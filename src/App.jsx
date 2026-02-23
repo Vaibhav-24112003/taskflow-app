@@ -390,7 +390,13 @@ function TaskFlowApp({ cu, isAdmin, allProfiles, onSignOut }) {
   const [search,      setSearch]      = useState('')
   const [loading,     setLoading]     = useState(true)
   const [showProf,    setShowProf]    = useState(false)
+  const [toast,       setToast]       = useState(null) // {msg, type: 'ok'|'err'}
   const pRef = useRef()
+
+  const showToast = useCallback((msg, type = 'ok') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4000)
+  }, [])
 
   const activeWs = workspaces.find(w => w.id === activeWsId) || null
   const wsColor  = activeWs?.color || '#6366f1'
@@ -418,21 +424,34 @@ function TaskFlowApp({ cu, isAdmin, allProfiles, onSignOut }) {
   }, [])
 
   // ── Workspace CRUD ────────────────────────────────────────────────────────
-  const handleSaveWorkspace = async ({ id, name, description, color, icon, memberIds, ownerId }) => {
+  const handleSaveWorkspace = async ({ id, name, description, color, icon, memberIds }) => {
     if (id) {
-      const { data } = await updateWorkspace(id, { name, description, color, icon })
-      // sync members
+      // Edit existing workspace
+      const { error } = await updateWorkspace(id, { name, description, color, icon })
+      if (error) { showToast('Failed to update workspace: ' + error.message, 'err'); return }
       const current = wsMembers.map(m => m.id)
       for (const uid of memberIds) { if (!current.includes(uid)) await addMemberToWorkspace(id, uid) }
-      for (const uid of current) { if (!memberIds.includes(uid) && uid !== cu.id) await removeMemberFromWorkspace(id, uid) }
+      for (const uid of current)   { if (!memberIds.includes(uid) && uid !== cu.id) await removeMemberFromWorkspace(id, uid) }
+      showToast('Workspace updated!', 'ok')
     } else {
-      const { data: ws } = await createWorkspace({ name, description, color, icon, owner_id: cu.id })
-      if (ws) {
-        for (const uid of memberIds) await addMemberToWorkspace(ws.id, uid)
-        setActiveWsId(ws.id)
+      // Create new workspace — must add creator as member immediately after
+      const { data: ws, error } = await createWorkspace({ name, description, color, icon, owner_id: cu.id })
+      if (error || !ws) {
+        showToast('Failed to create workspace: ' + (error?.message || 'unknown error'), 'err')
+        console.error('Workspace create error:', error)
+        return
       }
+      // Add creator first (always), then other members
+      const allIds = [...new Set([cu.id, ...memberIds])]
+      for (const uid of allIds) {
+        const role = uid === cu.id ? 'owner' : 'member'
+        const { error: merr } = await addMemberToWorkspace(ws.id, uid, role)
+        if (merr) console.error('Member add error for', uid, merr)
+      }
+      setActiveWsId(ws.id)
+      showToast('Workspace created!', 'ok')
     }
-    loadWorkspaces()
+    await loadWorkspaces()
   }
 
   const handleDeleteWorkspace = async id => {
@@ -445,12 +464,16 @@ function TaskFlowApp({ cu, isAdmin, allProfiles, onSignOut }) {
   // ── Task CRUD ─────────────────────────────────────────────────────────────
   const handleSaveTask = async taskData => {
     if (taskData.id) {
-      const { data } = await updateTask(taskData.id, taskData)
+      const { data, error } = await updateTask(taskData.id, taskData)
+      if (error) { showToast('Failed to save task: ' + error.message, 'err'); return }
       if (data) { setTasks(p => p.map(t => t.id === data.id ? data : t)); setViewTask(data) }
       await logActivity(taskData.id, cu.id, 'Updated task')
+      showToast('Task saved!', 'ok')
     } else {
-      const { data } = await createTask(taskData)
+      const { data, error } = await createTask(taskData)
+      if (error) { showToast('Failed to create task: ' + error.message, 'err'); return }
       if (data) { setTasks(p => [...p, data]); await logActivity(data.id, cu.id, 'Created task') }
+      showToast('Task created!', 'ok')
     }
   }
 
@@ -482,6 +505,14 @@ function TaskFlowApp({ cu, isAdmin, allProfiles, onSignOut }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#07101d', fontFamily: 'system-ui,sans-serif', color: '#f1f5f9', display: 'flex' }} onDragEnd={() => setDragId(null)}>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: toast.type === 'ok' ? '#10b981' : '#ef4444', color: '#fff', borderRadius: 12, padding: '12px 20px', fontSize: 14, fontWeight: 600, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', gap: 8, maxWidth: 380 }}>
+          <span>{toast.type === 'ok' ? '✓' : '⚠'}</span>
+          <span>{toast.msg}</span>
+        </div>
+      )}
 
       {/* ── Icon rail ── */}
       <div style={{ width: 64, background: '#060c18', borderRight: '1px solid #1e2d42', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0', gap: 8, flexShrink: 0 }}>
