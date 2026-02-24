@@ -92,11 +92,36 @@ export async function deleteWorkspace(id) {
 }
 
 export async function getWorkspaceMembers(wsId) {
-  const { data, error } = await supabase
+  const { data: memberships, error: memberError } = await supabase
     .from('workspace_members')
-    .select('role, profiles(id, email, name, avatar_url)')
+    .select('user_id, role')
     .eq('workspace_id', wsId)
-  return { data: (data || []).map(r => ({ ...r.profiles, role: r.role })), error }
+  
+  if (memberError) return { data: [], error: memberError }
+
+  const userIds = [...new Set((memberships || []).map(r => r.user_id).filter(Boolean))]
+  let profileById = {}
+
+  if (userIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, name, avatar_url')
+      .in('id', userIds)
+
+    if (profileError) return { data: [], error: profileError }
+    profileById = Object.fromEntries((profiles || []).map(p => [p.id, p]))
+  }
+
+  return {
+    data: (memberships || []).map(r => ({
+      id: r.user_id,
+      email: profileById[r.user_id]?.email || '',
+      name: profileById[r.user_id]?.name || profileById[r.user_id]?.email || 'Workspace member',
+      avatar_url: profileById[r.user_id]?.avatar_url || null,
+      role: r.role,
+    })),
+    error: null,
+  }
 }
 
 export async function addMemberToWorkspace(wsId, userId, role = 'member') {
