@@ -91,6 +91,7 @@ function Confirm({open,icon,title,body,confirmLabel,confirmColor='#ef4444',onCon
       </div>
     </div>
   )
+}
 
 // ── Auth screens ──────────────────────────────────────────────────────────────
 function AuthScreen(){
