@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessStatus,
-         getAccessRequests, approveRequest, denyRequest, upsertProfile,
+         getAccessRequests, approveRequest, denyRequest, upsertProfile, getApprovedProfiles,
          getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
          getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace,
          getTasks, createTask, updateTask, deleteTask, logActivity } from './lib/supabase.js'
@@ -418,7 +418,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                   <div key={m.id} onClick={()=>setAssignTarget(m.id)}
                     style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:10,cursor:'pointer',border:`2px solid ${sel?ws.color:'#1e2d42'}`,background:sel?ws.color+'18':'#131f35',transition:'all 0.15s',flexShrink:0}}>
                     <Avatar user={eu} size={28}/>
-                    <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'#f1f5f9'}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:10,color:'#64748b'}}>Assign task</div></div>
+                    <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'#f1f5f9'}}>{m.name||m.email?.split('@')[0]||'Member'}</div><div style={{fontSize:10,color:'#64748b'}}>Assign task</div></div>
                     {sel&&<div style={{width:16,height:16,borderRadius:'50%',background:ws.color,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:4}}><span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span></div>}
                   </div>
                 )
@@ -625,13 +625,23 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
 
   useEffect(()=>{
     if(!activeWsId) return
-    Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId)])
-      .then(([{data:mems},{data:tsks}])=>{
-        setWsMembers(mems||[])
-        setTasks(tsks||[])
-      })
-  },[activeWsId])
-
+    const loadWorkspaceData=async()=>{
+      const [{data:mems,error:memberError},{data:tsks}] = await Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId)])
+      if(memberError){
+        showToast('Failed to load members: '+memberError.message,'err')
+      }
+      let normalizedMembers=mems||[]
+      if(!normalizedMembers.some(m=>m.id===cu.id)){
+        await addMemberToWorkspace(activeWsId,cu.id,'owner')
+        const {data:refetched}=await getWorkspaceMembers(activeWsId)
+        normalizedMembers=refetched||[]
+      }
+      setWsMembers(normalizedMembers)
+      setTasks(tsks||[])
+    }
+    loadWorkspaceData()
+  },[activeWsId,cu.id,showToast])
+         
   useEffect(()=>{
     const h=e=>{if(pRef.current&&!pRef.current.contains(e.target))setShowProf(false)}
     document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)
@@ -1163,11 +1173,12 @@ export default function App(){
       if(!status){await submitAccessRequest(user);setAccessStatus('pending')}
       else setAccessStatus(status)
     }
-    const{data:ar}=await supabase.from('access_requests').select('user_id').eq('status','approved')
-    const ids=ar?.map(r=>r.user_id)||[]
-    if(ids.length>0){
-      const{data}=await supabase.from('profiles').select('id,email,name,avatar_url').in('id',ids)
-      setAllProfiles(data||[])
+    const { data: approvedProfiles } = await getApprovedProfiles()
+    if(approvedProfiles?.length){
+      setAllProfiles(approvedProfiles)
+    } else {
+      const { data: fallbackProfiles } = await supabase.from('profiles').select('id,email,name,avatar_url')
+      setAllProfiles(fallbackProfiles||[])
     }
     setLoading(false)
   }
