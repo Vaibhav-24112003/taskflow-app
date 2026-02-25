@@ -160,3 +160,17 @@ export async function deleteTask(id) {
 export async function addComment(taskId, userId, text) {
   const { data, error } = await supabase
     .from('task_comments').insert({ task_id: taskId, user_id: userId, text }).select().single()
+  return { data, error }
+}
+
+export async function logTime(taskId, userId, hours) {
+  return supabase.from('task_activity').insert({
+    task_id: taskId, user_id: userId, action: `Logged ${hours}h`, time_logged: hours
+  })
+}
+
+export async function logActivity(taskId, userId, action) {
+  return supabase.from('task_activity').insert({
+    task_id: taskId, user_id: userId, action, time_logged: 0
+  })
+}
