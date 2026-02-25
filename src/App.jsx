@@ -67,7 +67,7 @@ const LBL = {display:'block',fontSize:11,color:'#64748b',fontWeight:700,marginBo
 // ─── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({user,size=32}){
   if(!user) return <div style={{width:size,height:size,borderRadius:'50%',background:'#1e2d42',flexShrink:0}}/>
-  if(user.avatar_url) return <img src={user.avatar_url} alt={user.name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
+  if(user.avatar_url) return <img src={user.avatar_url} alt={user.name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0,filter:'invert(1) hue-rotate(180deg)'}}/>
   return <div title={user.name} style={{width:size,height:size,borderRadius:'50%',background:user.color||'#6366f1',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:700,flexShrink:0,userSelect:'none',border:'2px solid rgba(255,255,255,0.1)'}}>{user.initials}</div>
 }
 
@@ -560,8 +560,8 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
   const accentColor=mirrored?'#818cf8':delegated?'#f59e0b':wsColor
   return(
     <>
-      <div draggable={!mirrored} onDragStart={e=>{if(mirrored)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}}
-        style={{background:isDragging?'#1a2a40':'#0d1627',border:`1px solid ${isDragging?wsColor:hov?accentColor+'66':'#1e2d42'}`,borderRadius:12,padding:14,cursor:mirrored?'default':'grab',transition:'all 0.15s',borderLeft:`3px solid ${accentColor}`,opacity:isDragging?0.4:1,boxShadow:hov&&!isDragging?'0 8px 24px rgba(0,0,0,0.5)':'none',userSelect:'none',position:'relative'}}
+      <div draggable={!mirrored} onDragStart={e=>{if(mirrored)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}} onClick={()=>onEdit(task)}
+        style={{background:isDragging?'#1a2a40':'#0d1627',border:`1px solid ${isDragging?wsColor:hov?accentColor+'66':'#1e2d42'}`,borderRadius:12,padding:14,cursor:mirrored?'pointer':'grab',transition:'all 0.15s',borderLeft:`3px solid ${accentColor}`,opacity:isDragging?0.4:1,boxShadow:hov&&!isDragging?'0 8px 24px rgba(0,0,0,0.5)':'none',userSelect:'none',position:'relative'}}
         onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
         {mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#818cf833',color:'#818cf8',border:'1px solid #818cf844',borderRadius:5,padding:'2px 6px'}}>📥 ASSIGNED TO ME</div>}
         {delegated&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#f59e0b22',color:'#f59e0b',border:'1px solid #f59e0b44',borderRadius:5,padding:'2px 6px'}}>📤 DELEGATED</div>}
@@ -635,6 +635,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const [loading,      setLoading]      = useState(true)
   const [showProf,     setShowProf]     = useState(false)
   const [toast,        setToast]        = useState(null)
+  const [theme,        setTheme]        = useState('light')
   const pRef=useRef()
 
   const showToast=useCallback((msg,type='ok')=>{setToast({msg,type});setTimeout(()=>setToast(null),4000)},[])
@@ -642,6 +643,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const wsColor=activeWs?.color||'#6366f1'
   const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES
   const SC=scMap(statuses)
+  const isLightTheme=theme==='light'
 
   // Reset selected team member when switching workspace
   useEffect(()=>{setTeamMemberId(null)},[activeWsId])
@@ -841,7 +843,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   if(loading) return <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:'system-ui,sans-serif'}}>Loading…</div>
 
   return(
-    <div style={{minHeight:'100vh',background:'#07101d',fontFamily:'system-ui,sans-serif',color:'#f1f5f9',display:'flex'}} onDragEnd={()=>setDragId(null)}>
+    <div style={{minHeight:'100vh',background:'#07101d',fontFamily:"'Lexend',system-ui,sans-serif",color:'#f1f5f9',display:'flex',filter:isLightTheme?'invert(1) hue-rotate(180deg)':'none',transition:'filter 0.2s'}} onDragEnd={()=>setDragId(null)}>
 
       {toast&&<div style={{position:'fixed',bottom:24,right:24,zIndex:9999,background:toast.type==='ok'?'#10b981':'#ef4444',color:'#fff',borderRadius:12,padding:'12px 20px',fontSize:14,fontWeight:600,boxShadow:'0 8px 32px rgba(0,0,0,0.5)',display:'flex',alignItems:'center',gap:8,maxWidth:400}}><span>{toast.type==='ok'?'✓':'⚠'}</span><span>{toast.msg}</span></div>}
 
@@ -862,6 +864,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1e2d42';e.currentTarget.style.color='#374151';e.currentTarget.style.background='transparent'}}>+</div>
         <div style={{flex:1}}/>
         {isAdmin&&<div title="Admin Panel" onClick={()=>setAdminOpen(true)} style={{width:40,height:40,borderRadius:12,background:'#f59e0b22',border:'1px solid #f59e0b44',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',marginBottom:8}}>🛡️</div>}
+        <button title={isLightTheme?'Switch to Dark':'Switch to Light'} onClick={()=>setTheme(t=>t==='light'?'dark':'light')} style={{width:40,height:40,borderRadius:12,background:'#131f35',border:'1px solid #1e2d42',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',marginBottom:8}}>{isLightTheme?'🌙':'☀️'}</button>
         <div ref={pRef} style={{position:'relative'}}>
           <div onClick={()=>setShowProf(p=>!p)} style={{cursor:'pointer'}}><Avatar user={enrich(cu)} size={36}/></div>
           {showProf&&(
@@ -1248,6 +1251,18 @@ export default function App(){
       setSession(session);if(session)handleUserAuth(session.user);else{setAccessStatus(null);setLoading(false)}
     })
     return()=>subscription.unsubscribe()
+  },[])
+
+  useEffect(()=>{
+    const id='lexend-font-link'
+    if(!document.getElementById(id)){
+      const l=document.createElement('link')
+      l.id=id
+      l.rel='stylesheet'
+      l.href='https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap'
+      document.head.appendChild(l)
+    }
+    document.body.style.fontFamily="'Lexend',system-ui,sans-serif"
   },[])
 
   const handleUserAuth=async user=>{
