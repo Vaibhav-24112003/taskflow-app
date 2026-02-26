@@ -61,7 +61,7 @@ const isMirroredToMe = (task, userId) =>
 const isAssignedToMember = (task, memberId) =>
   task.assigned_to === memberId && task.created_by !== memberId
 
-const INP = {display:'block',width:'100%',boxSizing:'border-box',background:'#131f35',border:'1px solid #1e2d42',borderRadius:9,padding:'10px 13px',color:'#f1f5f9',fontSize:14,outline:'none',fontFamily:'system-ui,sans-serif',lineHeight:1.5}
+const INP = {display:'block',width:'100%',boxSizing:'border-box',background:'#131f35',border:'1px solid #1e2d42',borderRadius:9,padding:'10px 13px',color:'#f1f5f9',fontSize:14,outline:'none',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",lineHeight:1.5}
 const LBL = {display:'block',fontSize:11,color:'#64748b',fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.07em'}
 
 // ─── Avatar ────────────────────────────────────────────────────────────────────
@@ -111,7 +111,7 @@ function Confirm({open,icon,title,body,confirmLabel,confirmColor='#ef4444',onCon
 function AuthScreen(){
   const [loading,setLoading]=useState(false)
   return(
-    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',fontFamily:'system-ui,sans-serif'}}>
+    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
       <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:48}}>
         <div style={{maxWidth:400,width:'100%'}}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
@@ -139,10 +139,10 @@ function AuthScreen(){
   )
 }
 function PendingScreen({user,onSignOut}){
-  return(<div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui,sans-serif'}}><div style={{textAlign:'center',maxWidth:400,padding:32}}><div style={{fontSize:56,marginBottom:20}}>⏳</div><div style={{fontSize:22,fontWeight:800,color:'#f1f5f9',marginBottom:8}}>Access Requested</div><div style={{fontSize:14,color:'#818cf8',marginBottom:4}}>{user.email}</div><div style={{fontSize:13,color:'#64748b',background:'#131f35',border:'1px solid #1e2d42',borderRadius:12,padding:16,margin:'20px 0',lineHeight:1.6}}>The admin will review your request.</div><button onClick={onSignOut} style={{background:'#1a2640',border:'1px solid #2a3a54',borderRadius:10,padding:'10px 24px',color:'#94a3b8',cursor:'pointer',fontSize:14}}>Sign Out</button></div></div>)
+  return(<div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}><div style={{textAlign:'center',maxWidth:400,padding:32}}><div style={{fontSize:56,marginBottom:20}}>⏳</div><div style={{fontSize:22,fontWeight:800,color:'#f1f5f9',marginBottom:8}}>Access Requested</div><div style={{fontSize:14,color:'#818cf8',marginBottom:4}}>{user.email}</div><div style={{fontSize:13,color:'#64748b',background:'#131f35',border:'1px solid #1e2d42',borderRadius:12,padding:16,margin:'20px 0',lineHeight:1.6}}>The admin will review your request.</div><button onClick={onSignOut} style={{background:'#1a2640',border:'1px solid #2a3a54',borderRadius:10,padding:'10px 24px',color:'#94a3b8',cursor:'pointer',fontSize:14}}>Sign Out</button></div></div>)
 }
 function DeniedScreen({onSignOut}){
-  return(<div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui,sans-serif'}}><div style={{textAlign:'center',maxWidth:380,padding:32}}><div style={{fontSize:56,marginBottom:20}}>🚫</div><div style={{fontSize:22,fontWeight:800,color:'#f1f5f9',marginBottom:12}}>Access Denied</div><div style={{fontSize:14,color:'#94a3b8',marginBottom:24}}>Contact the admin if you think this is a mistake.</div><button onClick={onSignOut} style={{background:'#ef444420',border:'1px solid #ef444440',borderRadius:10,padding:'10px 24px',color:'#ef4444',cursor:'pointer',fontSize:14,fontWeight:600}}>Sign Out</button></div></div>)
+  return(<div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}><div style={{textAlign:'center',maxWidth:380,padding:32}}><div style={{fontSize:56,marginBottom:20}}>🚫</div><div style={{fontSize:22,fontWeight:800,color:'#f1f5f9',marginBottom:12}}>Access Denied</div><div style={{fontSize:14,color:'#94a3b8',marginBottom:24}}>Contact the admin if you think this is a mistake.</div><button onClick={onSignOut} style={{background:'#ef444420',border:'1px solid #ef444440',borderRadius:10,padding:'10px 24px',color:'#ef4444',cursor:'pointer',fontSize:14,fontWeight:600}}>Sign Out</button></div></div>)
 }
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
@@ -635,6 +635,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const [loading,      setLoading]      = useState(true)
   const [showProf,     setShowProf]     = useState(false)
   const [toast,        setToast]        = useState(null)
+  const [sidebarOpen,  setSidebarOpen]  = useState(true)       
   const [theme,        setTheme]        = useState('light')
   const pRef=useRef()
 
@@ -840,10 +841,10 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const teamTasks=allTasks.filter(t=>t.assigned_to===teamMemberId&&t.created_by!==teamMemberId)
   const teamSelfTasks=allTasks.filter(t=>t.created_by===teamMemberId&&(!t.assigned_to||t.assigned_to===teamMemberId))
 
-  if(loading) return <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:'system-ui,sans-serif'}}>Loading…</div>
+  if(loading) return <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>Loading…</div>
 
   return(
-    <div style={{minHeight:'100vh',background:'#07101d',fontFamily:"'Lexend',system-ui,sans-serif",color:'#f1f5f9',display:'flex',filter:isLightTheme?'invert(1) hue-rotate(180deg)':'none',transition:'filter 0.2s'}} onDragEnd={()=>setDragId(null)}>
+    <div style={{minHeight:'100vh',background:'#07101d',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",color:'#f1f5f9',display:'flex',WebkitFontSmoothing:'antialiased',MozOsxFontSmoothing:'grayscale',textRendering:'optimizeLegibility'}} onDragEnd={()=>setDragId(null)}>
 
       {toast&&<div style={{position:'fixed',bottom:24,right:24,zIndex:9999,background:toast.type==='ok'?'#10b981':'#ef4444',color:'#fff',borderRadius:12,padding:'12px 20px',fontSize:14,fontWeight:600,boxShadow:'0 8px 32px rgba(0,0,0,0.5)',display:'flex',alignItems:'center',gap:8,maxWidth:400}}><span>{toast.type==='ok'?'✓':'⚠'}</span><span>{toast.msg}</span></div>}
 
@@ -881,7 +882,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
       </div>
 
       {/* ── Sidebar ── */}
-      <div style={{width:230,background:'#060c18',borderRight:'1px solid #1e2d42',display:'flex',flexDirection:'column',flexShrink:0}}>
+      <div style={{width:sidebarOpen?230:0,background:'#060c18',borderRight:sidebarOpen?'1px solid #1e2d42':'none',display:'flex',flexDirection:'column',flexShrink:0,overflow:'hidden',transition:'width 0.22s ease'}}>
         {activeWs?(
           <>
             <div style={{padding:'16px 14px',borderBottom:'1px solid #1e2d42'}}>
@@ -960,6 +961,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {/* Topbar */}
         <div style={{background:'#060c18',borderBottom:'1px solid #1e2d42',padding:'0 18px',height:54,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+                 <button onClick={()=>setSidebarOpen(v=>!v)} title={sidebarOpen?'Hide panel':'Show panel'} style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 9px',color:'#cbd5e1',cursor:'pointer',fontSize:12,fontWeight:700}}>{sidebarOpen?'◀':'▶'}</button>
           {activeWs?(
             <>
               <button onClick={()=>setActiveWsId(null)} style={{background:'none',border:'none',color:'#64748b',cursor:'pointer',fontSize:12,fontWeight:600}}>All Workspaces</button>
@@ -967,7 +969,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
               <span style={{color:wsColor}}>{activeWs.icon}</span>
               <span style={{fontSize:13,fontWeight:700,color:'#f1f5f9'}}>{activeWs.name}</span>
               <div style={{width:1,height:20,background:'#1e2d42',margin:'0 4px'}}/>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search…" style={{background:'#0d1627',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 10px',color:'#f1f5f9',fontSize:12,outline:'none',width:160,fontFamily:'system-ui,sans-serif'}}/>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search…" style={{background:'#0d1627',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 10px',color:'#f1f5f9',fontSize:12,outline:'none',width:160,fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}/>
               <select value={fPriority} onChange={e=>setFPriority(e.target.value)} style={{background:'#0d1627',border:'1px solid #1e2d42',borderRadius:8,padding:'4px 7px',color:'#94a3b8',fontSize:11,cursor:'pointer',outline:'none'}}>
                 <option value="">All Priority</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}
               </select>
@@ -1253,6 +1255,17 @@ export default function App(){
     return()=>subscription.unsubscribe()
   },[])
 
+          useEffect(()=>{
+    const id='inter-font-link'
+    if(!document.getElementById(id)){
+      const l=document.createElement('link')
+      l.id=id
+      l.rel='stylesheet'
+      l.href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
+      document.head.appendChild(l)
+    }
+  },[])
+
   useEffect(()=>{
     const id='lexend-font-link'
     if(!document.getElementById(id)){
@@ -1289,7 +1302,7 @@ export default function App(){
   const handleSignOut=async()=>{await signOut();setSession(null);setAccessStatus(null)}
 
   if(loading) return(
-    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui,sans-serif'}}>
+    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
       <div style={{textAlign:'center'}}>
         <div style={{fontSize:40,marginBottom:16}}>✦</div>
         <div style={{fontSize:14,color:'#64748b'}}>Loading TaskFlow…</div>
