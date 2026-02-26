@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessStatus,
-         getAccessRequests, approveRequest, denyRequest, upsertProfile,
+         getAccessRequests, approveRequest, denyRequest, removeUserFromAllWorkspaces, upsertProfile,
          getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
          getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace,
          getTasks, createTask, updateTask, deleteTask, logActivity } from './lib/supabase.js'
@@ -136,7 +136,18 @@ function AdminPanel({open,onClose}){
   const [reqs,setReqs]=useState([]);const [loading,setLoading]=useState(true)
   const load=async()=>{setLoading(true);const{data}=await getAccessRequests();setReqs(data||[]);setLoading(false)}
   useEffect(()=>{if(open)load()},[open])
-  const act=async(uid,a)=>{if(a==='approve')await approveRequest(uid);else await denyRequest(uid);load()}
+  const act=async(uid,a)=>{
+    if(a==='approve'){
+      await approveRequest(uid)
+    } else if(a==='remove'){
+      if(!window.confirm('Remove this person from access and all workspace memberships?')) return
+      await denyRequest(uid)
+      await removeUserFromAllWorkspaces(uid)
+    } else {
+      await denyRequest(uid)
+    }
+    load()
+  }
   const sc={pending:'#f59e0b',approved:'#10b981',denied:'#ef4444'}
   return(
     <Modal open={open} onClose={onClose} title="🛡️ Access Requests" width={520}>
@@ -151,6 +162,7 @@ function AdminPanel({open,onClose}){
             <button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>✓ Approve</button>
             <button onClick={()=>act(r.user_id,'deny')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>✗ Deny</button>
           </>}
+          {r.status==='approved'&&<button onClick={()=>act(r.user_id,'remove')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>Remove Access</button>}
         </div>
       ))}
     </Modal>
@@ -1195,15 +1207,3 @@ export default function App(){
 
   if(loading) return(
     <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{fontSize:40,marginBottom:16}}>✦</div>
-        <div style={{fontSize:14,color:'#64748b'}}>Loading TaskFlow…</div>
-      </div>
-    </div>
-  )
-  if(!session) return <AuthScreen/>
-  if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={handleSignOut}/>
-  if(accessStatus==='denied')  return <DeniedScreen onSignOut={handleSignOut}/>
-  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut}/>
-  return <AuthScreen/>
-}
