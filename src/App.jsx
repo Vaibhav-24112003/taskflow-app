@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessStatus,
-         getAccessRequests, approveRequest, denyRequest, upsertProfile, getApprovedProfiles,
+         getAccessRequests, approveRequest, denyRequest, upsertProfile,
          getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
          getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace,
          getTasks, createTask, updateTask, deleteTask, logActivity } from './lib/supabase.js'
@@ -21,20 +21,6 @@ const fmtDate    = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',da
 const enrich     = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u.email||'')}:null
 const getUser    = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
 const scMap      = ss=>{const d={'Todo':'#6b7280','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%6)]]))}
-const RECUR_MONTHLY_TAG = '__recur_monthly__'
-const visibleTags = (tags=[]) => tags.filter(t=>t!==RECUR_MONTHLY_TAG)
-const hasMonthlyRecurrence = task => (task?.tags||[]).includes(RECUR_MONTHLY_TAG)
-const addOneMonthISO = (isoDate) => {
-  const base = isoDate ? new Date(isoDate+'T00:00:00') : new Date()
-  const year = base.getFullYear()
-  const month = base.getMonth()
-  const day = base.getDate()
-  const nextMonthStart = new Date(year, month + 1, 1)
-  const nextMonthDays = new Date(year, month + 2, 0).getDate()
-  const safeDay = Math.min(day, nextMonthDays)
-  const next = new Date(nextMonthStart.getFullYear(), nextMonthStart.getMonth(), safeDay)
-  return next.toISOString().slice(0,10)
-}
 
 // ─── Task visibility logic (the 3 rules) ──────────────────────────────────────
 // A task is visible on a user's board if:
@@ -67,7 +53,7 @@ const LBL = {display:'block',fontSize:11,color:'#64748b',fontWeight:700,marginBo
 // ─── Avatar ────────────────────────────────────────────────────────────────────
 function Avatar({user,size=32}){
   if(!user) return <div style={{width:size,height:size,borderRadius:'50%',background:'#1e2d42',flexShrink:0}}/>
-  if(user.avatar_url) return <img src={user.avatar_url} alt={user.name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0,filter:'invert(1) hue-rotate(180deg)'}}/>
+  if(user.avatar_url) return <img src={user.avatar_url} alt={user.name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
   return <div title={user.name} style={{width:size,height:size,borderRadius:'50%',background:user.color||'#6366f1',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:700,flexShrink:0,userSelect:'none',border:'2px solid rgba(255,255,255,0.1)'}}>{user.initials}</div>
 }
 
@@ -361,12 +347,11 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 }
 
 // ── Task Form Modal ───────────────────────────────────────────────────────────
-function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onSaveBulk,onDelete}){
-  const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef(),bulkRef=useRef()
+function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
+  const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
   const [status,setStatus]             = useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]         = useState('Medium')
   const [assignTarget,setAssignTarget] = useState('self')
-  const [recurringMonthly,setRecurringMonthly] = useState(false)
   const [cdel,setCdel]                 = useState(false)
   const isEdit=!!task
 
@@ -377,41 +362,24 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     if(task){
       const selfAssigned=!task.assigned_to||task.assigned_to===task.created_by
       setAssignTarget(selfAssigned?'self':task.assigned_to)
-      setRecurringMonthly(hasMonthlyRecurrence(task))
-    } else {
-      setAssignTarget('self')
-      setRecurringMonthly(false)
-    }
+    } else setAssignTarget('self')
   },[open,task,defaultStatus,statuses])
 
   if(!open||!ws||!cu) return null
   const otherMembers=wsMembers.filter(m=>m.id!==cu.id)
 
   const handleSave=async()=>{
+    const title=titleRef.current?.value?.trim();if(!title)return
     const assigned_to=assignTarget==='self'?cu.id:assignTarget
-    const cleanTags=(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean)
-    const tags=recurringMonthly?[...cleanTags.filter(t=>t!==RECUR_MONTHLY_TAG),RECUR_MONTHLY_TAG]:cleanTags.filter(t=>t!==RECUR_MONTHLY_TAG)
-    const bulkLines=(bulkRef.current?.value||'').split('\n').map(l=>l.trim()).filter(Boolean)
-    const basePayload={
-      description:descRef.current?.value?.trim()||'',
+    const payload={
+      title,description:descRef.current?.value?.trim()||'',
       project:projRef.current?.value?.trim()||'',
-      tags,
+      tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),
       due_date:dateRef.current?.value||null,
       status,priority,assigned_to,
       workspace_id:ws.id,created_by:task?.created_by||cu.id,
     }
-
-    if(!isEdit&&bulkLines.length>0){
-      const payloads=bulkLines.map(title=>({...basePayload,title}))
-      await onSaveBulk(payloads)
-      onClose()
-      return
-    }
-
-    const title=titleRef.current?.value?.trim()
-    if(!title) return
-    await onSave(isEdit?{...task,...basePayload,title}:{...basePayload,title})
-    onClose()
+    await onSave(isEdit?{...task,...payload}:payload);onClose()
   }
 
   const F=({label,children,full})=>(
@@ -425,7 +393,6 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <Modal open={open} onClose={onClose} title={isEdit?'✏️ Edit Task':'✦ New Task'} width={580}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
           <F label="Task Title *" full><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={INP} onKeyDown={e=>{if(e.key==='Enter')handleSave()}}/></F>
-          {!isEdit&&<F label="Quick Paste (one task per line)" full><textarea ref={bulkRef} rows={4} style={{...INP,resize:'vertical'}} placeholder={`Send proposal\nPrepare invoice\nFollow up with client`}/></F>}
           <F label="Description" full><textarea ref={descRef} defaultValue={task?.description||''} rows={3} style={{...INP,resize:'vertical'}} placeholder="Details…"/></F>
           <F label="Status">
             <select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>
@@ -451,7 +418,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                   <div key={m.id} onClick={()=>setAssignTarget(m.id)}
                     style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:10,cursor:'pointer',border:`2px solid ${sel?ws.color:'#1e2d42'}`,background:sel?ws.color+'18':'#131f35',transition:'all 0.15s',flexShrink:0}}>
                     <Avatar user={eu} size={28}/>
-                    <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'#f1f5f9'}}>{m.name||m.email?.split('@')[0]||'Member'}</div><div style={{fontSize:10,color:'#64748b'}}>Assign task</div></div>
+                    <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'#f1f5f9'}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:10,color:'#64748b'}}>Assign task</div></div>
                     {sel&&<div style={{width:16,height:16,borderRadius:'50%',background:ws.color,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:4}}><span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span></div>}
                   </div>
                 )
@@ -470,13 +437,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
           </F>
           <F label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
           <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Accounts, HR"/></F>
-          <F label="Repeat">
-            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,color:'#cbd5e1',marginTop:4,cursor:'pointer'}}>
-              <input type="checkbox" checked={recurringMonthly} onChange={e=>setRecurringMonthly(e.target.checked)} />
-              Repeat monthly (auto-create next month when marked done)
-            </label>
-          </F>
-          <F label="Tags (comma-separated)"><input ref={tagsRef} defaultValue={visibleTags(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
+          <F label="Tags (comma-separated)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
         </div>
         <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8}}>
           {isEdit?<button onClick={()=>setCdel(true)} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:9,padding:'9px 16px',color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:600}}>🗑️ Delete</button>:<div/>}
@@ -560,13 +521,13 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
   const accentColor=mirrored?'#818cf8':delegated?'#f59e0b':wsColor
   return(
     <>
-      <div draggable={!mirrored} onDragStart={e=>{if(mirrored)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}} onClick={()=>onEdit(task)}
-        style={{background:isDragging?'#1a2a40':'#0d1627',border:`1px solid ${isDragging?wsColor:hov?accentColor+'66':'#1e2d42'}`,borderRadius:12,padding:14,cursor:mirrored?'pointer':'grab',transition:'all 0.15s',borderLeft:`3px solid ${accentColor}`,opacity:isDragging?0.4:1,boxShadow:hov&&!isDragging?'0 8px 24px rgba(0,0,0,0.5)':'none',userSelect:'none',position:'relative'}}
+      <div draggable={!mirrored} onDragStart={e=>{if(mirrored)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}}
+        style={{background:isDragging?'#1a2a40':'#0d1627',border:`1px solid ${isDragging?wsColor:hov?accentColor+'66':'#1e2d42'}`,borderRadius:12,padding:14,cursor:mirrored?'default':'grab',transition:'all 0.15s',borderLeft:`3px solid ${accentColor}`,opacity:isDragging?0.4:1,boxShadow:hov&&!isDragging?'0 8px 24px rgba(0,0,0,0.5)':'none',userSelect:'none',position:'relative'}}
         onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
         {mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#818cf833',color:'#818cf8',border:'1px solid #818cf844',borderRadius:5,padding:'2px 6px'}}>📥 ASSIGNED TO ME</div>}
         {delegated&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#f59e0b22',color:'#f59e0b',border:'1px solid #f59e0b44',borderRadius:5,padding:'2px 6px'}}>📤 DELEGATED</div>}
         <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6,paddingRight:mirrored||delegated?90:0}}>
-          {visibleTags(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:10,color:'#94a3b8',background:'#131f35',borderRadius:4,padding:'2px 5px',fontWeight:600}}>{t}</span>)}
+          {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:10,color:'#94a3b8',background:'#131f35',borderRadius:4,padding:'2px 5px',fontWeight:600}}>{t}</span>)}
         </div>
         <div style={{fontSize:13,fontWeight:600,color:'#f1f5f9',marginBottom:5,lineHeight:1.4}}>{task.title}</div>
         {task.description&&<div style={{fontSize:11,color:'#64748b',marginBottom:8,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
@@ -635,8 +596,8 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const [loading,      setLoading]      = useState(true)
   const [showProf,     setShowProf]     = useState(false)
   const [toast,        setToast]        = useState(null)
-  const [sidebarOpen,  setSidebarOpen]  = useState(true)       
-  const [theme,        setTheme]        = useState('light')
+  const [sidebarOpen,  setSidebarOpen]  = useState(true)
+  const [lightMode,    setLightMode]    = useState(false)
   const pRef=useRef()
 
   const showToast=useCallback((msg,type='ok')=>{setToast({msg,type});setTimeout(()=>setToast(null),4000)},[])
@@ -644,7 +605,6 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const wsColor=activeWs?.color||'#6366f1'
   const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES
   const SC=scMap(statuses)
-  const isLightTheme=theme==='light'
 
   // Reset selected team member when switching workspace
   useEffect(()=>{setTeamMemberId(null)},[activeWsId])
@@ -667,22 +627,12 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
 
   useEffect(()=>{
     if(!activeWsId) return
-    const loadWorkspaceData=async()=>{
-      const [{data:mems,error:memberError},{data:tsks}] = await Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId)])
-      if(memberError){
-        showToast('Failed to load members: '+memberError.message,'err')
-      }
-      let normalizedMembers=mems||[]
-      if(!normalizedMembers.some(m=>m.id===cu.id)){
-        await addMemberToWorkspace(activeWsId,cu.id,'owner')
-        const {data:refetched}=await getWorkspaceMembers(activeWsId)
-        normalizedMembers=refetched||[]
-      }
-      setWsMembers(normalizedMembers)
-      setTasks(tsks||[])
-    }
-    loadWorkspaceData()
-  },[activeWsId,cu.id,showToast])
+    Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId)])
+      .then(([{data:mems},{data:tsks}])=>{
+        setWsMembers(mems||[])
+        setTasks(tsks||[])
+      })
+  },[activeWsId])
 
   useEffect(()=>{
     const h=e=>{if(pRef.current&&!pRef.current.contains(e.target))setShowProf(false)}
@@ -721,58 +671,13 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
     await deleteWorkspace(id);setActiveWsId(null);setDelWs(null);await loadWorkspaces()
   }
 
-  const maybeCreateNextMonthlyTask=async completedTask=>{
-    if(!hasMonthlyRecurrence(completedTask)) return
-    const nextDueDate=addOneMonthISO(completedTask.due_date)
-    const nextStatus=statuses[0]||'Todo'
-    const payload={
-      title:completedTask.title,
-      description:completedTask.description||'',
-      project:completedTask.project||'',
-      tags:completedTask.tags||[],
-      due_date:nextDueDate,
-      status:nextStatus,
-      priority:completedTask.priority||'Medium',
-      assigned_to:completedTask.assigned_to||completedTask.created_by||cu.id,
-      workspace_id:activeWsId,
-      created_by:completedTask.created_by||cu.id,
-    }
-    const {data,error}=await createTask(payload)
-    if(error){showToast('Recurring task failed: '+error.message,'err');return}
-    if(data){
-      setTasks(p=>[...p,data])
-      await logActivity(data.id,cu.id,'Auto-created next monthly recurrence')
-      showToast('Next monthly task created ✓')
-    }
-  }
-
   // ── Task CRUD ──────────────────────────────────────────────────────────────
-  const handleSaveBulkTasks=async payloads=>{
-    let added=0,failed=0
-    for(const td of payloads){
-      const {data,error}=await createTask(td)
-      if(error){failed++;continue}
-      if(data){
-        added++
-        setTasks(p=>[...p,data])
-        await logActivity(data.id,cu.id,'Created task')
-      }
-    }
-    if(added>0) showToast(`Created ${added} task${added!==1?'s':''} ✓`)
-    if(failed>0) showToast(`${failed} task${failed!==1?'s':''} failed to create`,'err')
-  }
-
   const handleSaveTask=async td=>{
-    const doneStatus=statuses[statuses.length-1]
     if(td.id){
-      const prev=tasks.find(t=>t.id===td.id)
       const{data,error}=await updateTask(td.id,td)
       if(error){showToast('Save failed: '+error.message,'err');return}
       if(data) setTasks(p=>p.map(t=>t.id===data.id?data:t))
       await logActivity(td.id,cu.id,'Updated task')
-      if(data&&prev&&prev.status!==doneStatus&&data.status===doneStatus){
-        await maybeCreateNextMonthlyTask(data)
-      }
       showToast('Task saved! ✓')
     } else {
       const{data,error}=await createTask(td)
@@ -790,15 +695,11 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
     if(!dragId) return
     const task=tasks.find(t=>t.id===dragId)
     if(!task||task.status===st){setDragId(null);return}
-    const doneStatus=statuses[statuses.length-1]
     const{data}=await updateTask(dragId,{status:st})
     if(data) setTasks(p=>p.map(t=>t.id===dragId?data:t))
     await logActivity(dragId,cu.id,`Moved to ${st}`)
-    if(data&&task.status!==doneStatus&&st===doneStatus){
-      await maybeCreateNextMonthlyTask(data)
-    }
     setDragId(null)
-  },[dragId,tasks,cu.id,statuses,maybeCreateNextMonthlyTask])
+  },[dragId,tasks,cu.id])
 
   // ── Import CSV ────────────────────────────────────────────────────────────
   const handleImport=async rows=>{
@@ -844,7 +745,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   if(loading) return <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>Loading…</div>
 
   return(
-    <div style={{minHeight:'100vh',background:'#07101d',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",color:'#f1f5f9',display:'flex',WebkitFontSmoothing:'antialiased',MozOsxFontSmoothing:'grayscale',textRendering:'optimizeLegibility'}} onDragEnd={()=>setDragId(null)}>
+    <div style={{minHeight:'100vh',background:'#07101d',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",color:'#f1f5f9',display:'flex',WebkitFontSmoothing:'antialiased',MozOsxFontSmoothing:'grayscale',textRendering:'optimizeLegibility',filter:lightMode?'invert(1) hue-rotate(180deg)':'none',transition:'filter .2s ease'}} onDragEnd={()=>setDragId(null)}>
 
       {toast&&<div style={{position:'fixed',bottom:24,right:24,zIndex:9999,background:toast.type==='ok'?'#10b981':'#ef4444',color:'#fff',borderRadius:12,padding:'12px 20px',fontSize:14,fontWeight:600,boxShadow:'0 8px 32px rgba(0,0,0,0.5)',display:'flex',alignItems:'center',gap:8,maxWidth:400}}><span>{toast.type==='ok'?'✓':'⚠'}</span><span>{toast.msg}</span></div>}
 
@@ -865,7 +766,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1e2d42';e.currentTarget.style.color='#374151';e.currentTarget.style.background='transparent'}}>+</div>
         <div style={{flex:1}}/>
         {isAdmin&&<div title="Admin Panel" onClick={()=>setAdminOpen(true)} style={{width:40,height:40,borderRadius:12,background:'#f59e0b22',border:'1px solid #f59e0b44',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',marginBottom:8}}>🛡️</div>}
-        <button title={isLightTheme?'Switch to Dark':'Switch to Light'} onClick={()=>setTheme(t=>t==='light'?'dark':'light')} style={{width:40,height:40,borderRadius:12,background:'#131f35',border:'1px solid #1e2d42',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',marginBottom:8}}>{isLightTheme?'🌙':'☀️'}</button>
+        <button title={lightMode?'Switch to dark':'Switch to light'} onClick={()=>setLightMode(v=>!v)} style={{width:40,height:40,borderRadius:12,background:'#131f35',border:'1px solid #1e2d42',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',marginBottom:8,color:'#cbd5e1'}}>{lightMode?'🌙':'☀️'}</button>
         <div ref={pRef} style={{position:'relative'}}>
           <div onClick={()=>setShowProf(p=>!p)} style={{cursor:'pointer'}}><Avatar user={enrich(cu)} size={36}/></div>
           {showProf&&(
@@ -961,7 +862,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {/* Topbar */}
         <div style={{background:'#060c18',borderBottom:'1px solid #1e2d42',padding:'0 18px',height:54,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-                 <button onClick={()=>setSidebarOpen(v=>!v)} title={sidebarOpen?'Hide panel':'Show panel'} style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 9px',color:'#cbd5e1',cursor:'pointer',fontSize:12,fontWeight:700}}>{sidebarOpen?'◀':'▶'}</button>
+          <button onClick={()=>setSidebarOpen(v=>!v)} title={sidebarOpen?'Hide panel':'Show panel'} style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 9px',color:'#cbd5e1',cursor:'pointer',fontSize:12,fontWeight:700}}>{sidebarOpen?'◀':'▶'}</button>
           {activeWs?(
             <>
               <button onClick={()=>setActiveWsId(null)} style={{background:'none',border:'none',color:'#64748b',cursor:'pointer',fontSize:12,fontWeight:600}}>All Workspaces</button>
@@ -1215,7 +1116,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
         <TaskFormModal open onClose={()=>{setCreateStatus(null);setEditTask(null)}}
           task={editTask} ws={activeWs} wsMembers={wsMembers} cu={cu}
           statuses={statuses} defaultStatus={createStatus||statuses[0]}
-          onSave={handleSaveTask} onSaveBulk={handleSaveBulkTasks} onDelete={handleDeleteTask}/>
+          onSave={handleSaveTask} onDelete={handleDeleteTask}/>
       )}
       {wsForm&&(
         <WorkspaceFormModal open onClose={()=>setWsForm(null)}
@@ -1249,13 +1150,17 @@ export default function App(){
     supabase.auth.getSession().then(({data:{session}})=>{
       setSession(session);if(session)handleUserAuth(session.user);else setLoading(false)
     })
-    const{data:{subscription}}=supabase.auth.onAuthStateChange((_e,session)=>{
-      setSession(session);if(session)handleUserAuth(session.user);else{setAccessStatus(null);setLoading(false)}
+    const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+      setSession(session)
+      if(!session){setAccessStatus(null);setLoading(false);return}
+      if(event==='SIGNED_IN'||event==='USER_UPDATED'){
+        handleUserAuth(session.user)
+      }
     })
     return()=>subscription.unsubscribe()
   },[])
 
-          useEffect(()=>{
+  useEffect(()=>{
     const id='inter-font-link'
     if(!document.getElementById(id)){
       const l=document.createElement('link')
@@ -1264,18 +1169,6 @@ export default function App(){
       l.href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
       document.head.appendChild(l)
     }
-  },[])
-
-  useEffect(()=>{
-    const id='lexend-font-link'
-    if(!document.getElementById(id)){
-      const l=document.createElement('link')
-      l.id=id
-      l.rel='stylesheet'
-      l.href='https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700;800&display=swap'
-      document.head.appendChild(l)
-    }
-    document.body.style.fontFamily="'Lexend',system-ui,sans-serif"
   },[])
 
   const handleUserAuth=async user=>{
@@ -1289,12 +1182,11 @@ export default function App(){
       if(!status){await submitAccessRequest(user);setAccessStatus('pending')}
       else setAccessStatus(status)
     }
-    const { data: approvedProfiles } = await getApprovedProfiles()
-    if(approvedProfiles?.length){
-      setAllProfiles(approvedProfiles)
-    } else {
-      const { data: fallbackProfiles } = await supabase.from('profiles').select('id,email,name,avatar_url')
-      setAllProfiles(fallbackProfiles||[])
+    const{data:ar}=await supabase.from('access_requests').select('user_id').eq('status','approved')
+    const ids=ar?.map(r=>r.user_id)||[]
+    if(ids.length>0){
+      const{data}=await supabase.from('profiles').select('id,email,name,avatar_url').in('id',ids)
+      setAllProfiles(data||[])
     }
     setLoading(false)
   }
