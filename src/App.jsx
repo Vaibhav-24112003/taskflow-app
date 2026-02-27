@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessStatus,
-         getAccessRequests, approveRequest, denyRequest, removeUserFromAllWorkspaces, upsertProfile,
-         getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
-         getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace,
-         getTasks, createTask, updateTask, deleteTask, logActivity } from './lib/supabase.js'
+import * as supabaseApi from './lib/supabase.js'
+
+const { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessStatus,
+  getAccessRequests, approveRequest, denyRequest, removeUserFromAllWorkspaces, upsertProfile,
+  getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
+  getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace,
+  getTasks, createTask, updateTask, deleteTask,
+  logActivity = async () => ({ error: null }) } = supabaseApi
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
@@ -1249,6 +1252,3 @@ export default function App(){
   if(!session) return <AuthScreen/>
   if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={handleSignOut}/>
   if(accessStatus==='denied')  return <DeniedScreen onSignOut={handleSignOut}/>
-  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut}/>
-  return <AuthScreen/>
-}
