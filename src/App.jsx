@@ -135,7 +135,7 @@ function DeniedScreen({onSignOut}){
 }
 
 // ── Admin Panel ───────────────────────────────────────────────────────────────
-function AdminPanel({open,onClose}){
+function AdminPanel({open,onClose,onAccessChanged}){
   const [reqs,setReqs]=useState([]);const [loading,setLoading]=useState(true)
   const load=async()=>{setLoading(true);const{data}=await getAccessRequests();setReqs(data||[]);setLoading(false)}
   useEffect(()=>{if(open)load()},[open])
@@ -149,7 +149,8 @@ function AdminPanel({open,onClose}){
     } else {
       await denyRequest(uid)
     }
-    load()
+    await load()
+    await onAccessChanged?.()
   }
   const sc={pending:'#f59e0b',approved:'#10b981',denied:'#ef4444'}
   return(
@@ -169,6 +170,7 @@ function AdminPanel({open,onClose}){
               <button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>✓ Approve</button>
               <button onClick={()=>act(r.user_id,'deny')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>✗ Deny</button>
             </div>}
+            {status==='denied'&&<button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>Approve Again</button>}
             {status==='approved'&&<button onClick={()=>act(r.user_id,'remove')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>Remove Access</button>}
           </div>
         </div>
@@ -597,7 +599,7 @@ function DropColumn({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
-function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
+function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   const [workspaces,   setWorkspaces]   = useState([])
   const [activeWsId,   setActiveWsId]   = useState(null)
   const [wsMembers,    setWsMembers]    = useState([])
@@ -1163,7 +1165,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
           wsName={activeWs.name} onImport={handleImport}/>
       )}
       <Confirm open={!!delWs} icon="⚠️" title="Delete Workspace?" body={`Delete "${delWs?.name}" and all its tasks?`} confirmLabel="Delete Workspace" onConfirm={()=>handleDeleteWorkspace(delWs?.id)} onCancel={()=>setDelWs(null)}/>
-      <AdminPanel open={adminOpen} onClose={()=>setAdminOpen(false)}/>
+      <AdminPanel open={adminOpen} onClose={()=>setAdminOpen(false)} onAccessChanged={onAccessChanged}/>
     </div>
   )
 }
@@ -1217,6 +1219,17 @@ export default function App(){
     }
   },[])
 
+  const refreshApprovedProfiles=useCallback(async()=>{
+    const{data:ar}=await supabase.from('access_requests').select('user_id').eq('status','approved')
+    const ids=ar?.map(r=>r.user_id)||[]
+    if(ids.length===0){
+      setAllProfiles([])
+      return
+    }
+    const{data}=await supabase.from('profiles').select('id,email,name,avatar_url').in('id',ids)
+    setAllProfiles(data||[])
+  },[])
+
   const handleUserAuth=async user=>{
     setLoading(true)
     await upsertProfile(user)
@@ -1228,12 +1241,7 @@ export default function App(){
       if(!status){await submitAccessRequest(user);setAccessStatus('pending')}
       else setAccessStatus(status)
     }
-    const{data:ar}=await supabase.from('access_requests').select('user_id').eq('status','approved')
-    const ids=ar?.map(r=>r.user_id)||[]
-    if(ids.length>0){
-      const{data}=await supabase.from('profiles').select('id,email,name,avatar_url').in('id',ids)
-      setAllProfiles(data||[])
-    }
+    await refreshApprovedProfiles()
     authUserIdRef.current=user.id
     initializedRef.current=true
     setLoading(false)
@@ -1252,6 +1260,6 @@ export default function App(){
   if(!session) return <AuthScreen/>
   if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={handleSignOut}/>
   if(accessStatus==='denied')  return <DeniedScreen onSignOut={handleSignOut}/>
-  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut}/>
+  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut} onAccessChanged={refreshApprovedProfiles}/>
   return <AuthScreen/>
 }
