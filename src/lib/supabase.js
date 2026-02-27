@@ -46,6 +46,11 @@ export async function denyRequest(userId) {
   return supabase.from('access_requests').update({ status: 'denied' }).eq('user_id', userId)
 }
 
+
+export async function removeUserFromAllWorkspaces(userId) {
+  return supabase.from('workspace_members').delete().eq('user_id', userId)
+}
+
 // ── Profiles ──────────────────────────────────────────────────────────────────
 
 export async function upsertProfile(user) {
@@ -141,11 +146,5 @@ export async function addComment(taskId, userId, text) {
 export async function logTime(taskId, userId, hours) {
   return supabase.from('task_activity').insert({
     task_id: taskId, user_id: userId, action: `Logged ${hours}h`, time_logged: hours
-  })
-}
-
-export async function logActivity(taskId, userId, action) {
-  return supabase.from('task_activity').insert({
-    task_id: taskId, user_id: userId, action, time_logged: 0
   })
 }
