@@ -148,3 +148,9 @@ export async function logTime(taskId, userId, hours) {
     task_id: taskId, user_id: userId, action: `Logged ${hours}h`, time_logged: hours
   })
 }
+
+export async function logActivity(taskId, userId, action) {
+  return supabase.from('task_activity').insert({
+    task_id: taskId, user_id: userId, action, time_logged: 0
+  })
+}
