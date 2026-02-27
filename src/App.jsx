@@ -1252,3 +1252,6 @@ export default function App(){
   if(!session) return <AuthScreen/>
   if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={handleSignOut}/>
   if(accessStatus==='denied')  return <DeniedScreen onSignOut={handleSignOut}/>
+  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut}/>
+  return <AuthScreen/>
+}
