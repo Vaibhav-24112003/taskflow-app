@@ -153,18 +153,23 @@ function AdminPanel({open,onClose}){
     <Modal open={open} onClose={onClose} title="🛡️ Access Requests" width={520}>
       {loading?<div style={{textAlign:'center',padding:40,color:'#64748b'}}>Loading…</div>
       :reqs.length===0?<div style={{textAlign:'center',padding:40,color:'#64748b'}}>No requests yet.</div>
-      :reqs.map(r=>(
+      :reqs.map(r=>{
+        const status=(r.status||'').trim().toLowerCase()
+        const statusColor=sc[status]||'#64748b'
+        return(
         <div key={r.user_id} style={{display:'flex',alignItems:'center',gap:12,background:'#131f35',border:'1px solid #1e2d42',borderRadius:12,padding:'12px 16px',marginBottom:10}}>
           <div style={{width:40,height:40,borderRadius:'50%',background:mkColor(r.email),color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,flexShrink:0}}>{mkInit(r.name||r.email)}</div>
-          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:'#f1f5f9'}}>{r.name}</div><div style={{fontSize:11,color:'#64748b'}}>{r.email}</div></div>
-          <span style={{fontSize:11,fontWeight:700,color:sc[r.status],background:sc[r.status]+'22',border:`1px solid ${sc[r.status]}44`,borderRadius:6,padding:'2px 8px'}}>{r.status.toUpperCase()}</span>
-          {r.status==='pending'&&<>
-            <button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>✓ Approve</button>
-            <button onClick={()=>act(r.user_id,'deny')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>✗ Deny</button>
-          </>}
-          {r.status==='approved'&&<button onClick={()=>act(r.user_id,'remove')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>Remove Access</button>}
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:'#f1f5f9'}}>{r.name}</div><div style={{fontSize:11,color:'#64748b',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.email}</div></div>
+          <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+            <span style={{fontSize:11,fontWeight:700,color:statusColor,background:statusColor+'22',border:`1px solid ${statusColor}44`,borderRadius:6,padding:'2px 8px'}}>{status.toUpperCase()}</span>
+            {status==='pending'&&<div style={{display:'flex',gap:6}}>
+              <button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>✓ Approve</button>
+              <button onClick={()=>act(r.user_id,'deny')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>✗ Deny</button>
+            </div>}
+            {status==='approved'&&<button onClick={()=>act(r.user_id,'remove')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>Remove Access</button>}
+          </div>
         </div>
-      ))}
+      )})}
     </Modal>
   )
 }
@@ -534,6 +539,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
   return(
     <>
       <div draggable={!mirrored} onDragStart={e=>{if(mirrored)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}}
+        onClick={()=>onEdit(task)}
         style={{background:isDragging?'#1a2a40':'#0d1627',border:`1px solid ${isDragging?wsColor:hov?accentColor+'66':'#1e2d42'}`,borderRadius:12,padding:14,cursor:mirrored?'default':'grab',transition:'all 0.15s',borderLeft:`3px solid ${accentColor}`,opacity:isDragging?0.4:1,boxShadow:hov&&!isDragging?'0 8px 24px rgba(0,0,0,0.5)':'none',userSelect:'none',position:'relative'}}
         onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
         {mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#818cf833',color:'#818cf8',border:'1px solid #818cf844',borderRadius:5,padding:'2px 6px'}}>📥 ASSIGNED TO ME</div>}
@@ -611,6 +617,16 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut}){
   const [sidebarOpen,  setSidebarOpen]  = useState(true)
   const [lightMode,    setLightMode]    = useState(false)
   const pRef=useRef()
+
+  useEffect(()=>{
+    const savedLight=localStorage.getItem('taskflow-light-mode')
+    const savedSidebar=localStorage.getItem('taskflow-sidebar-open')
+    if(savedLight!==null) setLightMode(savedLight==='true')
+    if(savedSidebar!==null) setSidebarOpen(savedSidebar==='true')
+  },[])
+
+  useEffect(()=>{localStorage.setItem('taskflow-light-mode',String(lightMode))},[lightMode])
+  useEffect(()=>{localStorage.setItem('taskflow-sidebar-open',String(sidebarOpen))},[sidebarOpen])
 
   const showToast=useCallback((msg,type='ok')=>{setToast({msg,type});setTimeout(()=>setToast(null),4000)},[])
   const activeWs=workspaces.find(w=>w.id===activeWsId)||null
@@ -1155,17 +1171,32 @@ export default function App(){
   const [accessStatus, setAccessStatus] = useState(null)
   const [allProfiles,  setAllProfiles]  = useState([])
   const [loading,      setLoading]      = useState(true)
+  const initializedRef = useRef(false)
+  const authUserIdRef  = useRef(null)
   const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL||''
   const isAdmin = session?.user?.email===ADMIN_EMAIL
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
-      setSession(session);if(session)handleUserAuth(session.user);else setLoading(false)
+      setSession(session)
+      if(session){
+        handleUserAuth(session.user)
+      } else {
+        setLoading(false)
+        initializedRef.current=true
+      }
     })
     const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
       setSession(session)
-      if(!session){setAccessStatus(null);setLoading(false);return}
-      if(event==='SIGNED_IN'||event==='USER_UPDATED'){
+      if(!session){
+        authUserIdRef.current=null
+        setAccessStatus(null)
+        setLoading(false)
+        initializedRef.current=true
+        return
+      }
+      const isNewUser=authUserIdRef.current!==session.user.id
+      if(!initializedRef.current||event==='USER_UPDATED'||(event==='SIGNED_IN'&&isNewUser)){
         handleUserAuth(session.user)
       }
     })
@@ -1200,10 +1231,24 @@ export default function App(){
       const{data}=await supabase.from('profiles').select('id,email,name,avatar_url').in('id',ids)
       setAllProfiles(data||[])
     }
+    authUserIdRef.current=user.id
+    initializedRef.current=true
     setLoading(false)
   }
 
-  const handleSignOut=async()=>{await signOut();setSession(null);setAccessStatus(null)}
+  const handleSignOut=async()=>{await signOut();authUserIdRef.current=null;setSession(null);setAccessStatus(null)}
 
   if(loading) return(
     <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:40,marginBottom:16}}>✦</div>
+        <div style={{fontSize:14,color:'#64748b'}}>Loading TaskFlow…</div>
+      </div>
+    </div>
+  )
+  if(!session) return <AuthScreen/>
+  if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={handleSignOut}/>
+  if(accessStatus==='denied')  return <DeniedScreen onSignOut={handleSignOut}/>
+  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut}/>
+  return <AuthScreen/>
+}
