@@ -97,11 +97,33 @@ export async function deleteWorkspace(id) {
 }
 
 export async function getWorkspaceMembers(wsId) {
-  const { data, error } = await supabase
+  const { data: members, error } = await supabase
     .from('workspace_members')
-    .select('role, profiles(id, email, name, avatar_url)')
+    .select('user_id, role')
     .eq('workspace_id', wsId)
-  return { data: (data || []).map(r => ({ ...r.profiles, role: r.role })), error }
+
+  if (error) return { data: [], error }
+
+  const userIds = (members || []).map(m => m.user_id)
+  if (userIds.length === 0) return { data: [], error: null }
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, email, name, avatar_url')
+    .in('id', userIds)
+
+  if (profilesError) return { data: [], error: profilesError }
+
+  const profileById = new Map((profiles || []).map(p => [p.id, p]))
+  return {
+    data: (members || [])
+      .map(m => {
+        const profile = profileById.get(m.user_id)
+        return profile ? { ...profile, role: m.role } : null
+      })
+      .filter(Boolean),
+    error: null,
+  }
 }
 
 export async function addMemberToWorkspace(wsId, userId, role = 'member') {
