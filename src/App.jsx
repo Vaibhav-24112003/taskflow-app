@@ -1220,7 +1220,7 @@ export default function App(){
   },[])
 
   const refreshApprovedProfiles=useCallback(async()=>{
-    const{data:ar}=await supabase.from('access_requests').select('user_id').eq('status','approved')
+    const{data:ar}=await supabase.from('access_requests').select('user_id,status').in('status',['approved','APPROVED','Approved'])
     const ids=ar?.map(r=>r.user_id)||[]
     if(ids.length===0){
       setAllProfiles([])
