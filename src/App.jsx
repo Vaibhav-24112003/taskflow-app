@@ -11,6 +11,7 @@ const { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessSta
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
 const PRIORITIES       = ['Low','Medium','High','Critical']
+const RECURRENCE_TYPES = ['none','daily','weekly','monthly']
 const PC  = {'Low':'#6b7280','Medium':'#3b82f6','High':'#f59e0b','Critical':'#ef4444'}
 const PI  = {'Low':'↓','Medium':'→','High':'↑','Critical':'⚡'}
 const WS_COLORS = ['#6366f1','#ec4899','#10b981','#f59e0b','#06b6d4','#8b5cf6','#ef4444','#3b82f6']
@@ -21,6 +22,15 @@ const mkColor    = e=>{let n=0;for(let c of e)n+=c.charCodeAt(0);return WS_COLOR
 const mkInit     = n=>n.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
 const isOverdue  = d=>d&&new Date(d)<new Date()
 const fmtDate    = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—'
+const nextRecurringDate=(dueDate,type='none',interval=1)=>{
+  if(!dueDate||type==='none') return null
+  const dt=new Date(`${dueDate}T00:00:00`)
+  const step=Math.max(1,Number(interval)||1)
+  if(type==='daily') dt.setDate(dt.getDate()+step)
+  else if(type==='weekly') dt.setDate(dt.getDate()+7*step)
+  else if(type==='monthly') dt.setMonth(dt.getMonth()+step)
+  return dt.toISOString().slice(0,10)
+}
 const enrich     = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u.email||'')}:null
 const getUser    = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
 const scMap      = ss=>{const d={'Todo':'#6b7280','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%6)]]))}
@@ -374,6 +384,8 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   const [status,setStatus]             = useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]         = useState('Medium')
   const [assignTarget,setAssignTarget] = useState('self')
+  const [recurrenceType,setRecurrenceType] = useState('none')
+  const [recurrenceInterval,setRecurrenceInterval] = useState(1)
   const [cdel,setCdel]                 = useState(false)
   const isEdit=!!task
 
@@ -384,7 +396,13 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     if(task){
       const selfAssigned=!task.assigned_to||task.assigned_to===task.created_by
       setAssignTarget(selfAssigned?'self':task.assigned_to)
-    } else setAssignTarget('self')
+      setRecurrenceType(task?.recurrence_type||'none')
+      setRecurrenceInterval(task?.recurrence_interval||1)
+    } else {
+      setAssignTarget('self')
+      setRecurrenceType('none')
+      setRecurrenceInterval(1)
+    }
   },[open,task,defaultStatus,statuses])
 
   if(!open||!ws||!cu) return null
@@ -398,6 +416,8 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       project:projRef.current?.value?.trim()||'',
       tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),
       due_date:dateRef.current?.value||null,
+      recurrence_type:recurrenceType,
+      recurrence_interval:Math.max(1,Number(recurrenceInterval)||1),
       status,priority,assigned_to,
       workspace_id:ws.id,created_by:task?.created_by||cu.id,
     }
@@ -458,6 +478,14 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
             )}
           </F>
           <F label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
+          <F label="Repeat">
+            <select value={recurrenceType} onChange={e=>setRecurrenceType(e.target.value)} style={{...INP,cursor:'pointer'}}>
+              {RECURRENCE_TYPES.map(r=><option key={r} value={r}>{r==='none'?'Does not repeat':`Every ${r}`}</option>)}
+            </select>
+          </F>
+          <F label="Repeat Interval">
+            <input type="number" min={1} value={recurrenceInterval} onChange={e=>setRecurrenceInterval(e.target.value)} disabled={recurrenceType==='none'} style={{...INP,opacity:recurrenceType==='none'?0.6:1}}/>
+          </F>
           <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Accounts, HR"/></F>
           <F label="Tags (comma-separated)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
         </div>
@@ -707,10 +735,32 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   // ── Task CRUD ──────────────────────────────────────────────────────────────
   const handleSaveTask=async td=>{
     if(td.id){
+      const prev=tasks.find(t=>t.id===td.id)
       const{data,error}=await updateTask(td.id,td)
       if(error){showToast('Save failed: '+error.message,'err');return}
       if(data) setTasks(p=>p.map(t=>t.id===data.id?data:t))
       await logActivity(td.id,cu.id,'Updated task')
+
+      const becameDone=prev&&prev.status!=='Done'&&td.status==='Done'
+      const recurring=td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date
+      if(becameDone&&recurring){
+        const nextDue=nextRecurringDate(td.due_date,td.recurrence_type,td.recurrence_interval)
+        if(nextDue){
+          const clone={
+            title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],
+            due_date:nextDue,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval,
+            status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,
+            workspace_id:td.workspace_id,created_by:cu.id,
+          }
+          const{data:nextTask,error:nextErr}=await createTask(clone)
+          if(!nextErr&&nextTask){
+            setTasks(p=>[...p,nextTask])
+            await logActivity(nextTask.id,cu.id,'Created recurring task')
+            showToast(`Task saved! Next recurring task created for ${fmtDate(nextDue)} ✓`)
+            return
+          }
+        }
+      }
       showToast('Task saved! ✓')
     } else {
       const{data,error}=await createTask(td)
@@ -1213,53 +1263,3 @@ export default function App(){
     if(!document.getElementById(id)){
       const l=document.createElement('link')
       l.id=id
-      l.rel='stylesheet'
-      l.href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
-      document.head.appendChild(l)
-    }
-  },[])
-
-  const refreshApprovedProfiles=useCallback(async()=>{
-    const{data:ar}=await supabase.from('access_requests').select('user_id,status').in('status',['approved','APPROVED','Approved'])
-    const ids=ar?.map(r=>r.user_id)||[]
-    if(ids.length===0){
-      setAllProfiles([])
-      return
-    }
-    const{data}=await supabase.from('profiles').select('id,email,name,avatar_url').in('id',ids)
-    setAllProfiles(data||[])
-  },[])
-
-  const handleUserAuth=async user=>{
-    setLoading(true)
-    await upsertProfile(user)
-    if(user.email===ADMIN_EMAIL){
-      await supabase.from('access_requests').upsert({user_id:user.id,email:user.email,name:user.user_metadata?.full_name||user.email,status:'approved'},{onConflict:'user_id'})
-      setAccessStatus('approved')
-    } else {
-      const status=await checkAccessStatus(user.id)
-      if(!status){await submitAccessRequest(user);setAccessStatus('pending')}
-      else setAccessStatus(status)
-    }
-    await refreshApprovedProfiles()
-    authUserIdRef.current=user.id
-    initializedRef.current=true
-    setLoading(false)
-  }
-
-  const handleSignOut=async()=>{await signOut();authUserIdRef.current=null;setSession(null);setAccessStatus(null)}
-
-  if(loading) return(
-    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{fontSize:40,marginBottom:16}}>✦</div>
-        <div style={{fontSize:14,color:'#64748b'}}>Loading TaskFlow…</div>
-      </div>
-    </div>
-  )
-  if(!session) return <AuthScreen/>
-  if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={handleSignOut}/>
-  if(accessStatus==='denied')  return <DeniedScreen onSignOut={handleSignOut}/>
-  if(accessStatus==='approved') return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={handleSignOut} onAccessChanged={refreshApprovedProfiles}/>
-  return <AuthScreen/>
-}
