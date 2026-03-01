@@ -11,54 +11,60 @@ const { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessSta
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
 const PRIORITIES       = ['Low','Medium','High','Critical']
-const RECURRENCE_TYPES = ['none','daily','weekly','monthly']
+const RECURRENCE_TYPES = ['none','daily','weekly','monthly','custom']
 const PC  = {'Low':'#6b7280','Medium':'#3b82f6','High':'#f59e0b','Critical':'#ef4444'}
 const PI  = {'Low':'↓','Medium':'→','High':'↑','Critical':'⚡'}
 const WS_COLORS = ['#6366f1','#ec4899','#10b981','#f59e0b','#06b6d4','#8b5cf6','#ef4444','#3b82f6']
 const WS_ICONS  = ['⬡','◈','◉','⊛','◆','▲','●','■']
 const SCPAL     = ['#6b7280','#6366f1','#f59e0b','#10b981','#ec4899','#06b6d4','#8b5cf6','#ef4444','#3b82f6','#84cc16']
 
+const RECURRENCE_LABELS = {
+  none: 'Does not repeat',
+  daily: 'Every day',
+  weekly: 'Every week',
+  monthly: 'Every month',
+  custom: 'Custom interval…',
+}
+
 const mkColor    = e=>{let n=0;for(let c of e)n+=c.charCodeAt(0);return WS_COLORS[n%WS_COLORS.length]}
 const mkInit     = n=>n.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
 const isOverdue  = d=>d&&new Date(d)<new Date()
 const fmtDate    = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—'
+
 const nextRecurringDate=(dueDate,type='none',interval=1)=>{
   if(!dueDate||type==='none') return null
   const dt=new Date(`${dueDate}T00:00:00`)
   const step=Math.max(1,Number(interval)||1)
-  if(type==='daily') dt.setDate(dt.getDate()+step)
+  if(type==='daily'||type==='custom') dt.setDate(dt.getDate()+step)
   else if(type==='weekly') dt.setDate(dt.getDate()+7*step)
   else if(type==='monthly') dt.setMonth(dt.getMonth()+step)
   return dt.toISOString().slice(0,10)
 }
+
+const recurringLabel=(type,interval=1)=>{
+  if(!type||type==='none') return null
+  const n=Number(interval)||1
+  if(type==='daily') return n===1?'Repeats daily':`Every ${n} days`
+  if(type==='weekly') return n===1?'Repeats weekly':`Every ${n} weeks`
+  if(type==='monthly') return n===1?'Repeats monthly':`Every ${n} months`
+  if(type==='custom') return `Every ${n} days`
+  return null
+}
+
 const enrich     = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u.email||'')}:null
 const getUser    = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
 const scMap      = ss=>{const d={'Todo':'#6b7280','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%6)]]))}
 
-// ─── Task visibility logic (the 3 rules) ──────────────────────────────────────
-// A task is visible on a user's board if:
-//   Rule 1: created_by = user AND assigned_to = null (unassigned — only creator sees)
-//   Rule 2a: assigned_to = user (assigned to me — I see it as mirrored)
-//   Rule 2b: created_by = user AND assigned_to ≠ null AND assigned_to ≠ user (I delegated it — I see it)
-//   Rule 3: created_by = user AND assigned_to = user (self-assigned — only I see)
+// ─── Task visibility logic ──────────────────────────────────────────────────────
 const isOnMyBoard = (task, userId) => {
   const mine    = task.created_by === userId
   const assignedToMe = task.assigned_to === userId
   const unassigned   = !task.assigned_to
   const delegated    = mine && task.assigned_to && task.assigned_to !== userId
-  return mine && unassigned   // Rule 1: my unassigned task
-      || assignedToMe         // Rule 2a + 3: assigned to me (by anyone, including self)
-      || delegated            // Rule 2b: I created and delegated to someone else
+  return (mine && unassigned) || assignedToMe || delegated
 }
-
-// A task is "mirrored" (assigned by someone else to me) if:
 const isMirroredToMe = (task, userId) =>
   task.assigned_to === userId && task.created_by !== userId
-
-// Tasks visible on a specific member's board FROM MANAGER VIEW:
-// Only tasks assigned to that member (not their private self-tasks)
-const isAssignedToMember = (task, memberId) =>
-  task.assigned_to === memberId && task.created_by !== memberId
 
 const INP = {display:'block',width:'100%',boxSizing:'border-box',background:'#131f35',border:'1px solid #1e2d42',borderRadius:9,padding:'10px 13px',color:'#f1f5f9',fontSize:14,outline:'none',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif",lineHeight:1.5}
 const LBL = {display:'block',fontSize:11,color:'#64748b',fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.07em'}
@@ -127,7 +133,7 @@ function AuthScreen(){
         </div>
       </div>
       <div style={{width:260,background:'#0a1220',borderLeft:'1px solid #1e2d42',display:'flex',flexDirection:'column',justifyContent:'center',padding:32}}>
-        {[{icon:'👤',title:'Personal Board',desc:'Your tasks stay private'},{icon:'📤',title:'Delegate to Team',desc:'Assign tasks — mirror on their board'},{icon:'👁',title:'Manager View',desc:'Pick any member to see their board'},{icon:'📊',title:'CSV Import/Export',desc:'Bulk upload or download all tasks'}].map(f=>(
+        {[{icon:'👤',title:'Personal Board',desc:'Your tasks stay private'},{icon:'📤',title:'Delegate to Team',desc:'Assign tasks — mirror on their board'},{icon:'🔁',title:'Recurring Tasks',desc:'Auto-create tasks on a schedule'},{icon:'📊',title:'CSV Import/Export',desc:'Bulk upload or download all tasks'}].map(f=>(
           <div key={f.title} style={{display:'flex',gap:12,marginBottom:20}}>
             <div style={{width:32,height:32,borderRadius:9,background:'#6366f122',border:'1px solid #6366f144',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0}}>{f.icon}</div>
             <div><div style={{fontSize:13,fontWeight:700,color:'#e2e8f0',marginBottom:2}}>{f.title}</div><div style={{fontSize:12,color:'#64748b',lineHeight:1.5}}>{f.desc}</div></div>
@@ -150,17 +156,12 @@ function AdminPanel({open,onClose,onAccessChanged}){
   const load=async()=>{setLoading(true);const{data}=await getAccessRequests();setReqs(data||[]);setLoading(false)}
   useEffect(()=>{if(open)load()},[open])
   const act=async(uid,a)=>{
-    if(a==='approve'){
-      await approveRequest(uid)
-    } else if(a==='remove'){
+    if(a==='approve'){await approveRequest(uid)}
+    else if(a==='remove'){
       if(!window.confirm('Remove this person from access and all workspace memberships?')) return
-      await denyRequest(uid)
-      await removeUserFromAllWorkspaces(uid)
-    } else {
-      await denyRequest(uid)
-    }
-    await load()
-    await onAccessChanged?.()
+      await denyRequest(uid);await removeUserFromAllWorkspaces(uid)
+    } else {await denyRequest(uid)}
+    await load();await onAccessChanged?.()
   }
   const sc={pending:'#f59e0b',approved:'#10b981',denied:'#ef4444'}
   return(
@@ -232,8 +233,13 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 
   const handleExport=()=>{
     const getName=id=>wsMembers.find(m=>m.id===id)?.name||id||''
-    const headers=['Title','Description','Status','Priority','Assigned To','Created By','Project','Tags','Due Date']
-    const rows=tasks.map(t=>[t.title,t.description||'',t.status,t.priority,getName(t.assigned_to),getName(t.created_by),t.project||'',(t.tags||[]).join(';'),t.due_date||''].map(esc))
+    const headers=['Title','Description','Status','Priority','Assigned To','Created By','Project','Tags','Due Date','Recurrence','Interval']
+    const rows=tasks.map(t=>[
+      t.title,t.description||'',t.status,t.priority,
+      getName(t.assigned_to),getName(t.created_by),
+      t.project||'',(t.tags||[]).join(';'),t.due_date||'',
+      t.recurrence_type||'none',t.recurrence_interval||1
+    ].map(esc))
     const csv=[headers,...rows].map(r=>r.join(',')).join('\n')
     const blob=new Blob([csv],{type:'text/csv'})
     const url=URL.createObjectURL(blob)
@@ -268,6 +274,8 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
         project:(cols[gi('project')]||'').trim(),
         tags:(cols[gi('tags')]||'').split(';').map(t=>t.trim()).filter(Boolean),
         due_date:(cols[gi('due_date')]||'').trim()||null,
+        recurrence_type:(cols[gi('recurrence')]||'none').trim(),
+        recurrence_interval:Math.max(1,parseInt(cols[gi('interval')])||1),
       }
     }).filter(r=>r.title)
   }
@@ -294,11 +302,8 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
       {tab==='export'&&(
         <div>
           <div style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:12,padding:16,marginBottom:16}}>
-            <div style={{fontSize:13,color:'#94a3b8',marginBottom:12,lineHeight:1.6}}>Downloads a CSV with all <strong style={{color:'#f1f5f9'}}>{tasks.length} tasks</strong> from this workspace. Open in Excel or Google Sheets, or reimport later.</div>
-            <div style={{fontSize:11,color:'#64748b',fontFamily:'monospace',background:'#0d1627',borderRadius:8,padding:'8px 12px'}}>Title · Description · Status · Priority · Assigned To · Created By · Project · Tags · Due Date</div>
-          </div>
-          <div style={{background:'#f59e0b11',border:'1px solid #f59e0b33',borderRadius:10,padding:'10px 14px',marginBottom:20,fontSize:12,color:'#f59e0b',lineHeight:1.6}}>
-            💡 <strong>Tip for reimport:</strong> Keep "Assigned To" as the member's exact name or email. Tags = semicolon-separated (e.g. <em>Urgent;Finance</em>).
+            <div style={{fontSize:13,color:'#94a3b8',marginBottom:12,lineHeight:1.6}}>Downloads a CSV with all <strong style={{color:'#f1f5f9'}}>{tasks.length} tasks</strong> from this workspace.</div>
+            <div style={{fontSize:11,color:'#64748b',fontFamily:'monospace',background:'#0d1627',borderRadius:8,padding:'8px 12px'}}>Title · Description · Status · Priority · Assigned To · Created By · Project · Tags · Due Date · Recurrence · Interval</div>
           </div>
           <button onClick={handleExport} style={{width:'100%',background:'linear-gradient(135deg,#10b981,#059669)',border:'none',borderRadius:10,padding:'12px',color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
             ⬇ Download {tasks.length} Tasks as CSV
@@ -310,19 +315,9 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
         <div>
           <div style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:12,padding:16,marginBottom:16,fontSize:12,color:'#94a3b8',lineHeight:1.8}}>
             <div style={{fontWeight:700,color:'#f1f5f9',marginBottom:8,fontSize:13}}>CSV Format Requirements</div>
-            <div>• First row must be a <strong style={{color:'#818cf8'}}>header row</strong></div>
             <div>• Required column: <strong style={{color:'#818cf8'}}>Title</strong></div>
-            <div>• Optional: Description, Status, Priority, Assigned To, Project, Tags (semicolon-sep), Due Date (YYYY-MM-DD)</div>
-            <div>• "Assigned To" must match a member's exact name or email</div>
+            <div>• Optional: Description, Status, Priority, Assigned To, Project, Tags (semicolon-sep), Due Date (YYYY-MM-DD), Recurrence (none/daily/weekly/monthly/custom), Interval</div>
           </div>
-          <button onClick={()=>{
-            const csv='Title,Description,Status,Priority,Assigned To,Project,Tags,Due Date\n"Sample Task","Details here","Todo","Medium","","Project Name","tag1;tag2","2025-12-31"'
-            const blob=new Blob([csv],{type:'text/csv'})
-            const url=URL.createObjectURL(blob)
-            const a=document.createElement('a');a.href=url;a.download='taskflow_import_template.csv';a.click();URL.revokeObjectURL(url)
-          }} style={{width:'100%',background:'#131f35',border:'1px solid #1e2d42',borderRadius:9,padding:'9px',color:'#94a3b8',cursor:'pointer',fontSize:12,fontWeight:600,marginBottom:14,textAlign:'center'}}>
-            📋 Download Import Template
-          </button>
           <div onDragOver={e=>{e.preventDefault();setDragging(true)}} onDragLeave={()=>setDragging(false)}
             onDrop={e=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f)}}
             onClick={()=>fileRef.current?.click()}
@@ -344,28 +339,22 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
           <div style={{maxHeight:280,overflow:'auto',border:'1px solid #1e2d42',borderRadius:12,marginBottom:14}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
               <thead style={{position:'sticky',top:0,background:'#0b1220'}}>
-                <tr>{['Title','Status','Priority','Assigned To','Due Date'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:'#64748b',fontWeight:700,borderBottom:'1px solid #1e2d42',whiteSpace:'nowrap'}}>{h}</th>)}</tr>
+                <tr>{['Title','Status','Priority','Assigned To','Due Date','Repeat'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:'#64748b',fontWeight:700,borderBottom:'1px solid #1e2d42',whiteSpace:'nowrap'}}>{h}</th>)}</tr>
               </thead>
               <tbody>
-                {preview.map((r,i)=>{
-                  const validStatus=statuses.includes(r.status)
-                  const validPriority=PRIORITIES.includes(r.priority)
-                  const assigneeFound=!r.assigned_to_name||wsMembers.some(m=>m.name?.toLowerCase()===r.assigned_to_name.toLowerCase()||m.email?.toLowerCase()===r.assigned_to_name.toLowerCase())
-                  const warn=!validStatus||!validPriority||!assigneeFound
-                  return(
-                    <tr key={i} style={{borderBottom:'1px solid #1e2d42',background:warn?'#f59e0b08':'transparent'}}>
-                      <td style={{padding:'7px 12px',color:'#f1f5f9',fontWeight:600}}>{r.title}</td>
-                      <td style={{padding:'7px 8px'}}><span style={{color:validStatus?'#94a3b8':'#f59e0b'}}>{r.status||'—'}</span>{!validStatus&&<span style={{fontSize:9,color:'#f59e0b',marginLeft:4}}>→{statuses[0]}</span>}</td>
-                      <td style={{padding:'7px 8px'}}><span style={{color:validPriority?'#94a3b8':'#f59e0b'}}>{r.priority||'—'}</span>{!validPriority&&<span style={{fontSize:9,color:'#f59e0b',marginLeft:4}}>→Medium</span>}</td>
-                      <td style={{padding:'7px 8px'}}><span style={{color:assigneeFound?'#94a3b8':'#f59e0b'}}>{r.assigned_to_name||'—'}</span>{!assigneeFound&&<span style={{fontSize:9,color:'#f59e0b',marginLeft:4}}>→Me</span>}</td>
-                      <td style={{padding:'7px 8px',color:'#94a3b8'}}>{r.due_date||'—'}</td>
-                    </tr>
-                  )
-                })}
+                {preview.map((r,i)=>(
+                  <tr key={i} style={{borderBottom:'1px solid #1e2d42'}}>
+                    <td style={{padding:'7px 12px',color:'#f1f5f9',fontWeight:600}}>{r.title}</td>
+                    <td style={{padding:'7px 8px',color:'#94a3b8'}}>{r.status||'—'}</td>
+                    <td style={{padding:'7px 8px',color:'#94a3b8'}}>{r.priority||'—'}</td>
+                    <td style={{padding:'7px 8px',color:'#94a3b8'}}>{r.assigned_to_name||'—'}</td>
+                    <td style={{padding:'7px 8px',color:'#94a3b8'}}>{r.due_date||'—'}</td>
+                    <td style={{padding:'7px 8px'}}>{r.recurrence_type!=='none'?<span style={{color:'#818cf8',fontSize:10}}>🔁 {recurringLabel(r.recurrence_type,r.recurrence_interval)}</span>:<span style={{color:'#374151',fontSize:10}}>—</span>}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-          <div style={{fontSize:11,color:'#64748b',marginBottom:14,lineHeight:1.6}}>Yellow rows have warnings — invalid values default, unknown assignees → assigned to you.</div>
           <div style={{display:'flex',gap:10}}>
             <button onClick={()=>setPreview(null)} style={{flex:1,background:'#1a2640',border:'1px solid #2a3a54',borderRadius:9,padding:'10px',color:'#94a3b8',cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>
             <button onClick={()=>{onImport(preview);onClose();setPreview(null)}} style={{flex:2,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:9,padding:'10px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13}}>
@@ -375,6 +364,46 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
         </div>
       )}
     </Modal>
+  )
+}
+
+// ── Recurrence Picker ─────────────────────────────────────────────────────────
+function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onIntervalChange}){
+  const isCustom = recurrenceType === 'custom'
+  const showInterval = recurrenceType !== 'none'
+  return(
+    <div style={{background:'#0d1627',border:'1px solid #1e2d42',borderRadius:12,padding:'12px 14px',marginTop:2}}>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:showInterval?12:0}}>
+        {RECURRENCE_TYPES.map(rt=>(
+          <button key={rt} onClick={()=>onTypeChange(rt)}
+            style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${recurrenceType===rt?'#6366f1':'#1e2d42'}`,background:recurrenceType===rt?'#6366f122':'transparent',color:recurrenceType===rt?'#818cf8':'#64748b',cursor:'pointer',fontSize:12,fontWeight:recurrenceType===rt?700:500,transition:'all 0.15s',whiteSpace:'nowrap'}}>
+            {rt==='none'?'✕ None':rt==='daily'?'📅 Daily':rt==='weekly'?'📆 Weekly':rt==='monthly'?'🗓 Monthly':'⚙️ Custom'}
+          </button>
+        ))}
+      </div>
+      {showInterval&&(
+        <div style={{display:'flex',alignItems:'center',gap:10,background:'#131f35',borderRadius:9,padding:'10px 12px',border:'1px solid #1e2d42'}}>
+          <span style={{fontSize:12,color:'#64748b',whiteSpace:'nowrap'}}>Every</span>
+          <input type="number" min={1} max={365} value={recurrenceInterval}
+            onChange={e=>onIntervalChange(Math.max(1,parseInt(e.target.value)||1))}
+            style={{...INP,width:70,padding:'6px 10px',fontSize:13,flex:'none'}}/>
+          <span style={{fontSize:12,color:'#94a3b8',whiteSpace:'nowrap'}}>
+            {recurrenceType==='daily'?`day${recurrenceInterval===1?'':'s'}`:
+             recurrenceType==='weekly'?`week${recurrenceInterval===1?'':'s'}`:
+             recurrenceType==='monthly'?`month${recurrenceInterval===1?'':'s'}`:
+             `day${recurrenceInterval===1?'':'s'}`}
+          </span>
+          <span style={{marginLeft:'auto',fontSize:11,color:'#6366f1',background:'#6366f122',border:'1px solid #6366f144',borderRadius:6,padding:'3px 8px',whiteSpace:'nowrap'}}>
+            🔁 {recurringLabel(recurrenceType,recurrenceInterval)}
+          </span>
+        </div>
+      )}
+      {showInterval&&recurrenceType!=='none'&&(
+        <div style={{marginTop:8,fontSize:11,color:'#64748b',lineHeight:1.6}}>
+          💡 When you mark this task <strong style={{color:'#10b981'}}>Done</strong>, a new copy will auto-create with the next due date.
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -432,10 +461,10 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 
   return(
     <>
-      <Modal open={open} onClose={onClose} title={isEdit?'✏️ Edit Task':'✦ New Task'} width={580}>
+      <Modal open={open} onClose={onClose} title={isEdit?'✏️ Edit Task':'✦ New Task'} width={600}>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
           <F label="Task Title *" full><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={INP} onKeyDown={e=>{if(e.key==='Enter')handleSave()}}/></F>
-          <F label="Description" full><textarea ref={descRef} defaultValue={task?.description||''} rows={3} style={{...INP,resize:'vertical'}} placeholder="Details…"/></F>
+          <F label="Description" full><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Details…"/></F>
           <F label="Status">
             <select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>
               {statuses.map(s=><option key={s} value={s}>{s}</option>)}
@@ -446,7 +475,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
               {PRIORITIES.map(p=><option key={p} value={p}>{p}</option>)}
             </select>
           </F>
-          <F label={otherMembers.length===0?'Assign To (add members to workspace first)':'Assign To'} full>
+          <F label={otherMembers.length===0?'Assign To (add members first)':'Assign To'} full>
             <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
               <div onClick={()=>setAssignTarget('self')}
                 style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:10,cursor:'pointer',border:`2px solid ${assignTarget==='self'?ws.color:'#1e2d42'}`,background:assignTarget==='self'?ws.color+'18':'#131f35',transition:'all 0.15s',flexShrink:0}}>
@@ -465,26 +494,18 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                   </div>
                 )
               })}
-              {otherMembers.length===0&&(
-                <div style={{fontSize:12,color:'#64748b',background:'#0d1627',border:'1px solid #1e2d42',borderRadius:10,padding:'10px 14px',lineHeight:1.7,flex:1}}>
-                  No teammates yet. Edit workspace (✏️ button) → tick members → Save Changes. Then come back here.
-                </div>
-              )}
             </div>
-            {assignTarget!=='self'&&(
-              <div style={{marginTop:10,fontSize:11,color:'#f59e0b',background:'#f59e0b11',border:'1px solid #f59e0b33',borderRadius:8,padding:'8px 12px',lineHeight:1.6}}>
-                📤 Will appear on <strong>{wsMembers.find(m=>m.id===assignTarget)?.name||'their'}</strong>'s board as assigned work, and stay on your board for tracking.
-              </div>
-            )}
           </F>
-          <F label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
-          <F label="Repeat">
-            <select value={recurrenceType} onChange={e=>setRecurrenceType(e.target.value)} style={{...INP,cursor:'pointer'}}>
-              {RECURRENCE_TYPES.map(r=><option key={r} value={r}>{r==='none'?'Does not repeat':`Every ${r}`}</option>)}
-            </select>
+          <F label="Due Date (first occurrence)" full>
+            <input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/>
           </F>
-          <F label="Repeat Interval">
-            <input type="number" min={1} value={recurrenceInterval} onChange={e=>setRecurrenceInterval(e.target.value)} disabled={recurrenceType==='none'} style={{...INP,opacity:recurrenceType==='none'?0.6:1}}/>
+          <F label="🔁 Recurrence" full>
+            <RecurrencePicker
+              recurrenceType={recurrenceType}
+              recurrenceInterval={recurrenceInterval}
+              onTypeChange={setRecurrenceType}
+              onIntervalChange={setRecurrenceInterval}
+            />
           </F>
           <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Accounts, HR"/></F>
           <F label="Tags (comma-separated)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
@@ -503,7 +524,6 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 }
 
 // ── Workspace Form ────────────────────────────────────────────────────────────
-// KEY FIX: currentMemberIds prop pre-populates members from live wsMembers state
 function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMemberIds}){
   const nameRef=useRef(),descRef=useRef()
   const [color,setColor]=useState(WS_COLORS[0])
@@ -514,8 +534,6 @@ function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMember
     if(open){
       setColor(ws?.color||WS_COLORS[0])
       setIcon(ws?.icon||WS_ICONS[0])
-      // When editing: use currentMemberIds (live from wsMembers state).
-      // When creating: just self.
       const initial = ws ? (currentMemberIds?.length>0 ? currentMemberIds : [cu?.id]) : [cu?.id]
       setMembers(initial)
     }
@@ -533,7 +551,7 @@ function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMember
         <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:8,background:icon===ic?color+'33':'#131f35',border:`1.5px solid ${icon===ic?color:'#1e2d42'}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17}}>{ic}</div>)}</div></div>
       </div>
       <div style={{marginBottom:20}}>
-        <label style={LBL}>Members — who can access this workspace ({members.length} selected)</label>
+        <label style={LBL}>Members — {members.length} selected</label>
         {allProfiles.length===0&&<div style={{fontSize:12,color:'#f59e0b',background:'#f59e0b11',borderRadius:10,padding:12,lineHeight:1.6,border:'1px solid #f59e0b33'}}>⚠ No approved members yet. Open Admin Panel (🛡️) and approve teammates first.</div>}
         {allProfiles.map(u=>{
           const checked=members.includes(u.id),isSelf=u.id===cu.id
@@ -567,6 +585,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
   const overdue =isOverdue(task.due_date)
   const mirrored=isMirroredToMe(task,cu?.id)
   const delegated=task.created_by===cu?.id&&task.assigned_to&&task.assigned_to!==cu?.id
+  const recurring=task.recurrence_type&&task.recurrence_type!=='none'
   const [hov,setHov]=useState(false);const [cdel,setCdel]=useState(false)
   const accentColor=mirrored?'#818cf8':delegated?'#f59e0b':wsColor
   return(
@@ -576,9 +595,10 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         style={{background:isDragging?'#1a2a40':'#0d1627',border:`1px solid ${isDragging?wsColor:hov?accentColor+'66':'#1e2d42'}`,borderRadius:12,padding:14,cursor:mirrored?'default':'grab',transition:'all 0.15s',borderLeft:`3px solid ${accentColor}`,opacity:isDragging?0.4:1,boxShadow:hov&&!isDragging?'0 8px 24px rgba(0,0,0,0.5)':'none',userSelect:'none',position:'relative'}}
         onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
         {mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#818cf833',color:'#818cf8',border:'1px solid #818cf844',borderRadius:5,padding:'2px 6px'}}>📥 ASSIGNED TO ME</div>}
-        {delegated&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#f59e0b22',color:'#f59e0b',border:'1px solid #f59e0b44',borderRadius:5,padding:'2px 6px'}}>📤 DELEGATED</div>}
+        {delegated&&!mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'#f59e0b22',color:'#f59e0b',border:'1px solid #f59e0b44',borderRadius:5,padding:'2px 6px'}}>📤 DELEGATED</div>}
         <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6,paddingRight:mirrored||delegated?90:0}}>
           {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:10,color:'#94a3b8',background:'#131f35',borderRadius:4,padding:'2px 5px',fontWeight:600}}>{t}</span>)}
+          {recurring&&<span style={{fontSize:10,color:'#6366f1',background:'#6366f122',border:'1px solid #6366f144',borderRadius:4,padding:'2px 5px',fontWeight:600}}>🔁 {recurringLabel(task.recurrence_type,task.recurrence_interval)}</span>}
         </div>
         <div style={{fontSize:13,fontWeight:600,color:'#f1f5f9',marginBottom:5,lineHeight:1.4}}>{task.title}</div>
         {task.description&&<div style={{fontSize:11,color:'#64748b',marginBottom:8,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
@@ -667,9 +687,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES
   const SC=scMap(statuses)
 
-  // Reset selected team member when switching workspace
   useEffect(()=>{setTeamMemberId(null)},[activeWsId])
-  // Auto-select first other member when entering team view
   useEffect(()=>{
     if(subView==='team'&&!teamMemberId&&wsMembers.length>0){
       const other=wsMembers.find(m=>m.id!==cu.id)
@@ -741,22 +759,25 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
       if(data) setTasks(p=>p.map(t=>t.id===data.id?data:t))
       await logActivity(td.id,cu.id,'Updated task')
 
-      const becameDone=prev&&prev.status!=='Done'&&td.status==='Done'
+      // Auto-create next recurring task when marked Done
+      const becameDone=prev&&prev.status!==statuses[statuses.length-1]&&td.status===statuses[statuses.length-1]
       const recurring=td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date
       if(becameDone&&recurring){
         const nextDue=nextRecurringDate(td.due_date,td.recurrence_type,td.recurrence_interval)
         if(nextDue){
           const clone={
             title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],
-            due_date:nextDue,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval,
+            due_date:nextDue,
+            recurrence_type:td.recurrence_type,
+            recurrence_interval:td.recurrence_interval||1,
             status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,
             workspace_id:td.workspace_id,created_by:cu.id,
           }
           const{data:nextTask,error:nextErr}=await createTask(clone)
           if(!nextErr&&nextTask){
             setTasks(p=>[...p,nextTask])
-            await logActivity(nextTask.id,cu.id,'Created recurring task')
-            showToast(`Task saved! Next recurring task created for ${fmtDate(nextDue)} ✓`)
+            await logActivity(nextTask.id,cu.id,'Auto-created recurring task')
+            showToast(`✓ Task done! Next recurring task created for ${fmtDate(nextDue)} 🔁`)
             return
           }
         }
@@ -765,8 +786,12 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
     } else {
       const{data,error}=await createTask(td)
       if(error){showToast('Create failed: '+error.message,'err');return}
-      if(data){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created task')}
-      showToast('Task created! ✓')
+      if(data){
+        setTasks(p=>[...p,data])
+        await logActivity(data.id,cu.id,'Created task')
+        const rl=recurringLabel(td.recurrence_type,td.recurrence_interval)
+        showToast(rl?`Task created! Repeats: ${rl} 🔁`:'Task created! ✓')
+      }
     }
   }
 
@@ -800,6 +825,8 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
         assigned_to:assignee?.id||cu.id,
         created_by:cu.id,workspace_id:activeWsId,
         project:r.project,tags:r.tags,due_date:r.due_date,
+        recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',
+        recurrence_interval:r.recurrence_interval||1,
       }
       const{data,error}=await createTask(payload)
       if(data){setTasks(p=>[...p,data]);added++}
@@ -820,10 +847,10 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   const myBoardTasks=tasks.filter(t=>baseFilter(t)&&isOnMyBoard(t,cu.id))
   const allTasks=tasks.filter(baseFilter)
 
-  // Team view data for selected member
   const selMember=wsMembers.find(m=>m.id===teamMemberId)||null
   const teamTasks=allTasks.filter(t=>t.assigned_to===teamMemberId&&t.created_by!==teamMemberId)
   const teamSelfTasks=allTasks.filter(t=>t.created_by===teamMemberId&&(!t.assigned_to||t.assigned_to===teamMemberId))
+  const recurringTasks=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
 
   if(loading) return <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>Loading…</div>
 
@@ -832,7 +859,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
 
       {toast&&<div style={{position:'fixed',bottom:24,right:24,zIndex:9999,background:toast.type==='ok'?'#10b981':'#ef4444',color:'#fff',borderRadius:12,padding:'12px 20px',fontSize:14,fontWeight:600,boxShadow:'0 8px 32px rgba(0,0,0,0.5)',display:'flex',alignItems:'center',gap:8,maxWidth:400}}><span>{toast.type==='ok'?'✓':'⚠'}</span><span>{toast.msg}</span></div>}
 
-      {/* ── Icon Rail ── */}
+      {/* Icon Rail */}
       <div style={{width:64,background:'#060c18',borderRight:'1px solid #1e2d42',display:'flex',flexDirection:'column',alignItems:'center',padding:'16px 0',gap:8,flexShrink:0}}>
         <div style={{width:40,height:40,borderRadius:12,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,marginBottom:8,cursor:'pointer'}} onClick={()=>setActiveWsId(null)}>✦</div>
         <div style={{width:32,height:1,background:'#1e2d42',marginBottom:4}}/>
@@ -849,7 +876,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
           onMouseLeave={e=>{e.currentTarget.style.borderColor='#1e2d42';e.currentTarget.style.color='#374151';e.currentTarget.style.background='transparent'}}>+</div>
         <div style={{flex:1}}/>
         {isAdmin&&<div title="Admin Panel" onClick={()=>setAdminOpen(true)} style={{width:40,height:40,borderRadius:12,background:'#f59e0b22',border:'1px solid #f59e0b44',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',marginBottom:8}}>🛡️</div>}
-        <button title={lightMode?'Switch to dark':'Switch to light'} onClick={()=>setLightMode(v=>!v)} style={{width:40,height:40,borderRadius:12,background:'#131f35',border:'1px solid #1e2d42',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',marginBottom:8,color:'#cbd5e1'}}>{lightMode?'🌙':'☀️'}</button>
+        <button title={lightMode?'Dark mode':'Light mode'} onClick={()=>setLightMode(v=>!v)} style={{width:40,height:40,borderRadius:12,background:'#131f35',border:'1px solid #1e2d42',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',marginBottom:8,color:'#cbd5e1'}}>{lightMode?'🌙':'☀️'}</button>
         <div ref={pRef} style={{position:'relative'}}>
           <div onClick={()=>setShowProf(p=>!p)} style={{cursor:'pointer'}}><Avatar user={enrich(cu)} size={36}/></div>
           {showProf&&(
@@ -865,7 +892,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
         </div>
       </div>
 
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <div style={{width:sidebarOpen?230:0,background:'#060c18',borderRight:sidebarOpen?'1px solid #1e2d42':'none',display:'flex',flexDirection:'column',flexShrink:0,overflow:'hidden',transition:'width 0.22s ease'}}>
         {activeWs?(
           <>
@@ -874,11 +901,10 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
                 <div style={{width:30,height:30,borderRadius:8,background:wsColor+'22',border:`1px solid ${wsColor}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15}}>{activeWs.icon}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:13,fontWeight:700,color:'#f1f5f9',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{activeWs.name}</div>
-                  <div style={{fontSize:10,color:'#64748b'}}>{wsMembers.length} members · {tasks.length} tasks</div>
+                  <div style={{fontSize:10,color:'#64748b'}}>{wsMembers.length} members · {tasks.length} tasks{recurringTasks.length>0?` · 🔁 ${recurringTasks.length}`:''}</div>
                 </div>
               </div>
               <div style={{display:'flex',gap:5}}>
-                {/* KEY FIX: memberIds injected from live wsMembers state */}
                 <button onClick={()=>setWsForm({...activeWs,memberIds:wsMembers.map(m=>m.id)})} style={{flex:1,background:wsColor+'18',border:`1px solid ${wsColor}33`,borderRadius:7,padding:'5px 0',color:wsColor,cursor:'pointer',fontSize:11,fontWeight:600}}>✏️ Edit</button>
                 <button onClick={()=>setStatusMgr(true)} title="Custom columns" style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:7,padding:'5px 8px',color:'#94a3b8',cursor:'pointer',fontSize:11}}>⚙️</button>
                 {activeWs.owner_id===cu.id&&<button onClick={()=>setDelWs(activeWs)} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:7,padding:'5px 7px',color:'#ef4444',cursor:'pointer',fontSize:11}}>🗑</button>}
@@ -886,7 +912,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
             </div>
             <div style={{padding:'10px 8px',flex:1,overflowY:'auto'}}>
               <div style={{margin:'0 0 8px 10px'}}>
-                {[{c:'#818cf8',icon:'📥',label:'Assigned to me'},{c:'#f59e0b',icon:'📤',label:'Delegated by me'},{c:wsColor,icon:'🔒',label:'My private task'}].map(x=>(
+                {[{c:'#818cf8',icon:'📥',label:'Assigned to me'},{c:'#f59e0b',icon:'📤',label:'Delegated by me'},{c:'#6366f1',icon:'🔁',label:'Recurring task'}].map(x=>(
                   <div key={x.label} style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
                     <div style={{width:3,height:12,borderRadius:2,background:x.c,flexShrink:0}}/>
                     <span style={{fontSize:10,color:'#64748b'}}>{x.icon} {x.label}</span>
@@ -894,11 +920,12 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
                 ))}
               </div>
               <div style={{height:1,background:'#1e2d42',margin:'0 0 8px'}}/>
-              {[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team View',icon:'⊛'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}].map(n=>(
+              {[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team View',icon:'⊛'},{id:'recurring',label:'Recurring Tasks',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}].map(n=>(
                 <button key={n.id} onClick={()=>setSubView(n.id)} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'8px 10px',borderRadius:10,border:'none',cursor:'pointer',marginBottom:2,fontSize:13,textAlign:'left',fontWeight:subView===n.id?700:500,background:subView===n.id?wsColor+'22':'transparent',color:subView===n.id?wsColor:'#64748b',transition:'all 0.15s'}}
                   onMouseEnter={e=>{if(subView!==n.id)e.currentTarget.style.background='#131f35'}}
                   onMouseLeave={e=>{if(subView!==n.id)e.currentTarget.style.background='transparent'}}>
                   <span style={{fontSize:15}}>{n.icon}</span>{n.label}
+                  {n.id==='recurring'&&recurringTasks.length>0&&<span style={{marginLeft:'auto',background:'#6366f133',color:'#818cf8',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{recurringTasks.length}</span>}
                 </button>
               ))}
               <div style={{height:1,background:'#1e2d42',margin:'8px 0'}}/>
@@ -941,11 +968,11 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
         )}
       </div>
 
-      {/* ── Main Content ── */}
+      {/* Main Content */}
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
         {/* Topbar */}
         <div style={{background:'#060c18',borderBottom:'1px solid #1e2d42',padding:'0 18px',height:54,display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
-          <button onClick={()=>setSidebarOpen(v=>!v)} title={sidebarOpen?'Hide panel':'Show panel'} style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 9px',color:'#cbd5e1',cursor:'pointer',fontSize:12,fontWeight:700}}>{sidebarOpen?'◀':'▶'}</button>
+          <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:'#131f35',border:'1px solid #1e2d42',borderRadius:8,padding:'5px 9px',color:'#cbd5e1',cursor:'pointer',fontSize:12,fontWeight:700}}>{sidebarOpen?'◀':'▶'}</button>
           {activeWs?(
             <>
               <button onClick={()=>setActiveWsId(null)} style={{background:'none',border:'none',color:'#64748b',cursor:'pointer',fontSize:12,fontWeight:600}}>All Workspaces</button>
@@ -992,13 +1019,13 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
             </div>
           )}
 
-          {/* ── MY BOARD ── */}
+          {/* MY BOARD */}
           {activeWs&&subView==='board'&&(
             <div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
                 <div>
                   <h1 style={{fontSize:20,fontWeight:800,color:'#f1f5f9',margin:0}}>My Board — {activeWs.name}</h1>
-                  <p style={{margin:'4px 0 0',fontSize:12,color:'#64748b'}}>{myBoardTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned to me</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p>
+                  <p style={{margin:'4px 0 0',fontSize:12,color:'#64748b'}}>{myBoardTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned to me</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span> · <span style={{color:'#6366f1'}}>🔁 recurring</span></p>
                 </div>
                 <button onClick={()=>openNewTask()} style={{background:`linear-gradient(135deg,${wsColor},${wsColor}bb)`,border:'none',borderRadius:9,padding:'8px 18px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}}>+ New Task</button>
               </div>
@@ -1014,7 +1041,74 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
             </div>
           )}
 
-          {/* ── TEAM VIEW ── */}
+          {/* RECURRING TASKS VIEW */}
+          {activeWs&&subView==='recurring'&&(
+            <div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+                <div>
+                  <h1 style={{fontSize:20,fontWeight:800,color:'#f1f5f9',margin:0}}>🔁 Recurring Tasks — {activeWs.name}</h1>
+                  <p style={{margin:'4px 0 0',fontSize:12,color:'#64748b'}}>{recurringTasks.length} recurring task{recurringTasks.length!==1?'s':''} · Auto-creates next instance when marked Done</p>
+                </div>
+                <button onClick={()=>openNewTask()} style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:9,padding:'8px 18px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}}>+ New Recurring Task</button>
+              </div>
+              {recurringTasks.length===0?(
+                <div style={{textAlign:'center',padding:60,border:'2px dashed #1e2d42',borderRadius:16,color:'#374151'}}>
+                  <div style={{fontSize:40,marginBottom:12}}>🔁</div>
+                  <div style={{fontSize:15,fontWeight:700,color:'#64748b',marginBottom:8}}>No recurring tasks yet</div>
+                  <div style={{fontSize:13,color:'#374151',marginBottom:20}}>Create a task and set a recurrence (daily, weekly, monthly, or custom).<br/>When you mark it Done, the next occurrence auto-creates.</div>
+                  <button onClick={()=>openNewTask()} style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:10,padding:'10px 24px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13}}>Create First Recurring Task</button>
+                </div>
+              ):(
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12}}>
+                  {recurringTasks.map(t=>{
+                    const assignee=getUser(t.assigned_to,wsMembers)
+                    const overdue=isOverdue(t.due_date)
+                    const rl=recurringLabel(t.recurrence_type,t.recurrence_interval)
+                    const nextDue=nextRecurringDate(t.due_date,t.recurrence_type,t.recurrence_interval)
+                    const SC2=scMap(statuses)
+                    const statusColor=SC2[t.status]||wsColor
+                    return(
+                      <div key={t.id} onClick={()=>setEditTask(t)} style={{background:'#0d1627',border:'1.5px solid #6366f133',borderRadius:14,padding:16,cursor:'pointer',transition:'all 0.15s',position:'relative',overflow:'hidden'}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f166';e.currentTarget.style.background='#131f35'}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor='#6366f133';e.currentTarget.style.background='#0d1627'}}>
+                        <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6366f1,#8b5cf6)'}}/>
+                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                          <div style={{fontSize:14,fontWeight:700,color:'#f1f5f9',lineHeight:1.4,flex:1}}>{t.title}</div>
+                          <span style={{background:'#6366f122',color:'#818cf8',border:'1px solid #6366f144',borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>🔁 {rl}</span>
+                        </div>
+                        {t.description&&<div style={{fontSize:12,color:'#64748b',marginBottom:10,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{t.description}</div>}
+                        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+                          <Pill label={t.status} color={statusColor} sm/>
+                          <Pill label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]} sm/>
+                          {overdue&&<Pill label="⚠ Overdue" color="#ef4444" sm/>}
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,background:'#0a1525',borderRadius:10,padding:'10px 12px'}}>
+                          <div>
+                            <div style={{fontSize:10,color:'#374151',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Current Due</div>
+                            <div style={{fontSize:12,color:overdue?'#ef4444':'#94a3b8',fontWeight:600}}>{t.due_date?fmtDate(t.due_date):'Not set'}</div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:10,color:'#374151',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next Occurrence</div>
+                            <div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nextDue?fmtDate(nextDue):'—'}</div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:10,color:'#374151',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Assigned To</div>
+                            <div style={{display:'flex',alignItems:'center',gap:4}}><Avatar user={assignee} size={16}/><span style={{fontSize:12,color:'#94a3b8'}}>{assignee?.id===cu?.id?'Me':assignee?.name?.split(' ')[0]||'—'}</span></div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:10,color:'#374151',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Action</div>
+                            <div style={{fontSize:11,color:'#6366f1'}}>Mark Done → auto-creates next</div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TEAM VIEW */}
           {activeWs&&subView==='team'&&(
             <div>
               <div style={{marginBottom:20}}>
@@ -1022,12 +1116,9 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
                 <p style={{margin:'4px 0 0',fontSize:12,color:'#64748b'}}>Select a member to see their assigned workload board</p>
               </div>
               {wsMembers.filter(m=>m.id!==cu.id).length===0?(
-                <div style={{textAlign:'center',padding:40,color:'#374151',fontSize:13,border:'2px dashed #1e2d42',borderRadius:16}}>
-                  No other team members in this workspace yet.<br/>Edit the workspace to add members.
-                </div>
+                <div style={{textAlign:'center',padding:40,color:'#374151',fontSize:13,border:'2px dashed #1e2d42',borderRadius:16}}>No other team members yet. Edit the workspace to add members.</div>
               ):(
                 <>
-                  {/* Member picker */}
                   <div style={{display:'flex',gap:10,marginBottom:24,flexWrap:'wrap'}}>
                     {wsMembers.filter(m=>m.id!==cu.id).map(m=>{
                       const eu=enrich(m);const sel=m.id===teamMemberId
@@ -1045,8 +1136,6 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
                       )
                     })}
                   </div>
-
-                  {/* Selected member board */}
                   {selMember&&(
                     <div style={{background:'#0a1525',border:`1.5px solid ${wsColor}44`,borderRadius:18,padding:20}}>
                       <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:20,paddingBottom:16,borderBottom:'1px solid #1e2d42'}}>
@@ -1056,24 +1145,16 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
                           <div style={{fontSize:12,color:'#64748b'}}>{selMember.email}</div>
                         </div>
                         <div style={{display:'flex',gap:20}}>
-                          {[
-                            {l:'Assigned to them',v:teamTasks.length,c:wsColor},
-                            {l:'Own private tasks',v:teamSelfTasks.length,c:'#64748b'},
-                            {l:'Completed',v:teamTasks.filter(t=>t.status===statuses[statuses.length-1]).length,c:'#10b981'},
-                            {l:'Overdue',v:teamTasks.filter(t=>isOverdue(t.due_date)).length,c:'#ef4444'},
-                          ].map(x=>(
+                          {[{l:'Assigned',v:teamTasks.length,c:wsColor},{l:'Own tasks',v:teamSelfTasks.length,c:'#64748b'},{l:'Completed',v:teamTasks.filter(t=>t.status===statuses[statuses.length-1]).length,c:'#10b981'},{l:'Overdue',v:teamTasks.filter(t=>isOverdue(t.due_date)).length,c:'#ef4444'}].map(x=>(
                             <div key={x.l} style={{textAlign:'center',minWidth:60}}>
                               <div style={{fontSize:22,fontWeight:800,color:x.c}}>{x.v}</div>
-                              <div style={{fontSize:9,color:'#64748b',marginTop:2,fontWeight:600,lineHeight:1.3}}>{x.l}</div>
+                              <div style={{fontSize:9,color:'#64748b',marginTop:2,fontWeight:600}}>{x.l}</div>
                             </div>
                           ))}
                         </div>
                       </div>
                       {teamTasks.length===0?(
-                        <div style={{textAlign:'center',padding:32,color:'#374151',fontSize:13,border:'2px dashed #1e2d42',borderRadius:12}}>
-                          No tasks assigned to {selMember.name?.split(' ')[0]||'this member'} yet.<br/>
-                          <span style={{fontSize:11,color:'#374151'}}>Create a task on My Board and assign it to them.</span>
-                        </div>
+                        <div style={{textAlign:'center',padding:32,color:'#374151',fontSize:13,border:'2px dashed #1e2d42',borderRadius:12}}>No tasks assigned to {selMember.name?.split(' ')[0]||'this member'} yet.</div>
                       ):(
                         <div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:4,alignItems:'flex-start'}}>
                           {statuses.map(st=>(
@@ -1092,7 +1173,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
             </div>
           )}
 
-          {/* ── ALL TASKS LIST ── */}
+          {/* ALL TASKS LIST */}
           {activeWs&&subView==='list'&&(
             <div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
@@ -1101,23 +1182,20 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
               </div>
               <div style={{background:'#0d1627',border:'1px solid #1e2d42',borderRadius:14,overflow:'hidden'}}>
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
-                  <thead><tr style={{borderBottom:'1px solid #1e2d42'}}>{['Task','Status','Priority','Creator','Assignee','Due',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:'#64748b',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{borderBottom:'1px solid #1e2d42'}}>{['Task','Status','Priority','Creator','Assignee','Due','Recurrence',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:'#64748b',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
                   <tbody>
                     {allTasks.map(t=>{
                       const asgn=getUser(t.assigned_to,wsMembers)
                       const crea=getUser(t.created_by,wsMembers)
                       const ov=isOverdue(t.due_date)
                       const col=SC[t.status]||wsColor
-                      const isPrivate=t.created_by===t.assigned_to||!t.assigned_to
+                      const rl=recurringLabel(t.recurrence_type,t.recurrence_interval)
                       return(
                         <tr key={t.id} style={{borderBottom:'1px solid #1e2d42'}} onMouseEnter={e=>e.currentTarget.style.background='#131f35'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                           <td style={{padding:'11px 14px'}}>
                             <div style={{display:'flex',alignItems:'center',gap:10}}>
                               <div style={{width:3,height:28,borderRadius:2,background:PC[t.priority],flexShrink:0}}/>
-                              <div>
-                                <div style={{fontSize:13,fontWeight:600,color:'#f1f5f9'}}>{t.title}</div>
-                                <div style={{fontSize:10,color:'#64748b'}}>{isPrivate?'🔒 Private':t.assigned_to&&t.assigned_to!==t.created_by?'📤 Delegated':'—'}</div>
-                              </div>
+                              <div style={{fontSize:13,fontWeight:600,color:'#f1f5f9'}}>{t.title}</div>
                             </div>
                           </td>
                           <td style={{padding:'11px 8px'}}><Pill label={t.status} color={col} sm/></td>
@@ -1125,25 +1203,27 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
                           <td style={{padding:'11px 8px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={crea} size={20}/><span style={{fontSize:11,color:'#94a3b8'}}>{crea?.name?.split(' ')[0]||'?'}</span></div></td>
                           <td style={{padding:'11px 8px'}}>{asgn&&asgn.id!==t.created_by?<div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={asgn} size={20}/><span style={{fontSize:11,color:'#818cf8'}}>{asgn.name?.split(' ')[0]}</span></div>:<span style={{fontSize:11,color:'#374151'}}>—</span>}</td>
                           <td style={{padding:'11px 8px'}}><span style={{fontSize:12,color:ov?'#ef4444':'#94a3b8',fontWeight:ov?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
+                          <td style={{padding:'11px 8px'}}>{rl?<span style={{fontSize:11,color:'#6366f1',background:'#6366f122',borderRadius:6,padding:'2px 7px',fontWeight:600}}>🔁 {rl}</span>:<span style={{fontSize:11,color:'#374151'}}>—</span>}</td>
                           <td style={{padding:'11px 8px'}}><button onClick={()=>setEditTask(t)} style={{background:wsColor+'22',border:`1px solid ${wsColor}44`,borderRadius:6,padding:'4px 8px',color:wsColor,cursor:'pointer',fontSize:11,fontWeight:600}}>✏️</button></td>
                         </tr>
                       )
                     })}
-                    {allTasks.length===0&&<tr><td colSpan={7} style={{padding:40,textAlign:'center',color:'#374151',fontSize:13}}>No tasks yet — create one or import a CSV</td></tr>}
+                    {allTasks.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'#374151',fontSize:13}}>No tasks yet</td></tr>}
                   </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* ── DASHBOARD ── */}
+          {/* DASHBOARD */}
           {activeWs&&subView==='dashboard'&&(
             <div>
               <h1 style={{fontSize:20,fontWeight:800,color:'#f1f5f9',margin:'0 0 20px'}}>Dashboard — {activeWs.name}</h1>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:18}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginBottom:18}}>
                 {[
                   {l:'Total Tasks',v:tasks.length,c:wsColor},
                   {l:'On My Board',v:myBoardTasks.length,c:'#818cf8'},
+                  {l:'Recurring',v:recurringTasks.length,c:'#6366f1'},
                   {l:'I Delegated',v:tasks.filter(t=>t.created_by===cu.id&&t.assigned_to&&t.assigned_to!==cu.id).length,c:'#f59e0b'},
                   {l:'Overdue',v:tasks.filter(t=>isOverdue(t.due_date)).length,c:'#ef4444'},
                 ].map(x=>(
@@ -1194,7 +1274,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
         </div>
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {isFormOpen&&activeWs&&(
         <TaskFormModal open onClose={()=>{setCreateStatus(null);setEditTask(null)}}
           task={editTask} ws={activeWs} wsMembers={wsMembers} cu={cu}
@@ -1232,6 +1312,59 @@ export default function App(){
   const isAdmin = session?.user?.email===ADMIN_EMAIL
 
   useEffect(()=>{
+    // Load Inter font
+    const id='inter-font-link'
+    if(!document.getElementById(id)){
+      const l=document.createElement('link')
+      l.id=id
+      l.rel='stylesheet'
+      l.href='https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
+      document.head.appendChild(l)
+    }
+  },[])
+
+  const handleUserAuth = async (user) => {
+    authUserIdRef.current = user.id
+    try {
+      await upsertProfile({
+        id: user.id,
+        email: user.email,
+        name: user.user_metadata?.full_name || user.email.split('@')[0],
+        avatar_url: user.user_metadata?.avatar_url || null,
+      })
+
+      if(user.email === ADMIN_EMAIL){
+        await submitAccessRequest(user.id, user.email, user.user_metadata?.full_name||'')
+        await approveRequest(user.id)
+        setAccessStatus('approved')
+      } else {
+        const { data: reqData } = await checkAccessStatus(user.id)
+        if(!reqData){
+          await submitAccessRequest(user.id, user.email, user.user_metadata?.full_name||'')
+          setAccessStatus('pending')
+        } else {
+          setAccessStatus(reqData.status?.trim()||'pending')
+        }
+      }
+
+      // Load all approved profiles for workspace member selection
+      const { data: reqList } = await getAccessRequests()
+      const approvedIds = (reqList||[]).filter(r=>r.status==='approved').map(r=>r.user_id)
+      if(approvedIds.length>0){
+        const { data: profiles } = await supabase.from('profiles').select('*').in('id', approvedIds)
+        setAllProfiles(profiles||[])
+      } else {
+        setAllProfiles([])
+      }
+    } catch(e){
+      console.error('Auth error:',e)
+    } finally {
+      setLoading(false)
+      initializedRef.current=true
+    }
+  }
+
+  useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
       setSession(session)
       if(session){
@@ -1258,8 +1391,48 @@ export default function App(){
     return()=>subscription.unsubscribe()
   },[])
 
-  useEffect(()=>{
-    const id='inter-font-link'
-    if(!document.getElementById(id)){
-      const l=document.createElement('link')
-      l.id=id
+  const onSignOut = async () => {
+    await signOut()
+    setSession(null)
+    setAccessStatus(null)
+    authUserIdRef.current=null
+  }
+
+  const onAccessChanged = async () => {
+    if(!session?.user) return
+    const { data: reqList } = await getAccessRequests()
+    const approvedIds = (reqList||[]).filter(r=>r.status==='approved').map(r=>r.user_id)
+    if(approvedIds.length>0){
+      const { data: profiles } = await supabase.from('profiles').select('*').in('id', approvedIds)
+      setAllProfiles(profiles||[])
+    }
+  }
+
+  if(loading) return(
+    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{width:42,height:42,borderRadius:12,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 16px'}}>✦</div>
+        <div style={{fontSize:14}}>Loading TaskFlow…</div>
+      </div>
+    </div>
+  )
+
+  if(!session) return <AuthScreen/>
+  if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={onSignOut}/>
+  if(accessStatus==='denied') return <DeniedScreen onSignOut={onSignOut}/>
+  if(!accessStatus) return(
+    <div style={{minHeight:'100vh',background:'#06090f',display:'flex',alignItems:'center',justifyContent:'center',color:'#64748b',fontFamily:"'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif"}}>
+      Checking access…
+    </div>
+  )
+
+  return(
+    <TaskFlowApp
+      cu={session.user}
+      isAdmin={isAdmin}
+      allProfiles={allProfiles}
+      onSignOut={onSignOut}
+      onAccessChanged={onAccessChanged}
+    />
+  )
+}
