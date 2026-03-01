@@ -696,10 +696,15 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   },[subView,wsMembers,teamMemberId,cu.id])
 
   const loadWorkspaces=useCallback(async()=>{
-    const{data}=await getMyWorkspaces(cu.id)
-    setWorkspaces(data||[])
-    setLoading(false)
-    if(data?.length>0&&!activeWsId) setActiveWsId(data[0].id)
+    try{
+      const{data}=await getMyWorkspaces(cu.id)
+      setWorkspaces(data||[])
+      if(data?.length>0&&!activeWsId) setActiveWsId(data[0].id)
+    } catch(e){
+      console.error('loadWorkspaces error:',e)
+    } finally {
+      setLoading(false)
+    }
   },[cu.id,activeWsId])
 
   useEffect(()=>{loadWorkspaces()},[cu.id])
