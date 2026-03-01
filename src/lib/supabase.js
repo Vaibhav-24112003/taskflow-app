@@ -41,18 +41,19 @@ export const removeUserFromAllWorkspaces = (userId) =>
   supabase.from('workspace_members').delete().eq('user_id', userId)
 
 // ── Workspaces ─────────────────────────────────────────────────────────────
-export const getMyWorkspaces = (userId) =>
-  supabase
+export const getMyWorkspaces = async (userId) => {
+  const { data: memberRows, error: memberErr } = await supabase
+    .from('workspace_members')
+    .select('workspace_id')
+    .eq('user_id', userId)
+  if (memberErr || !memberRows?.length) return { data: [], error: memberErr }
+  const ids = memberRows.map(r => r.workspace_id)
+  return supabase
     .from('workspaces')
     .select('*')
-    .in(
-      'id',
-      supabase
-        .from('workspace_members')
-        .select('workspace_id')
-        .eq('user_id', userId)
-    )
+    .in('id', ids)
     .order('created_at', { ascending: true })
+}
 
 export const createWorkspace = (ws) =>
   supabase.from('workspaces').insert(ws).select().single()
