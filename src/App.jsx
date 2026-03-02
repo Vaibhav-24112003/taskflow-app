@@ -8,1078 +8,865 @@ const { supabase, signInWithGoogle, signOut, submitAccessRequest, checkAccessSta
   getTasks, createTask, updateTask, deleteTask,
   logActivity = async () => ({ error: null }) } = supabaseApi
 
-// ─── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
-const PRIORITIES       = ['Low','Medium','High','Critical']
+const PRIORITIES = ['Low','Medium','High','Critical']
 const RECURRENCE_TYPES = ['none','daily','weekly','monthly','custom']
-const PC  = {'Low':'#6b7280','Medium':'#3b82f6','High':'#f59e0b','Critical':'#ef4444'}
-const PI  = {'Low':'↓','Medium':'→','High':'↑','Critical':'⚡'}
+const PC = {'Low':'#64748b','Medium':'#38bdf8','High':'#fb923c','Critical':'#f87171'}
+const PI = {'Low':'↓','Medium':'→','High':'↑','Critical':'⚡'}
 const WS_COLORS = ['#6366f1','#ec4899','#10b981','#f59e0b','#06b6d4','#8b5cf6','#ef4444','#3b82f6']
 const WS_ICONS  = ['⬡','◈','◉','⊛','◆','▲','●','■']
-const SCPAL     = ['#6b7280','#6366f1','#f59e0b','#10b981','#ec4899','#06b6d4','#8b5cf6','#ef4444','#3b82f6','#84cc16']
+const SCPAL = ['#64748b','#6366f1','#f59e0b','#10b981','#ec4899','#06b6d4','#8b5cf6','#ef4444']
 
-// ─── Dual Theme System ────────────────────────────────────────────────────────
-// MODERN = glassmorphism, blur, ambient glow, smooth curves
-// CLASSIC = solid dark, sharp, no blur (original look)
-const T = {
-  modern: {
-    name:'modern',
-    bgApp:   '#05080f',
-    bgRail:  'rgba(5,8,18,0.97)',
-    bgSide:  'rgba(6,10,22,0.93)',
-    bgTop:   'rgba(5,8,18,0.85)',
-    bgCard:  'rgba(10,16,36,0.82)',
-    bgCardH: 'rgba(14,22,50,0.96)',
-    bgInput: 'rgba(8,14,32,0.9)',
-    bgModal: 'rgba(5,9,22,0.98)',
-    bgTag:   'rgba(255,255,255,0.05)',
-    border:  'rgba(255,255,255,0.08)',
-    borderH: (c) => `${c}55`,
-    text:    '#eef2ff',
-    textSub: '#64748b',
-    textMut: '#2a3850',
-    radius:  '16px',
-    radiusSm:'10px',
-    radiusXs:'7px',
-    blur:    'blur(20px)',
-    blurSm:  'blur(8px)',
-    shadow:  '0 4px 24px rgba(0,0,0,0.5)',
-    shadowLg:'0 32px 80px rgba(0,0,0,0.8)',
-    cardShadow: (c) => `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px ${c}18`,
-    glow:    (c) => `0 0 30px ${c}22, 0 4px 16px rgba(0,0,0,0.4)`,
-    trans:   'all 0.22s cubic-bezier(0.4,0,0.2,1)',
-    transFast:'all 0.12s ease',
-    font:    "'DM Sans','Segoe UI',system-ui,sans-serif",
-  },
-  classic: {
-    name:'classic',
-    bgApp:   '#07101d',
-    bgRail:  '#060c18',
-    bgSide:  '#060c18',
-    bgTop:   '#060c18',
-    bgCard:  '#0d1627',
-    bgCardH: '#131f35',
-    bgInput: '#131f35',
-    bgModal: '#0b1220',
-    bgTag:   '#131f35',
-    border:  '#1e2d42',
-    borderH: (c) => `${c}66`,
-    text:    '#f1f5f9',
-    textSub: '#64748b',
-    textMut: '#374151',
-    radius:  '12px',
-    radiusSm:'9px',
-    radiusXs:'6px',
-    blur:    'none',
-    blurSm:  'none',
-    shadow:  'none',
-    shadowLg:'0 40px 120px rgba(0,0,0,0.9)',
-    cardShadow: () => 'none',
-    glow:    () => 'none',
-    trans:   'all 0.15s',
-    transFast:'all 0.1s',
-    font:    "'Inter','Segoe UI',system-ui,sans-serif",
-  }
+function hexToRgb(hex) {
+  if(!hex||hex.length<7) return '99,102,241'
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16)
+  return `${r},${g},${b}`
 }
 
-const mkColor    = e=>{let n=0;for(let c of e)n+=c.charCodeAt(0);return WS_COLORS[n%WS_COLORS.length]}
-const mkInit     = n=>n.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
-const isOverdue  = d=>d&&new Date(d)<new Date()
-const fmtDate    = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—'
-
-const nextRecurringDate=(dueDate,type='none',interval=1)=>{
-  if(!dueDate||type==='none') return null
-  const dt=new Date(`${dueDate}T00:00:00`)
-  const step=Math.max(1,Number(interval)||1)
-  if(type==='daily'||type==='custom') dt.setDate(dt.getDate()+step)
-  else if(type==='weekly') dt.setDate(dt.getDate()+7*step)
-  else if(type==='monthly') dt.setMonth(dt.getMonth()+step)
-  return dt.toISOString().slice(0,10)
+const G = {
+  bg:'#040912', bgDeep:'#020609',
+  surface:'rgba(255,255,255,0.025)', surfaceHov:'rgba(255,255,255,0.045)',
+  panel:'rgba(4,9,20,0.94)', overlay:'rgba(2,5,14,0.86)',
+  border:'rgba(255,255,255,0.07)', borderHov:'rgba(255,255,255,0.14)',
+  text:'#e8edf5', textSub:'#5a6a85', textMut:'#2a3448',
+  blur:'blur(24px)', blurSm:'blur(12px)', blurXs:'blur(6px)',
+  radius:'18px', radiusMd:'12px', radiusSm:'8px', radiusXs:'5px',
+  trans:'all 0.2s cubic-bezier(0.4,0,0.2,1)', transSnap:'all 0.1s ease',
+  font:"'Plus Jakarta Sans','Segoe UI',system-ui,sans-serif",
+  shadow:'0 8px 32px rgba(0,0,0,0.5)', shadowLg:'0 24px 80px rgba(0,0,0,0.8)',
 }
 
-const recurringLabel=(type,interval=1)=>{
-  if(!type||type==='none') return null
-  const n=Number(interval)||1
-  if(type==='daily') return n===1?'Repeats daily':`Every ${n} days`
-  if(type==='weekly') return n===1?'Repeats weekly':`Every ${n} weeks`
-  if(type==='monthly') return n===1?'Repeats monthly':`Every ${n} months`
-  if(type==='custom') return `Every ${n} days`
-  return null
-}
-
+const mkColor = e=>{let n=0;for(let c of e)n+=c.charCodeAt(0);return WS_COLORS[n%WS_COLORS.length]}
+const mkInit  = n=>n.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
+const isOvd   = d=>d&&new Date(d)<new Date()
+const fmtDate = d=>{if(!d)return'—';const dt=new Date(d),now=new Date(),diff=Math.round((dt-now)/(864e5));if(diff===0)return'Today';if(diff===1)return'Tomorrow';if(diff===-1)return'Yesterday';return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+const fmtFull = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—'
 const enrich  = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u.email||'')}:null
 const getUser = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
-const scMap   = ss=>{const d={'Todo':'#6b7280','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%6)]]))}
+const scMap   = ss=>{const d={'Todo':'#64748b','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%4)]]))}
+const isOnMyBoard = (t,uid)=>t.created_by===uid||t.assigned_to===uid
+const isMirrored  = (t,uid)=>t.assigned_to===uid&&t.created_by!==uid
+const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
+const rrLabel =(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
-const isOnMyBoard = (task, userId) => {
-  const mine=task.created_by===userId,assignedToMe=task.assigned_to===userId,unassigned=!task.assigned_to,delegated=mine&&task.assigned_to&&task.assigned_to!==userId
-  return (mine&&unassigned)||assignedToMe||delegated
-}
-const isMirroredToMe = (task,userId)=>task.assigned_to===userId&&task.created_by!==userId
-
-const inp = (th)=>({display:'block',width:'100%',boxSizing:'border-box',background:th.bgInput,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'10px 13px',color:th.text,fontSize:14,outline:'none',fontFamily:th.font,lineHeight:1.5,backdropFilter:th.blurSm,transition:th.trans})
-const lbl = (th)=>({display:'block',fontSize:11,color:th.textSub,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.07em'})
-
-// ─── Avatar ───────────────────────────────────────────────────────────────────
-function Avatar({user,size=32,th}){
-  const ring=th?.name==='modern'?'0 0 0 2px rgba(255,255,255,0.1)':'none'
-  if(!user) return <div style={{width:size,height:size,borderRadius:'50%',background:'#1e2d42',flexShrink:0}}/>
-  if(user.avatar_url) return <img src={user.avatar_url} alt={user.name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0,boxShadow:ring}}/>
-  return <div title={user.name} style={{width:size,height:size,borderRadius:'50%',background:`linear-gradient(135deg,${user.color||'#6366f1'},${user.color||'#6366f1'}99)`,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:700,flexShrink:0,userSelect:'none',boxShadow:ring}}>{user.initials}</div>
+// ── Atoms ─────────────────────────────────────────────────────────────────────
+function Avatar({user,size=32}){
+  if(!user)return<div style={{width:size,height:size,borderRadius:'50%',background:G.surface,flexShrink:0}}/>
+  if(user.avatar_url)return<img src={user.avatar_url} alt={user.name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover',flexShrink:0,border:'1.5px solid rgba(255,255,255,0.08)'}}/>
+  return<div title={user.name} style={{width:size,height:size,borderRadius:'50%',background:`linear-gradient(135deg,${user.color}cc,${user.color}66)`,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:700,flexShrink:0,userSelect:'none',letterSpacing:'-0.01em'}}>{user.initials}</div>
 }
 
-function Pill({label,color,sm}){
-  return <span style={{background:color+'22',color,border:`1px solid ${color}44`,borderRadius:6,padding:sm?'1px 6px':'3px 10px',fontSize:sm?10:11,fontWeight:700,whiteSpace:'nowrap'}}>{label}</span>
+function Tag({label,color}){
+  const rgb=hexToRgb(color)
+  return<span style={{display:'inline-flex',alignItems:'center',gap:3,background:`rgba(${rgb},0.1)`,color,border:`1px solid rgba(${rgb},0.22)`,borderRadius:'100px',padding:'2px 9px',fontSize:10,fontWeight:600,whiteSpace:'nowrap'}}><span style={{width:4,height:4,borderRadius:'50%',background:color,flexShrink:0}}/>{label}</span>
 }
 
-function Modal({open,onClose,title,width=600,children,th}){
-  if(!open) return null
-  const isM=th?.name==='modern'
-  return(
-    <div onClick={onClose} style={{position:'fixed',inset:0,background:isM?'rgba(0,0,0,0.75)':'rgba(0,0,0,0.88)',backdropFilter:'blur(12px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:th.bgModal,border:`1px solid ${th.border}`,borderRadius:'20px',width:'100%',maxWidth:width,maxHeight:'93vh',overflow:'auto',boxShadow:isM?'0 32px 96px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05)':th.shadowLg,backdropFilter:isM?th.blur:'none',WebkitBackdropFilter:isM?th.blur:'none'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 24px',borderBottom:`1px solid ${th.border}`}}>
-          <span style={{fontSize:16,fontWeight:700,color:th.text,letterSpacing:'-0.01em'}}>{title}</span>
-          <button onClick={onClose} style={{background:isM?'rgba(255,255,255,0.06)':'none',border:isM?`1px solid ${th.border}`:'none',borderRadius:'8px',width:30,height:30,color:th.textSub,cursor:'pointer',fontSize:18,lineHeight:1,display:'flex',alignItems:'center',justifyContent:'center',transition:th.trans}}>✕</button>
-        </div>
-        <div style={{padding:24}}>{children}</div>
+function Btn({children,onClick,color='#6366f1',outline,sm,full,style={}}){
+  const rgb=hexToRgb(color)
+  const base={display:'flex',alignItems:'center',justifyContent:'center',gap:6,cursor:'pointer',fontFamily:G.font,fontWeight:700,fontSize:sm?11:13,borderRadius:G.radiusMd,padding:sm?'5px 12px':'9px 20px',width:full?'100%':undefined,transition:G.trans,border:'none',...style}
+  if(outline)return<button onClick={onClick} style={{...base,background:`rgba(${rgb},0.08)`,border:`1px solid rgba(${rgb},0.25)`,color}}>{children}</button>
+  return<button onClick={onClick} style={{...base,background:`linear-gradient(135deg,${color},${color}cc)`,color:'#fff',boxShadow:`0 4px 18px rgba(${rgb},0.35)`}}>{children}</button>
+}
+
+function Modal({open,onClose,title,width=600,children}){
+  if(!open)return null
+  return<div onClick={onClose} style={{position:'fixed',inset:0,background:G.overlay,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'rgba(4,9,22,0.97)',border:`1px solid ${G.border}`,borderRadius:'20px',width:'100%',maxWidth:width,maxHeight:'92vh',overflow:'auto',boxShadow:G.shadowLg}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 24px',borderBottom:`1px solid ${G.border}`}}>
+        <span style={{fontSize:15,fontWeight:700,color:G.text,letterSpacing:'-0.02em'}}>{title}</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:G.surface,border:`1px solid ${G.border}`,color:G.textSub,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center'}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>✕</button>
+      </div>
+      <div style={{padding:'22px 24px'}}>{children}</div>
+    </div>
+  </div>
+}
+
+function Confirm({open,icon,title,body,confirmLabel,confirmColor='#ef4444',onConfirm,onCancel}){
+  if(!open)return null
+  const rgb=hexToRgb(confirmColor)
+  return<div onClick={onCancel} style={{position:'fixed',inset:0,background:G.overlay,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',justifyContent:'center',zIndex:3000,padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'rgba(4,9,22,0.98)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'20px',width:'100%',maxWidth:370,padding:30,boxShadow:G.shadowLg}}>
+      <div style={{fontSize:40,textAlign:'center',marginBottom:14}}>{icon}</div>
+      <div style={{fontSize:16,fontWeight:700,color:G.text,textAlign:'center',marginBottom:8,letterSpacing:'-0.02em'}}>{title}</div>
+      <div style={{fontSize:13,color:G.textSub,textAlign:'center',marginBottom:26,lineHeight:1.7}}>{body}</div>
+      <div style={{display:'flex',gap:10}}>
+        <button onClick={onCancel} style={{flex:1,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px',color:G.textSub,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:G.font}}>Cancel</button>
+        <button onClick={onConfirm} style={{flex:1,background:confirmColor,border:'none',borderRadius:G.radiusMd,padding:'10px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:`0 4px 18px rgba(${rgb},0.4)`,fontFamily:G.font}}>{confirmLabel}</button>
       </div>
     </div>
-  )
+  </div>
 }
 
-function Confirm({open,icon,title,body,confirmLabel,confirmColor='#ef4444',onConfirm,onCancel,th}){
-  if(!open||!th) return null
-  return(
-    <div onClick={onCancel} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',backdropFilter:'blur(12px)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:3000,padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:th.bgModal,border:`1px solid ${confirmColor}44`,borderRadius:'20px',width:'100%',maxWidth:400,padding:30,boxShadow:`0 0 0 1px ${confirmColor}22, ${th.shadowLg}`}}>
-        <div style={{fontSize:36,textAlign:'center',marginBottom:12}}>{icon}</div>
-        <div style={{fontSize:17,fontWeight:700,color:th.text,textAlign:'center',marginBottom:8,letterSpacing:'-0.02em'}}>{title}</div>
-        <div style={{fontSize:13,color:th.textSub,textAlign:'center',marginBottom:24,lineHeight:1.6}}>{body}</div>
-        <div style={{display:'flex',gap:10}}>
-          <button onClick={onCancel} style={{flex:1,background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'10px',color:th.textSub,cursor:'pointer',fontSize:14,fontWeight:600,transition:th.trans}}>Cancel</button>
-          <button onClick={onConfirm} style={{flex:1,background:confirmColor,border:'none',borderRadius:th.radiusSm,padding:'10px',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700,boxShadow:`0 4px 16px ${confirmColor}44`}}>{confirmLabel}</button>
-        </div>
-      </div>
-    </div>
-  )
-}
+const INP={display:'block',width:'100%',boxSizing:'border-box',background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px 14px',color:G.text,fontSize:14,outline:'none',fontFamily:G.font,lineHeight:1.5,transition:G.trans}
+const LBL={display:'block',fontSize:10,color:G.textSub,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.08em'}
 
-// ── Auth ───────────────────────────────────────────────────────────────────────
-function AuthScreen({th}){
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function AuthScreen(){
   const [loading,setLoading]=useState(false)
-  const isM=th.name==='modern'
-  return(
-    <div style={{minHeight:'100vh',background:th.bgApp,display:'flex',fontFamily:th.font,position:'relative',overflow:'hidden'}}>
-      {isM&&<>
-        <div style={{position:'absolute',top:'-20%',left:'-10%',width:'60%',height:'60%',background:'radial-gradient(ellipse,rgba(99,102,241,0.07) 0%,transparent 70%)',pointerEvents:'none'}}/>
-        <div style={{position:'absolute',bottom:'-10%',right:'0',width:'50%',height:'50%',background:'radial-gradient(ellipse,rgba(16,185,129,0.05) 0%,transparent 70%)',pointerEvents:'none'}}/>
-      </>}
-      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:48,position:'relative'}}>
-        <div style={{maxWidth:400,width:'100%'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:24}}>
-            <div style={{width:44,height:44,borderRadius:'13px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:isM?'0 8px 24px rgba(99,102,241,0.4)':'none'}}>✦</div>
-            <span style={{fontSize:28,fontWeight:800,color:th.text,letterSpacing:'-0.03em'}}>TaskFlow</span>
-          </div>
-          <div style={{fontSize:30,fontWeight:800,color:th.text,lineHeight:1.15,marginBottom:12,letterSpacing:isM?'-0.04em':'normal'}}>Private workspace<br/><span style={{background:'linear-gradient(90deg,#6366f1,#10b981)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent'}}>for your team</span></div>
-          <div style={{fontSize:14,color:th.textSub,lineHeight:1.6,marginBottom:32}}>Sign in with Google to request access.<br/>Admin reviews all requests.</div>
-          <button onClick={async()=>{setLoading(true);await signInWithGoogle()}} disabled={loading}
-            style={{width:'100%',display:'flex',alignItems:'center',gap:14,padding:'15px 20px',background:'#fff',borderRadius:isM?'14px':'12px',border:'none',cursor:'pointer',fontSize:15,fontWeight:600,color:'#1a1a1a',boxShadow:isM?'0 4px 20px rgba(0,0,0,0.4)':'0 2px 12px rgba(0,0,0,0.4)',opacity:loading?0.7:1,transition:th.trans}}>
-            <svg width="22" height="22" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            {loading?'Redirecting…':'Continue with Google'}
-          </button>
-        </div>
-      </div>
-      <div style={{width:270,background:isM?'rgba(7,11,28,0.7)':'#0a1220',borderLeft:`1px solid ${th.border}`,backdropFilter:isM?th.blur:'none',display:'flex',flexDirection:'column',justifyContent:'center',padding:32,position:'relative'}}>
-        {[{icon:'👤',title:'Personal Board',desc:'Your tasks stay private'},{icon:'📤',title:'Delegate to Team',desc:'Assign tasks — mirror on their board'},{icon:'🔁',title:'Recurring Tasks',desc:'Auto-create tasks on a schedule'},{icon:'📊',title:'CSV Import/Export',desc:'Bulk upload or download all tasks'}].map(f=>(
-          <div key={f.title} style={{display:'flex',gap:12,marginBottom:22}}>
-            <div style={{width:34,height:34,borderRadius:'10px',background:isM?'rgba(99,102,241,0.12)':'#6366f122',border:`1px solid ${isM?'rgba(99,102,241,0.22)':'#6366f144'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,boxShadow:isM?'0 4px 12px rgba(99,102,241,0.1)':'none'}}>{f.icon}</div>
-            <div><div style={{fontSize:13,fontWeight:700,color:th.text,marginBottom:2}}>{f.title}</div><div style={{fontSize:12,color:th.textSub,lineHeight:1.5}}>{f.desc}</div></div>
+  return<div style={{minHeight:'100vh',background:G.bg,fontFamily:G.font,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
+    <div style={{position:'absolute',top:'5%',left:'20%',width:600,height:600,background:'radial-gradient(ellipse,rgba(99,102,241,0.06) 0%,transparent 65%)',pointerEvents:'none'}}/>
+    <div style={{position:'absolute',bottom:'10%',right:'15%',width:400,height:400,background:'radial-gradient(ellipse,rgba(16,185,129,0.04) 0%,transparent 65%)',pointerEvents:'none'}}/>
+    <div style={{maxWidth:420,width:'100%',padding:40,textAlign:'center',position:'relative'}}>
+      <div style={{width:64,height:64,borderRadius:'18px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto 22px',boxShadow:'0 12px 40px rgba(99,102,241,0.35)'}}>✦</div>
+      <h1 style={{fontSize:36,fontWeight:800,color:G.text,margin:'0 0 10px',letterSpacing:'-0.04em'}}>TaskFlow</h1>
+      <p style={{fontSize:14,color:G.textSub,lineHeight:1.7,margin:'0 0 36px'}}>A private workspace for focused teams.<br/>Sign in to request access.</p>
+      <button onClick={async()=>{setLoading(true);await signInWithGoogle()}} disabled={loading}
+        style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:14,padding:'16px 24px',background:'rgba(255,255,255,0.96)',borderRadius:G.radiusMd,border:'none',cursor:'pointer',fontSize:15,fontWeight:600,color:'#111',boxShadow:'0 4px 28px rgba(0,0,0,0.45)',opacity:loading?0.7:1,transition:G.trans,fontFamily:G.font}}>
+        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        {loading?'Redirecting…':'Continue with Google'}
+      </button>
+      <div style={{marginTop:36,display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,textAlign:'left'}}>
+        {[['👤','Private Board','Your tasks stay yours'],['📤','Delegate','Assign to teammates'],['🔁','Recurring','Auto-creates next'],['📊','CSV I/O','Import and export']].map(([ic,t,d])=>(
+          <div key={t} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'12px 14px'}}>
+            <div style={{fontSize:18,marginBottom:6}}>{ic}</div>
+            <div style={{fontSize:12,fontWeight:700,color:G.text,marginBottom:2}}>{t}</div>
+            <div style={{fontSize:11,color:G.textSub}}>{d}</div>
           </div>
         ))}
       </div>
     </div>
-  )
-}
-function PendingScreen({user,onSignOut,th}){
-  return(<div style={{minHeight:'100vh',background:th.bgApp,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:th.font}}><div style={{textAlign:'center',maxWidth:400,padding:32}}><div style={{fontSize:56,marginBottom:20}}>⏳</div><div style={{fontSize:22,fontWeight:800,color:th.text,marginBottom:8,letterSpacing:'-0.02em'}}>Access Requested</div><div style={{fontSize:14,color:'#818cf8',marginBottom:4}}>{user.email}</div><div style={{fontSize:13,color:th.textSub,background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radius,padding:16,margin:'20px 0',lineHeight:1.6}}>The admin will review your request.</div><button onClick={onSignOut} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'10px 24px',color:th.textSub,cursor:'pointer',fontSize:14,fontFamily:th.font}}>Sign Out</button></div></div>)
-}
-function DeniedScreen({onSignOut,th}){
-  return(<div style={{minHeight:'100vh',background:th.bgApp,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:th.font}}><div style={{textAlign:'center',maxWidth:380,padding:32}}><div style={{fontSize:56,marginBottom:20}}>🚫</div><div style={{fontSize:22,fontWeight:800,color:th.text,marginBottom:12,letterSpacing:'-0.02em'}}>Access Denied</div><div style={{fontSize:14,color:th.textSub,marginBottom:24}}>Contact the admin if you think this is a mistake.</div><button onClick={onSignOut} style={{background:'#ef444420',border:'1px solid #ef444440',borderRadius:th.radiusSm,padding:'10px 24px',color:'#ef4444',cursor:'pointer',fontSize:14,fontWeight:600,fontFamily:th.font}}>Sign Out</button></div></div>)
+  </div>
 }
 
-// ── Admin Panel ────────────────────────────────────────────────────────────────
-function AdminPanel({open,onClose,onAccessChanged,th}){
+function PendingScreen({user,onSignOut}){
+  return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:G.font}}>
+    <div style={{textAlign:'center',maxWidth:380,padding:40}}>
+      <div style={{fontSize:52,marginBottom:20}}>⏳</div>
+      <h2 style={{fontSize:20,fontWeight:800,color:G.text,margin:'0 0 8px',letterSpacing:'-0.03em'}}>Access Requested</h2>
+      <p style={{fontSize:13,color:'#818cf8',margin:'0 0 4px'}}>{user.email}</p>
+      <p style={{fontSize:12,color:G.textSub,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:16,margin:'20px 0',lineHeight:1.7}}>The admin will review your request shortly.</p>
+      <Btn onClick={onSignOut} outline color="#64748b">Sign Out</Btn>
+    </div>
+  </div>
+}
+
+function DeniedScreen({onSignOut}){
+  return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:G.font}}>
+    <div style={{textAlign:'center',maxWidth:360,padding:40}}>
+      <div style={{fontSize:52,marginBottom:20}}>🚫</div>
+      <h2 style={{fontSize:20,fontWeight:800,color:G.text,margin:'0 0 10px',letterSpacing:'-0.03em'}}>Access Denied</h2>
+      <p style={{fontSize:13,color:G.textSub,margin:'0 0 24px'}}>Contact the admin if you think this is a mistake.</p>
+      <Btn onClick={onSignOut} outline color="#ef4444">Sign Out</Btn>
+    </div>
+  </div>
+}
+
+// ── Admin ─────────────────────────────────────────────────────────────────────
+function AdminPanel({open,onClose,onAccessChanged}){
   const [reqs,setReqs]=useState([]);const [loading,setLoading]=useState(true)
   const load=async()=>{setLoading(true);const{data}=await getAccessRequests();setReqs(data||[]);setLoading(false)}
   useEffect(()=>{if(open)load()},[open])
   const act=async(uid,a)=>{
-    if(a==='approve'){await approveRequest(uid)}
+    if(a==='approve')await approveRequest(uid)
     else if(a==='remove'){if(!window.confirm('Remove this person?'))return;await denyRequest(uid);await removeUserFromAllWorkspaces(uid)}
-    else{await denyRequest(uid)}
+    else await denyRequest(uid)
     await load();await onAccessChanged?.()
   }
   const sc={pending:'#f59e0b',approved:'#10b981',denied:'#ef4444'}
-  return(
-    <Modal open={open} onClose={onClose} title="🛡️ Access Requests" width={520} th={th}>
-      {loading?<div style={{textAlign:'center',padding:40,color:th.textSub}}>Loading…</div>
-      :reqs.length===0?<div style={{textAlign:'center',padding:40,color:th.textSub}}>No requests yet.</div>
-      :reqs.map(r=>{
-        const status=(r.status||'').trim().toLowerCase();const statusColor=sc[status]||th.textSub
-        return(
-          <div key={r.user_id} style={{display:'flex',alignItems:'center',gap:12,background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'12px 16px',marginBottom:10}}>
-            <div style={{width:40,height:40,borderRadius:'50%',background:`linear-gradient(135deg,${mkColor(r.email)},${mkColor(r.email)}88)`,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,fontWeight:700,flexShrink:0}}>{mkInit(r.name||r.email)}</div>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:th.text}}>{r.name}</div><div style={{fontSize:11,color:th.textSub,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.email}</div></div>
-            <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
-              <span style={{fontSize:11,fontWeight:700,color:statusColor,background:statusColor+'22',border:`1px solid ${statusColor}44`,borderRadius:6,padding:'2px 8px'}}>{status.toUpperCase()}</span>
-              {status==='pending'&&<div style={{display:'flex',gap:6}}>
-                <button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>✓ Approve</button>
-                <button onClick={()=>act(r.user_id,'deny')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>✗ Deny</button>
-              </div>}
-              {status==='denied'&&<button onClick={()=>act(r.user_id,'approve')} style={{background:'#10b98122',border:'1px solid #10b98144',borderRadius:8,padding:'5px 12px',color:'#10b981',cursor:'pointer',fontSize:12,fontWeight:700}}>Approve Again</button>}
-              {status==='approved'&&<button onClick={()=>act(r.user_id,'remove')} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:8,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>Remove Access</button>}
-            </div>
-          </div>
-        )
-      })}
-    </Modal>
-  )
+  return<Modal open={open} onClose={onClose} title="Access Management" width={500}>
+    {loading?<div style={{textAlign:'center',padding:40,color:G.textSub}}>Loading…</div>
+    :reqs.length===0?<div style={{textAlign:'center',padding:40,color:G.textSub}}>No requests yet.</div>
+    :reqs.map(r=>{
+      const st=(r.status||'').trim().toLowerCase();const c=sc[st]||G.textSub;const rgb=hexToRgb(c)
+      return<div key={r.user_id} style={{display:'flex',alignItems:'center',gap:12,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'12px 16px',marginBottom:9}}>
+        <div style={{width:38,height:38,borderRadius:'50%',background:`linear-gradient(135deg,${mkColor(r.email)},${mkColor(r.email)}66)`,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,flexShrink:0}}>{mkInit(r.name||r.email)}</div>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:G.text}}>{r.name}</div><div style={{fontSize:11,color:G.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.email}</div></div>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:6,flexShrink:0}}>
+          <span style={{fontSize:10,fontWeight:700,color:c,background:`rgba(${rgb},0.1)`,border:`1px solid rgba(${rgb},0.22)`,borderRadius:'100px',padding:'2px 9px'}}>{st.toUpperCase()}</span>
+          {st==='pending'&&<div style={{display:'flex',gap:6}}>
+            <Btn onClick={()=>act(r.user_id,'approve')} outline color="#10b981" sm>✓ Approve</Btn>
+            <Btn onClick={()=>act(r.user_id,'deny')} outline color="#ef4444" sm>✕ Deny</Btn>
+          </div>}
+          {st==='denied'&&<Btn onClick={()=>act(r.user_id,'approve')} outline color="#10b981" sm>Approve</Btn>}
+          {st==='approved'&&<Btn onClick={()=>act(r.user_id,'remove')} outline color="#ef4444" sm>Remove</Btn>}
+        </div>
+      </div>
+    })}
+  </Modal>
 }
 
-// ── Status Manager ─────────────────────────────────────────────────────────────
-function StatusManager({open,onClose,statuses,wsColor,onSave,th}){
+// ── Status Manager ────────────────────────────────────────────────────────────
+function StatusManager({open,onClose,statuses,wsColor,onSave}){
   const [list,setList]=useState([...statuses]);const ref=useRef()
   useEffect(()=>{if(open)setList([...statuses])},[open,statuses])
   const SC=scMap(list)
   const add=()=>{const v=ref.current?.value?.trim();if(!v||list.includes(v))return;setList(p=>[...p,v]);ref.current.value=''}
   const del=s=>{if(list.length<=1)return;setList(p=>p.filter(x=>x!==s))}
   const mv=(i,d)=>{const a=[...list],j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];setList(a)}
-  const INP=inp(th)
-  return(
-    <Modal open={open} onClose={onClose} title="⚙️ Manage Status Columns" width={440} th={th}>
-      <div style={{fontSize:12,color:th.textSub,marginBottom:16,lineHeight:1.6}}>Add, remove, or reorder status columns for this workspace.</div>
-      {list.map((s,i)=>(
-        <div key={s} style={{display:'flex',alignItems:'center',gap:10,background:th.bgCard,border:`1px solid ${SC[s]}44`,borderRadius:th.radiusSm,padding:'9px 12px',marginBottom:7,transition:th.trans}}>
-          <div style={{width:10,height:10,borderRadius:'50%',background:SC[s],flexShrink:0,boxShadow:th.name==='modern'?`0 0 8px ${SC[s]}88`:'none'}}/>
-          <span style={{flex:1,fontSize:13,fontWeight:600,color:th.text}}>{s}</span>
-          <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?th.textMut:th.textSub,cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>↑</button>
-          <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?th.textMut:th.textSub,cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>↓</button>
-          <button onClick={()=>del(s)} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600}}>✕</button>
-        </div>
-      ))}
-      <div style={{display:'flex',gap:8,margin:'16px 0'}}>
-        <input ref={ref} placeholder="New status… e.g. Blocked, QA" style={{...INP,flex:1}} onKeyDown={e=>{if(e.key==='Enter')add()}}/>
-        <button onClick={add} style={{background:`linear-gradient(135deg,${wsColor},${wsColor}bb)`,border:'none',borderRadius:th.radiusSm,padding:'0 16px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:14,flexShrink:0,boxShadow:`0 4px 16px ${wsColor}44`}}>+ Add</button>
+  return<Modal open={open} onClose={onClose} title="Manage Columns" width={420}>
+    <p style={{fontSize:12,color:G.textSub,marginBottom:16,lineHeight:1.6}}>Reorder or add status columns for this workspace.</p>
+    {list.map((s,i)=>{
+      const col=SC[s];const rgb=hexToRgb(col)
+      return<div key={s} style={{display:'flex',alignItems:'center',gap:10,background:G.surface,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusMd,padding:'9px 14px',marginBottom:8}}>
+        <div style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,boxShadow:`0 0 8px ${col}99`}}/>
+        <span style={{flex:1,fontSize:13,fontWeight:600,color:G.text}}>{s}</span>
+        <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?G.textMut:G.textSub,cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>↑</button>
+        <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?G.textMut:G.textSub,cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>↓</button>
+        <Btn onClick={()=>del(s)} outline color="#ef4444" sm>✕</Btn>
       </div>
-      <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-        <button onClick={onClose} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'9px 20px',color:th.textSub,cursor:'pointer',fontSize:13,transition:th.trans}}>Cancel</button>
-        <button onClick={()=>{onSave(list);onClose()}} style={{background:`linear-gradient(135deg,${wsColor},${wsColor}bb)`,border:'none',borderRadius:th.radiusSm,padding:'9px 26px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13,boxShadow:`0 4px 16px ${wsColor}44`}}>Save</button>
-      </div>
-    </Modal>
-  )
+    })}
+    <div style={{display:'flex',gap:8,margin:'16px 0'}}>
+      <input ref={ref} placeholder="New status…" style={{...INP,flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/>
+      <Btn onClick={add} color={wsColor}>Add</Btn>
+    </div>
+    <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+      <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
+      <Btn onClick={()=>{onSave(list);onClose()}} color={wsColor}>Save</Btn>
+    </div>
+  </Modal>
 }
 
-// ── Import/Export ──────────────────────────────────────────────────────────────
-function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImport,th}){
-  const [tab,setTab]=useState('export');const [dragging,setDragging]=useState(false);const [preview,setPreview]=useState(null);const fileRef=useRef()
+// ── Import/Export ─────────────────────────────────────────────────────────────
+function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImport}){
+  const [tab,setTab]=useState('export');const [drag,setDrag]=useState(false);const [preview,setPreview]=useState(null);const fileRef=useRef()
   const esc=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s}
   const handleExport=()=>{
-    const getName=id=>wsMembers.find(m=>m.id===id)?.name||id||''
-    const headers=['Title','Description','Status','Priority','Assigned To','Created By','Project','Tags','Due Date','Recurrence','Interval']
-    const rows=tasks.map(t=>[t.title,t.description||'',t.status,t.priority,getName(t.assigned_to),getName(t.created_by),t.project||'',(t.tags||[]).join(';'),t.due_date||'',t.recurrence_type||'none',t.recurrence_interval||1].map(esc))
-    const csv=[headers,...rows].map(r=>r.join(',')).join('\n')
-    const blob=new Blob([csv],{type:'text/csv'});const url=URL.createObjectURL(blob)
-    const a=document.createElement('a');a.href=url;a.download=`${wsName}_tasks_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url)
+    const nm=id=>wsMembers.find(m=>m.id===id)?.name||id||''
+    const h=['Title','Description','Status','Priority','Assigned To','Created By','Project','Tags','Due Date','Recurrence','Interval']
+    const rows=tasks.map(t=>[t.title,t.description||'',t.status,t.priority,nm(t.assigned_to),nm(t.created_by),t.project||'',(t.tags||[]).join(';'),t.due_date||'',t.recurrence_type||'none',t.recurrence_interval||1].map(esc))
+    const csv=[h,...rows].map(r=>r.join(',')).join('\n')
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`${wsName}_${new Date().toISOString().slice(0,10)}.csv`;a.click()
   }
   const parseCSV=text=>{
-    const parseRow=row=>{const cells=[];let cur='',inQ=false;for(const ch of row){if(ch==='"'&&!inQ)inQ=true;else if(ch==='"'&&inQ)inQ=false;else if(ch===','&&!inQ){cells.push(cur.trim());cur=''}else cur+=ch}cells.push(cur.trim());return cells}
-    const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);if(lines.length<2) return null
-    const headers=parseRow(lines[0]).map(h=>h.toLowerCase().replace(/[\s-]+/g,'_').replace(/[^a-z_]/g,''));const gi=k=>headers.indexOf(k)
-    return lines.slice(1).map(line=>{const cols=parseRow(line);return{title:(cols[gi('title')]||'').trim(),description:(cols[gi('description')]||'').trim(),status:(cols[gi('status')]||'').trim(),priority:(cols[gi('priority')]||'').trim(),assigned_to_name:(cols[gi('assigned_to')]||'').trim(),project:(cols[gi('project')]||'').trim(),tags:(cols[gi('tags')]||'').split(';').map(t=>t.trim()).filter(Boolean),due_date:(cols[gi('due_date')]||'').trim()||null,recurrence_type:(cols[gi('recurrence')]||'none').trim(),recurrence_interval:Math.max(1,parseInt(cols[gi('interval')])||1)}}).filter(r=>r.title)
+    const pr=row=>{const c=[];let cur='',q=false;for(const ch of row){if(ch==='"'&&!q)q=true;else if(ch==='"'&&q)q=false;else if(ch===','&&!q){c.push(cur.trim());cur=''}else cur+=ch}c.push(cur.trim());return c}
+    const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);if(lines.length<2)return null
+    const hd=pr(lines[0]).map(h=>h.toLowerCase().replace(/[\s-]+/g,'_').replace(/[^a-z_]/g,''));const gi=k=>hd.indexOf(k)
+    return lines.slice(1).map(line=>{const c=pr(line);return{title:(c[gi('title')]||'').trim(),description:(c[gi('description')]||'').trim(),status:(c[gi('status')]||'').trim(),priority:(c[gi('priority')]||'').trim(),assigned_to_name:(c[gi('assigned_to')]||'').trim(),project:(c[gi('project')]||'').trim(),tags:(c[gi('tags')]||'').split(';').map(t=>t.trim()).filter(Boolean),due_date:(c[gi('due_date')]||'').trim()||null,recurrence_type:(c[gi('recurrence')]||'none').trim(),recurrence_interval:Math.max(1,parseInt(c[gi('interval')])||1)}}).filter(r=>r.title)
   }
-  const handleFile=async f=>{if(!f)return;const text=await f.text();const rows=parseCSV(text);if(!rows||rows.length===0){alert('Could not parse CSV.');return};setPreview(rows)}
-  const INP=inp(th)
-  return(
-    <Modal open={open} onClose={()=>{onClose();setPreview(null);setTab('export')}} title="📊 Import / Export Tasks" width={640} th={th}>
-      <div style={{display:'flex',gap:4,background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:4,marginBottom:20}}>
-        {[{id:'export',label:'⬇ Export CSV'},{id:'import',label:'⬆ Import CSV'}].map(t=>(
-          <button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px 0',borderRadius:th.radiusXs,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'#6366f1':'transparent',color:tab===t.id?'#fff':th.textSub,transition:th.trans,boxShadow:tab===t.id&&th.name==='modern'?'0 4px 12px rgba(99,102,241,0.4)':'none'}}>{t.label}</button>
-        ))}
-      </div>
-      {tab==='export'&&(
-        <div>
-          <div style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:16,marginBottom:16}}>
-            <div style={{fontSize:13,color:th.textSub,marginBottom:12,lineHeight:1.6}}>Downloads a CSV with all <strong style={{color:th.text}}>{tasks.length} tasks</strong> from this workspace.</div>
-            <div style={{fontSize:11,color:th.textMut,fontFamily:'monospace',background:'rgba(0,0,0,0.3)',borderRadius:8,padding:'8px 12px'}}>Title · Status · Priority · Assigned To · Due Date · Recurrence</div>
-          </div>
-          <button onClick={handleExport} style={{width:'100%',background:'linear-gradient(135deg,#10b981,#059669)',border:'none',borderRadius:th.radiusSm,padding:'12px',color:'#fff',fontWeight:700,fontSize:14,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,boxShadow:'0 8px 24px rgba(16,185,129,0.35)',transition:th.trans}}>⬇ Download {tasks.length} Tasks as CSV</button>
-        </div>
-      )}
-      {tab==='import'&&!preview&&(
-        <div>
-          <div style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:16,marginBottom:16,fontSize:12,color:th.textSub,lineHeight:1.8}}>
-            <div style={{fontWeight:700,color:th.text,marginBottom:8,fontSize:13}}>CSV Format Requirements</div>
-            <div>• Required: <strong style={{color:'#818cf8'}}>Title</strong></div>
-            <div>• Optional: Description, Status, Priority, Assigned To, Project, Tags (;), Due Date (YYYY-MM-DD), Recurrence, Interval</div>
-          </div>
-          <div onDragOver={e=>{e.preventDefault();setDragging(true)}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);const f=e.dataTransfer.files[0];if(f)handleFile(f)}} onClick={()=>fileRef.current?.click()}
-            style={{border:`2px dashed ${dragging?'#6366f1':th.border}`,borderRadius:th.radius,padding:'40px 20px',textAlign:'center',cursor:'pointer',background:dragging?'rgba(99,102,241,0.06)':'transparent',transition:th.trans}}>
-            <div style={{fontSize:36,marginBottom:12}}>📂</div>
-            <div style={{fontSize:14,fontWeight:600,color:th.textSub,marginBottom:4}}>Drop your CSV file here</div>
-            <div style={{fontSize:12,color:th.textMut}}>or click to browse</div>
-            <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])}/>
-          </div>
-        </div>
-      )}
-      {tab==='import'&&preview&&(
-        <div>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-            <div style={{fontSize:14,fontWeight:700,color:th.text}}>Preview — {preview.length} rows</div>
-            <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:th.textSub,cursor:'pointer',fontSize:12}}>← Back</button>
-          </div>
-          <div style={{maxHeight:280,overflow:'auto',border:`1px solid ${th.border}`,borderRadius:th.radiusSm,marginBottom:14}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-              <thead style={{position:'sticky',top:0,background:th.bgModal}}>
-                <tr>{['Title','Status','Priority','Assigned To','Due Date'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:th.textSub,fontWeight:700,borderBottom:`1px solid ${th.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {preview.map((r,i)=>(
-                  <tr key={i} style={{borderBottom:`1px solid ${th.border}`}}>
-                    <td style={{padding:'7px 12px',color:th.text,fontWeight:600}}>{r.title}</td>
-                    <td style={{padding:'7px 8px',color:th.textSub}}>{r.status||'—'}</td>
-                    <td style={{padding:'7px 8px',color:th.textSub}}>{r.priority||'—'}</td>
-                    <td style={{padding:'7px 8px',color:th.textSub}}>{r.assigned_to_name||'—'}</td>
-                    <td style={{padding:'7px 8px',color:th.textSub}}>{r.due_date||'—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div style={{display:'flex',gap:10}}>
-            <button onClick={()=>setPreview(null)} style={{flex:1,background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'10px',color:th.textSub,cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>
-            <button onClick={()=>{onImport(preview);onClose();setPreview(null)}} style={{flex:2,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:th.radiusSm,padding:'10px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13,boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>✓ Import {preview.length} Tasks</button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  )
-}
-
-// ── Recurrence Picker ──────────────────────────────────────────────────────────
-function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onIntervalChange,th}){
-  const showInterval=recurrenceType!=='none';const INP=inp(th)
-  return(
-    <div style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'12px 14px',marginTop:2}}>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:showInterval?12:0}}>
-        {RECURRENCE_TYPES.map(rt=>(
-          <button key={rt} onClick={()=>onTypeChange(rt)} style={{padding:'6px 12px',borderRadius:8,border:`1.5px solid ${recurrenceType===rt?'#6366f1':th.border}`,background:recurrenceType===rt?'rgba(99,102,241,0.18)':'transparent',color:recurrenceType===rt?'#818cf8':th.textSub,cursor:'pointer',fontSize:12,fontWeight:recurrenceType===rt?700:500,transition:th.trans,boxShadow:recurrenceType===rt&&th.name==='modern'?'0 0 12px rgba(99,102,241,0.2)':'none'}}>
-            {rt==='none'?'✕ None':rt==='daily'?'📅 Daily':rt==='weekly'?'📆 Weekly':rt==='monthly'?'🗓 Monthly':'⚙️ Custom'}
-          </button>
-        ))}
-      </div>
-      {showInterval&&(
-        <div style={{display:'flex',alignItems:'center',gap:10,background:'rgba(0,0,0,0.2)',borderRadius:9,padding:'10px 12px',border:`1px solid ${th.border}`}}>
-          <span style={{fontSize:12,color:th.textSub,whiteSpace:'nowrap'}}>Every</span>
-          <input type="number" min={1} max={365} value={recurrenceInterval} onChange={e=>onIntervalChange(Math.max(1,parseInt(e.target.value)||1))} style={{...INP,width:70,padding:'6px 10px',fontSize:13,flex:'none'}}/>
-          <span style={{fontSize:12,color:th.textSub,whiteSpace:'nowrap'}}>{recurrenceType==='weekly'?`week${recurrenceInterval===1?'':'s'}`:recurrenceType==='monthly'?`month${recurrenceInterval===1?'':'s'}`:`day${recurrenceInterval===1?'':'s'}`}</span>
-          <span style={{marginLeft:'auto',fontSize:11,color:'#6366f1',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:6,padding:'3px 8px',whiteSpace:'nowrap',fontWeight:600}}>🔁 {recurringLabel(recurrenceType,recurrenceInterval)}</span>
-        </div>
-      )}
-      {showInterval&&<div style={{marginTop:8,fontSize:11,color:th.textSub,lineHeight:1.6}}>💡 When marked <strong style={{color:'#10b981'}}>Done</strong>, a new copy auto-creates with the next due date.</div>}
+  const handleFile=async f=>{if(!f)return;const rows=parseCSV(await f.text());if(!rows?.length){alert('Could not parse CSV.');return};setPreview(rows)}
+  return<Modal open={open} onClose={()=>{onClose();setPreview(null);setTab('export')}} title="Import / Export Tasks" width={620}>
+    <div style={{display:'flex',gap:4,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:4,marginBottom:20}}>
+      {[{id:'export',lb:'⬇ Export CSV'},{id:'import',lb:'⬆ Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(99,102,241,0.85)':'transparent',color:tab===t.id?'#fff':G.textSub,transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
     </div>
-  )
+    {tab==='export'&&<div>
+      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:G.textSub,lineHeight:1.7}}>Export all <strong style={{color:G.text}}>{tasks.length} tasks</strong> from this workspace as a CSV file.</div>
+      <Btn onClick={handleExport} color="#10b981" full>⬇ Download {tasks.length} Tasks as CSV</Btn>
+    </div>}
+    {tab==='import'&&!preview&&<div>
+      <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:14,marginBottom:16,fontSize:12,color:G.textSub,lineHeight:1.8}}><strong style={{color:G.text,display:'block',marginBottom:4}}>Format:</strong>Required: <em>Title</em> · Optional: Description, Status, Priority, Assigned To, Tags (semicolon), Due Date (YYYY-MM-DD), Recurrence, Interval</div>
+      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()}
+        style={{border:`2px dashed ${drag?'#6366f1':G.border}`,borderRadius:G.radiusMd,padding:'48px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(99,102,241,0.04)':'transparent',transition:G.trans}}>
+        <div style={{fontSize:36,marginBottom:10}}>📂</div>
+        <p style={{fontSize:13,fontWeight:600,color:G.textSub,margin:'0 0 4px'}}>Drop CSV here or click to browse</p>
+        <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])}/>
+      </div>
+    </div>}
+    {tab==='import'&&preview&&<div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+        <strong style={{fontSize:14,color:G.text}}>{preview.length} rows ready to import</strong>
+        <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:G.textSub,cursor:'pointer',fontSize:12,fontFamily:G.font}}>← Back</button>
+      </div>
+      <div style={{maxHeight:260,overflow:'auto',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,marginBottom:16}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+          <thead><tr>{['Title','Status','Priority','Assigned','Due'].map(h=><th key={h} style={{padding:'9px 14px',textAlign:'left',color:G.textSub,fontWeight:700,borderBottom:`1px solid ${G.border}`,background:'rgba(4,9,20,0.9)',position:'sticky',top:0}}>{h}</th>)}</tr></thead>
+          <tbody>{preview.map((r,i)=><tr key={i} style={{borderBottom:`1px solid ${G.border}`}}>
+            <td style={{padding:'8px 14px',color:G.text,fontWeight:600}}>{r.title}</td>
+            <td style={{padding:'8px 10px',color:G.textSub}}>{r.status||'—'}</td>
+            <td style={{padding:'8px 10px',color:G.textSub}}>{r.priority||'—'}</td>
+            <td style={{padding:'8px 10px',color:G.textSub}}>{r.assigned_to_name||'—'}</td>
+            <td style={{padding:'8px 10px',color:G.textSub}}>{r.due_date||'—'}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+      <div style={{display:'flex',gap:10}}>
+        <Btn onClick={()=>setPreview(null)} outline color="#64748b" full>Back</Btn>
+        <Btn onClick={()=>{onImport(preview);onClose();setPreview(null)}} color="#6366f1" full>Import {preview.length} Tasks</Btn>
+      </div>
+    </div>}
+  </Modal>
 }
 
-// ── Task Form ──────────────────────────────────────────────────────────────────
-function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete,th}){
+// ── Recurrence Picker ─────────────────────────────────────────────────────────
+function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onIntervalChange}){
+  const show=recurrenceType!=='none'
+  return<div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'14px 16px',marginTop:2}}>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:show?12:0}}>
+      {RECURRENCE_TYPES.map(rt=><button key={rt} onClick={()=>onTypeChange(rt)} style={{padding:'5px 13px',borderRadius:'100px',border:`1.5px solid ${recurrenceType===rt?'#6366f1':G.border}`,background:recurrenceType===rt?'rgba(99,102,241,0.15)':'transparent',color:recurrenceType===rt?'#818cf8':G.textSub,cursor:'pointer',fontSize:11,fontWeight:recurrenceType===rt?700:500,transition:G.trans,fontFamily:G.font}}>
+        {rt==='none'?'No repeat':rt.charAt(0).toUpperCase()+rt.slice(1)}
+      </button>)}
+    </div>
+    {show&&<div style={{display:'flex',alignItems:'center',gap:12,background:'rgba(0,0,0,0.2)',borderRadius:G.radiusSm,padding:'10px 14px',border:`1px solid ${G.border}`}}>
+      <span style={{fontSize:12,color:G.textSub,flexShrink:0}}>Every</span>
+      <input type="number" min={1} max={365} value={recurrenceInterval} onChange={e=>onIntervalChange(Math.max(1,parseInt(e.target.value)||1))} style={{...INP,width:62,padding:'5px 10px',fontSize:13,flex:'none'}}/>
+      <span style={{fontSize:12,color:G.textSub,flexShrink:0}}>{recurrenceType==='weekly'?'week(s)':recurrenceType==='monthly'?'month(s)':'day(s)'}</span>
+      <Tag label={`🔁 ${rrLabel(recurrenceType,recurrenceInterval)}`} color="#6366f1"/>
+    </div>}
+    {show&&<p style={{margin:'10px 0 0',fontSize:11,color:G.textSub,lineHeight:1.6}}>Mark Done → next occurrence auto-creates.</p>}
+  </div>
+}
+
+// ── Task Form ─────────────────────────────────────────────────────────────────
+function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
   const [status,setStatus]=useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]=useState('Medium')
   const [assignTarget,setAssignTarget]=useState('self')
-  const [recurrenceType,setRecurrenceType]=useState('none')
-  const [recurrenceInterval,setRecurrenceInterval]=useState(1)
+  const [rt,setRt]=useState('none');const [ri,setRi]=useState(1)
   const [cdel,setCdel]=useState(false)
-  const isEdit=!!task;const INP=inp(th)
+  const isEdit=!!task
 
   useEffect(()=>{
     if(!open)return
     setStatus(task?.status||defaultStatus||statuses[0]||'Todo');setPriority(task?.priority||'Medium')
-    if(task){const sa=!task.assigned_to||task.assigned_to===task.created_by;setAssignTarget(sa?'self':task.assigned_to);setRecurrenceType(task?.recurrence_type||'none');setRecurrenceInterval(task?.recurrence_interval||1)}
-    else{setAssignTarget('self');setRecurrenceType('none');setRecurrenceInterval(1)}
+    if(task){const sa=!task.assigned_to||task.assigned_to===task.created_by;setAssignTarget(sa?'self':task.assigned_to);setRt(task.recurrence_type||'none');setRi(task.recurrence_interval||1)}
+    else{setAssignTarget('self');setRt('none');setRi(1)}
   },[open,task,defaultStatus,statuses])
 
-  if(!open||!ws||!cu) return null
-  const otherMembers=wsMembers.filter(m=>m.id!==cu.id)
+  if(!open||!ws||!cu)return null
+  const others=wsMembers.filter(m=>m.id!==cu.id)
+  const rgb=hexToRgb(ws.color)
 
-  const handleSave=async()=>{
+  const save=async()=>{
     const title=titleRef.current?.value?.trim();if(!title)return
-    const assigned_to=assignTarget==='self'?cu.id:assignTarget
-    const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:recurrenceType,recurrence_interval:Math.max(1,Number(recurrenceInterval)||1),status,priority,assigned_to,workspace_id:ws.id,created_by:task?.created_by||cu.id}
+    const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assigned_to:assignTarget==='self'?cu.id:assignTarget,workspace_id:ws.id,created_by:task?.created_by||cu.id}
     await onSave(isEdit?{...task,...payload}:payload);onClose()
   }
-  const F=({label,children,full})=>(<div style={{marginBottom:14,gridColumn:full?'1/-1':undefined}}><label style={lbl(th)}>{label}</label>{children}</div>)
+  const F=({label,children,full})=><div style={{marginBottom:16,gridColumn:full?'1/-1':undefined}}><label style={LBL}>{label}</label>{children}</div>
 
-  return(
-    <>
-      <Modal open={open} onClose={onClose} title={isEdit?'✏️ Edit Task':'✦ New Task'} width={600} th={th}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
-          <F label="Task Title *" full><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter')handleSave()}}/></F>
-          <F label="Description" full><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Details…"/></F>
-          <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s} value={s}>{s}</option>)}</select></F>
-          <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p} value={p}>{p}</option>)}</select></F>
-          <F label={otherMembers.length===0?'Assign To (add members first)':'Assign To'} full>
-            <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-              <div onClick={()=>setAssignTarget('self')} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:th.radiusSm,cursor:'pointer',border:`2px solid ${assignTarget==='self'?ws.color:th.border}`,background:assignTarget==='self'?ws.color+'18':th.bgCard,transition:th.trans,flexShrink:0}}>
-                <div style={{width:28,height:28,borderRadius:'50%',background:ws.color+'33',border:`1px solid ${ws.color}66`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>🔒</div>
-                <div><div style={{fontSize:12,fontWeight:700,color:assignTarget==='self'?ws.color:th.text}}>Only Me</div><div style={{fontSize:10,color:th.textSub}}>Private task</div></div>
-                {assignTarget==='self'&&<div style={{width:16,height:16,borderRadius:'50%',background:ws.color,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:4}}><span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span></div>}
+  return<>
+    <Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={620}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
+        <F full label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>e.key==='Enter'&&save()}/></F>
+        <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
+        <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
+        <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
+        <F full label="Assign To">
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {[{id:'self',icon:'🔒',name:'Only Me',sub:'Private'},...others.map(m=>({id:m.id,user:enrich(m),name:m.name||m.email.split('@')[0],sub:'Assign'}))].map(opt=>{
+              const sel=assignTarget===opt.id
+              return<div key={opt.id} onClick={()=>setAssignTarget(opt.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.5)`:G.border}`,background:sel?`rgba(${rgb},0.08)`:G.surface,transition:G.trans}}>
+                {opt.user?<Avatar user={opt.user} size={26}/>:<span style={{fontSize:14}}>🔒</span>}
+                <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>{opt.name}</div><div style={{fontSize:10,color:G.textSub}}>{opt.sub}</div></div>
+                {sel&&<div style={{width:14,height:14,borderRadius:'50%',background:ws.color,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2}}><span style={{color:'#fff',fontSize:9,fontWeight:800}}>✓</span></div>}
               </div>
-              {otherMembers.map(m=>{
-                const eu=enrich(m);const sel=assignTarget===m.id
-                return(
-                  <div key={m.id} onClick={()=>setAssignTarget(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:th.radiusSm,cursor:'pointer',border:`2px solid ${sel?ws.color:th.border}`,background:sel?ws.color+'18':th.bgCard,transition:th.trans,flexShrink:0}}>
-                    <Avatar user={eu} size={28} th={th}/>
-                    <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:th.text}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:10,color:th.textSub}}>Assign task</div></div>
-                    {sel&&<div style={{width:16,height:16,borderRadius:'50%',background:ws.color,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:4}}><span style={{color:'#fff',fontSize:10,fontWeight:700}}>✓</span></div>}
-                  </div>
-                )
-              })}
-            </div>
-          </F>
-          <F label="Due Date (first occurrence)" full><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
-          <F label="🔁 Recurrence" full><RecurrencePicker recurrenceType={recurrenceType} recurrenceInterval={recurrenceInterval} onTypeChange={setRecurrenceType} onIntervalChange={setRecurrenceInterval} th={th}/></F>
-          <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Accounts, HR"/></F>
-          <F label="Tags (comma-separated)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
-        </div>
-        <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:12,borderTop:`1px solid ${th.border}`}}>
-          {isEdit?<button onClick={()=>setCdel(true)} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:th.radiusSm,padding:'9px 16px',color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:600}}>🗑️ Delete</button>:<div/>}
-          <div style={{display:'flex',gap:10}}>
-            <button onClick={onClose} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'9px 20px',color:th.textSub,cursor:'pointer',fontSize:13,transition:th.trans}}>Cancel</button>
-            <button onClick={handleSave} style={{background:`linear-gradient(135deg,${ws.color},${ws.color}bb)`,border:'none',borderRadius:th.radiusSm,padding:'9px 26px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13,boxShadow:`0 6px 20px ${ws.color}44`}}>{isEdit?'💾 Save':'Create Task'}</button>
+            })}
           </div>
+        </F>
+        <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
+        <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
+        <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
+        <F label="Tags (comma separated)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
+        {isEdit?<Btn onClick={()=>setCdel(true)} outline color="#ef4444">Delete</Btn>:<div/>}
+        <div style={{display:'flex',gap:8}}>
+          <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
+          <Btn onClick={save} color={ws.color}>{isEdit?'Save Changes':'Create Task'}</Btn>
         </div>
-      </Modal>
-      <Confirm open={cdel} icon="🗑️" title="Delete Task?" body={`Delete "${task?.title}"?`} confirmLabel="Delete" onConfirm={async()=>{setCdel(false);await onDelete(task.id);onClose()}} onCancel={()=>setCdel(false)} th={th}/>
-    </>
-  )
-}
-
-// ── Workspace Form ─────────────────────────────────────────────────────────────
-function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMemberIds,th}){
-  const nameRef=useRef(),descRef=useRef()
-  const [color,setColor]=useState(WS_COLORS[0]);const [icon,setIcon]=useState(WS_ICONS[0]);const [members,setMembers]=useState([])
-  const INP=inp(th)
-  useEffect(()=>{if(open){setColor(ws?.color||WS_COLORS[0]);setIcon(ws?.icon||WS_ICONS[0]);const initial=ws?(currentMemberIds?.length>0?currentMemberIds:[cu?.id]):[cu?.id];setMembers(initial)}},[open,ws,cu,currentMemberIds])
-  if(!open||!cu) return null
-  const toggle=id=>{if(id===cu.id)return;setMembers(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])}
-  return(
-    <Modal open={open} onClose={onClose} title={ws?'✏️ Edit Workspace':'✦ New Workspace'} width={500} th={th}>
-      <div style={{marginBottom:14}}><label style={lbl(th)}>Workspace Name *</label><input ref={nameRef} defaultValue={ws?.name||''} placeholder="e.g. Daily To Do, Accounts Team" style={INP}/></div>
-      <div style={{marginBottom:14}}><label style={lbl(th)}>Description</label><textarea ref={descRef} defaultValue={ws?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="What does this workspace cover?"/></div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px',marginBottom:14}}>
-        <div><label style={lbl(th)}>Color</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:8,background:c,cursor:'pointer',border:`2.5px solid ${color===c?'#fff':'transparent'}`,boxShadow:color===c?`0 0 0 2px ${c}, 0 4px 12px ${c}66`:'none',transition:th.trans}}/>)}</div></div>
-        <div><label style={lbl(th)}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:8,background:icon===ic?color+'33':th.bgCard,border:`1.5px solid ${icon===ic?color:th.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:th.trans}}>{ic}</div>)}</div></div>
-      </div>
-      <div style={{marginBottom:20}}>
-        <label style={lbl(th)}>Members — {members.length} selected</label>
-        {allProfiles.length===0&&<div style={{fontSize:12,color:'#f59e0b',background:'#f59e0b11',borderRadius:th.radiusSm,padding:12,lineHeight:1.6,border:'1px solid #f59e0b33'}}>⚠ No approved members yet. Open Admin Panel and approve teammates first.</div>}
-        {allProfiles.map(u=>{
-          const checked=members.includes(u.id),isSelf=u.id===cu.id
-          return(
-            <div key={u.id} onClick={()=>toggle(u.id)} style={{display:'flex',alignItems:'center',gap:12,background:checked?th.bgCard:'transparent',border:`1px solid ${checked?color+'44':th.border}`,borderRadius:th.radiusSm,padding:'9px 13px',cursor:isSelf?'default':'pointer',marginBottom:7,transition:th.trans,boxShadow:checked&&th.name==='modern'?`0 4px 16px ${color}18`:'none'}}>
-              <Avatar user={enrich(u)} size={30} th={th}/>
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:th.text}}>{u.name||u.email}{isSelf?' (You — always included)':''}</div><div style={{fontSize:11,color:th.textSub}}>{u.email}</div></div>
-              <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${checked?color:th.textMut}`,background:checked?color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:th.trans,boxShadow:checked?`0 2px 8px ${color}44`:'none'}}>{checked&&<span style={{color:'#fff',fontSize:11,fontWeight:700}}>✓</span>}</div>
-            </div>
-          )
-        })}
-      </div>
-      <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-        <button onClick={onClose} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'9px 20px',color:th.textSub,cursor:'pointer',fontSize:13,transition:th.trans}}>Cancel</button>
-        <button onClick={async()=>{const name=nameRef.current?.value?.trim();if(!name)return;await onSave({id:ws?.id,name,description:descRef.current?.value?.trim()||'',color,icon,memberIds:members.includes(cu.id)?members:[...members,cu.id]});onClose()}} style={{background:`linear-gradient(135deg,${color},${color}bb)`,border:'none',borderRadius:th.radiusSm,padding:'9px 26px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13,boxShadow:`0 6px 20px ${color}44`}}>{ws?'Save Changes':'Create Workspace'}</button>
       </div>
     </Modal>
-  )
+    <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task?.title}" will be permanently removed.`} confirmLabel="Delete" onConfirm={async()=>{setCdel(false);await onDelete(task.id);onClose()}} onCancel={()=>setCdel(false)}/>
+  </>
 }
 
-// ── Task Card ──────────────────────────────────────────────────────────────────
-function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging,th}){
-  const assignee=getUser(task.assigned_to,wsMembers);const creator=getUser(task.created_by,wsMembers)
-  const overdue=isOverdue(task.due_date);const mirrored=isMirroredToMe(task,cu?.id)
-  const delegated=task.created_by===cu?.id&&task.assigned_to&&task.assigned_to!==cu?.id
-  const recurring=task.recurrence_type&&task.recurrence_type!=='none'
-  const [hov,setHov]=useState(false);const [cdel,setCdel]=useState(false)
-  const accentColor=mirrored?'#818cf8':delegated?'#f59e0b':wsColor
-  const isM=th.name==='modern'
-  return(
-    <>
-      <div draggable={!mirrored} onDragStart={e=>{if(mirrored)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}}
-        onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-        style={{background:isDragging?th.bgCardH:hov?th.bgCardH:th.bgCard,border:`1px solid ${hov?accentColor+'55':th.border}`,borderLeft:`3px solid ${accentColor}`,borderRadius:th.radius,padding:14,cursor:mirrored?'default':'grab',transition:th.trans,opacity:isDragging?0.35:1,boxShadow:hov&&!isDragging?(isM?`0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px ${accentColor}22`:th.shadow):'none',transform:hov&&!isDragging&&isM?'translateY(-2px)':'none',userSelect:'none',position:'relative',backdropFilter:isM?th.blurSm:'none',WebkitBackdropFilter:isM?th.blurSm:'none'}}>
-        {mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'rgba(129,140,248,0.15)',color:'#818cf8',border:'1px solid rgba(129,140,248,0.25)',borderRadius:5,padding:'2px 6px'}}>📥 ASSIGNED TO ME</div>}
-        {delegated&&!mirrored&&<div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,background:'rgba(245,158,11,0.12)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.25)',borderRadius:5,padding:'2px 6px'}}>📤 DELEGATED</div>}
-        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6,paddingRight:mirrored||delegated?90:0}}>
-          {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:10,color:th.textSub,background:th.bgTag,borderRadius:4,padding:'2px 5px',fontWeight:600,border:`1px solid ${th.border}`}}>{t}</span>)}
-          {recurring&&<span style={{fontSize:10,color:'#6366f1',background:'rgba(99,102,241,0.15)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:4,padding:'2px 5px',fontWeight:600}}>🔁 {recurringLabel(task.recurrence_type,task.recurrence_interval)}</span>}
-        </div>
-        <div style={{fontSize:13,fontWeight:600,color:th.text,marginBottom:5,lineHeight:1.4,letterSpacing:isM?'-0.01em':'normal'}}>{task.title}</div>
-        {task.description&&<div style={{fontSize:11,color:th.textSub,marginBottom:8,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
-        <div style={{display:'flex',gap:4,marginBottom:8}}>
-          <Pill label={`${PI[task.priority]} ${task.priority}`} color={PC[task.priority]} sm/>
-          {overdue&&<Pill label="⚠ Overdue" color="#ef4444" sm/>}
-        </div>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <div style={{display:'flex',alignItems:'center',gap:5}}>
-            {mirrored?(<><Avatar user={creator} size={18} th={th}/><span style={{fontSize:10,color:'#818cf8',fontWeight:600}}>from {creator?.name?.split(' ')[0]||'?'}</span></>)
-                     :(<><Avatar user={assignee} size={18} th={th}/><span style={{fontSize:11,color:th.textSub}}>{assignee?.id===cu?.id?'Me':assignee?.name?.split(' ')[0]||'—'}</span></>)}
-          </div>
-          {task.due_date&&<span style={{fontSize:10,color:overdue?'#ef4444':th.textSub,fontWeight:overdue?700:400}}>{fmtDate(task.due_date)}</span>}
-        </div>
-        {!mirrored&&(
-          <div style={{display:'flex',gap:6,marginTop:10,paddingTop:10,borderTop:`1px solid ${th.border}`,opacity:hov?1:0,transform:hov?'none':'translateY(4px)',transition:th.trans}}>
-            <button onClick={e=>{e.stopPropagation();onEdit(task)}} style={{flex:1,background:wsColor+'22',border:`1px solid ${wsColor}44`,borderRadius:th.radiusXs,padding:'5px 0',color:wsColor,cursor:'pointer',fontSize:11,fontWeight:600}}>✏️ Edit</button>
-            <button onClick={e=>{e.stopPropagation();setCdel(true)}} style={{flex:1,background:'#ef444418',border:'1px solid #ef444440',borderRadius:th.radiusXs,padding:'5px 0',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600}}>🗑 Delete</button>
-          </div>
-        )}
-      </div>
-      <Confirm open={cdel} icon="🗑️" title="Delete Task?" body={`Delete "${task.title}"?`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)} th={th}/>
-    </>
-  )
-}
-
-// ── Drop Column ────────────────────────────────────────────────────────────────
-function DropColumn({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAddTask,th}){
-  const [over,setOver]=useState(false);const col=SC[status]||wsColor;const isM=th.name==='modern'
-  return(
-    <div onDragOver={e=>{e.preventDefault();setOver(true)}} onDragLeave={()=>setOver(false)} onDrop={e=>{e.preventDefault();setOver(false);onDrop(status)}} style={{minWidth:250,flex:'1 1 250px',maxWidth:300}}>
-      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:10,padding:'7px 10px',background:over?(isM?`rgba(0,0,0,0.2)`:`${col}11`):'transparent',borderRadius:th.radiusSm,border:`1px solid ${over?col+'55':'transparent'}`,transition:th.trans,backdropFilter:isM&&over?th.blurSm:'none'}}>
-        <div style={{width:8,height:8,borderRadius:'50%',background:col,boxShadow:isM?`0 0 8px ${col}99`:'none'}}/>
-        <span style={{fontSize:12,fontWeight:700,color:th.text,flex:1}}>{status}</span>
-        <span style={{background:col+'22',color:col,borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:700,border:`1px solid ${col}33`}}>{tasks.length}</span>
-        <button onClick={()=>onAddTask(status)} style={{width:24,height:24,borderRadius:7,background:col+'22',border:`1px solid ${col}44`,color:col,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,flexShrink:0,padding:0,lineHeight:1,transition:th.transFast}}
-          onMouseEnter={e=>e.currentTarget.style.background=col+'44'} onMouseLeave={e=>e.currentTarget.style.background=col+'22'}>+</button>
-      </div>
-      <div style={{minHeight:60,borderRadius:th.radiusSm,padding:over?'8px':'0',background:over?col+'0d':'transparent',border:over?`2px dashed ${col}66`:'2px dashed transparent',transition:th.trans,display:'flex',flexDirection:'column',gap:9}}>
-        {tasks.map(t=><TaskCard key={t.id} task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id} th={th}/>)}
-        {tasks.length===0&&!over&&<div style={{border:`2px dashed ${th.border}`,borderRadius:th.radiusSm,padding:20,textAlign:'center',color:th.textMut,fontSize:12}}>No tasks</div>}
-        {over&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:60,color:col,fontSize:12,fontWeight:600}}>↓ Drop here</div>}
-      </div>
+// ── Workspace Form ────────────────────────────────────────────────────────────
+function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMemberIds}){
+  const nameRef=useRef(),descRef=useRef()
+  const [color,setColor]=useState(WS_COLORS[0]);const [icon,setIcon]=useState(WS_ICONS[0]);const [members,setMembers]=useState([])
+  useEffect(()=>{if(open){setColor(ws?.color||WS_COLORS[0]);setIcon(ws?.icon||WS_ICONS[0]);setMembers(ws?(currentMemberIds?.length>0?currentMemberIds:[cu?.id]):[cu?.id])}},[open,ws,cu,currentMemberIds])
+  if(!open||!cu)return null
+  const toggle=id=>{if(id===cu.id)return;setMembers(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])}
+  const rgb=hexToRgb(color)
+  return<Modal open={open} onClose={onClose} title={ws?'Edit Workspace':'New Workspace'} width={500}>
+    <div style={{marginBottom:16}}><label style={LBL}>Name *</label><input ref={nameRef} defaultValue={ws?.name||''} placeholder="e.g. Daily Tasks, Q4 Launch" style={INP}/></div>
+    <div style={{marginBottom:16}}><label style={LBL}>Description</label><textarea ref={descRef} defaultValue={ws?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="What does this workspace cover?"/></div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px',marginBottom:16}}>
+      <div><label style={LBL}>Color</label><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{WS_COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'9px',background:c,cursor:'pointer',border:`2.5px solid ${color===c?'rgba(255,255,255,0.9)':'transparent'}`,boxShadow:color===c?`0 0 0 3px rgba(${hexToRgb(c)},0.35)`:'none',transition:G.trans}}/>)}</div></div>
+      <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:'9px',background:icon===ic?`rgba(${rgb},0.15)`:G.surface,border:`1.5px solid ${icon===ic?color:G.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:G.trans}}>{ic}</div>)}</div></div>
     </div>
-  )
+    <div style={{marginBottom:20}}>
+      <label style={LBL}>Members — {members.length} selected</label>
+      {allProfiles.length===0&&<div style={{fontSize:12,color:'#f59e0b',background:'rgba(245,158,11,0.08)',borderRadius:G.radiusMd,padding:12,lineHeight:1.6,border:'1px solid rgba(245,158,11,0.2)',marginBottom:8}}>No approved members yet. Go to Admin to approve teammates first.</div>}
+      {allProfiles.map(u=>{
+        const ch=members.includes(u.id),self=u.id===cu.id
+        return<div key={u.id} onClick={()=>toggle(u.id)} style={{display:'flex',alignItems:'center',gap:12,background:ch?`rgba(${rgb},0.06)`:G.surface,border:`1px solid ${ch?`rgba(${rgb},0.28)`:G.border}`,borderRadius:G.radiusMd,padding:'9px 14px',cursor:self?'default':'pointer',marginBottom:8,transition:G.trans}}>
+          <Avatar user={enrich(u)} size={30}/>
+          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:G.text}}>{u.name||u.email}{self?' (You)':''}</div><div style={{fontSize:11,color:G.textSub}}>{u.email}</div></div>
+          <div style={{width:18,height:18,borderRadius:'6px',border:`2px solid ${ch?color:G.textMut}`,background:ch?color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:G.trans,boxShadow:ch?`0 2px 8px rgba(${rgb},0.4)`:'none'}}>{ch&&<span style={{color:'#fff',fontSize:11,fontWeight:800}}>✓</span>}</div>
+        </div>
+      })}
+    </div>
+    <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+      <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
+      <Btn onClick={async()=>{const name=nameRef.current?.value?.trim();if(!name)return;await onSave({id:ws?.id,name,description:descRef.current?.value?.trim()||'',color,icon,memberIds:members.includes(cu.id)?members:[...members,cu.id]});onClose()}} color={color}>{ws?'Save':'Create Workspace'}</Btn>
+    </div>
+  </Modal>
 }
 
-// ── Main App ───────────────────────────────────────────────────────────────────
+// ── Task Card ─────────────────────────────────────────────────────────────────
+function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging}){
+  const assignee=getUser(task.assigned_to,wsMembers);const creator=getUser(task.created_by,wsMembers)
+  const ovd=isOvd(task.due_date);const mir=isMirrored(task,cu?.id)
+  const del=task.created_by===cu?.id&&task.assigned_to&&task.assigned_to!==cu?.id
+  const rec=task.recurrence_type&&task.recurrence_type!=='none'
+  const [hov,setHov]=useState(false);const [cdel,setCdel]=useState(false)
+  const acc=mir?'#818cf8':del?'#f59e0b':wsColor;const rgb=hexToRgb(acc)
+  return<>
+    <div draggable={!mir} onDragStart={e=>{if(mir)return;e.dataTransfer.effectAllowed='move';onDragStart(task.id)}} onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+      style={{background:hov?`rgba(${rgb},0.06)`:G.surface,border:`1px solid ${hov?`rgba(${rgb},0.28)`:G.border}`,borderRadius:G.radiusMd,padding:'14px 16px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.25:1,transform:hov&&!isDragging?'translateY(-2px)':'none',boxShadow:hov&&!isDragging?`0 10px 28px rgba(0,0,0,0.35),0 0 0 1px rgba(${rgb},0.12)`:'none',userSelect:'none',borderLeft:`3px solid rgba(${rgb},${hov?0.8:0.35})`}}>
+      {/* badges */}
+      <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>
+        {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:9,color:G.textSub,background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'1px 7px',fontWeight:600}}>{t}</span>)}
+        {rec&&<span style={{fontSize:9,color:'#818cf8',background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>🔁 {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
+        {mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#818cf8',background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>ASSIGNED</span>}
+        {del&&!mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>DELEGATED</span>}
+      </div>
+      <div style={{fontSize:13,fontWeight:600,color:G.text,marginBottom:task.description?6:10,lineHeight:1.4,letterSpacing:'-0.01em'}}>{task.title}</div>
+      {task.description&&<div style={{fontSize:11,color:G.textSub,marginBottom:10,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+          <Tag label={`${PI[task.priority]} ${task.priority}`} color={PC[task.priority]}/>
+          {ovd&&<Tag label="Overdue" color="#ef4444"/>}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+          {task.due_date&&<span style={{fontSize:10,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{fmtDate(task.due_date)}</span>}
+          {mir?<Avatar user={creator} size={18}/>:<Avatar user={assignee} size={18}/>}
+        </div>
+      </div>
+      {!mir&&<div style={{display:'flex',gap:6,marginTop:10,paddingTop:10,borderTop:`1px solid ${G.border}`,opacity:hov?1:0,transform:hov?'none':'translateY(3px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
+        <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm full>Edit</Btn>
+        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} outline color="#ef4444" sm full>Delete</Btn>
+      </div>}
+    </div>
+    <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
+  </>
+}
+
+// ── Kanban Column ─────────────────────────────────────────────────────────────
+function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
+  const [over,setOver]=useState(false)
+  const col=SC[status]||wsColor;const rgb=hexToRgb(col)
+  return<div onDragOver={e=>{e.preventDefault();setOver(true)}} onDragLeave={()=>setOver(false)} onDrop={e=>{e.preventDefault();setOver(false);onDrop(status)}} style={{minWidth:265,flex:'1 1 265px',maxWidth:310}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'10px 14px',background:over?`rgba(${rgb},0.08)`:G.surface,border:`1px solid ${over?`rgba(${rgb},0.4)`:G.border}`,borderRadius:G.radiusMd,borderTop:`3px solid ${col}`,transition:G.trans}}>
+      <span style={{fontSize:12,fontWeight:700,color:G.text,flex:1,letterSpacing:'-0.01em'}}>{status}</span>
+      <span style={{fontSize:11,fontWeight:700,color:col,background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.22)`,borderRadius:'100px',padding:'2px 9px'}}>{tasks.length}</span>
+      <button onClick={()=>onAdd(status)} style={{width:24,height:24,borderRadius:'7px',background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.22)`,color:col,cursor:'pointer',fontSize:17,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,flexShrink:0,padding:0,lineHeight:1,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=`rgba(${rgb},0.25)`} onMouseLeave={e=>e.currentTarget.style.background=`rgba(${rgb},0.12)`}>+</button>
+    </div>
+    <div style={{display:'flex',flexDirection:'column',gap:8,minHeight:80,padding:over?'8px':'0',background:over?`rgba(${rgb},0.03)`:'transparent',border:`2px dashed ${over?`rgba(${rgb},0.4)`:'transparent'}`,borderRadius:G.radiusMd,transition:G.trans}}>
+      {tasks.map(t=><TaskCard key={t.id} task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id}/>)}
+      {tasks.length===0&&!over&&<div style={{border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,padding:'20px 16px',textAlign:'center',color:G.textMut,fontSize:12}}>No tasks yet</div>}
+      {over&&tasks.length===0&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:56,color:col,fontSize:12,fontWeight:700,letterSpacing:'0.05em'}}>↓ DROP</div>}
+    </div>
+  </div>
+}
+
+// ── Main App ──────────────────────────────────────────────────────────────────
 function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null);const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
-  const [subView,setSubView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null);const [editTask,setEditTask]=useState(null);const [createStatus,setCreateStatus]=useState(null)
+  const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
+  const [editTask,setEditTask]=useState(null);const [createStatus,setCreateStatus]=useState(null)
   const [wsForm,setWsForm]=useState(null);const [delWs,setDelWs]=useState(null);const [statusMgr,setStatusMgr]=useState(false);const [showImEx,setShowImEx]=useState(false)
-  const [dragId,setDragId]=useState(null);const [adminOpen,setAdminOpen]=useState(false);const [fPriority,setFPriority]=useState('');const [search,setSearch]=useState('')
-  const [loading,setLoading]=useState(true);const [showProf,setShowProf]=useState(false);const [toast,setToast]=useState(null);const [sidebarOpen,setSidebarOpen]=useState(true)
-  const [lightMode,setLightMode]=useState(false);const [themeName,setThemeName]=useState('modern')
-  const pRef=useRef();const th=T[themeName]
-  const isM=themeName==='modern'
+  const [dragId,setDragId]=useState(null);const [adminOpen,setAdminOpen]=useState(false)
+  const [fPriority,setFPriority]=useState('');const [search,setSearch]=useState('')
+  const [loading,setLoading]=useState(true);const [toast,setToast]=useState(null)
+  const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
+  const [lightMode,setLightMode]=useState(false)
+  const userMenuRef=useRef();const wsMenuRef=useRef()
 
-  useEffect(()=>{
-    const sl=localStorage.getItem('taskflow-light-mode');const ss=localStorage.getItem('taskflow-sidebar-open');const st=localStorage.getItem('taskflow-theme')||'modern'
-    if(sl!==null)setLightMode(sl==='true');if(ss!==null)setSidebarOpen(ss==='true');setThemeName(st)
-  },[])
-  useEffect(()=>{localStorage.setItem('taskflow-light-mode',String(lightMode))},[lightMode])
-  useEffect(()=>{localStorage.setItem('taskflow-sidebar-open',String(sidebarOpen))},[sidebarOpen])
-  useEffect(()=>{localStorage.setItem('taskflow-theme',themeName)},[themeName])
+  useEffect(()=>{const v=localStorage.getItem('tf-light');if(v)setLightMode(v==='1')},[])
+  useEffect(()=>{localStorage.setItem('tf-light',lightMode?'1':'0')},[lightMode])
 
   const showToast=useCallback((msg,type='ok')=>{setToast({msg,type});setTimeout(()=>setToast(null),4000)},[])
-  const activeWs=workspaces.find(w=>w.id===activeWsId)||null;const wsColor=activeWs?.color||'#6366f1';const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES;const SC=scMap(statuses)
+  const activeWs=workspaces.find(w=>w.id===activeWsId)||null
+  const wsColor=activeWs?.color||'#6366f1';const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES;const SC=scMap(statuses)
+  const wsRgb=hexToRgb(wsColor)
 
   useEffect(()=>{setTeamMemberId(null)},[activeWsId])
-  useEffect(()=>{if(subView==='team'&&!teamMemberId&&wsMembers.length>0){const other=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(other?.id||wsMembers[0]?.id||null)}},[subView,wsMembers,teamMemberId,cu.id])
+  useEffect(()=>{if(view==='team'&&!teamMemberId&&wsMembers.length>0){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||wsMembers[0]?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
+  useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
-  const loadWorkspaces=useCallback(async()=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(data?.length>0&&!activeWsId)setActiveWsId(data[0].id)}catch(e){console.error('loadWorkspaces error:',e)}finally{setLoading(false)}},[cu.id,activeWsId])
-  useEffect(()=>{loadWorkspaces()},[cu.id])
-  useEffect(()=>{if(!activeWsId)return;Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId)]).then(([{data:mems},{data:tsks}])=>{setWsMembers(mems||[]);setTasks(tsks||[])})},[activeWsId])
-  useEffect(()=>{const h=e=>{if(pRef.current&&!pRef.current.contains(e.target))setShowProf(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
+  const loadWS=useCallback(async()=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(data?.length>0&&!activeWsId)setActiveWsId(data[0].id)}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
+  useEffect(()=>{loadWS()},[cu.id])
+  useEffect(()=>{if(!activeWsId)return;Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId)]).then(([{data:m},{data:t}])=>{setWsMembers(m||[]);setTasks(t||[])})},[activeWsId])
 
-  const handleSaveWorkspace=async({id,name,description,color,icon,memberIds})=>{
+  const saveWS=async({id,name,description,color,icon,memberIds})=>{
     if(id){
-      const{error}=await updateWorkspace(id,{name,description,color,icon});if(error){showToast('Update failed: '+error.message,'err');return}
+      const{error}=await updateWorkspace(id,{name,description,color,icon});if(error){showToast('Failed','err');return}
       const cur=wsMembers.map(m=>m.id)
       for(const uid of memberIds){if(!cur.includes(uid))await addMemberToWorkspace(id,uid)}
       for(const uid of cur){if(!memberIds.includes(uid)&&uid!==cu.id)await removeMemberFromWorkspace(id,uid)}
-      const{data:mems}=await getWorkspaceMembers(id);setWsMembers(mems||[]);showToast('Workspace updated! ✓')
+      const{data:mems}=await getWorkspaceMembers(id);setWsMembers(mems||[]);showToast('Updated ✓')
     } else {
-      const{data:ws,error}=await createWorkspace({name,description,color,icon,owner_id:cu.id});if(error||!ws){showToast('Create failed','err');return}
+      const{data:ws,error}=await createWorkspace({name,description,color,icon,owner_id:cu.id});if(error||!ws){showToast('Failed','err');return}
       for(const uid of [...new Set([cu.id,...memberIds])])await addMemberToWorkspace(ws.id,uid,uid===cu.id?'owner':'member')
-      setActiveWsId(ws.id);showToast('Workspace created! ✓')
+      setActiveWsId(ws.id);showToast('Workspace created ✓')
     }
-    await loadWorkspaces()
+    await loadWS()
   }
-  const handleSaveStatuses=async ss=>{if(!activeWsId)return;const{error}=await updateWorkspace(activeWsId,{custom_statuses:ss});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===activeWsId?{...w,custom_statuses:ss}:w));showToast('Columns saved! ✓')}
-  const handleDeleteWorkspace=async id=>{await deleteWorkspace(id);setActiveWsId(null);setDelWs(null);await loadWorkspaces()}
+  const saveStatuses=async ss=>{if(!activeWsId)return;const{error}=await updateWorkspace(activeWsId,{custom_statuses:ss});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===activeWsId?{...w,custom_statuses:ss}:w));showToast('Saved ✓')}
+  const delWsHandler=async id=>{await deleteWorkspace(id);setActiveWsId(null);setDelWs(null);await loadWS()}
 
-  const handleSaveTask=async td=>{
+  const saveTask=async td=>{
     if(td.id){
       const prev=tasks.find(t=>t.id===td.id)
-      const{data,error}=await updateTask(td.id,td);if(error){showToast('Save failed','err');return}
+      const{data,error}=await updateTask(td.id,td);if(error){showToast('Failed','err');return}
       if(data)setTasks(p=>p.map(t=>t.id===data.id?data:t))
-      await logActivity(td.id,cu.id,'Updated task')
+      await logActivity(td.id,cu.id,'Updated')
       const becameDone=prev&&prev.status!==statuses[statuses.length-1]&&td.status===statuses[statuses.length-1]
-      const recurring=td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date
-      if(becameDone&&recurring){
-        const nextDue=nextRecurringDate(td.due_date,td.recurrence_type,td.recurrence_interval)
-        if(nextDue){
-          const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nextDue,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,workspace_id:td.workspace_id,created_by:cu.id}
-          const{data:nextTask,error:nextErr}=await createTask(clone)
-          if(!nextErr&&nextTask){setTasks(p=>[...p,nextTask]);await logActivity(nextTask.id,cu.id,'Auto-created recurring task');showToast(`✓ Done! Next recurring task → ${fmtDate(nextDue)} 🔁`);return}
+      if(becameDone&&td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date){
+        const nd=nextDate(td.due_date,td.recurrence_type,td.recurrence_interval)
+        if(nd){
+          const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,workspace_id:td.workspace_id,created_by:cu.id}
+          const{data:nt,error:ne}=await createTask(clone)
+          if(!ne&&nt){setTasks(p=>[...p,nt]);await logActivity(nt.id,cu.id,'Auto-created recurring');showToast(`Next recurring task created → ${fmtFull(nd)} 🔁`);return}
         }
       }
-      showToast('Task saved! ✓')
+      showToast('Saved ✓')
     } else {
-      const{data,error}=await createTask(td);if(error){showToast('Create failed','err');return}
-      if(data){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created task')}
-      const rl=recurringLabel(td.recurrence_type,td.recurrence_interval)
-      showToast(rl?`Task created! Repeats: ${rl} 🔁`:'Task created! ✓')
+      const{data,error}=await createTask(td);if(error){showToast('Failed','err');return}
+      if(data){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created')}
+      const rl=rrLabel(td.recurrence_type,td.recurrence_interval)
+      showToast(rl?`Created — repeats ${rl} 🔁`:'Created ✓')
     }
   }
-  const handleDeleteTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
-  const handleDrop=useCallback(async st=>{if(!dragId)return;const task=tasks.find(t=>t.id===dragId);if(!task||task.status===st){setDragId(null);return};const{data}=await updateTask(dragId,{status:st});if(data)setTasks(p=>p.map(t=>t.id===dragId?data:t));await logActivity(dragId,cu.id,`Moved to ${st}`);setDragId(null)},[dragId,tasks,cu.id])
-  const handleImport=async rows=>{
-    const memberByName=name=>wsMembers.find(m=>m.name?.toLowerCase()===name?.toLowerCase()||m.email?.toLowerCase()===name?.toLowerCase())
-    let added=0,skipped=0
-    for(const r of rows){const assignee=memberByName(r.assigned_to_name);const payload={title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:assignee?.id||cu.id,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1};const{data,error}=await createTask(payload);if(data){setTasks(p=>[...p,data]);added++}else{skipped++;console.warn('Import skip:',error?.message)}}
-    showToast(`Imported ${added} task${added!==1?'s':''}${skipped?` · ${skipped} skipped`:''}`,added>0?'ok':'err')
+  const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
+  const drop=useCallback(async st=>{if(!dragId)return;const task=tasks.find(t=>t.id===dragId);if(!task||task.status===st){setDragId(null);return};const{data}=await updateTask(dragId,{status:st});if(data)setTasks(p=>p.map(t=>t.id===dragId?data:t));await logActivity(dragId,cu.id,`→${st}`);setDragId(null)},[dragId,tasks,cu.id])
+  const importTasks=async rows=>{
+    const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase())
+    let a=0,s=0
+    for(const r of rows){const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:byName(r.assigned_to_name)?.id||cu.id,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1});if(data){setTasks(p=>[...p,data]);a++}else{s++;console.warn(error?.message)}}
+    showToast(`Imported ${a}${s?`, ${s} skipped`:''}`,a>0?'ok':'err')
   }
 
-  const openNewTask=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
-  const isFormOpen=createStatus!==null||editTask!==null
-  const baseFilter=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
-  const myBoardTasks=tasks.filter(t=>baseFilter(t)&&isOnMyBoard(t,cu.id))
-  const allTasks=tasks.filter(baseFilter)
-  const selMember=wsMembers.find(m=>m.id===teamMemberId)||null
-  const teamTasks=allTasks.filter(t=>t.assigned_to===teamMemberId&&t.created_by!==teamMemberId)
-  const teamSelfTasks=allTasks.filter(t=>t.created_by===teamMemberId&&(!t.assigned_to||t.assigned_to===teamMemberId))
-  const recurringTasks=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
+  const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
+  const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
+  const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id))
+  const allT=tasks.filter(bf)
+  const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
+  const teamT=allT.filter(t=>t.assigned_to===teamMemberId&&t.created_by!==teamMemberId)
+  const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
+  const curUser=enrich(cu)
+  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'⊛'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}]
 
-  if(loading)return(<div style={{minHeight:'100vh',background:th.bgApp,display:'flex',alignItems:'center',justifyContent:'center',color:th.textSub,fontFamily:th.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:'13px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 16px',boxShadow:isM?'0 8px 24px rgba(99,102,241,0.4)':'none'}}>✦</div><div style={{fontSize:14}}>Loading TaskFlow…</div></div></div>)
+  if(loading) return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 16px',boxShadow:'0 8px 28px rgba(99,102,241,0.4)'}}>✦</div><div>Loading…</div></div></div>
 
-  const railBtn=(title,onClick,children,extraStyle={})=>(
-    <div title={title} onClick={onClick} style={{width:40,height:40,borderRadius:'12px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',transition:th.trans,...extraStyle}}>{children}</div>
-  )
+  return<div style={{minHeight:'100vh',background:G.bg,fontFamily:G.font,color:G.text,display:'flex',flexDirection:'column',WebkitFontSmoothing:'antialiased',filter:lightMode?'invert(1) hue-rotate(180deg)':'none',transition:'filter .2s'}} onDragEnd={()=>setDragId(null)}>
+    {/* Ambient glow */}
+    {activeWs&&<div style={{position:'fixed',top:0,left:'25%',right:0,height:'35vh',background:`radial-gradient(ellipse at 65% 0%,rgba(${wsRgb},0.055) 0%,transparent 70%)`,pointerEvents:'none',zIndex:0}}/>}
 
-  return(
-    <div style={{minHeight:'100vh',background:th.bgApp,fontFamily:th.font,color:th.text,display:'flex',WebkitFontSmoothing:'antialiased',filter:lightMode?'invert(1) hue-rotate(180deg)':'none',transition:'filter .2s ease',position:'relative'}} onDragEnd={()=>setDragId(null)}>
+    {/* Toast */}
+    {toast&&<div style={{position:'fixed',bottom:32,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:toast.type==='ok'?'rgba(16,185,129,0.92)':'rgba(239,68,68,0.92)',color:'#fff',borderRadius:'100px',padding:'10px 22px',fontSize:13,fontWeight:600,backdropFilter:G.blur,boxShadow:'0 8px 32px rgba(0,0,0,0.5)',whiteSpace:'nowrap'}}>{toast.type==='ok'?'✓':'⚠'} {toast.msg}</div>}
 
-      {/* Ambient glow for modern theme */}
-      {isM&&activeWs&&<>
-        <div style={{position:'fixed',top:0,left:0,right:0,height:'100vh',background:`radial-gradient(ellipse 60% 40% at 20% 0%, ${wsColor}07 0%, transparent 60%)`,pointerEvents:'none',zIndex:0}}/>
-        <div style={{position:'fixed',bottom:0,right:0,width:'50%',height:'50vh',background:`radial-gradient(ellipse 50% 40% at 80% 100%, ${wsColor}05 0%, transparent 60%)`,pointerEvents:'none',zIndex:0}}/>
-      </>}
+    {/* ── TOP NAV ────────────────────────────────────────────────────────── */}
+    <nav style={{height:54,background:G.panel,borderBottom:`1px solid ${G.border}`,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 18px',gap:6,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
+      {/* Logo */}
+      <div style={{width:32,height:32,borderRadius:'9px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,boxShadow:'0 3px 12px rgba(99,102,241,0.35)',flexShrink:0,cursor:'pointer'}} onClick={()=>setActiveWsId(null)}>✦</div>
+      <span style={{fontSize:14,fontWeight:800,color:G.text,letterSpacing:'-0.03em',marginRight:8}}>TaskFlow</span>
+      <div style={{width:1,height:18,background:G.border,marginRight:4}}/>
 
-      {/* Toast */}
-      {toast&&<div style={{position:'fixed',bottom:24,right:24,zIndex:9999,background:toast.type==='ok'?'linear-gradient(135deg,#10b981,#059669)':'linear-gradient(135deg,#ef4444,#dc2626)',color:'#fff',borderRadius:th.radius,padding:'12px 20px',fontSize:14,fontWeight:600,boxShadow:th.shadowLg,display:'flex',alignItems:'center',gap:8,maxWidth:400,border:'1px solid rgba(255,255,255,0.15)'}}><span>{toast.type==='ok'?'✓':'⚠'}</span><span>{toast.msg}</span></div>}
-
-      {/* Icon Rail */}
-      <div style={{width:64,background:th.bgRail,borderRight:`1px solid ${th.border}`,display:'flex',flexDirection:'column',alignItems:'center',padding:'16px 0',gap:8,flexShrink:0,backdropFilter:isM?th.blur:'none',WebkitBackdropFilter:isM?th.blur:'none',position:'relative',zIndex:10}}>
-        <div style={{width:40,height:40,borderRadius:'12px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,marginBottom:8,cursor:'pointer',boxShadow:isM?'0 8px 20px rgba(99,102,241,0.45)':'none',transition:th.trans}} onClick={()=>setActiveWsId(null)}>✦</div>
-        <div style={{width:32,height:1,background:th.border,marginBottom:4}}/>
-        {workspaces.map(ws=>(
-          <div key={ws.id} title={ws.name} onClick={()=>{setActiveWsId(ws.id);setSubView('board');setFPriority('');setSearch('')}}
-            style={{width:40,height:40,borderRadius:'12px',background:activeWsId===ws.id?ws.color+'33':isM?'rgba(255,255,255,0.03)':'#0d1627',border:`1.5px solid ${activeWsId===ws.id?ws.color:th.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',transition:th.trans,boxShadow:activeWsId===ws.id&&isM?`0 0 20px ${ws.color}33`:'none'}}
-            onMouseEnter={e=>{if(activeWsId!==ws.id){e.currentTarget.style.background=isM?'rgba(255,255,255,0.07)':'#131f35';e.currentTarget.style.borderColor=ws.color+'66'}}}
-            onMouseLeave={e=>{if(activeWsId!==ws.id){e.currentTarget.style.background=isM?'rgba(255,255,255,0.03)':'#0d1627';e.currentTarget.style.borderColor=th.border}}}>
-            {ws.icon}
-          </div>
-        ))}
-        <div title="New Workspace" onClick={()=>setWsForm('new')} style={{width:40,height:40,borderRadius:'12px',border:`1.5px dashed ${th.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,cursor:'pointer',color:th.textMut,transition:th.trans}}
-          onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.color='#6366f1';e.currentTarget.style.background='rgba(99,102,241,0.1)'}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.color=th.textMut;e.currentTarget.style.background='transparent'}}>+</div>
-        <div style={{flex:1}}/>
-        {isAdmin&&<div title="Admin Panel" onClick={()=>setAdminOpen(true)} style={{width:40,height:40,borderRadius:'12px',background:'rgba(245,158,11,0.12)',border:'1px solid rgba(245,158,11,0.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,cursor:'pointer',marginBottom:4,transition:th.trans,boxShadow:isM?'0 4px 12px rgba(245,158,11,0.15)':'none'}}>🛡️</div>}
-        {/* ─── THEME TOGGLE ─── click to switch Modern ↔ Classic instantly */}
-        <div
-          title={isM?'Switch to Classic UI (rollback)':'Switch to Modern UI'}
-          onClick={()=>setThemeName(n=>n==='modern'?'classic':'modern')}
-          style={{width:40,height:40,borderRadius:'12px',background:isM?'rgba(99,102,241,0.15)':'#131f35',border:`1px solid ${isM?'rgba(99,102,241,0.35)':th.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,cursor:'pointer',marginBottom:4,color:isM?'#818cf8':th.textSub,transition:th.trans,boxShadow:isM?'0 4px 12px rgba(99,102,241,0.15)':'none'}}>
-          {isM?'◆':'◇'}
-        </div>
-        <button title={lightMode?'Dark mode':'Light mode'} onClick={()=>setLightMode(v=>!v)} style={{width:40,height:40,borderRadius:'12px',background:isM?'rgba(255,255,255,0.05)':'#131f35',border:`1px solid ${th.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,cursor:'pointer',marginBottom:8,color:th.textSub,transition:th.trans,fontFamily:th.font}}>{lightMode?'🌙':'☀️'}</button>
-        <div ref={pRef} style={{position:'relative'}}>
-          <div onClick={()=>setShowProf(p=>!p)} style={{cursor:'pointer'}}><Avatar user={enrich(cu)} size={36} th={th}/></div>
-          {showProf&&(
-            <div style={{position:'absolute',bottom:0,left:52,background:th.bgModal,border:`1px solid ${th.border}`,borderRadius:th.radius,width:220,boxShadow:th.shadowLg,zIndex:500,overflow:'hidden',backdropFilter:isM?th.blur:'none',WebkitBackdropFilter:isM?th.blur:'none'}}>
-              <div style={{padding:'12px 14px',borderBottom:`1px solid ${th.border}`,display:'flex',gap:9,alignItems:'center'}}>
-                <Avatar user={enrich(cu)} size={36} th={th}/>
-                <div><div style={{fontSize:13,fontWeight:700,color:th.text}}>{cu.user_metadata?.full_name||cu.email}</div><div style={{fontSize:11,color:th.textSub}}>{cu.email}</div><div style={{fontSize:10,color:'#10b981',marginTop:2,fontWeight:600}}>● Google Auth{isAdmin?' · Admin':''}</div></div>
-              </div>
-              {isAdmin&&<button onClick={()=>{setAdminOpen(true);setShowProf(false)}} style={{display:'block',width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:'#f59e0b',fontSize:13,textAlign:'left',fontWeight:600,transition:th.trans,fontFamily:th.font}} onMouseEnter={e=>e.currentTarget.style.background=isM?'rgba(255,255,255,0.05)':'#1e2937'} onMouseLeave={e=>e.currentTarget.style.background='none'}>🛡️ Admin Panel</button>}
-              <button onClick={()=>{setShowProf(false);onSignOut()}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 14px',background:'none',border:'none',cursor:'pointer',color:'#ef4444',fontSize:13,transition:th.trans,fontFamily:th.font}} onMouseEnter={e=>e.currentTarget.style.background=isM?'rgba(255,255,255,0.05)':'#1e2937'} onMouseLeave={e=>e.currentTarget.style.background='none'}>⎋ Sign Out</button>
-            </div>
-          )}
-        </div>
+      {/* Workspace tabs */}
+      <div style={{display:'flex',alignItems:'center',gap:3,overflow:'auto'}}>
+        {workspaces.map(ws=>{
+          const active=ws.id===activeWsId;const wrgb=hexToRgb(ws.color)
+          return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setView('board');setSearch('');setFPriority('')}}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.35)`:G.border}`,background:active?`rgba(${wrgb},0.12)`:'transparent',color:active?ws.color:G.textSub,cursor:'pointer',fontSize:12,fontWeight:active?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font}}
+            onMouseEnter={e=>{if(!active){e.currentTarget.style.background=G.surface;e.currentTarget.style.color=G.text}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color=G.textSub}}}>
+            <span style={{fontSize:13}}>{ws.icon}</span>{ws.name}
+          </button>
+        })}
+        <button onClick={()=>setWsForm('new')} style={{width:26,height:26,borderRadius:G.radiusSm,border:`1px dashed ${G.border}`,background:'transparent',color:G.textMut,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.color='#6366f1'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textMut}}>+</button>
       </div>
 
-      {/* Sidebar */}
-      <div style={{width:sidebarOpen?230:0,background:th.bgSide,borderRight:sidebarOpen?`1px solid ${th.border}`:'none',display:'flex',flexDirection:'column',flexShrink:0,overflow:'hidden',transition:'width 0.25s cubic-bezier(0.4,0,0.2,1)',backdropFilter:isM?th.blur:'none',WebkitBackdropFilter:isM?th.blur:'none',position:'relative',zIndex:9}}>
-        {activeWs?(
-          <>
-            <div style={{padding:'16px 14px',borderBottom:`1px solid ${th.border}`}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-                <div style={{width:30,height:30,borderRadius:'9px',background:wsColor+'22',border:`1px solid ${wsColor}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,boxShadow:isM?`0 4px 12px ${wsColor}22`:'none'}}>{activeWs.icon}</div>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:th.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:isM?'-0.01em':'normal'}}>{activeWs.name}</div><div style={{fontSize:10,color:th.textSub}}>{wsMembers.length} members · {tasks.length} tasks{recurringTasks.length>0?` · 🔁 ${recurringTasks.length}`:''}</div></div>
-              </div>
-              <div style={{display:'flex',gap:5}}>
-                <button onClick={()=>setWsForm({...activeWs,memberIds:wsMembers.map(m=>m.id)})} style={{flex:1,background:wsColor+'18',border:`1px solid ${wsColor}33`,borderRadius:'7px',padding:'5px 0',color:wsColor,cursor:'pointer',fontSize:11,fontWeight:600,transition:th.transFast,fontFamily:th.font}}>✏️ Edit</button>
-                <button onClick={()=>setStatusMgr(true)} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:'7px',padding:'5px 8px',color:th.textSub,cursor:'pointer',fontSize:11,transition:th.transFast,fontFamily:th.font}}>⚙️</button>
-                {activeWs.owner_id===cu.id&&<button onClick={()=>setDelWs(activeWs)} style={{background:'#ef444418',border:'1px solid #ef444440',borderRadius:'7px',padding:'5px 7px',color:'#ef4444',cursor:'pointer',fontSize:11,transition:th.transFast,fontFamily:th.font}}>🗑</button>}
-              </div>
-            </div>
-            <div style={{padding:'10px 8px',flex:1,overflowY:'auto'}}>
-              <div style={{margin:'0 0 8px 10px'}}>
-                {[{c:'#818cf8',icon:'📥',label:'Assigned to me'},{c:'#f59e0b',icon:'📤',label:'Delegated by me'},{c:'#6366f1',icon:'🔁',label:'Recurring task'}].map(x=>(
-                  <div key={x.label} style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
-                    <div style={{width:3,height:12,borderRadius:2,background:x.c,flexShrink:0,boxShadow:isM?`0 0 6px ${x.c}88`:'none'}}/>
-                    <span style={{fontSize:10,color:th.textSub}}>{x.icon} {x.label}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{height:1,background:th.border,margin:'0 0 8px'}}/>
-              {[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team View',icon:'⊛'},{id:'recurring',label:'Recurring Tasks',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}].map(n=>(
-                <button key={n.id} onClick={()=>setSubView(n.id)}
-                  style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'8px 10px',borderRadius:th.radiusSm,border:'none',cursor:'pointer',marginBottom:2,fontSize:13,textAlign:'left',fontWeight:subView===n.id?700:500,background:subView===n.id?wsColor+'22':'transparent',color:subView===n.id?wsColor:th.textSub,transition:th.trans,boxShadow:subView===n.id&&isM?`0 2px 8px ${wsColor}18`:'none',fontFamily:th.font}}
-                  onMouseEnter={e=>{if(subView!==n.id)e.currentTarget.style.background=isM?'rgba(255,255,255,0.04)':'#131f35'}}
-                  onMouseLeave={e=>{if(subView!==n.id)e.currentTarget.style.background='transparent'}}>
-                  <span style={{fontSize:15}}>{n.icon}</span>{n.label}
-                  {n.id==='recurring'&&recurringTasks.length>0&&<span style={{marginLeft:'auto',background:wsColor+'22',color:wsColor,borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{recurringTasks.length}</span>}
-                </button>
-              ))}
-              <div style={{height:1,background:th.border,margin:'8px 0'}}/>
-              <div style={{padding:'0 10px',marginBottom:6,fontSize:10,color:th.textMut,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em'}}>Members ({wsMembers.length})</div>
-              {wsMembers.map(u=>(
-                <div key={u.id} style={{display:'flex',alignItems:'center',gap:7,padding:'5px 10px',borderRadius:8}}>
-                  <Avatar user={enrich(u)} size={20} th={th}/>
-                  <span style={{fontSize:12,color:u.id===cu.id?wsColor:th.textSub,fontWeight:u.id===cu.id?700:400,flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(u.name||u.email||'').split(' ')[0]}{u.id===cu.id?' ✦':''}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{padding:'12px 8px',borderTop:`1px solid ${th.border}`,display:'flex',flexDirection:'column',gap:6}}>
-              <button onClick={()=>openNewTask()} style={{width:'100%',background:`linear-gradient(135deg,${wsColor},${wsColor}bb)`,border:'none',borderRadius:th.radiusSm,padding:'10px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,boxShadow:`0 6px 20px ${wsColor}44`,transition:th.trans,fontFamily:th.font}}>
-                <span style={{fontSize:17}}>+</span> New Task
-              </button>
-              <button onClick={()=>setShowImEx(true)} style={{width:'100%',background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'8px',color:th.textSub,fontWeight:600,fontSize:12,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,transition:th.trans,fontFamily:th.font}}>📊 Import / Export CSV</button>
-            </div>
-          </>
-        ):(
-          <div style={{padding:14,flex:1,overflowY:'auto'}}>
-            <div style={{fontSize:11,color:th.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Your Workspaces</div>
-            {workspaces.map(ws=>(
-              <div key={ws.id} onClick={()=>setActiveWsId(ws.id)} style={{background:th.bgCard,border:`1.5px solid ${th.border}`,borderRadius:th.radius,padding:'12px 14px',cursor:'pointer',marginBottom:8,transition:th.trans,backdropFilter:isM?th.blurSm:'none'}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=ws.color;e.currentTarget.style.background=th.bgCardH;if(isM)e.currentTarget.style.boxShadow=`0 8px 24px ${ws.color}18`}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.background=th.bgCard;e.currentTarget.style.boxShadow='none'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{width:32,height:32,borderRadius:'9px',background:ws.color+'22',border:`1px solid ${ws.color}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}}>{ws.icon}</div>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:700,color:th.text}}>{ws.name}</div><div style={{fontSize:11,color:th.textSub}}>{ws.description}</div></div>
-                </div>
-              </div>
-            ))}
-            <button onClick={()=>setWsForm('new')} style={{width:'100%',background:'transparent',border:`1.5px dashed ${th.border}`,borderRadius:th.radius,padding:'12px',color:th.textMut,cursor:'pointer',fontSize:13,fontWeight:600,transition:th.trans,fontFamily:th.font}}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.color='#6366f1'}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.color=th.textMut}}>+ Create Workspace</button>
+      <div style={{flex:1}}/>
+
+      {/* Search */}
+      {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'5px 13px',color:G.text,fontSize:12,outline:'none',width:140,fontFamily:G.font,transition:G.trans}}/>}
+
+      {/* Priority filter */}
+      {activeWs&&<select value={fPriority} onChange={e=>setFPriority(e.target.value)} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusSm,padding:'5px 9px',color:G.textSub,fontSize:11,cursor:'pointer',outline:'none',fontFamily:G.font}}>
+        <option value="">Priority</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}
+      </select>}
+      {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:G.font}}>✕</button>}
+
+      {/* Workspace settings */}
+      {activeWs&&<div ref={wsMenuRef} style={{position:'relative'}}>
+        <button onClick={()=>setShowWsMenu(v=>!v)} style={{width:28,height:28,borderRadius:G.radiusSm,background:G.surface,border:`1px solid ${G.border}`,color:G.textSub,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,transition:G.trans}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>⚙</button>
+        {showWsMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'rgba(4,9,22,0.98)',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,minWidth:200,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
+          {[{label:'✏️ Edit workspace',action:()=>{setWsForm({...activeWs,memberIds:wsMembers.map(m=>m.id)});setShowWsMenu(false)}},{label:'⚙️ Manage columns',action:()=>{setStatusMgr(true);setShowWsMenu(false)}},{label:'📊 Import / Export',action:()=>{setShowImEx(true);setShowWsMenu(false)}},...(activeWs.owner_id===cu.id?[{label:'🗑 Delete workspace',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[])].map((item,i)=>(
+            <button key={i} onClick={item.action} style={{display:'block',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#f87171':G.text,fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surface} onMouseLeave={e=>e.currentTarget.style.background='none'}>{item.label}</button>
+          ))}
+        </div>}
+      </div>}
+
+      {/* Admin */}
+      {isAdmin&&<button title="Admin" onClick={()=>setAdminOpen(true)} style={{width:28,height:28,borderRadius:G.radiusSm,background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',color:'#f59e0b',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,transition:G.trans}}>🛡</button>}
+
+      {/* Light */}
+      <button onClick={()=>setLightMode(v=>!v)} style={{width:28,height:28,borderRadius:G.radiusSm,background:G.surface,border:`1px solid ${G.border}`,color:G.textSub,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,transition:G.trans}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>{lightMode?'🌙':'☀️'}</button>
+
+      {/* User */}
+      <div ref={userMenuRef} style={{position:'relative'}}>
+        <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:`1.5px solid ${G.border}`}}><Avatar user={curUser} size={30}/></div>
+        {showUserMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'rgba(4,9,22,0.98)',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,minWidth:220,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
+          <div style={{padding:'14px 16px',borderBottom:`1px solid ${G.border}`,display:'flex',gap:10,alignItems:'center'}}>
+            <Avatar user={curUser} size={34}/>
+            <div><div style={{fontSize:13,fontWeight:700,color:G.text,letterSpacing:'-0.01em'}}>{cu.user_metadata?.full_name||cu.email}</div><div style={{fontSize:11,color:G.textSub}}>{cu.email}</div><div style={{fontSize:10,color:'#10b981',marginTop:2,fontWeight:600}}>● Active{isAdmin?' · Admin':''}</div></div>
           </div>
-        )}
+          {isAdmin&&<button onClick={()=>{setAdminOpen(true);setShowUserMenu(false)}} style={{display:'block',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:'#f59e0b',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surface} onMouseLeave={e=>e.currentTarget.style.background='none'}>🛡️ Admin Panel</button>}
+          <button onClick={()=>{setShowUserMenu(false);onSignOut()}} style={{display:'block',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surface} onMouseLeave={e=>e.currentTarget.style.background='none'}>⎋ Sign out</button>
+        </div>}
       </div>
+    </nav>
 
-      {/* Main Content */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative',zIndex:1}}>
-        {/* Topbar */}
-        <div style={{background:th.bgTop,borderBottom:`1px solid ${th.border}`,padding:'0 18px',height:54,display:'flex',alignItems:'center',gap:10,flexShrink:0,backdropFilter:isM?th.blur:'none',WebkitBackdropFilter:isM?th.blur:'none'}}>
-          <button onClick={()=>setSidebarOpen(v=>!v)} style={{background:isM?'rgba(255,255,255,0.05)':'#131f35',border:`1px solid ${th.border}`,borderRadius:'8px',padding:'5px 9px',color:th.textSub,cursor:'pointer',fontSize:12,fontWeight:700,transition:th.trans,fontFamily:th.font}}>{sidebarOpen?'◀':'▶'}</button>
-          {activeWs?(
-            <>
-              <button onClick={()=>setActiveWsId(null)} style={{background:'none',border:'none',color:th.textSub,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:th.font}}>All Workspaces</button>
-              <span style={{color:th.textMut}}>/</span>
-              <span style={{color:wsColor}}>{activeWs.icon}</span>
-              <span style={{fontSize:13,fontWeight:700,color:th.text,letterSpacing:isM?'-0.01em':'normal'}}>{activeWs.name}</span>
-              <div style={{width:1,height:20,background:th.border,margin:'0 4px'}}/>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Search…" style={{background:isM?'rgba(255,255,255,0.05)':'#0d1627',border:`1px solid ${th.border}`,borderRadius:'8px',padding:'5px 10px',color:th.text,fontSize:12,outline:'none',width:160,fontFamily:th.font,backdropFilter:isM?th.blurSm:'none',transition:th.trans}}/>
-              <select value={fPriority} onChange={e=>setFPriority(e.target.value)} style={{background:isM?'rgba(255,255,255,0.05)':'#0d1627',border:`1px solid ${th.border}`,borderRadius:'8px',padding:'4px 7px',color:th.textSub,fontSize:11,cursor:'pointer',outline:'none',fontFamily:th.font}}>
-                <option value="">All Priority</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}
-              </select>
-              {(fPriority||search)&&<button onClick={()=>{setFPriority('');setSearch('')}} style={{background:'#ef444420',border:'1px solid #ef444440',borderRadius:'6px',padding:'3px 9px',color:'#ef4444',fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:th.font}}>Clear ✕</button>}
-            </>
-          ):<span style={{fontSize:15,fontWeight:700,color:th.text,letterSpacing:isM?'-0.02em':'normal'}}>All Workspaces</span>}
-          <div style={{flex:1}}/>
-          <button onClick={()=>setWsForm('new')} style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:'8px',padding:'6px 14px',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',boxShadow:isM?'0 4px 16px rgba(99,102,241,0.35)':'none',transition:th.trans}}>+ New Workspace</button>
-        </div>
-
-        <div style={{flex:1,overflow:'auto',padding:20}}>
-
-          {/* HOME */}
-          {!activeWs&&(
-            <div>
-              <h1 style={{fontSize:22,fontWeight:800,color:th.text,margin:'0 0 20px',letterSpacing:isM?'-0.03em':'normal'}}>Your Workspaces</h1>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
-                {workspaces.map(ws=>(
-                  <div key={ws.id} onClick={()=>setActiveWsId(ws.id)} style={{background:th.bgCard,border:`1.5px solid ${th.border}`,borderRadius:th.radius,padding:18,cursor:'pointer',transition:th.trans,position:'relative',overflow:'hidden',backdropFilter:isM?th.blurSm:'none'}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=ws.color;e.currentTarget.style.background=th.bgCardH;if(isM)e.currentTarget.style.boxShadow=`0 16px 48px ${ws.color}18, 0 0 0 1px ${ws.color}22`}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.background=th.bgCard;e.currentTarget.style.boxShadow='none'}}>
-                    <div style={{position:'absolute',top:0,left:0,right:0,height:isM?3:2,background:isM?`linear-gradient(90deg,${ws.color},${ws.color}66)`:ws.color}}/>
-                    {isM&&<div style={{position:'absolute',top:0,right:0,width:'60%',height:'100%',background:`radial-gradient(ellipse at top right, ${ws.color}07 0%, transparent 70%)`,pointerEvents:'none'}}/>}
-                    <div style={{display:'flex',alignItems:'center',gap:10,marginTop:6}}>
-                      <div style={{width:40,height:40,borderRadius:'11px',background:ws.color+'22',border:`1px solid ${ws.color}44`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:isM?`0 6px 16px ${ws.color}22`:'none'}}>{ws.icon}</div>
-                      <div><div style={{fontSize:14,fontWeight:700,color:th.text,letterSpacing:isM?'-0.02em':'normal'}}>{ws.name}</div><div style={{fontSize:11,color:th.textSub}}>{ws.description}</div></div>
-                    </div>
-                  </div>
-                ))}
-                <div onClick={()=>setWsForm('new')} style={{background:th.bgCard,border:`1.5px dashed ${th.border}`,borderRadius:th.radius,padding:'28px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:th.trans,backdropFilter:isM?th.blurSm:'none'}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.background=th.bgCardH;if(isM)e.currentTarget.style.boxShadow='0 8px 24px rgba(99,102,241,0.1)'}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.background=th.bgCard;e.currentTarget.style.boxShadow='none'}}>
-                  <div style={{width:44,height:44,borderRadius:'12px',border:`2px dashed ${th.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:th.textMut}}>+</div>
-                  <div style={{fontSize:13,fontWeight:600,color:th.textMut}}>Create Workspace</div>
+    {/* ── CONTENT ────────────────────────────────────────────────────────── */}
+    {!activeWs
+      ? <div style={{flex:1,padding:'36px 32px',position:'relative',zIndex:1}}>
+          <h1 style={{fontSize:22,fontWeight:800,color:G.text,margin:'0 0 6px',letterSpacing:'-0.04em'}}>Workspaces</h1>
+          <p style={{fontSize:13,color:G.textSub,margin:'0 0 26px'}}>Select a workspace or create a new one.</p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+            {workspaces.map(ws=>{
+              const wrgb=hexToRgb(ws.color)
+              return<div key={ws.id} onClick={()=>setActiveWsId(ws.id)}
+                style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background=G.surfaceHov;e.currentTarget.style.transform='translateY(-2px)'}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.surface;e.currentTarget.style.transform='none'}}>
+                <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${ws.color},${ws.color}44)`}}/>
+                <div style={{position:'absolute',top:0,right:0,width:'50%',height:'100%',background:`radial-gradient(ellipse at top right,rgba(${wrgb},0.06) 0%,transparent 70%)`,pointerEvents:'none'}}/>
+                <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
+                  <div style={{width:42,height:42,borderRadius:'12px',background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:`0 4px 14px rgba(${wrgb},0.12)`}}>{ws.icon}</div>
+                  <div><div style={{fontSize:14,fontWeight:700,color:G.text,letterSpacing:'-0.02em'}}>{ws.name}</div><div style={{fontSize:11,color:G.textSub,marginTop:2}}>{ws.description||'No description'}</div></div>
                 </div>
               </div>
+            })}
+            <div onClick={()=>setWsForm('new')} style={{background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.background=G.surfaceHov;e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.surface;e.currentTarget.style.transform='none'}}>
+              <div style={{width:42,height:42,borderRadius:'12px',border:`2px dashed ${G.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:G.textMut}}>+</div>
+              <span style={{fontSize:13,fontWeight:600,color:G.textMut}}>New Workspace</span>
             </div>
-          )}
+          </div>
+        </div>
+      : <div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',zIndex:1}}>
 
-          {/* MY BOARD */}
-          {activeWs&&subView==='board'&&(
-            <div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          {/* View tab bar */}
+          <div style={{background:G.panel,borderBottom:`1px solid ${G.border}`,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,padding:'0 24px',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
+            {views.map(v=><button key={v.id} onClick={()=>setView(v.id)}
+              style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:G.textSub,cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
+              <span>{v.icon}</span>{v.label}
+              {v.id==='recurring'&&recT.length>0&&<span style={{fontSize:10,fontWeight:700,color:wsColor,background:`rgba(${wsRgb},0.14)`,borderRadius:'100px',padding:'1px 7px'}}>{recT.length}</span>}
+            </button>)}
+            <div style={{flex:1}}/>
+            {/* Members row */}
+            <div style={{display:'flex',alignItems:'center',marginRight:12}}>
+              {wsMembers.slice(0,5).map((m,i)=><div key={m.id} style={{marginLeft:i?-7:0,zIndex:wsMembers.length-i}}><Avatar user={enrich(m)} size={22}/></div>)}
+              {wsMembers.length>5&&<div style={{width:22,height:22,borderRadius:'50%',background:G.surface,border:`1px solid ${G.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:G.textSub,fontWeight:700,marginLeft:-7}}>+{wsMembers.length-5}</div>}
+            </div>
+            <Btn onClick={()=>openNew()} color={wsColor} style={{margin:'7px 0',fontSize:12,padding:'7px 16px'}}>+ New Task</Btn>
+          </div>
+
+          {/* View content */}
+          <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
+
+            {/* ── BOARD ─────────────────────────────────────────────────── */}
+            {view==='board'&&<div>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:18}}>
                 <div>
-                  <h1 style={{fontSize:20,fontWeight:800,color:th.text,margin:0,letterSpacing:isM?'-0.03em':'normal'}}>My Board — {activeWs.name}</h1>
-                  <p style={{margin:'4px 0 0',fontSize:12,color:th.textSub}}>{myBoardTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned to me</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span> · <span style={{color:'#6366f1'}}>🔁 recurring</span></p>
+                  <h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:0,letterSpacing:'-0.03em'}}>My Board</h2>
+                  <p style={{margin:'4px 0 0',fontSize:12,color:G.textSub}}>{myTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p>
                 </div>
-                <button onClick={()=>openNewTask()} style={{background:`linear-gradient(135deg,${wsColor},${wsColor}bb)`,border:'none',borderRadius:th.radiusSm,padding:'8px 18px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',boxShadow:`0 6px 20px ${wsColor}44`,transition:th.trans}}>+ New Task</button>
               </div>
               <div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:16,alignItems:'flex-start'}}>
-                {statuses.map(st=>(<DropColumn key={st} status={st} tasks={myBoardTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={handleDeleteTask} dragId={dragId} onDragStart={setDragId} onDrop={handleDrop} onAddTask={s=>openNewTask(s)} th={th}/>))}
+                {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
               </div>
-            </div>
-          )}
+            </div>}
 
-          {/* RECURRING */}
-          {activeWs&&subView==='recurring'&&(
-            <div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-                <div>
-                  <h1 style={{fontSize:20,fontWeight:800,color:th.text,margin:0,letterSpacing:isM?'-0.03em':'normal'}}>🔁 Recurring Tasks</h1>
-                  <p style={{margin:'4px 0 0',fontSize:12,color:th.textSub}}>{recurringTasks.length} recurring · Auto-creates next when marked Done</p>
-                </div>
-                <button onClick={()=>openNewTask()} style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:th.radiusSm,padding:'8px 18px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',boxShadow:'0 6px 20px rgba(99,102,241,0.4)',transition:th.trans}}>+ New Recurring Task</button>
-              </div>
-              {recurringTasks.length===0?(
-                <div style={{textAlign:'center',padding:60,border:`2px dashed ${th.border}`,borderRadius:th.radius,color:th.textMut,backdropFilter:isM?th.blurSm:'none'}}>
-                  <div style={{fontSize:40,marginBottom:12}}>🔁</div>
-                  <div style={{fontSize:15,fontWeight:700,color:th.textSub,marginBottom:8}}>No recurring tasks yet</div>
-                  <div style={{fontSize:13,color:th.textMut,marginBottom:20}}>Create a task and set a recurrence. Mark Done → next auto-creates.</div>
-                  <button onClick={()=>openNewTask()} style={{background:'linear-gradient(135deg,#6366f1,#8b5cf6)',border:'none',borderRadius:th.radiusSm,padding:'10px 24px',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:13}}>Create First Recurring Task</button>
-                </div>
-              ):(
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12}}>
-                  {recurringTasks.map(t=>{
-                    const assignee=getUser(t.assigned_to,wsMembers);const overdue=isOverdue(t.due_date);const rl=recurringLabel(t.recurrence_type,t.recurrence_interval);const nextDue=nextRecurringDate(t.due_date,t.recurrence_type,t.recurrence_interval);const statusColor=SC[t.status]||wsColor
-                    return(
-                      <div key={t.id} onClick={()=>setEditTask(t)} style={{background:th.bgCard,border:`1.5px solid rgba(99,102,241,0.2)`,borderRadius:th.radius,padding:16,cursor:'pointer',transition:th.trans,position:'relative',overflow:'hidden',backdropFilter:isM?th.blurSm:'none'}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.4)';e.currentTarget.style.background=th.bgCardH;if(isM)e.currentTarget.style.boxShadow='0 12px 40px rgba(99,102,241,0.12)'}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.2)';e.currentTarget.style.background=th.bgCard;e.currentTarget.style.boxShadow='none'}}>
-                        <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6366f1,#8b5cf6)'}}/>
-                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
-                          <div style={{fontSize:14,fontWeight:700,color:th.text,lineHeight:1.4,flex:1}}>{t.title}</div>
-                          <span style={{background:'rgba(99,102,241,0.15)',color:'#818cf8',border:'1px solid rgba(99,102,241,0.25)',borderRadius:6,padding:'2px 8px',fontSize:11,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>🔁 {rl}</span>
-                        </div>
-                        {t.description&&<div style={{fontSize:12,color:th.textSub,marginBottom:10,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{t.description}</div>}
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-                          <Pill label={t.status} color={statusColor} sm/><Pill label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]} sm/>
-                          {overdue&&<Pill label="⚠ Overdue" color="#ef4444" sm/>}
-                        </div>
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,background:'rgba(0,0,0,0.2)',borderRadius:th.radiusSm,padding:'10px 12px'}}>
-                          <div><div style={{fontSize:10,color:th.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Current Due</div><div style={{fontSize:12,color:overdue?'#ef4444':th.textSub,fontWeight:600}}>{t.due_date?fmtDate(t.due_date):'Not set'}</div></div>
-                          <div><div style={{fontSize:10,color:th.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next Occurrence</div><div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nextDue?fmtDate(nextDue):'—'}</div></div>
-                          <div><div style={{fontSize:10,color:th.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Assigned To</div><div style={{display:'flex',alignItems:'center',gap:4}}><Avatar user={assignee} size={16} th={th}/><span style={{fontSize:12,color:th.textSub}}>{assignee?.id===cu?.id?'Me':assignee?.name?.split(' ')[0]||'—'}</span></div></div>
-                          <div><div style={{fontSize:10,color:th.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Action</div><div style={{fontSize:11,color:'#6366f1'}}>Mark Done → auto-creates next</div></div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TEAM VIEW */}
-          {activeWs&&subView==='team'&&(
-            <div>
+            {/* ── TEAM ──────────────────────────────────────────────────── */}
+            {view==='team'&&<div>
               <div style={{marginBottom:20}}>
-                <h1 style={{fontSize:20,fontWeight:800,color:th.text,margin:0,letterSpacing:isM?'-0.03em':'normal'}}>Team View — {activeWs.name}</h1>
-                <p style={{margin:'4px 0 0',fontSize:12,color:th.textSub}}>Select a member to see their assigned workload</p>
+                <h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 4px',letterSpacing:'-0.03em'}}>Team View</h2>
+                <p style={{fontSize:12,color:G.textSub,margin:0}}>Tasks assigned to a specific team member</p>
               </div>
-              {wsMembers.filter(m=>m.id!==cu.id).length===0?(
-                <div style={{textAlign:'center',padding:40,color:th.textMut,fontSize:13,border:`2px dashed ${th.border}`,borderRadius:th.radius}}>No other team members yet. Edit the workspace to add members.</div>
-              ):(
-                <>
-                  <div style={{display:'flex',gap:10,marginBottom:24,flexWrap:'wrap'}}>
-                    {wsMembers.filter(m=>m.id!==cu.id).map(m=>{
-                      const eu=enrich(m);const sel=m.id===teamMemberId;const mAssigned=allTasks.filter(t=>t.assigned_to===m.id&&t.created_by!==m.id).length
-                      return(
-                        <div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:th.radiusSm,cursor:'pointer',border:`2px solid ${sel?wsColor:th.border}`,background:sel?wsColor+'18':th.bgCard,transition:th.trans,minWidth:160,boxShadow:sel&&isM?`0 8px 24px ${wsColor}18`:'none'}}>
-                          <Avatar user={eu} size={34} th={th}/>
-                          <div><div style={{fontSize:13,fontWeight:700,color:sel?wsColor:th.text}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:11,color:th.textSub}}>{mAssigned} task{mAssigned!==1?'s':''} assigned</div></div>
-                          {sel&&<div style={{width:8,height:8,borderRadius:'50%',background:wsColor,marginLeft:'auto',boxShadow:isM?`0 0 8px ${wsColor}`:'none'}}/>}
+              {wsMembers.filter(m=>m.id!==cu.id).length===0
+                ? <div style={{textAlign:'center',padding:44,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut,fontSize:13}}>No other members yet. Edit the workspace to add teammates.</div>
+                : <>
+                    <div style={{display:'flex',gap:8,marginBottom:22,flexWrap:'wrap'}}>
+                      {wsMembers.filter(m=>m.id!==cu.id).map(m=>{
+                        const eu=enrich(m);const sel=m.id===teamMemberId;const rgb=hexToRgb(wsColor);const ct=allT.filter(t=>t.assigned_to===m.id&&t.created_by!==m.id).length
+                        return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.4)`:G.border}`,background:sel?`rgba(${rgb},0.08)`:G.surface,transition:G.trans,minWidth:150}}>
+                          <Avatar user={eu} size={32}/>
+                          <div><div style={{fontSize:13,fontWeight:700,color:sel?wsColor:G.text}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:11,color:G.textSub}}>{ct} assigned</div></div>
+                          {sel&&<div style={{width:7,height:7,borderRadius:'50%',background:wsColor,marginLeft:'auto',boxShadow:`0 0 8px ${wsColor}`}}/>}
                         </div>
-                      )
-                    })}
-                  </div>
-                  {selMember&&(
-                    <div style={{background:th.bgCard,border:`1.5px solid ${wsColor}44`,borderRadius:th.radius,padding:20,backdropFilter:isM?th.blurSm:'none'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${th.border}`}}>
-                        <Avatar user={enrich(selMember)} size={52} th={th}/>
-                        <div style={{flex:1}}><div style={{fontSize:18,fontWeight:800,color:th.text,letterSpacing:isM?'-0.03em':'normal'}}>{selMember.name||selMember.email}</div><div style={{fontSize:12,color:th.textSub}}>{selMember.email}</div></div>
-                        <div style={{display:'flex',gap:20}}>
-                          {[{l:'Assigned',v:teamTasks.length,c:wsColor},{l:'Own tasks',v:teamSelfTasks.length,c:th.textSub},{l:'Completed',v:teamTasks.filter(t=>t.status===statuses[statuses.length-1]).length,c:'#10b981'},{l:'Overdue',v:teamTasks.filter(t=>isOverdue(t.due_date)).length,c:'#ef4444'}].map(x=>(
-                            <div key={x.l} style={{textAlign:'center',minWidth:60}}><div style={{fontSize:22,fontWeight:800,color:x.c}}>{x.v}</div><div style={{fontSize:9,color:th.textSub,marginTop:2,fontWeight:600}}>{x.l}</div></div>
+                      })}
+                    </div>
+                    {selMem&&<div style={{background:G.surface,border:`1px solid rgba(${wsRgb},0.25)`,borderRadius:G.radius,padding:20}}>
+                      <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${G.border}`}}>
+                        <Avatar user={enrich(selMem)} size={48}/>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:17,fontWeight:800,color:G.text,letterSpacing:'-0.03em'}}>{selMem.name||selMem.email}</div>
+                          <div style={{fontSize:12,color:G.textSub}}>{selMem.email}</div>
+                        </div>
+                        <div style={{display:'flex',gap:16}}>
+                          {[{l:'Assigned',v:teamT.length,c:wsColor},{l:'Completed',v:teamT.filter(t=>t.status===statuses[statuses.length-1]).length,c:'#10b981'},{l:'Overdue',v:teamT.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'}].map(x=>(
+                            <div key={x.l} style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:x.c}}>{x.v}</div><div style={{fontSize:10,color:G.textSub,marginTop:2,fontWeight:600}}>{x.l}</div></div>
                           ))}
                         </div>
                       </div>
-                      {teamTasks.length===0?(
-                        <div style={{textAlign:'center',padding:32,color:th.textMut,fontSize:13,border:`2px dashed ${th.border}`,borderRadius:th.radiusSm}}>No tasks assigned to {selMember.name?.split(' ')[0]||'this member'} yet.</div>
-                      ):(
-                        <div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:4,alignItems:'flex-start'}}>
-                          {statuses.map(st=>(<DropColumn key={st} status={st} tasks={teamTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={handleDeleteTask} dragId={dragId} onDragStart={setDragId} onDrop={handleDrop} onAddTask={s=>openNewTask(s)} th={th}/>))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+                      {teamT.length===0
+                        ? <div style={{textAlign:'center',padding:32,border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,color:G.textMut,fontSize:13}}>No delegated tasks for {selMem.name?.split(' ')[0]||'this member'}.</div>
+                        : <div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:4,alignItems:'flex-start'}}>
+                            {statuses.map(st=><KanbanCol key={st} status={st} tasks={teamT.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
+                          </div>}
+                    </div>}
+                  </>}
+            </div>}
 
-          {/* ALL TASKS LIST */}
-          {activeWs&&subView==='list'&&(
-            <div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-                <h1 style={{fontSize:20,fontWeight:800,color:th.text,margin:0,letterSpacing:isM?'-0.03em':'normal'}}>All Tasks — {activeWs.name}</h1>
-                <button onClick={()=>setShowImEx(true)} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radiusSm,padding:'7px 14px',color:th.textSub,cursor:'pointer',fontSize:12,fontWeight:600,transition:th.trans}}>📊 Import / Export</button>
+            {/* ── RECURRING ─────────────────────────────────────────────── */}
+            {view==='recurring'&&<div>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}}>
+                <div>
+                  <h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 4px',letterSpacing:'-0.03em'}}>🔁 Recurring Tasks</h2>
+                  <p style={{fontSize:12,color:G.textSub,margin:0}}>{recT.length} recurring · Auto-creates next when marked Done</p>
+                </div>
+                <Btn onClick={()=>openNew()} color="#6366f1">+ New Recurring</Btn>
               </div>
-              <div style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radius,overflow:'hidden',backdropFilter:isM?th.blurSm:'none'}}>
-                <table style={{width:'100%',borderCollapse:'collapse'}}>
-                  <thead><tr style={{borderBottom:`1px solid ${th.border}`}}>{['Task','Status','Priority','Creator','Assignee','Due','Recurrence',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:th.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
-                  <tbody>
-                    {allTasks.map(t=>{
-                      const asgn=getUser(t.assigned_to,wsMembers);const crea=getUser(t.created_by,wsMembers);const ov=isOverdue(t.due_date);const col=SC[t.status]||wsColor;const rl=recurringLabel(t.recurrence_type,t.recurrence_interval)
-                      return(
-                        <tr key={t.id} style={{borderBottom:`1px solid ${th.border}`,transition:th.transFast}} onMouseEnter={e=>e.currentTarget.style.background=th.bgCardH} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                          <td style={{padding:'11px 14px'}}><div style={{display:'flex',alignItems:'center',gap:10}}><div style={{width:3,height:28,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><div style={{fontSize:13,fontWeight:600,color:th.text}}>{t.title}</div></div></td>
-                          <td style={{padding:'11px 8px'}}><Pill label={t.status} color={col} sm/></td>
-                          <td style={{padding:'11px 8px'}}><Pill label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]} sm/></td>
-                          <td style={{padding:'11px 8px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={crea} size={20} th={th}/><span style={{fontSize:11,color:th.textSub}}>{crea?.name?.split(' ')[0]||'?'}</span></div></td>
-                          <td style={{padding:'11px 8px'}}>{asgn&&asgn.id!==t.created_by?<div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={asgn} size={20} th={th}/><span style={{fontSize:11,color:'#818cf8'}}>{asgn.name?.split(' ')[0]}</span></div>:<span style={{fontSize:11,color:th.textMut}}>—</span>}</td>
-                          <td style={{padding:'11px 8px'}}><span style={{fontSize:12,color:ov?'#ef4444':th.textSub,fontWeight:ov?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
-                          <td style={{padding:'11px 8px'}}>{rl?<span style={{fontSize:11,color:'#6366f1',background:'rgba(99,102,241,0.15)',borderRadius:6,padding:'2px 7px',fontWeight:600}}>🔁 {rl}</span>:<span style={{fontSize:11,color:th.textMut}}>—</span>}</td>
-                          <td style={{padding:'11px 8px'}}><button onClick={()=>setEditTask(t)} style={{background:wsColor+'22',border:`1px solid ${wsColor}44`,borderRadius:6,padding:'4px 8px',color:wsColor,cursor:'pointer',fontSize:11,fontWeight:600}}>✏️</button></td>
-                        </tr>
-                      )
+              {recT.length===0
+                ? <div style={{textAlign:'center',padding:56,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut}}>
+                    <div style={{fontSize:36,marginBottom:12}}>🔁</div>
+                    <div style={{fontSize:14,fontWeight:700,color:G.textSub,marginBottom:8}}>No recurring tasks yet</div>
+                    <div style={{fontSize:12,marginBottom:20}}>Create a task and set a recurrence schedule.</div>
+                    <Btn onClick={()=>openNew()} color="#6366f1">Create First Recurring Task</Btn>
+                  </div>
+                : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(310px,1fr))',gap:12}}>
+                    {recT.map(t=>{
+                      const assignee=getUser(t.assigned_to,wsMembers);const ovd=isOvd(t.due_date);const rl=rrLabel(t.recurrence_type,t.recurrence_interval);const nd=nextDate(t.due_date,t.recurrence_type,t.recurrence_interval);const col=SC[t.status]||wsColor
+                      return<div key={t.id} onClick={()=>setEditTask(t)} style={{background:G.surface,border:'1px solid rgba(99,102,241,0.2)',borderRadius:G.radius,padding:16,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.4)';e.currentTarget.style.background=G.surfaceHov;e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.2)';e.currentTarget.style.background=G.surface;e.currentTarget.style.transform='none'}}>
+                        <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6366f1,#8b5cf6)'}}/>
+                        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                          <div style={{fontSize:14,fontWeight:700,color:G.text,flex:1,lineHeight:1.4,letterSpacing:'-0.01em'}}>{t.title}</div>
+                          <Tag label={`🔁 ${rl}`} color="#6366f1"/>
+                        </div>
+                        {t.description&&<div style={{fontSize:12,color:G.textSub,marginBottom:10,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{t.description}</div>}
+                        <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}>
+                          <Tag label={t.status} color={col}/><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/>
+                          {ovd&&<Tag label="⚠ Overdue" color="#ef4444"/>}
+                        </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,background:'rgba(0,0,0,0.2)',borderRadius:G.radiusSm,padding:'10px 12px'}}>
+                          <div><div style={{fontSize:10,color:G.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Current Due</div><div style={{fontSize:12,color:ovd?'#f87171':G.textSub,fontWeight:600}}>{t.due_date?fmtFull(t.due_date):'Not set'}</div></div>
+                          <div><div style={{fontSize:10,color:G.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next After Done</div><div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nd?fmtFull(nd):'—'}</div></div>
+                          <div><div style={{fontSize:10,color:G.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Assigned To</div><div style={{display:'flex',alignItems:'center',gap:4}}><Avatar user={assignee} size={16}/><span style={{fontSize:12,color:G.textSub}}>{assignee?.id===cu?.id?'Me':assignee?.name?.split(' ')[0]||'—'}</span></div></div>
+                          <div><div style={{fontSize:10,color:G.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Trigger</div><div style={{fontSize:11,color:'#818cf8'}}>Mark Done → creates next</div></div>
+                        </div>
+                      </div>
                     })}
-                    {allTasks.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:th.textMut,fontSize:13}}>No tasks yet</td></tr>}
+                  </div>}
+            </div>}
+
+            {/* ── ALL TASKS LIST ─────────────────────────────────────────── */}
+            {view==='list'&&<div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
+                <div><h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:G.textSub,margin:0}}>{allT.length} tasks in this workspace</p></div>
+                <Btn onClick={()=>setShowImEx(true)} outline color="#64748b">📊 Import / Export</Btn>
+              </div>
+              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,overflow:'hidden'}}>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr style={{borderBottom:`1px solid ${G.border}`}}>{['Task','Status','Priority','Creator','Assignee','Due','Recurrence',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {allT.map(t=>{
+                      const asgn=getUser(t.assigned_to,wsMembers);const crea=getUser(t.created_by,wsMembers);const ovd=isOvd(t.due_date);const col=SC[t.status]||wsColor;const rl=rrLabel(t.recurrence_type,t.recurrence_interval)
+                      return<tr key={t.id} style={{borderBottom:`1px solid ${G.border}`,transition:G.transSnap,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                        <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><span style={{fontSize:13,fontWeight:600,color:G.text}}>{t.title}</span></div></td>
+                        <td style={{padding:'10px 10px'}}><Tag label={t.status} color={col}/></td>
+                        <td style={{padding:'10px 10px'}}><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/></td>
+                        <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={crea} size={18}/><span style={{fontSize:11,color:G.textSub}}>{crea?.name?.split(' ')[0]||'?'}</span></div></td>
+                        <td style={{padding:'10px 10px'}}>{asgn&&asgn.id!==t.created_by?<div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={asgn} size={18}/><span style={{fontSize:11,color:'#818cf8'}}>{asgn.name?.split(' ')[0]}</span></div>:<span style={{fontSize:11,color:G.textMut}}>—</span>}</td>
+                        <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
+                        <td style={{padding:'10px 10px'}}>{rl?<Tag label={`🔁 ${rl}`} color="#6366f1"/>:<span style={{fontSize:11,color:G.textMut}}>—</span>}</td>
+                        <td style={{padding:'10px 10px'}}><Btn onClick={()=>setEditTask(t)} outline color={wsColor} sm>Edit</Btn></td>
+                      </tr>
+                    })}
+                    {allT.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:G.textMut,fontSize:13}}>No tasks yet</td></tr>}
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
+            </div>}
 
-          {/* DASHBOARD */}
-          {activeWs&&subView==='dashboard'&&(
-            <div>
-              <h1 style={{fontSize:20,fontWeight:800,color:th.text,margin:'0 0 20px',letterSpacing:isM?'-0.03em':'normal'}}>Dashboard — {activeWs.name}</h1>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:12,marginBottom:18}}>
-                {[{l:'Total Tasks',v:tasks.length,c:wsColor},{l:'On My Board',v:myBoardTasks.length,c:'#818cf8'},{l:'Recurring',v:recurringTasks.length,c:'#6366f1'},{l:'I Delegated',v:tasks.filter(t=>t.created_by===cu.id&&t.assigned_to&&t.assigned_to!==cu.id).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOverdue(t.due_date)).length,c:'#ef4444'}].map(x=>(
-                  <div key={x.l} style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radius,padding:'16px 18px',backdropFilter:isM?th.blurSm:'none',boxShadow:isM?th.cardShadow(x.c):'none',transition:th.trans}}>
-                    <div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2,letterSpacing:'-0.02em'}}>{x.v}</div>
-                    <div style={{fontSize:12,fontWeight:700,color:th.text}}>{x.l}</div>
+            {/* ── DASHBOARD ─────────────────────────────────────────────── */}
+            {view==='dashboard'&&<div>
+              <h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 20px',letterSpacing:'-0.03em'}}>Dashboard</h2>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(170px,1fr))',gap:10,marginBottom:16}}>
+                {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&t.assigned_to&&t.assigned_to!==cu.id).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'}].map(x=>{
+                  const rgb=hexToRgb(x.c)
+                  return<div key={x.l} style={{background:G.surface,border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>
+                    <div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2,letterSpacing:'-0.03em'}}>{x.v}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:G.text}}>{x.l}</div>
                   </div>
-                ))}
+                })}
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-                <div style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radius,padding:16,backdropFilter:isM?th.blurSm:'none'}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:12,color:th.text}}>Status Breakdown</div>
-                  {statuses.map(s=>{const c=tasks.filter(t=>t.status===s).length;const p=tasks.length?Math.round((c/tasks.length)*100):0;return(
-                    <div key={s} style={{marginBottom:10}}>
-                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}><span style={{fontSize:12,color:th.textSub}}>{s}</span><span style={{fontSize:12,color:SC[s],fontWeight:700}}>{c}</span></div>
-                      <div style={{height:5,background:th.bgCardH,borderRadius:3,overflow:'hidden'}}><div style={{width:p+'%',height:'100%',background:SC[s],borderRadius:3,boxShadow:isM?`0 0 8px ${SC[s]}88`:'none'}}/></div>
+                <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:18}}>
+                  <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:14}}>Status Breakdown</div>
+                  {statuses.map(s=>{const c=tasks.filter(t=>t.status===s).length;const p=tasks.length?Math.round((c/tasks.length)*100):0;const col=SC[s];const rgb=hexToRgb(col);return(
+                    <div key={s} style={{marginBottom:12}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:G.textSub}}>{s}</span><span style={{fontSize:12,color:col,fontWeight:700}}>{c}</span></div>
+                      <div style={{height:4,background:G.surfaceHov,borderRadius:2,overflow:'hidden'}}><div style={{width:p+'%',height:'100%',background:col,borderRadius:2,boxShadow:`0 0 8px rgba(${rgb},0.5)`,transition:'width 0.5s ease'}}/></div>
                     </div>
                   )})}
                 </div>
-                <div style={{background:th.bgCard,border:`1px solid ${th.border}`,borderRadius:th.radius,padding:16,backdropFilter:isM?th.blurSm:'none'}}>
-                  <div style={{fontSize:13,fontWeight:700,marginBottom:12,color:th.text}}>Workload by Member</div>
-                  {wsMembers.map(m=>{const assigned=tasks.filter(t=>t.assigned_to===m.id&&t.created_by!==m.id).length;const own=tasks.filter(t=>t.created_by===m.id&&(!t.assigned_to||t.assigned_to===m.id)).length;return(
-                    <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                      <Avatar user={enrich(m)} size={24} th={th}/>
-                      <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:th.text,marginBottom:2}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:4}}><span style={{fontSize:10,color:'#818cf8'}}>{assigned} assigned</span><span style={{fontSize:10,color:th.textMut}}>·</span><span style={{fontSize:10,color:th.textSub}}>{own} own</span></div></div>
+                <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:18}}>
+                  <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:14}}>Team Workload</div>
+                  {wsMembers.map(m=>{const a=tasks.filter(t=>t.assigned_to===m.id&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&(!t.assigned_to||t.assigned_to===m.id)).length;return(
+                    <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+                      <Avatar user={enrich(m)} size={26}/>
+                      <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:G.text}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:G.textMut}}>·</span><span style={{fontSize:10,color:G.textSub}}>{o} own</span></div></div>
                     </div>
                   )})}
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
+            </div>}
 
-      {/* Modals */}
-      {isFormOpen&&activeWs&&(<TaskFormModal open onClose={()=>{setCreateStatus(null);setEditTask(null)}} task={editTask} ws={activeWs} wsMembers={wsMembers} cu={cu} statuses={statuses} defaultStatus={createStatus||statuses[0]} onSave={handleSaveTask} onDelete={handleDeleteTask} th={th}/>)}
-      {wsForm&&(<WorkspaceFormModal open onClose={()=>setWsForm(null)} ws={wsForm==='new'?null:wsForm} allProfiles={allProfiles} cu={cu} onSave={handleSaveWorkspace} currentMemberIds={wsMembers.map(m=>m.id)} th={th}/>)}
-      <StatusManager open={statusMgr} onClose={()=>setStatusMgr(false)} statuses={statuses} wsColor={wsColor} onSave={handleSaveStatuses} th={th}/>
-      {showImEx&&activeWs&&(<ImportExportModal open onClose={()=>setShowImEx(false)} tasks={tasks} wsMembers={wsMembers} statuses={statuses} wsName={activeWs.name} onImport={handleImport} th={th}/>)}
-      <Confirm open={!!delWs} icon="⚠️" title="Delete Workspace?" body={`Delete "${delWs?.name}" and all its tasks?`} confirmLabel="Delete Workspace" onConfirm={()=>handleDeleteWorkspace(delWs?.id)} onCancel={()=>setDelWs(null)} th={th}/>
-      <AdminPanel open={adminOpen} onClose={()=>setAdminOpen(false)} onAccessChanged={onAccessChanged} th={th}/>
-    </div>
-  )
+          </div>
+        </div>}
+
+    {/* ── Modals ─────────────────────────────────────────────────────────── */}
+    {(createStatus!==null||editTask!==null)&&activeWs&&<TaskFormModal open onClose={()=>{setCreateStatus(null);setEditTask(null)}} task={editTask} ws={activeWs} wsMembers={wsMembers} cu={cu} statuses={statuses} defaultStatus={createStatus||statuses[0]} onSave={saveTask} onDelete={delTask}/>}
+    {wsForm&&<WorkspaceFormModal open onClose={()=>setWsForm(null)} ws={wsForm==='new'?null:wsForm} allProfiles={allProfiles} cu={cu} onSave={saveWS} currentMemberIds={wsMembers.map(m=>m.id)}/>}
+    <StatusManager open={statusMgr} onClose={()=>setStatusMgr(false)} statuses={statuses} wsColor={wsColor} onSave={saveStatuses}/>
+    {showImEx&&activeWs&&<ImportExportModal open onClose={()=>setShowImEx(false)} tasks={tasks} wsMembers={wsMembers} statuses={statuses} wsName={activeWs.name} onImport={importTasks}/>}
+    <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all its tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
+    <AdminPanel open={adminOpen} onClose={()=>setAdminOpen(false)} onAccessChanged={onAccessChanged}/>
+  </div>
 }
 
-// ── Root ───────────────────────────────────────────────────────────────────────
+// ── Root ──────────────────────────────────────────────────────────────────────
 export default function App(){
   const [session,setSession]=useState(null);const [accessStatus,setAccessStatus]=useState(null);const [allProfiles,setAllProfiles]=useState([]);const [loading,setLoading]=useState(true)
-  const initializedRef=useRef(false);const authUserIdRef=useRef(null)
-  const ADMIN_EMAIL=import.meta.env.VITE_ADMIN_EMAIL||'';const isAdmin=session?.user?.email===ADMIN_EMAIL
-  const [themeName,setThemeName]=useState(()=>localStorage.getItem('taskflow-theme')||'modern')
-  const th=T[themeName]
+  const initRef=useRef(false);const authIdRef=useRef(null)
+  const ADMIN_EMAIL=import.meta.env.VITE_ADMIN_EMAIL||''
+  const isAdmin=session?.user?.email===ADMIN_EMAIL
 
   useEffect(()=>{
-    const id='app-font-link'
-    if(!document.getElementById(id)){
-      const l=document.createElement('link');l.id=id;l.rel='stylesheet'
-      l.href='https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap'
-      document.head.appendChild(l)
-    }
+    const id='tf-font';if(!document.getElementById(id)){const l=document.createElement('link');l.id=id;l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap';document.head.appendChild(l)}
   },[])
 
-  const handleUserAuth=async user=>{
-    authUserIdRef.current=user.id
+  const handleAuth=async user=>{
+    authIdRef.current=user.id
     try{
       await upsertProfile({id:user.id,email:user.email,name:user.user_metadata?.full_name||user.email.split('@')[0],avatar_url:user.user_metadata?.avatar_url||null})
       if(user.email===ADMIN_EMAIL){await submitAccessRequest(user.id,user.email,user.user_metadata?.full_name||'');await approveRequest(user.id);setAccessStatus('approved')}
-      else{const{data:reqData}=await checkAccessStatus(user.id);if(!reqData){await submitAccessRequest(user.id,user.email,user.user_metadata?.full_name||'');setAccessStatus('pending')}else{setAccessStatus(reqData.status?.trim()||'pending')}}
+      else{const{data}=await checkAccessStatus(user.id);if(!data){await submitAccessRequest(user.id,user.email,user.user_metadata?.full_name||'');setAccessStatus('pending')}else{setAccessStatus(data.status?.trim()||'pending')}}
       const{data:reqList}=await getAccessRequests();const approvedIds=(reqList||[]).filter(r=>r.status==='approved').map(r=>r.user_id)
       if(approvedIds.length>0){const{data:profiles}=await supabase.from('profiles').select('*').in('id',approvedIds);setAllProfiles(profiles||[])}else{setAllProfiles([])}
-    }catch(e){console.error('Auth error:',e)}finally{setLoading(false);initializedRef.current=true}
+    }catch(e){console.error(e)}finally{setLoading(false);initRef.current=true}
   }
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session){handleUserAuth(session.user)}else{setLoading(false);initializedRef.current=true}})
+    supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session){handleAuth(session.user)}else{setLoading(false);initRef.current=true}})
     const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
       setSession(session)
-      if(!session){authUserIdRef.current=null;setAccessStatus(null);setLoading(false);initializedRef.current=true;return}
-      const isNewUser=authUserIdRef.current!==session.user.id
-      if(!initializedRef.current||event==='USER_UPDATED'||(event==='SIGNED_IN'&&isNewUser)){handleUserAuth(session.user)}
+      if(!session){authIdRef.current=null;setAccessStatus(null);setLoading(false);initRef.current=true;return}
+      const isNew=authIdRef.current!==session.user.id
+      if(!initRef.current||event==='USER_UPDATED'||(event==='SIGNED_IN'&&isNew))handleAuth(session.user)
     })
     return()=>subscription.unsubscribe()
   },[])
 
-  const onSignOut=async()=>{await signOut();setSession(null);setAccessStatus(null);authUserIdRef.current=null}
-  const onAccessChanged=async()=>{if(!session?.user)return;const{data:reqList}=await getAccessRequests();const approvedIds=(reqList||[]).filter(r=>r.status==='approved').map(r=>r.user_id);if(approvedIds.length>0){const{data:profiles}=await supabase.from('profiles').select('*').in('id',approvedIds);setAllProfiles(profiles||[])}}
+  const onSignOut=async()=>{await signOut();setSession(null);setAccessStatus(null);authIdRef.current=null}
+  const onAccessChanged=async()=>{if(!session?.user)return;const{data:reqList}=await getAccessRequests();const ids=(reqList||[]).filter(r=>r.status==='approved').map(r=>r.user_id);if(ids.length>0){const{data:p}=await supabase.from('profiles').select('*').in('id',ids);setAllProfiles(p||[])}}
 
-  if(loading)return(<div style={{minHeight:'100vh',background:th.bgApp,display:'flex',alignItems:'center',justifyContent:'center',color:th.textSub,fontFamily:th.font}}><div style={{textAlign:'center'}}><div style={{width:42,height:42,borderRadius:'12px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 16px',boxShadow:'0 8px 24px rgba(99,102,241,0.4)'}}>✦</div><div style={{fontSize:14}}>Loading TaskFlow…</div></div></div>)
+  if(loading)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 14px',boxShadow:'0 8px 28px rgba(99,102,241,0.4)'}}>✦</div><div>Loading…</div></div></div>
 
-  if(!session) return <AuthScreen th={th}/>
-  if(accessStatus==='pending') return <PendingScreen user={session.user} onSignOut={onSignOut} th={th}/>
-  if(accessStatus==='denied') return <DeniedScreen onSignOut={onSignOut} th={th}/>
-  if(!accessStatus) return(<div style={{minHeight:'100vh',background:th.bgApp,display:'flex',alignItems:'center',justifyContent:'center',color:th.textSub,fontFamily:th.font}}>Checking access…</div>)
-
-  return <TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={onSignOut} onAccessChanged={onAccessChanged}/>
+  if(!session)return<AuthScreen/>
+  if(accessStatus==='pending')return<PendingScreen user={session.user} onSignOut={onSignOut}/>
+  if(accessStatus==='denied')return<DeniedScreen onSignOut={onSignOut}/>
+  if(!accessStatus)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}>Checking access…</div>
+  return<TaskFlowApp cu={session.user} isAdmin={isAdmin} allProfiles={allProfiles} onSignOut={onSignOut} onAccessChanged={onAccessChanged}/>
 }
