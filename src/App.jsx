@@ -699,7 +699,19 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <Avatar user={curUser} size={34}/>
             <div><div style={{fontSize:13,fontWeight:700,color:G.text}}>{cu.user_metadata?.full_name||cu.email}</div><div style={{fontSize:11,color:G.textSub}}>{cu.email}</div><div style={{fontSize:10,color:'#10b981',marginTop:2,fontWeight:600}}>● Active</div></div>
           </div>
-          {pendingInvites.length>0&&<div style={{padding:'10px 16px',borderBottom:`1px solid ${G.border}`,background:'rgba(99,102,241,0.05)'}}><div style={{fontSize:12,color:'#818cf8',fontWeight:600}}>🎉 {pendingInvites.length} pending invite{pendingInvites.length>1?'s':''}</div></div>}
+          {pendingInvites.length>0&&<div style={{borderBottom:`1px solid ${G.border}`,background:'rgba(99,102,241,0.04)'}}>
+            <div style={{padding:'8px 16px 4px',fontSize:10,fontWeight:800,color:'#818cf8',textTransform:'uppercase',letterSpacing:'0.08em'}}>🎉 Pending Invitations</div>
+            {pendingInvites.map(inv=>{const ws=inv.workspace;const rgb=hexRgb(ws?.color||'#6366f1');return<div key={inv.id} style={{padding:'8px 14px',borderTop:`1px solid rgba(${rgb},0.1)`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                <div style={{width:28,height:28,borderRadius:'8px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>{ws?.icon||'⬡'}</div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:G.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ws?.name||'Workspace'}</div><div style={{fontSize:10,color:G.textSub}}>by {inv.inviter?.name||inv.inviter?.email}</div></div>
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <button onClick={async e=>{e.stopPropagation();setShowUserMenu(false);await acceptInv(inv)}} style={{flex:1,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusXs,padding:'5px 0',color:ws?.color||'#818cf8',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font}}>✓ Accept</button>
+                <button onClick={async e=>{e.stopPropagation();await declineInv(inv)}} style={{flex:1,background:'rgba(239,68,68,0.07)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:G.radiusXs,padding:'5px 0',color:'#f87171',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>Decline</button>
+              </div>
+            </div>})}
+          </div>}
           <button onClick={()=>{setShowUserMenu(false);onSignOut()}} style={{display:'block',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:13,textAlign:'left',fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background=G.surface} onMouseLeave={e=>e.currentTarget.style.background='none'}>⎋ Sign out</button>
         </div>}
       </div>
@@ -727,7 +739,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         </div>
       </div>
       :<div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',zIndex:1,minHeight:0}}>
-        {/* View tabs */}
+        {/* Invite banner inside workspace too */}
+        {pendingInvites.length>0&&<div style={{padding:'10px 24px 0',flexShrink:0}}><InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/></div>}
+      {/* View tabs */}
         <div style={{background:G.panel,borderBottom:`1px solid ${G.border}`,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,padding:'0 24px',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
           {views.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:G.textSub,cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
             <span>{v.icon}</span>{v.label}
