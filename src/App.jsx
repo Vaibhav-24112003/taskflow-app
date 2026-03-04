@@ -48,7 +48,14 @@ const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new 
 const rrLabel =(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
 // ── Inject global scrollbar style ────────────────────────────────────────────
-function GlobalStyle() {
+function GlobalStyle({ lightMode }) {
+  useEffect(() => {
+    // Apply filter to <html> NOT to root div — avoids breaking position:fixed stacking context
+    document.documentElement.style.filter = lightMode ? 'invert(1) hue-rotate(180deg)' : ''
+    document.documentElement.style.transition = 'filter 0.2s'
+    return () => { document.documentElement.style.filter = '' }
+  }, [lightMode])
+
   useEffect(() => {
     const id = 'tf-scrollbar-style'
     if (document.getElementById(id)) return
@@ -102,14 +109,15 @@ function KanbanBoard({ children, isDragging }) {
       if (el && x !== null && isDragging) {
         const rect = el.getBoundingClientRect()
         const lx = x - rect.left
-        const ZONE = 140, MAX_SPEED = 18
+        const ZONE = 160, MAX_SPEED = 22
         if (lx < ZONE && lx >= 0) {
+          // Smooth ease-in: slow start, accelerates near edge
           const t = 1 - lx / ZONE
-          el.scrollLeft -= MAX_SPEED * t * t
+          el.scrollLeft -= MAX_SPEED * t * t * t
           checkEdges()
         } else if (lx > rect.width - ZONE && lx <= rect.width) {
           const t = 1 - (rect.width - lx) / ZONE
-          el.scrollLeft += MAX_SPEED * t * t
+          el.scrollLeft += MAX_SPEED * t * t * t
           checkEdges()
         }
       }
@@ -578,8 +586,8 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
 
   if(loading)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 16px',boxShadow:'0 8px 28px rgba(99,102,241,0.4)'}}>✦</div><div>Loading…</div></div></div>
 
-  return<div style={{minHeight:'100vh',background:G.bg,fontFamily:G.font,color:G.text,display:'flex',flexDirection:'column',WebkitFontSmoothing:'antialiased',filter:lightMode?'invert(1) hue-rotate(180deg)':'none',transition:'filter .2s'}} onDragEnd={()=>setDragId(null)}>
-    <GlobalStyle/>
+  return<div style={{minHeight:'100vh',background:G.bg,fontFamily:G.font,color:G.text,display:'flex',flexDirection:'column',WebkitFontSmoothing:'antialiased',position:'relative'}} onDragEnd={()=>setDragId(null)}>
+    <GlobalStyle lightMode={lightMode}/>
     {activeWs&&<div style={{position:'fixed',top:0,left:'25%',right:0,height:'35vh',background:`radial-gradient(ellipse at 65% 0%,rgba(${wsRgb},0.055) 0%,transparent 70%)`,pointerEvents:'none',zIndex:0}}/>}
     {toast&&<div style={{position:'fixed',bottom:32,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:toast.type==='ok'?'rgba(16,185,129,0.92)':'rgba(239,68,68,0.92)',color:'#fff',borderRadius:'100px',padding:'10px 22px',fontSize:13,fontWeight:600,backdropFilter:G.blur,boxShadow:'0 8px 32px rgba(0,0,0,0.5)',whiteSpace:'nowrap'}}>{toast.type==='ok'?'✓':'⚠'} {toast.msg}</div>}
 
@@ -649,8 +657,8 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
           <Btn onClick={()=>openNew()} color={wsColor} style={{margin:'7px 0',fontSize:12,padding:'7px 16px'}}>+ New Task</Btn>
         </div>
 
-        {/* BOARD — own flex container, fills height, scrollbar always at screen bottom */}
-        {view==='board'&&<div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',padding:'20px 24px 8px',minHeight:0}}>
+        {/* BOARD — explicit height so scrollbar stays at screen bottom always */}
+        {view==='board'&&<div style={{height:'calc(100vh - 54px - 46px)',display:'flex',flexDirection:'column',overflow:'hidden',padding:'20px 24px 8px',boxSizing:'border-box'}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,flexShrink:0}}>
             <div><h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:G.textSub}}>{myTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
           </div>
