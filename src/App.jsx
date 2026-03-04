@@ -4,7 +4,7 @@ import {
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
   getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace, getMemberRole,
   inviteToWorkspace, getWorkspaceInvitations, getMyInvitations,
-  getInvitationByToken, acceptInvitation, declineInvitation, cancelInvitation,
+  getInvitationByToken, acceptInvitation, acceptInvitationByToken, declineInvitation, cancelInvitation,
   getTasks, createTask, updateTask, deleteTask, logActivity
 } from './lib/supabase.js'
 
@@ -597,7 +597,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
-  const loadWS=useCallback(async()=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(data?.length>0&&!activeWsId)setActiveWsId(data[0].id)}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
+  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
   useEffect(()=>{loadWS()},[cu.id])
 
   useEffect(()=>{
@@ -609,7 +609,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   const saveWS=async({id,name,description,color,icon})=>{
     if(id){const{error}=await updateWorkspace(id,{name,description,color,icon});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===id?{...w,name,description,color,icon}:w));showToast('Updated ✓')}
-    else{const{data:ws,error}=await createWorkspace({name,description,color,icon,owner_id:cu.id});if(error||!ws){showToast('Failed','err');return};await addMemberToWorkspace(ws.id,cu.id,'owner');setActiveWsId(ws.id);showToast('Workspace created! Invite members →');await loadWS()}
+    else{const{data:ws,error}=await createWorkspace({name,description,color,icon,owner_id:cu.id});if(error||!ws){showToast('Failed to create: '+(error?.message||'unknown error'),'err');return};/* trigger auto-adds owner; also add explicitly for safety */await addMemberToWorkspace(ws.id,cu.id,'owner');showToast('Workspace created! Invite members →');await loadWS(ws.id)}
   }
   const saveStatuses=async ss=>{if(!activeWsId)return;const{error}=await updateWorkspace(activeWsId,{custom_statuses:ss});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===activeWsId?{...w,custom_statuses:ss}:w));showToast('Saved ✓')}
   const delWsHandler=async id=>{await deleteWorkspace(id);setActiveWsId(null);setDelWs(null);await loadWS()}
@@ -636,7 +636,13 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const drop=useCallback(async st=>{if(!dragId)return;const task=tasks.find(t=>t.id===dragId);if(!task||task.status===st){setDragId(null);return};const{data}=await updateTask(dragId,{status:st});if(data)setTasks(p=>p.map(t=>t.id===dragId?data:t));await logActivity(dragId,cu.id,`→${st}`);setDragId(null)},[dragId,tasks,cu.id])
   const importTasks=async rows=>{const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase());let a=0,s=0;for(const r of rows){const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:byName(r.assigned_to_name)?.id||cu.id,assignees:[byName(r.assigned_to_name)?.id||cu.id],created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:[]});if(data){setTasks(p=>[...p,data]);a++}else{s++}};showToast(`Imported ${a}${s?`, ${s} skipped`:''}`)}
 
-  const acceptInv=async inv=>{await acceptInvitation(inv.id,inv.invitee_email,inv.workspace_id,cu.id);await refreshInvites();await loadWS();setActiveWsId(inv.workspace_id);showToast(`Joined ${inv.workspace?.name||'workspace'}! 🎉`)}
+  const acceptInv=async inv=>{
+    const{data,error}=await acceptInvitation(inv.id,inv.invitee_email,inv.workspace_id,cu.id)
+    if(error){showToast('Failed to join workspace','err');return}
+    await refreshInvites()
+    await loadWS(inv.workspace_id)
+    showToast(`Joined ${inv.workspace?.name||'workspace'}! 🎉`)
+  }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
@@ -874,10 +880,9 @@ export default function App(){
     authIdRef.current=user.id
     try{
       await upsertProfile({id:user.id,email:user.email,name:user.user_metadata?.full_name||user.email.split('@')[0],avatar_url:user.user_metadata?.avatar_url||null})
-      // If arrived via invite token, accept it automatically
+      // If arrived via invite token, accept it using server-side function
       if(inviteToken){
-        const{data:inv}=await getInvitationByToken(inviteToken)
-        if(inv&&inv.status==='pending'){await acceptInvitation(inv.id,inv.invitee_email,inv.workspace_id,user.id)}
+        await acceptInvitationByToken(inviteToken)
         setInviteToken(null)
       }
       // Load pending invitations for this user
