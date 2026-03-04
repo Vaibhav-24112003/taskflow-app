@@ -111,15 +111,24 @@ export const getInvitationByToken = (token) =>
     .eq('token', token)
     .maybeSingle()
 
+// Use server-side SECURITY DEFINER function to bypass RLS race conditions
 export const acceptInvitation = async (invitationId, inviteeEmail, workspaceId, userId) => {
-  // Add to workspace first
+  // Primary: use server-side function (bypasses RLS entirely)
+  const { data, error } = await supabase.rpc('accept_workspace_invitation', {
+    p_invitation_id: invitationId
+  })
+  if (!error && data?.success) return { data, error: null }
+
+  // Fallback: direct insert (works if email already in profile)
   await addMemberToWorkspace(workspaceId, userId, 'member')
-  // Then mark accepted
   return supabase
     .from('workspace_invitations')
     .update({ status: 'accepted' })
     .eq('id', invitationId)
 }
+
+export const acceptInvitationByToken = async (token) =>
+  supabase.rpc('accept_invitation_by_token', { p_token: token })
 
 export const declineInvitation = (invitationId) =>
   supabase
