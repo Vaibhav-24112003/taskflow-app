@@ -42,8 +42,9 @@ const fmtFull = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'
 const enrich  = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u.email||'')}:null
 const getUser = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
 const scMap   = ss=>{const d={'Todo':'#64748b','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%4)]]))}
-const isOnMyBoard = (t,uid)=>t.created_by===uid||t.assigned_to===uid
-const isMirrored  = (t,uid)=>t.assigned_to===uid&&t.created_by!==uid
+const getAssignees  = t=>(t.assignees&&t.assignees.length>0)?t.assignees:(t.assigned_to?[t.assigned_to]:[])
+const isOnMyBoard  = (t,uid)=>t.created_by===uid||getAssignees(t).includes(uid)
+const isMirrored   = (t,uid)=>getAssignees(t).includes(uid)&&t.created_by!==uid
 const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
 const rrLabel =(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
@@ -372,45 +373,145 @@ function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onInte
   </div>
 }
 
+// ── Checklist component ───────────────────────────────────────────────────────
+function ChecklistEditor({ items, onChange, wsColor }) {
+  const [newText, setNewText] = useState('')
+  const [hideChecked, setHideChecked] = useState(false)
+  const inputRef = useRef()
+  const rgb = hexToRgb(wsColor)
+  const done = items.filter(i => i.done).length
+  const pct  = items.length ? Math.round((done / items.length) * 100) : 0
+
+  const addItem = () => {
+    const t = newText.trim(); if (!t) return
+    onChange([...items, { id: Date.now() + Math.random(), text: t, done: false }])
+    setNewText(''); inputRef.current?.focus()
+  }
+  const toggle = id => onChange(items.map(i => i.id === id ? { ...i, done: !i.done } : i))
+  const edit   = (id, text) => onChange(items.map(i => i.id === id ? { ...i, text } : i))
+  const remove = id => onChange(items.filter(i => i.id !== id))
+  const visible = hideChecked ? items.filter(i => !i.done) : items
+
+  return (
+    <div style={{ background: G.surface, border: `1px solid ${G.border}`, borderRadius: G.radiusMd, padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: G.text }}>Checklist</span>
+          {items.length > 0 && <span style={{ fontSize: 11, color: pct===100?'#10b981':wsColor, fontWeight: 700 }}>{done}/{items.length}</span>}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {items.some(i => i.done) && <button onClick={() => setHideChecked(h => !h)} style={{ background: 'none', border: `1px solid ${G.border}`, borderRadius: G.radiusXs, padding: '3px 9px', color: G.textSub, cursor: 'pointer', fontSize: 10, fontWeight: 600, fontFamily: G.font }}>{hideChecked ? 'Show all' : 'Hide done'}</button>}
+          {items.length > 0 && <button onClick={() => { if (window.confirm('Clear all checklist items?')) onChange([]) }} style={{ background: 'none', border: '1px solid rgba(239,68,68,0.25)', borderRadius: G.radiusXs, padding: '3px 9px', color: '#f87171', cursor: 'pointer', fontSize: 10, fontWeight: 600, fontFamily: G.font }}>Clear all</button>}
+        </div>
+      </div>
+      {items.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span style={{ fontSize: 10, color: G.textSub, fontWeight: 700, width: 28, flexShrink: 0 }}>{pct}%</span>
+          <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: pct + '%', background: pct===100?'#10b981':wsColor, borderRadius: 3, boxShadow: `0 0 8px rgba(${rgb},0.4)`, transition: 'width 0.35s ease' }} />
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 10 }}>
+        {visible.map(item => (
+          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: item.done ? 'rgba(16,185,129,0.04)' : 'transparent', borderRadius: G.radiusXs, padding: '5px 6px', transition: G.trans }} className="cl-item">
+            <div onClick={() => toggle(item.id)} style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${item.done ? '#10b981' : G.textMut}`, background: item.done ? '#10b981' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: G.trans, boxShadow: item.done ? '0 2px 6px rgba(16,185,129,0.35)' : 'none' }}>
+              {item.done && <span style={{ color: '#fff', fontSize: 10, fontWeight: 800, lineHeight: 1 }}>✓</span>}
+            </div>
+            <input value={item.text} onChange={e => edit(item.id, e.target.value)} onKeyDown={e => e.key === 'Enter' && inputRef.current?.focus()}
+              style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: item.done ? G.textSub : G.text, fontSize: 12, fontFamily: G.font, textDecoration: item.done ? 'line-through' : 'none', lineHeight: 1.5 }} />
+            <button onClick={() => remove(item.id)} style={{ background: 'none', border: 'none', color: G.textMut, cursor: 'pointer', fontSize: 13, padding: '0 3px', lineHeight: 1, fontFamily: G.font }}
+              onMouseEnter={e => e.currentTarget.style.color = '#f87171'} onMouseLeave={e => e.currentTarget.style.color = G.textMut}>✕</button>
+          </div>
+        ))}
+        {hideChecked && items.some(i => i.done) && <div style={{ fontSize: 11, color: G.textMut, fontStyle: 'italic', padding: '3px 6px' }}>{items.filter(i => i.done).length} done items hidden</div>}
+      </div>
+      <div style={{ display: 'flex', gap: 7 }}>
+        <input ref={inputRef} value={newText} onChange={e => setNewText(e.target.value)} onKeyDown={e => e.key === 'Enter' && addItem()}
+          placeholder="Add item… press Enter to add" style={{ ...INP, flex: 1, padding: '7px 12px', fontSize: 12 }} />
+        <button onClick={addItem} style={{ background: `rgba(${rgb},0.15)`, border: `1px solid rgba(${rgb},0.3)`, borderRadius: G.radiusMd, padding: '7px 14px', color: wsColor, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: G.font, transition: G.trans, whiteSpace: 'nowrap' }}>+ Add</button>
+      </div>
+    </div>
+  )
+}
+
 // ── Task Form ─────────────────────────────────────────────────────────────────
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
   const [status,setStatus]=useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]=useState('Medium')
-  const [assignTarget,setAssignTarget]=useState('self')
+  const [assignees,setAssignees]=useState([cu?.id].filter(Boolean))
+  const [checklist,setChecklist]=useState([])
   const [rt,setRt]=useState('none');const [ri,setRi]=useState(1)
   const [cdel,setCdel]=useState(false);const isEdit=!!task
-  useEffect(()=>{if(!open)return;setStatus(task?.status||defaultStatus||statuses[0]||'Todo');setPriority(task?.priority||'Medium');if(task){const sa=!task.assigned_to||task.assigned_to===task.created_by;setAssignTarget(sa?'self':task.assigned_to);setRt(task.recurrence_type||'none');setRi(task.recurrence_interval||1)}else{setAssignTarget('self');setRt('none');setRi(1)}},[open,task,defaultStatus,statuses])
+
+  useEffect(()=>{
+    if(!open||!cu)return
+    setStatus(task?.status||defaultStatus||statuses[0]||'Todo')
+    setPriority(task?.priority||'Medium')
+    setRt(task?.recurrence_type||'none');setRi(task?.recurrence_interval||1)
+    setChecklist(task?.checklist||[])
+    if(task){
+      const asgn=task.assignees&&task.assignees.length>0?task.assignees:task.assigned_to?[task.assigned_to]:[cu.id]
+      setAssignees(asgn)
+    } else { setAssignees([cu.id]) }
+  },[open,task,defaultStatus,statuses,cu])
+
   if(!open||!ws||!cu)return null
-  const others=wsMembers.filter(m=>m.id!==cu.id);const rgb=hexToRgb(ws.color)
-  const save=async()=>{const title=titleRef.current?.value?.trim();if(!title)return;const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assigned_to:assignTarget==='self'?cu.id:assignTarget,workspace_id:ws.id,created_by:task?.created_by||cu.id};await onSave(isEdit?{...task,...payload}:payload);onClose()}
+  const rgb=hexToRgb(ws.color)
+
+  const toggleAssignee=id=>setAssignees(prev=>{
+    if(prev.includes(id)){if(prev.length===1)return prev;return prev.filter(x=>x!==id)}
+    return [...prev,id]
+  })
+
+  const save=async()=>{
+    const title=titleRef.current?.value?.trim();if(!title)return
+    const finalAssignees=assignees.length>0?assignees:[cu.id]
+    const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',
+      tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),
+      due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),
+      status,priority,assignees:finalAssignees,assigned_to:finalAssignees[0],
+      workspace_id:ws.id,created_by:task?.created_by||cu.id,checklist}
+    await onSave(isEdit?{...task,...payload}:payload);onClose()
+  }
   const F=({label,children,full})=><div style={{marginBottom:16,gridColumn:full?'1/-1':undefined}}><label style={LBL}>{label}</label>{children}</div>
-  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={620}>
+
+  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
       <F full label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>e.key==='Enter'&&save()}/></F>
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
       <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
-      <F full label="Assign To"><div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-        {[{id:'self',name:'Only Me',sub:'Private'},...others.map(m=>({id:m.id,user:enrich(m),name:m.name||m.email.split('@')[0],sub:'Assign'}))].map(opt=>{const sel=assignTarget===opt.id;return<div key={opt.id} onClick={()=>setAssignTarget(opt.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.5)`:G.border}`,background:sel?`rgba(${rgb},0.08)`:G.surface,transition:G.trans}}>
-          {opt.user?<Avatar user={opt.user} size={26}/>:<span style={{fontSize:14}}>🔒</span>}
-          <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>{opt.name}</div><div style={{fontSize:10,color:G.textSub}}>{opt.sub}</div></div>
-          {sel&&<div style={{width:14,height:14,borderRadius:'50%',background:ws.color,display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2}}><span style={{color:'#fff',fontSize:9,fontWeight:800}}>✓</span></div>}
-        </div>})}
-      </div></F>
+      <F full label={`Assignees — ${assignees.length} selected (click to toggle)`}>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {wsMembers.map(m=>{
+            const eu=enrich(m);const sel=assignees.includes(m.id)
+            return<div key={m.id} onClick={()=>toggleAssignee(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.55)`:G.border}`,background:sel?`rgba(${rgb},0.09)`:G.surface,transition:G.trans}}>
+              <Avatar user={eu} size={28}/>
+              <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>{m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</div><div style={{fontSize:10,color:G.textSub}}>{m.email}</div></div>
+              <div style={{width:16,height:16,borderRadius:5,border:`2px solid ${sel?ws.color:G.textMut}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:G.trans,marginLeft:4,boxShadow:sel?`0 2px 8px rgba(${rgb},0.4)`:'none'}}>
+                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
+              </div>
+            </div>
+          })}
+        </div>
+        {assignees.length>1&&<div style={{marginTop:8,fontSize:11,color:'#818cf8',display:'flex',alignItems:'center',gap:4}}>ℹ All selected members will see this task on their board</div>}
+      </F>
       <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
       <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
       <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
       <F label="Tags (comma separated)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
+      <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
     </div>
     <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
       {isEdit?<Btn onClick={()=>setCdel(true)} outline color="#ef4444">Delete</Btn>:<div/>}
       <div style={{display:'flex',gap:8}}><Btn onClick={onClose} outline color="#64748b">Cancel</Btn><Btn onClick={save} color={ws.color}>{isEdit?'Save Changes':'Create Task'}</Btn></div>
     </div>
   </Modal>
-  <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task?.title}" will be removed.`} confirmLabel="Delete" onConfirm={async()=>{setCdel(false);await onDelete(task.id);onClose()}} onCancel={()=>setCdel(false)}/></>
+  <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task?.title}" will be removed.`} confirmLabel="Delete" onConfirm={async()=>{setCdel(false);await onDelete(task.id);onClose()}} onCancel={()=>setCdel(false)}/>
+  </>
 }
-
 // ── Workspace Form ────────────────────────────────────────────────────────────
 function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMemberIds}){
   const nameRef=useRef(),descRef=useRef()
@@ -439,10 +540,13 @@ function WorkspaceFormModal({open,onClose,ws,allProfiles,cu,onSave,currentMember
 
 // ── Task Card ─────────────────────────────────────────────────────────────────
 function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging}){
-  const assignee=getUser(task.assigned_to,wsMembers);const creator=getUser(task.created_by,wsMembers)
+  const taskAssignees=getAssignees(task)
+  const assigneeUsers=taskAssignees.map(id=>getUser(id,wsMembers)).filter(Boolean)
+  const creator=getUser(task.created_by,wsMembers)
   const ovd=isOvd(task.due_date);const mir=isMirrored(task,cu?.id)
-  const del=task.created_by===cu?.id&&task.assigned_to&&task.assigned_to!==cu?.id
+  const del=task.created_by===cu?.id&&taskAssignees.length>0&&!taskAssignees.includes(cu?.id)
   const rec=task.recurrence_type&&task.recurrence_type!=='none'
+  const cl=task.checklist||[];const clDone=cl.filter(i=>i.done).length;const clPct=cl.length?Math.round(clDone/cl.length*100):0
   const [hov,setHov]=useState(false);const [cdel,setCdel]=useState(false)
   const acc=mir?'#818cf8':del?'#f59e0b':wsColor;const rgb=hexToRgb(acc)
   return<>
@@ -450,19 +554,38 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       onDragStart={e=>{if(mir)return;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',task.id);onDragStart(task.id)}}
       onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
       style={{background:hov?`rgba(${rgb},0.06)`:G.surface,border:`1px solid ${hov?`rgba(${rgb},0.28)`:G.border}`,borderRadius:G.radiusMd,padding:'14px 16px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.25:1,transform:hov&&!isDragging?'translateY(-2px)':'none',boxShadow:hov&&!isDragging?`0 10px 28px rgba(0,0,0,0.35),0 0 0 1px rgba(${rgb},0.12)`:'none',userSelect:'none',borderLeft:`3px solid rgba(${rgb},${hov?0.8:0.35})`}}>
+      {/* Badges row */}
       <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>
         {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:9,color:G.textSub,background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'1px 7px',fontWeight:600}}>{t}</span>)}
         {rec&&<span style={{fontSize:9,color:'#818cf8',background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>🔁 {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
+        {cl.length>0&&<span style={{fontSize:9,color:clPct===100?'#10b981':'#f59e0b',background:clPct===100?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.1)',border:`1px solid ${clPct===100?'rgba(16,185,129,0.25)':'rgba(245,158,11,0.25)'}`,borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>☑ {clDone}/{cl.length}</span>}
         {mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#818cf8',background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>ASSIGNED</span>}
         {del&&!mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>DELEGATED</span>}
       </div>
+      {/* Title */}
       <div style={{fontSize:13,fontWeight:600,color:G.text,marginBottom:task.description?6:10,lineHeight:1.4,letterSpacing:'-0.01em'}}>{task.title}</div>
       {task.description&&<div style={{fontSize:11,color:G.textSub,marginBottom:10,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
+      {/* Checklist mini-bar */}
+      {cl.length>0&&<div style={{marginBottom:10}}>
+        <div style={{height:3,background:'rgba(255,255,255,0.06)',borderRadius:2,overflow:'hidden'}}>
+          <div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/>
+        </div>
+      </div>}
+      {/* Bottom row */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-        <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}><Tag label={`${PI[task.priority]} ${task.priority}`} color={PC[task.priority]}/>{ovd&&<Tag label="Overdue" color="#ef4444"/>}</div>
-        <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+          <Tag label={`${PI[task.priority]} ${task.priority}`} color={PC[task.priority]}/>
+          {ovd&&<Tag label="Overdue" color="#ef4444"/>}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
           {task.due_date&&<span style={{fontSize:10,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{fmtDate(task.due_date)}</span>}
-          {mir?<Avatar user={creator} size={18}/>:<Avatar user={assignee} size={18}/>}
+          {/* Stacked assignee avatars */}
+          <div style={{display:'flex',alignItems:'center'}}>
+            {mir
+              ?<Avatar user={creator} size={18}/>
+              :assigneeUsers.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0,zIndex:10-i}}><Avatar user={u} size={18}/></div>)}
+            {!mir&&assigneeUsers.length>3&&<div style={{marginLeft:-5,width:18,height:18,borderRadius:'50%',background:G.surface,border:`1px solid ${G.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,color:G.textSub,fontWeight:700}}>+{assigneeUsers.length-3}</div>}
+          </div>
         </div>
       </div>
       {!mir&&<div style={{display:'flex',gap:6,marginTop:10,paddingTop:10,borderTop:`1px solid ${G.border}`,opacity:hov?1:0,transform:hov?'none':'translateY(3px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
@@ -562,7 +685,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
       const becameDone=prev&&prev.status!==statuses[statuses.length-1]&&td.status===statuses[statuses.length-1]
       if(becameDone&&td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date){
         const nd=nextDate(td.due_date,td.recurrence_type,td.recurrence_interval)
-        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,workspace_id:td.workspace_id,created_by:cu.id};const{data:nt,error:ne}=await createTask(clone);if(!ne&&nt){setTasks(p=>[...p,nt]);await logActivity(nt.id,cu.id,'Auto-created recurring');showToast(`Next task created → ${fmtFull(nd)} 🔁`);return}}
+        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt,error:ne}=await createTask(clone);if(!ne&&nt){setTasks(p=>[...p,nt]);await logActivity(nt.id,cu.id,'Auto-created recurring');showToast(`Next task created → ${fmtFull(nd)} 🔁`);return}}
       }
       showToast('Saved ✓')
     } else {
@@ -573,13 +696,13 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
   }
   const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
   const drop=useCallback(async st=>{if(!dragId)return;const task=tasks.find(t=>t.id===dragId);if(!task||task.status===st){setDragId(null);return};const{data}=await updateTask(dragId,{status:st});if(data)setTasks(p=>p.map(t=>t.id===dragId?data:t));await logActivity(dragId,cu.id,`→${st}`);setDragId(null)},[dragId,tasks,cu.id])
-  const importTasks=async rows=>{const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase());let a=0,s=0;for(const r of rows){const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:byName(r.assigned_to_name)?.id||cu.id,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1});if(data){setTasks(p=>[...p,data]);a++}else{s++;console.warn(error?.message)}};showToast(`Imported ${a}${s?`, ${s} skipped`:''}`,a>0?'ok':'err')}
+  const importTasks=async rows=>{const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase());let a=0,s=0;for(const r of rows){const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:byName(r.assigned_to_name)?.id||cu.id,assignees:[byName(r.assigned_to_name)?.id||cu.id],created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1});if(data){setTasks(p=>[...p,data]);a++}else{s++;console.warn(error?.message)}};showToast(`Imported ${a}${s?`, ${s} skipped`:''}`,a>0?'ok':'err')}
 
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id));const allT=tasks.filter(bf)
   const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
-  const teamT=allT.filter(t=>t.assigned_to===teamMemberId&&t.created_by!==teamMemberId)
+  const teamT=allT.filter(t=>getAssignees(t).includes(teamMemberId)&&t.created_by!==teamMemberId)
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
   const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'⊛'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}]
@@ -677,7 +800,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
               ?<div style={{textAlign:'center',padding:44,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut,fontSize:13}}>No other members yet. Edit the workspace to add teammates.</div>
               :<>
                 <div style={{display:'flex',gap:8,marginBottom:22,flexWrap:'wrap'}}>
-                  {wsMembers.filter(m=>m.id!==cu.id).map(m=>{const eu=enrich(m);const sel=m.id===teamMemberId;const rgb=hexToRgb(wsColor);const ct=allT.filter(t=>t.assigned_to===m.id&&t.created_by!==m.id).length;return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.4)`:G.border}`,background:sel?`rgba(${rgb},0.08)`:G.surface,transition:G.trans,minWidth:150}}>
+                  {wsMembers.filter(m=>m.id!==cu.id).map(m=>{const eu=enrich(m);const sel=m.id===teamMemberId;const rgb=hexToRgb(wsColor);const ct=allT.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.4)`:G.border}`,background:sel?`rgba(${rgb},0.08)`:G.surface,transition:G.trans,minWidth:150}}>
                     <Avatar user={eu} size={32}/><div><div style={{fontSize:13,fontWeight:700,color:sel?wsColor:G.text}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:11,color:G.textSub}}>{ct} assigned</div></div>
                     {sel&&<div style={{width:7,height:7,borderRadius:'50%',background:wsColor,marginLeft:'auto',boxShadow:`0 0 8px ${wsColor}`}}/>}
                   </div>})}
@@ -747,7 +870,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
           {view==='dashboard'&&<div>
             <h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 20px',letterSpacing:'-0.03em'}}>Dashboard</h2>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:16}}>
-              {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&t.assigned_to&&t.assigned_to!==cu.id).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'}].map(x=>{const rgb=hexToRgb(x.c);return<div key={x.l} style={{background:G.surface,border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}><div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2}}>{x.v}</div><div style={{fontSize:12,fontWeight:600,color:G.text}}>{x.l}</div></div>})}
+              {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&getAssignees(t).some(id=>id!==cu.id)).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'}].map(x=>{const rgb=hexToRgb(x.c);return<div key={x.l} style={{background:G.surface,border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}><div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2}}>{x.v}</div><div style={{fontSize:12,fontWeight:600,color:G.text}}>{x.l}</div></div>})}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:18}}>
@@ -756,7 +879,7 @@ function TaskFlowApp({cu,isAdmin,allProfiles,onSignOut,onAccessChanged}){
               </div>
               <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:18}}>
                 <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:14}}>Team Workload</div>
-                {wsMembers.map(m=>{const a=tasks.filter(t=>t.assigned_to===m.id&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&(!t.assigned_to||t.assigned_to===m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:G.text}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:G.textMut}}>·</span><span style={{fontSize:10,color:G.textSub}}>{o} own</span></div></div></div>})}
+                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:G.text}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:G.textMut}}>·</span><span style={{fontSize:10,color:G.textSub}}>{o} own</span></div></div></div>})}
               </div>
             </div>
           </div>}
