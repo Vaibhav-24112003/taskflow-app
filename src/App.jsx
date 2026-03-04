@@ -570,6 +570,103 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
+// ── Team View Panel ───────────────────────────────────────────────────────────
+function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,openNew,setShowMembers,isOvd}){
+  const [filter,setFilter]=useState('all') // 'all' | 'own' | 'assigned'
+  const rgb=hexRgb(wsColor)
+
+  // All tasks visible on this member's board
+  const memberAll=allT.filter(t=>isOnMyBoard(t,teamMemberId))
+  const memberOwn=allT.filter(t=>t.created_by===teamMemberId)
+  const memberAssigned=allT.filter(t=>getAssignees(t).includes(teamMemberId)&&t.created_by!==teamMemberId)
+  const memberDone=memberAll.filter(t=>t.status===statuses[statuses.length-1])
+  const memberOverdue=memberAll.filter(t=>isOvd(t.due_date))
+
+  const displayTasks = filter==='own'?memberOwn : filter==='assigned'?memberAssigned : memberAll
+
+  if(wsMembers.filter(m=>m.id!==cu.id).length===0)return(
+    <div style={{textAlign:'center',padding:56,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut}}>
+      <div style={{fontSize:36,marginBottom:12}}>👥</div>
+      <div style={{fontSize:14,fontWeight:700,color:G.textSub,marginBottom:8}}>No teammates yet</div>
+      <div style={{fontSize:12,marginBottom:20}}>Invite colleagues to collaborate on tasks.</div>
+      <Btn onClick={()=>setShowMembers(true)} color={wsColor}>+ Invite Members</Btn>
+    </div>
+  )
+
+  return<div style={{display:'flex',flexDirection:'column',gap:16}}>
+    {/* Member picker row */}
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+      <span style={{fontSize:11,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginRight:4}}>Member</span>
+      {wsMembers.map(m=>{
+        const eu=enrich(m);const sel=m.id===teamMemberId;const isSelf=m.id===cu.id
+        const mAll=allT.filter(t=>isOnMyBoard(t,m.id)).length
+        return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.5)`:G.border}`,background:sel?`rgba(${rgb},0.1)`:G.surface,transition:G.trans}}>
+          <Avatar user={eu} size={28}/>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:sel?wsColor:G.text}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
+            <div style={{fontSize:10,color:G.textSub}}>{mAll} task{mAll!==1?'s':''}</div>
+          </div>
+          {sel&&<div style={{width:6,height:6,borderRadius:'50%',background:wsColor,marginLeft:4,boxShadow:`0 0 8px ${wsColor}`}}/>}
+        </div>
+      })}
+    </div>
+
+    {selMem&&<>
+      {/* Member header + stats */}
+      <div style={{background:G.surface,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radius,padding:'18px 22px',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+        <Avatar user={enrich(selMem)} size={52} ring={wsColor}/>
+        <div style={{flex:1,minWidth:160}}>
+          <div style={{fontSize:18,fontWeight:800,color:G.text,letterSpacing:'-0.02em'}}>{selMem.name||selMem.email}</div>
+          <div style={{fontSize:12,color:G.textSub,marginTop:2}}>{selMem.email}</div>
+          <div style={{fontSize:11,color:'#10b981',marginTop:4,fontWeight:600}}>● Workspace member</div>
+        </div>
+        {/* Stats */}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {[
+            {l:'Total',v:memberAll.length,c:wsColor,f:'all'},
+            {l:'Own',v:memberOwn.length,c:'#818cf8',f:'own'},
+            {l:'Assigned',v:memberAssigned.length,c:'#f59e0b',f:'assigned'},
+            {l:'Done',v:memberDone.length,c:'#10b981',f:null},
+            {l:'Overdue',v:memberOverdue.length,c:'#ef4444',f:null},
+          ].map(x=>{
+            const xrgb=hexRgb(x.c);const active=filter===x.f
+            return<div key={x.l} onClick={x.f?()=>setFilter(f=>f===x.f?'all':x.f):undefined}
+              style={{textAlign:'center',background:active?`rgba(${xrgb},0.15)`:G.surface,border:`1px solid ${active?`rgba(${xrgb},0.4)`:G.border}`,borderRadius:G.radiusMd,padding:'10px 16px',cursor:x.f?'pointer':'default',transition:G.trans,minWidth:60}}>
+              <div style={{fontSize:22,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
+              <div style={{fontSize:10,color:active?x.c:G.textSub,fontWeight:700,marginTop:3,textTransform:'uppercase',letterSpacing:'0.06em'}}>{x.l}</div>
+            </div>
+          })}
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:11,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Showing:</span>
+        {[{id:'all',label:`Full Board (${memberAll.length})`},{id:'own',label:`Created by them (${memberOwn.length})`},{id:'assigned',label:`Assigned to them (${memberAssigned.length})`}].map(f=>{
+          const active=filter===f.id;const frgb=hexRgb(wsColor)
+          return<button key={f.id} onClick={()=>setFilter(f.id)} style={{padding:'6px 14px',borderRadius:'100px',border:`1.5px solid ${active?`rgba(${frgb},0.5)`:G.border}`,background:active?`rgba(${frgb},0.12)`:'transparent',color:active?wsColor:G.textSub,cursor:'pointer',fontSize:12,fontWeight:active?700:500,transition:G.trans,fontFamily:G.font}}>{f.label}</button>
+        })}
+      </div>
+
+      {/* Full Kanban board */}
+      {displayTasks.length===0
+        ?<div style={{textAlign:'center',padding:40,border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,color:G.textMut,fontSize:13}}>
+          No tasks{filter==='assigned'?' assigned to ':filter==='own'?' created by ':' on the board for '}{selMem.name?.split(' ')[0]||'this member'} yet.
+        </div>
+        :<div style={{height:'calc(100vh - 340px)',minHeight:320,display:'flex',flexDirection:'column'}}>
+          <KanbanBoard isDragging={!!dragId}>
+            {statuses.map(st=><KanbanCol key={st} status={st}
+              tasks={displayTasks.filter(t=>t.status===st)}
+              wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
+              onEdit={setEditTask} onDelete={delTask}
+              dragId={dragId} onDragStart={setDragId} onDrop={drop}
+              onAdd={s=>openNew(s)}/>)}
+          </KanbanBoard>
+        </div>}
+    </>}
+  </div>
+}
+
 function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
@@ -649,8 +746,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id))
   const allT=tasks.filter(bf)
-  const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
-  const teamT=allT.filter(t=>getAssignees(t).includes(teamMemberId)&&t.created_by!==teamMemberId)
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
   const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'⊛'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}]
@@ -771,32 +866,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{display:view==='board'?'none':'block',flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
 
           {/* TEAM */}
-          {view==='team'&&<div>
-            <div style={{marginBottom:20}}><h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 4px',letterSpacing:'-0.03em'}}>Team View</h2><p style={{fontSize:12,color:G.textSub,margin:0}}>Tasks delegated to a specific member</p></div>
-            {wsMembers.filter(m=>m.id!==cu.id).length===0
-              ?<div style={{textAlign:'center',padding:44,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut,fontSize:13}}>
-                <div style={{fontSize:36,marginBottom:12}}>👥</div>
-                <div style={{fontSize:14,fontWeight:700,color:G.textSub,marginBottom:8}}>No teammates yet</div>
-                <div style={{fontSize:12,marginBottom:20}}>Invite colleagues to collaborate on tasks.</div>
-                <Btn onClick={()=>setShowMembers(true)} color={wsColor}>+ Invite Members</Btn>
-              </div>
-              :<>
-                <div style={{display:'flex',gap:8,marginBottom:22,flexWrap:'wrap'}}>
-                  {wsMembers.filter(m=>m.id!==cu.id).map(m=>{const eu=enrich(m);const sel=m.id===teamMemberId;const rgb=hexRgb(wsColor);const ct=allT.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.4)`:G.border}`,background:sel?`rgba(${rgb},0.08)`:G.surface,transition:G.trans,minWidth:150}}>
-                    <Avatar user={eu} size={32}/><div><div style={{fontSize:13,fontWeight:700,color:sel?wsColor:G.text}}>{m.name||m.email.split('@')[0]}</div><div style={{fontSize:11,color:G.textSub}}>{ct} assigned</div></div>
-                    {sel&&<div style={{width:7,height:7,borderRadius:'50%',background:wsColor,marginLeft:'auto',boxShadow:`0 0 8px ${wsColor}`}}/>}
-                  </div>})}
-                </div>
-                {selMem&&<div style={{background:G.surface,border:`1px solid rgba(${wsRgb},0.25)`,borderRadius:G.radius,padding:20}}>
-                  <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${G.border}`}}>
-                    <Avatar user={enrich(selMem)} size={48}/><div style={{flex:1}}><div style={{fontSize:17,fontWeight:800,color:G.text}}>{selMem.name||selMem.email}</div><div style={{fontSize:12,color:G.textSub}}>{selMem.email}</div></div>
-                    <div style={{display:'flex',gap:16}}>{[{l:'Assigned',v:teamT.length,c:wsColor},{l:'Done',v:teamT.filter(t=>t.status===statuses[statuses.length-1]).length,c:'#10b981'},{l:'Overdue',v:teamT.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'}].map(x=><div key={x.l} style={{textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:x.c}}>{x.v}</div><div style={{fontSize:10,color:G.textSub,marginTop:2,fontWeight:600}}>{x.l}</div></div>)}</div>
-                  </div>
-                  {teamT.length===0?<div style={{textAlign:'center',padding:32,border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,color:G.textMut,fontSize:13}}>No delegated tasks yet.</div>
-                  :<div style={{display:'flex',flexDirection:'column',minHeight:400}}><KanbanBoard isDragging={!!dragId}>{statuses.map(st=><KanbanCol key={st} status={st} tasks={teamT.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}</KanbanBoard></div>}
-                </div>}
-              </>}
-          </div>}
+          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
 
           {/* RECURRING */}
           {view==='recurring'&&<div>
