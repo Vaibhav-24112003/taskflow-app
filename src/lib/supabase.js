@@ -18,27 +18,11 @@ export const signOut = () => supabase.auth.signOut()
 export const upsertProfile = (profile) =>
   supabase.from('profiles').upsert(profile, { onConflict: 'id' })
 
-// ── Access Requests ────────────────────────────────────────────────────────
-export const submitAccessRequest = (userId, email, name) =>
-  supabase.from('access_requests').upsert(
-    { user_id: userId, email, name, status: 'pending' },
-    { onConflict: 'user_id' }
-  )
+export const getProfile = (userId) =>
+  supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
 
-export const checkAccessStatus = (userId) =>
-  supabase.from('access_requests').select('*').eq('user_id', userId).maybeSingle()
-
-export const getAccessRequests = () =>
-  supabase.from('access_requests').select('*').order('created_at', { ascending: false })
-
-export const approveRequest = (userId) =>
-  supabase.from('access_requests').update({ status: 'approved' }).eq('user_id', userId)
-
-export const denyRequest = (userId) =>
-  supabase.from('access_requests').update({ status: 'denied' }).eq('user_id', userId)
-
-export const removeUserFromAllWorkspaces = (userId) =>
-  supabase.from('workspace_members').delete().eq('user_id', userId)
+export const getAllProfiles = () =>
+  supabase.from('profiles').select('*').order('name')
 
 // ── Workspaces ─────────────────────────────────────────────────────────────
 export const getMyWorkspaces = async (userId) => {
@@ -87,6 +71,68 @@ export const removeMemberFromWorkspace = (workspaceId, userId) =>
     .eq('workspace_id', workspaceId)
     .eq('user_id', userId)
 
+export const getMemberRole = async (workspaceId, userId) => {
+  const { data } = await supabase
+    .from('workspace_members')
+    .select('role')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  return data?.role || null
+}
+
+// ── Workspace Invitations ──────────────────────────────────────────────────
+export const inviteToWorkspace = (workspaceId, inviterId, inviteeEmail) =>
+  supabase
+    .from('workspace_invitations')
+    .insert({ workspace_id: workspaceId, inviter_id: inviterId, invitee_email: inviteeEmail.toLowerCase().trim() })
+    .select()
+    .single()
+
+export const getWorkspaceInvitations = (workspaceId) =>
+  supabase
+    .from('workspace_invitations')
+    .select('*, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color)')
+    .eq('workspace_id', workspaceId)
+    .order('created_at', { ascending: false })
+
+export const getMyInvitations = (email) =>
+  supabase
+    .from('workspace_invitations')
+    .select('*, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color,description)')
+    .eq('invitee_email', email.toLowerCase())
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+
+export const getInvitationByToken = (token) =>
+  supabase
+    .from('workspace_invitations')
+    .select('*, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color,description)')
+    .eq('token', token)
+    .maybeSingle()
+
+export const acceptInvitation = async (invitationId, inviteeEmail, workspaceId, userId) => {
+  // Add to workspace first
+  await addMemberToWorkspace(workspaceId, userId, 'member')
+  // Then mark accepted
+  return supabase
+    .from('workspace_invitations')
+    .update({ status: 'accepted' })
+    .eq('id', invitationId)
+}
+
+export const declineInvitation = (invitationId) =>
+  supabase
+    .from('workspace_invitations')
+    .update({ status: 'declined' })
+    .eq('id', invitationId)
+
+export const cancelInvitation = (invitationId) =>
+  supabase
+    .from('workspace_invitations')
+    .delete()
+    .eq('id', invitationId)
+
 // ── Tasks ──────────────────────────────────────────────────────────────────
 export const getTasks = (workspaceId) =>
   supabase
@@ -105,5 +151,5 @@ export const deleteTask = (id) =>
   supabase.from('tasks').delete().eq('id', id)
 
 // ── Activity Log ───────────────────────────────────────────────────────────
-export const logActivity = (taskId, userId, action, timeLogged = 0) =>
-  supabase.from('task_activity').insert({ task_id: taskId, user_id: userId, action, time_logged: timeLogged })
+export const logActivity = (taskId, userId, action) =>
+  supabase.from('task_activity').insert({ task_id: taskId, user_id: userId, action })
