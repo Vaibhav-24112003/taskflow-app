@@ -511,19 +511,58 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
 function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
-  const [over,setOver]=useState(false);const col=SC[status]||wsColor;const rgb=hexRgb(col)
-  const handleDragOver=e=>{e.preventDefault();e.stopPropagation();setOver(true)}
-  const handleDrop=e=>{e.preventDefault();e.stopPropagation();setOver(false);onDrop(status)}
-  return<div onDragOver={handleDragOver} onDragEnter={handleDragOver} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setOver(false)}} onDrop={handleDrop} style={{minWidth:272,flex:'0 0 272px',display:'flex',flexDirection:'column',minHeight:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'10px 14px',background:over?`rgba(${rgb},0.08)`:G.surface,border:`1px solid ${over?`rgba(${rgb},0.4)`:G.border}`,borderRadius:G.radiusMd,borderTop:`3px solid ${col}`,transition:G.trans,flexShrink:0}}>
+  const [overCol,setOverCol]=useState(false)
+  const [insertIdx,setInsertIdx]=useState(null) // index to show insertion line
+  const colRef=useRef()
+  const col=SC[status]||wsColor;const rgb=hexRgb(col)
+
+  const getInsertIndex=useCallback((clientY)=>{
+    if(!colRef.current)return tasks.length
+    const cards=[...colRef.current.querySelectorAll('[data-card]')]
+    if(cards.length===0)return 0
+    for(let i=0;i<cards.length;i++){
+      const r=cards[i].getBoundingClientRect()
+      if(clientY<r.top+r.height/2)return i
+    }
+    return cards.length
+  },[tasks.length])
+
+  const handleDragOver=useCallback(e=>{
+    e.preventDefault();e.stopPropagation()
+    setOverCol(true)
+    setInsertIdx(getInsertIndex(e.clientY))
+  },[getInsertIndex])
+
+  const handleDragLeave=useCallback(e=>{
+    if(!colRef.current?.contains(e.relatedTarget)){setOverCol(false);setInsertIdx(null)}
+  },[])
+
+  const handleDrop=useCallback(e=>{
+    e.preventDefault();e.stopPropagation()
+    const idx=getInsertIndex(e.clientY)
+    setOverCol(false);setInsertIdx(null)
+    onDrop(status,idx)
+  },[status,onDrop,getInsertIndex])
+
+  const InsertLine=()=><div style={{height:2,background:col,borderRadius:2,margin:'2px 0',boxShadow:`0 0 8px ${col}88`,transition:'opacity 0.1s'}}/>
+
+  return<div style={{minWidth:272,flex:'0 0 272px',display:'flex',flexDirection:'column',minHeight:0}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'10px 14px',background:overCol?`rgba(${rgb},0.08)`:G.surface,border:`1px solid ${overCol?`rgba(${rgb},0.4)`:G.border}`,borderRadius:G.radiusMd,borderTop:`3px solid ${col}`,transition:G.trans,flexShrink:0}}>
       <span style={{fontSize:12,fontWeight:700,color:G.text,flex:1}}>{status}</span>
       <span style={{fontSize:11,fontWeight:700,color:col,background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.22)`,borderRadius:'100px',padding:'2px 9px'}}>{tasks.length}</span>
       <button onClick={()=>onAdd(status)} style={{width:24,height:24,borderRadius:'7px',background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.22)`,color:col,cursor:'pointer',fontSize:17,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,flexShrink:0,padding:0,lineHeight:1,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=`rgba(${rgb},0.25)`} onMouseLeave={e=>e.currentTarget.style.background=`rgba(${rgb},0.12)`}>+</button>
     </div>
-    <div className="tf-col" style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:8,padding:over?'8px':'4px 0',background:over?`rgba(${rgb},0.03)`:'transparent',border:`2px dashed ${over?`rgba(${rgb},0.4)`:'transparent'}`,borderRadius:G.radiusMd,transition:G.trans,minHeight:120}}>
-      {tasks.map(t=><TaskCard key={t.id} task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id}/>)}
-      {tasks.length===0&&!over&&<div style={{border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,padding:'22px 16px',textAlign:'center',color:G.textMut,fontSize:12}}>Drop tasks here</div>}
-      {over&&tasks.length===0&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:60,color:col,fontSize:12,fontWeight:700}}>↓ DROP</div>}
+    <div ref={colRef} className="tf-col"
+      onDragOver={handleDragOver} onDragEnter={handleDragOver}
+      onDragLeave={handleDragLeave} onDrop={handleDrop}
+      style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:4,padding:'4px 2px',background:overCol?`rgba(${rgb},0.03)`:'transparent',border:`2px dashed ${overCol?`rgba(${rgb},0.35)`:'transparent'}`,borderRadius:G.radiusMd,transition:G.trans,minHeight:120}}>
+      {tasks.length===0&&!overCol&&<div style={{border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,padding:'22px 16px',textAlign:'center',color:G.textMut,fontSize:12}}>Drop tasks here</div>}
+      {tasks.length===0&&overCol&&insertIdx===0&&<InsertLine/>}
+      {tasks.map((t,i)=><div key={t.id} data-card data-id={t.id} style={{display:'flex',flexDirection:'column',gap:0}}>
+        {overCol&&insertIdx===i&&<InsertLine/>}
+        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id}/>
+      </div>)}
+      {overCol&&insertIdx===tasks.length&&<InsertLine/>}
     </div>
   </div>
 }
@@ -730,7 +769,34 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     }
   }
   const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
-  const drop=useCallback(async st=>{if(!dragId)return;const task=tasks.find(t=>t.id===dragId);if(!task||task.status===st){setDragId(null);return};const{data}=await updateTask(dragId,{status:st});if(data)setTasks(p=>p.map(t=>t.id===dragId?data:t));await logActivity(dragId,cu.id,`→${st}`);setDragId(null)},[dragId,tasks,cu.id])
+  const drop=useCallback(async(st,insertIdx)=>{
+    if(!dragId)return
+    const task=tasks.find(t=>t.id===dragId)
+    if(!task){setDragId(null);return}
+
+    const colTasks=tasks.filter(t=>t.status===st&&t.id!==dragId).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+    const idx=insertIdx??colTasks.length
+    // Build new order: insert dragged task at idx
+    const newOrder=[...colTasks.slice(0,idx),task,...colTasks.slice(idx)]
+    // Assign sort_order values spaced by 1000
+    const updates=newOrder.map((t,i)=>({id:t.id,sort_order:(i+1)*1000}))
+
+    // Optimistic UI update
+    const statusChanged=task.status!==st
+    setTasks(p=>{
+      const withNew=p.map(t=>{
+        const u=updates.find(x=>x.id===t.id)
+        return u?{...t,sort_order:u.sort_order,status:st===task.status?t.status:(t.id===dragId?st:t.status)}:t
+      })
+      if(statusChanged)return withNew.map(t=>t.id===dragId?{...t,status:st}:t)
+      return withNew
+    })
+    setDragId(null)
+
+    // Persist all sort_order changes + status change
+    await Promise.all(updates.map(u=>updateTask(u.id,{sort_order:u.sort_order,...(u.id===dragId&&statusChanged?{status:st}:{})})))
+    if(statusChanged)await logActivity(dragId,cu.id,`→${st}`)
+  },[dragId,tasks,cu.id])
   const importTasks=async rows=>{const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase());let a=0,s=0;for(const r of rows){const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:byName(r.assigned_to_name)?.id||cu.id,assignees:[byName(r.assigned_to_name)?.id||cu.id],created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:[]});if(data){setTasks(p=>[...p,data]);a++}else{s++}};showToast(`Imported ${a}${s?`, ${s} skipped`:''}`)}
 
   const acceptInv=async inv=>{
@@ -744,8 +810,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
-  const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id))
-  const allT=tasks.filter(bf)
+  const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+  const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
   const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'⊛'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}]
