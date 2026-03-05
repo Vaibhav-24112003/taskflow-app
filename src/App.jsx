@@ -364,13 +364,13 @@ function ChecklistEditor({items,onChange,wsColor}){
           <div onClick={()=>toggle(item.id)} style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
             {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
           </div>
-          <input value={item.text} onChange={e=>edit(item.id,e.target.value)} onKeyDown={e=>e.key==='Enter'&&inputRef.current?.focus()} style={{flex:1,background:'none',border:'none',outline:'none',color:item.done?G.textSub:G.text,fontSize:12,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.5}}/>
+          <input value={item.text} onChange={e=>edit(item.id,e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();inputRef.current?.focus()}}} style={{flex:1,background:'none',border:'none',outline:'none',color:item.done?G.textSub:G.text,fontSize:12,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.5}}/>
           <button onClick={()=>remove(item.id)} style={{background:'none',border:'none',color:G.textMut,cursor:'pointer',fontSize:13,padding:'0 3px',lineHeight:1,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=G.textMut}>✕</button>
         </div>
       ))}
     </div>
     <div style={{display:'flex',gap:7}}>
-      <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
+      <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
       <button onClick={add} style={{background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusMd,padding:'7px 14px',color:wsColor,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font}}>+ Add</button>
     </div>
   </div>
@@ -612,6 +612,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 // ── Team View Panel ───────────────────────────────────────────────────────────
 function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,openNew,setShowMembers,isOvd}){
   const [filter,setFilter]=useState('all') // 'all' | 'own' | 'assigned'
+  const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
   const rgb=hexRgb(wsColor)
 
   // All tasks visible on this member's board
