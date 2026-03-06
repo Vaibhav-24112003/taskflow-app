@@ -335,11 +335,30 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
 }
 
 // ── Checklist Editor ──────────────────────────────────────────────────────────
+// ── Checklist Item — uncontrolled to avoid cursor-jump on every keystroke ────
+function ChecklistItem({item,onToggle,onEdit,onRemove,onEnter}){
+  const [text,setText]=useState(item.text)
+  const ref=useRef()
+  // sync if parent resets (e.g. modal reopen)
+  useEffect(()=>{setText(item.text)},[item.id])
+  const commit=()=>{const t=text.trim();if(t!==item.text)onEdit(item.id,t||item.text);if(!t)onRemove(item.id)}
+  return<div style={{display:'flex',alignItems:'center',gap:8,background:item.done?'rgba(16,185,129,0.04)':'transparent',borderRadius:G.radiusXs,padding:'5px 6px'}}>
+    <div onClick={()=>onToggle(item.id)} style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
+      {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
+    </div>
+    <input ref={ref} value={text} onChange={e=>setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();commit();onEnter()}else if(e.key==='Backspace'&&!text){e.preventDefault();onRemove(item.id);onEnter()}}}
+      style={{flex:1,background:'none',border:'none',outline:'none',color:item.done?G.textSub:G.text,fontSize:12,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.5}}/>
+    <button onClick={()=>onRemove(item.id)} style={{background:'none',border:'none',color:G.textMut,cursor:'pointer',fontSize:13,padding:'0 3px',lineHeight:1,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=G.textMut}>✕</button>
+  </div>
+}
+
 function ChecklistEditor({items,onChange,wsColor}){
   const [newText,setNewText]=useState('');const [hideChecked,setHideChecked]=useState(false)
   const inputRef=useRef();const rgb=hexRgb(wsColor)
   const done=items.filter(i=>i.done).length;const pct=items.length?Math.round(done/items.length*100):0
-  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');inputRef.current?.focus()}
+  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');setTimeout(()=>inputRef.current?.focus(),50)}
   const toggle=id=>onChange(items.map(i=>i.id===id?{...i,done:!i.done}:i))
   const edit=(id,text)=>onChange(items.map(i=>i.id===id?{...i,text}:i))
   const remove=id=>onChange(items.filter(i=>i.id!==id))
@@ -359,15 +378,7 @@ function ChecklistEditor({items,onChange,wsColor}){
       </div>
     </div>}
     <div style={{display:'flex',flexDirection:'column',gap:3,marginBottom:10}}>
-      {visible.map(item=>(
-        <div key={item.id} style={{display:'flex',alignItems:'center',gap:8,background:item.done?'rgba(16,185,129,0.04)':'transparent',borderRadius:G.radiusXs,padding:'5px 6px'}}>
-          <div onClick={()=>toggle(item.id)} style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
-            {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
-          </div>
-          <input value={item.text} onChange={e=>edit(item.id,e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();inputRef.current?.focus()}}} style={{flex:1,background:'none',border:'none',outline:'none',color:item.done?G.textSub:G.text,fontSize:12,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.5}}/>
-          <button onClick={()=>remove(item.id)} style={{background:'none',border:'none',color:G.textMut,cursor:'pointer',fontSize:13,padding:'0 3px',lineHeight:1,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=G.textMut}>✕</button>
-        </div>
-      ))}
+      {visible.map(item=><ChecklistItem key={item.id} item={item} onToggle={toggle} onEdit={edit} onRemove={remove} onEnter={()=>inputRef.current?.focus()}/>)}
     </div>
     <div style={{display:'flex',gap:7}}>
       <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
@@ -476,17 +487,17 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
     <div draggable={!mir}
       onDragStart={e=>{if(mir)return;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',task.id);onDragStart(task.id)}}
       onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{background:hov?`rgba(${rgb},0.06)`:G.surface,border:`1px solid ${hov?`rgba(${rgb},0.28)`:G.border}`,borderRadius:G.radiusMd,padding:'14px 16px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.25:1,transform:hov&&!isDragging?'translateY(-2px)':'none',boxShadow:hov&&!isDragging?`0 10px 28px rgba(0,0,0,0.35),0 0 0 1px rgba(${rgb},0.12)`:'none',userSelect:'none',borderLeft:`3px solid rgba(${rgb},${hov?0.8:0.35})`}}>
-      <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:8}}>
+      style={{background:hov?`rgba(${rgb},0.06)`:G.surface,border:`1px solid ${hov?`rgba(${rgb},0.28)`:G.border}`,borderRadius:G.radiusMd,padding:'8px 11px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.25:1,transform:hov&&!isDragging?'translateY(-2px)':'none',boxShadow:hov&&!isDragging?`0 10px 28px rgba(0,0,0,0.35),0 0 0 1px rgba(${rgb},0.12)`:'none',userSelect:'none',borderLeft:`3px solid rgba(${rgb},${hov?0.8:0.35})`}}>
+      <div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:5}}>
         {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:9,color:G.textSub,background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'1px 7px',fontWeight:600}}>{t}</span>)}
         {rec&&<span style={{fontSize:9,color:'#818cf8',background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>🔁 {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
         {cl.length>0&&<span style={{fontSize:9,color:clPct===100?'#10b981':'#f59e0b',background:clPct===100?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.1)',border:`1px solid ${clPct===100?'rgba(16,185,129,0.25)':'rgba(245,158,11,0.25)'}`,borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>☑ {clDone}/{cl.length}</span>}
         {mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#818cf8',background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>ASSIGNED</span>}
         {del&&!mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>DELEGATED</span>}
       </div>
-      <div style={{fontSize:13,fontWeight:600,color:G.text,marginBottom:task.description?6:10,lineHeight:1.4}}>{task.title}</div>
-      {task.description&&<div style={{fontSize:11,color:G.textSub,marginBottom:10,lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
-      {cl.length>0&&<div style={{marginBottom:10}}><div style={{height:3,background:'rgba(255,255,255,0.06)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div></div>}
+      <div style={{fontSize:12,fontWeight:600,color:G.text,marginBottom:task.description?4:6,lineHeight:1.35}}>{task.title}</div>
+      {task.description&&<div style={{fontSize:10,color:G.textSub,marginBottom:6,lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:1,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
+      {cl.length>0&&<div style={{marginBottom:6}}><div style={{height:2,background:'rgba(255,255,255,0.06)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div></div>}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
         <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
           <Tag label={`${PI[task.priority]} ${task.priority}`} color={PC[task.priority]}/>
@@ -500,7 +511,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
           </div>
         </div>
       </div>
-      {!mir&&<div style={{display:'flex',gap:6,marginTop:10,paddingTop:10,borderTop:`1px solid ${G.border}`,opacity:hov?1:0,transform:hov?'none':'translateY(3px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
+      {!mir&&<div style={{display:'flex',gap:5,marginTop:7,paddingTop:7,borderTop:`1px solid ${G.border}`,opacity:hov?1:0,transform:hov?'none':'translateY(3px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
         <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm full>Edit</Btn>
         <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm full>Delete</Btn>
       </div>}
@@ -1070,6 +1081,7 @@ export default function App(){
       setSession(session)
       if(!session){authIdRef.current=null;setLoading(false);initRef.current=true;return}
       const isNew=authIdRef.current!==session.user.id
+      if(event==='TOKEN_REFRESHED')return // don't reset state on silent token refresh
       if(!initRef.current||event==='USER_UPDATED'||(event==='SIGNED_IN'&&isNew))handleAuth(session.user)
     })
     return()=>subscription.unsubscribe()
