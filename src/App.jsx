@@ -405,6 +405,121 @@ function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onInte
   </div>
 }
 
+
+// ── Assign Task Modal ─────────────────────────────────────────────────────────
+// Handles both: (A) self-assign under a manager, (B) delegate to subordinates
+function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
+  const [mode,setMode]=useState('self')   // 'self' | 'delegate'
+  const [delegatorId,setDelegatorId]=useState(null)
+  const [subordinates,setSubordinates]=useState([])
+  const rgb=ws?hexRgb(ws.color):'99,102,241'
+
+  useEffect(()=>{
+    if(!open||!cu||!task)return
+    setMode('self')
+    setDelegatorId(task.delegator_id||task.created_by||cu.id)
+    setSubordinates([])
+  },[open,task,cu])
+
+  if(!open||!task||!cu||!ws)return null
+
+  const others=wsMembers.filter(m=>m.id!==cu.id)
+  const toggleSub=id=>setSubordinates(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id])
+
+  const save=async()=>{
+    const existingAssignees=getAssignees(task)
+    if(mode==='self'){
+      // Case A: Add self as assignee, set chosen delegator
+      const newAssignees=[...new Set([...existingAssignees,cu.id])]
+      await onSave(task,{assignees:newAssignees,assigned_to:newAssignees[0],delegator_id:delegatorId})
+    } else {
+      // Case B: Assign to subordinates, self becomes delegator
+      const newAssignees=subordinates.length>0?subordinates:[cu.id]
+      await onSave(task,{assignees:newAssignees,assigned_to:newAssignees[0],delegator_id:cu.id})
+    }
+    onClose()
+  }
+
+  const MemberCard=({m,selected,onClick,accent})=>{
+    const eu=enrich(m);const isSelf=m.id===cu.id
+    const ac=accent||ws.color;const acRgb=hexRgb(ac)
+    return<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${selected?`rgba(${acRgb},0.55)`:G.border}`,background:selected?`rgba(${acRgb},0.09)`:G.surface,transition:G.trans,flex:'1 1 180px'}}>
+      <Avatar user={eu} size={32}/>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:700,color:selected?ac:G.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
+        <div style={{fontSize:10,color:G.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
+      </div>
+      <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:G.textMut}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+        {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
+      </div>
+    </div>
+  }
+
+  return<Modal open={open} onClose={onClose} title="Assign Task" width={520}>
+    {/* Task summary */}
+    <div style={{background:G.surfaceHov,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:2}}>{task.title}</div>
+      {task.project&&<div style={{fontSize:11,color:G.textSub}}>📁 {task.project}</div>}
+    </div>
+
+    {/* Mode tabs */}
+    <div style={{display:'flex',gap:8,marginBottom:20}}>
+      <button onClick={()=>setMode('self')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='self'?`rgba(${rgb},0.5)`:G.border}`,background:mode==='self'?`rgba(${rgb},0.08)`:'transparent',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
+        <div style={{fontSize:20,marginBottom:4}}>🙋</div>
+        <div style={{fontSize:13,fontWeight:800,color:mode==='self'?ws.color:G.text}}>I'll take this</div>
+        <div style={{fontSize:10,color:G.textSub,marginTop:2}}>Self-assign under a manager</div>
+      </button>
+      <button onClick={()=>setMode('delegate')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='delegate'?'rgba(245,158,11,0.5)':G.border}`,background:mode==='delegate'?'rgba(245,158,11,0.08)':'transparent',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
+        <div style={{fontSize:20,marginBottom:4}}>➡️</div>
+        <div style={{fontSize:13,fontWeight:800,color:mode==='delegate'?'#f59e0b':G.text}}>Delegate to team</div>
+        <div style={{fontSize:10,color:G.textSub,marginTop:2}}>Assign to subordinates</div>
+      </button>
+    </div>
+
+    {/* CASE A: Self-assign → pick manager */}
+    {mode==='self'&&<>
+      <div style={{fontSize:11,fontWeight:700,color:G.textSub,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
+        ⚡ Who is your Manager / Delegator for this task?
+      </div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
+        {wsMembers.map(m=><MemberCard key={m.id} m={m} selected={delegatorId===m.id} onClick={()=>setDelegatorId(m.id)} accent='#f59e0b'/>)}
+      </div>
+      <div style={{background:'rgba(129,140,248,0.06)',border:'1px solid rgba(129,140,248,0.15)',borderRadius:G.radiusMd,padding:'10px 14px',fontSize:11,color:'#818cf8'}}>
+        ℹ This task will appear on <strong>your board</strong> as "Assigned by [Manager]". The manager sees it as a delegated task under their watch.
+      </div>
+    </>}
+
+    {/* CASE B: Delegate → pick subordinates */}
+    {mode==='delegate'&&<>
+      <div style={{fontSize:11,fontWeight:700,color:G.textSub,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>
+        👥 Select subordinates to assign this task to
+      </div>
+      <div style={{fontSize:10,color:G.textSub,marginBottom:10}}>You will be the Manager / Delegator. Selected members will see it on their board.</div>
+      {others.length===0
+        ?<div style={{padding:20,textAlign:'center',color:G.textMut,fontSize:12}}>No other members in this workspace</div>
+        :<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
+          {others.map(m=><MemberCard key={m.id} m={m} selected={subordinates.includes(m.id)} onClick={()=>toggleSub(m.id)} accent={ws.color}/>)}
+        </div>
+      }
+      <div style={{background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.15)',borderRadius:G.radiusMd,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+        <Avatar user={enrich(wsMembers.find(m=>m.id===cu.id)||{id:cu.id})} size={28}/>
+        <div style={{fontSize:11,color:'#f59e0b'}}>
+          <strong>You</strong> will be tagged as <strong>Manager / Delegator</strong> on this task.
+          {subordinates.length>0&&<span style={{color:G.textSub}}> {subordinates.length} member{subordinates.length>1?'s':''} will be assigned.</span>}
+        </div>
+      </div>
+    </>}
+
+    <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:18,paddingTop:14,borderTop:`1px solid ${G.border}`}}>
+      <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
+      <Btn onClick={save} color={mode==='delegate'?'#f59e0b':ws.color}
+        disabled={mode==='delegate'&&subordinates.length===0}>
+        {mode==='self'?'✋ Take this task':'➡️ Delegate task'}
+      </Btn>
+    </div>
+  </Modal>
+}
+
 // ── Task Form Modal ───────────────────────────────────────────────────────────
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
@@ -767,7 +882,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
-  const [editTask,setEditTask]=useState(null);const [createStatus,setCreateStatus]=useState(null)
+  const [editTask,setEditTask]=useState(null)
+  const [assignTask,setAssignTask]=useState(null);const [createStatus,setCreateStatus]=useState(null)
   const [wsForm,setWsForm]=useState(null);const [delWs,setDelWs]=useState(null)
   const [statusMgr,setStatusMgr]=useState(false);const [showImEx,setShowImEx]=useState(false)
   const [showMembers,setShowMembers]=useState(false)
@@ -838,6 +954,19 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       await logActivity(task.id,cu.id,'Claimed task')
     }else{showToast('Failed to claim task','err')}
   },[cu.id,tasks])
+
+  const handleAssignSave=useCallback(async(task,updates)=>{
+    const{data}=await updateTask(task.id,updates)
+    if(data){
+      setTasks(p=>p.map(t=>t.id===task.id?data:t))
+      const isSelf=updates.assignees?.includes(cu.id)&&updates.delegator_id!==cu.id
+      const isDel=updates.delegator_id===cu.id&&!updates.assignees?.includes(cu.id)
+      if(isSelf) showToast(`✋ Added to your board under manager`)
+      else if(isDel) showToast(`➡️ Delegated to ${updates.assignees?.length} member(s)`)
+      else showToast('Assignment updated ✓')
+      await logActivity(task.id,cu.id,isSelf?'Self-assigned under manager':'Delegated task')
+    }else showToast('Failed to update','err')
+  },[cu.id])
   const drop=useCallback(async(st,insertIdx)=>{
     if(!dragId)return
     const task=tasks.find(t=>t.id===dragId)
@@ -1042,7 +1171,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                     <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:4}}>{asgns.length===0?<span style={{fontSize:11,color:G.textMut,fontStyle:'italic'}}>Unassigned</span>:asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:G.textSub,marginLeft:4}}>+{asgns.length-3}</span>}{isMine&&<span style={{fontSize:9,color:'#10b981',fontWeight:700,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:'100px',padding:'1px 6px',marginLeft:4}}>You</span>}</div></td>
                     <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
                     <td style={{padding:'8px 10px'}}>{canClaim
-                      ?<button onClick={e=>{e.stopPropagation();claimTask(t)}} style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:G.radiusMd,padding:'5px 11px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(16,185,129,0.2)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(16,185,129,0.1)'}>🙋 Claim</button>
+                      ?<button onClick={e=>{e.stopPropagation();setAssignTask(t)}} style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:G.radiusMd,padding:'5px 11px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(16,185,129,0.2)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(16,185,129,0.1)'}>🙋 Assign</button>
                       :<span style={{fontSize:10,color:'#10b981',fontWeight:700}}>✓ Mine</span>}
                     </td>
                     <td style={{padding:'8px 10px'}}><Btn onClick={()=>setEditTask(t)} outline color={wsColor} sm>Edit</Btn></td>
@@ -1079,6 +1208,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* MODALS */}
     {(createStatus!==null||editTask!==null)&&activeWs&&<TaskFormModal open onClose={()=>{setCreateStatus(null);setEditTask(null)}} task={editTask} ws={activeWs} wsMembers={wsMembers} cu={cu} statuses={statuses} defaultStatus={createStatus||statuses[0]} onSave={saveTask} onDelete={delTask}/>}
+    {assignTask&&activeWs&&<AssignTaskModal open={!!assignTask} onClose={()=>setAssignTask(null)} task={assignTask} wsMembers={wsMembers} cu={cu} ws={activeWs} onSave={handleAssignSave}/>}
     {wsForm&&<WorkspaceFormModal open onClose={()=>setWsForm(null)} ws={wsForm==='new'?null:wsForm} cu={cu} onSave={saveWS}/>}
     <StatusManager open={statusMgr} onClose={()=>setStatusMgr(false)} statuses={statuses} wsColor={wsColor} onSave={saveStatuses}/>
     {showImEx&&activeWs&&<ImportExportModal open onClose={()=>setShowImEx(false)} tasks={tasks} wsMembers={wsMembers} statuses={statuses} wsName={activeWs.name} onImport={importTasks}/>}
