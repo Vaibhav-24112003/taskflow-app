@@ -448,7 +448,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F full label="👥 Task Assignment">
         {/* Mode pills */}
         <div style={{display:'flex',gap:6,marginBottom:14}}>
-          {[{id:'self',icon:'🙋',label:'I'll do this',desc:'Assigned to yourself'},{id:'delegate',icon:'➡️',label:'Delegate',desc:'Assign to someone else'},{id:'both',icon:'🤝',label:'Both',desc:'You + others work on it'}].map(m=>{
+          {[{id:'self',icon:'🙋',label:"I'll do this",desc:'Assigned to yourself'},{id:'delegate',icon:'➡️',label:'Delegate',desc:'Assign to someone else'},{id:'both',icon:'🤝',label:'Both',desc:'You + others work on it'}].map(m=>{
             const selfInAssignees=assignees.includes(cu.id)
             const othersInAssignees=assignees.some(id=>id!==cu.id)
             const curMode=selfInAssignees&&!othersInAssignees?'self':!selfInAssignees&&othersInAssignees?'delegate':'both'
