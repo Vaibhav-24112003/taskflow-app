@@ -43,7 +43,7 @@ const enrich  = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u
 const getUser = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
 const scMap   = ss=>{const d={'Todo':'#64748b','In Progress':'#6366f1','Review':'#f59e0b','Done':'#10b981'};let i=0;return Object.fromEntries(ss.map(s=>[s,d[s]||SCPAL[4+(i++%4)]]))}
 const getAssignees = t=>(t.assignees&&t.assignees.length>0)?t.assignees:(t.assigned_to?[t.assigned_to]:[])
-const isOnMyBoard  = (t,uid)=>t.created_by===uid||getAssignees(t).includes(uid)
+const isOnMyBoard  = (t,uid)=>t.created_by===uid||getAssignees(t).includes(uid)||(t.delegator_id&&t.delegator_id===uid)
 const isMirrored   = (t,uid)=>getAssignees(t).includes(uid)&&t.created_by!==uid
 const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
 const rrLabel=(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
@@ -411,6 +411,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   const [status,setStatus]=useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]=useState('Medium')
   const [assignees,setAssignees]=useState([])
+  const [delegatorId,setDelegatorId]=useState(null)
   const [checklist,setChecklist]=useState([])
   const [rt,setRt]=useState('none');const [ri,setRi]=useState(1)
   const [cdel,setCdel]=useState(false);const isEdit=!!task
@@ -421,8 +422,8 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     setPriority(task?.priority||'Medium')
     setRt(task?.recurrence_type||'none');setRi(task?.recurrence_interval||1)
     setChecklist(task?.checklist||[])
-    if(task){const a=task.assignees?.length>0?task.assignees:task.assigned_to?[task.assigned_to]:[cu.id];setAssignees(a)}
-    else setAssignees([cu.id])
+    if(task){const a=task.assignees?.length>0?task.assignees:task.assigned_to?[task.assigned_to]:[cu.id];setAssignees(a);setDelegatorId(task.delegator_id||task.created_by||cu.id)}
+    else{setAssignees([cu.id]);setDelegatorId(cu.id)}
   },[open,task,defaultStatus,statuses,cu])
 
   if(!open||!ws||!cu)return null
@@ -433,7 +434,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   const save=async()=>{
     const title=titleRef.current?.value?.trim();if(!title)return
     const fa=assignees.length>0?assignees:[cu.id]
-    const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assignees:fa,assigned_to:fa[0],workspace_id:ws.id,created_by:task?.created_by||cu.id,checklist}
+    const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assignees:fa,assigned_to:fa[0],delegator_id:delegatorId||cu.id,workspace_id:ws.id,created_by:task?.created_by||cu.id,checklist}
     await onSave(isEdit?{...task,...payload}:payload);onClose()
   }
   const F=({label,children,full})=><div style={{marginBottom:16,gridColumn:full?'1/-1':undefined}}><label style={LBL}>{label}</label>{children}</div>
@@ -444,19 +445,55 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
       <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
-      <F full label={`Assignees — ${assignees.length} selected`}>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
-            return<div key={m.id} onClick={()=>toggleA(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.55)`:G.border}`,background:sel?`rgba(${rgb},0.09)`:G.surface,transition:G.trans}}>
-              <Avatar user={eu} size={28}/>
-              <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>{m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</div><div style={{fontSize:10,color:G.textSub}}>{m.email}</div></div>
-              <div style={{width:16,height:16,borderRadius:5,border:`2px solid ${sel?ws.color:G.textMut}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:G.trans,marginLeft:4}}>
-                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
+      <F full label="👥 Task Assignment">
+        {/* Mode pills */}
+        <div style={{display:'flex',gap:6,marginBottom:14}}>
+          {[{id:'self',icon:'🙋',label:'I'll do this',desc:'Assigned to yourself'},{id:'delegate',icon:'➡️',label:'Delegate',desc:'Assign to someone else'},{id:'both',icon:'🤝',label:'Both',desc:'You + others work on it'}].map(m=>{
+            const selfInAssignees=assignees.includes(cu.id)
+            const othersInAssignees=assignees.some(id=>id!==cu.id)
+            const curMode=selfInAssignees&&!othersInAssignees?'self':!selfInAssignees&&othersInAssignees?'delegate':'both'
+            const active=curMode===m.id
+            const mrgb=hexRgb(active?ws.color:'#64748b')
+            return<button key={m.id} onClick={()=>{
+              if(m.id==='self'){setAssignees([cu.id]);setDelegatorId(cu.id)}
+              else if(m.id==='delegate'){const others=wsMembers.filter(x=>x.id!==cu.id);setAssignees(others.length?[others[0].id]:[cu.id]);setDelegatorId(cu.id)}
+              else{setAssignees([cu.id,...wsMembers.filter(x=>x.id!==cu.id).slice(0,1).map(x=>x.id)]);setDelegatorId(cu.id)}
+            }} style={{flex:1,background:active?`rgba(${mrgb},0.1)`:'transparent',border:`1.5px solid ${active?`rgba(${mrgb},0.5)`:G.border}`,borderRadius:G.radiusMd,padding:'9px 12px',cursor:'pointer',fontFamily:G.font,textAlign:'left',transition:G.trans}}>
+              <div style={{fontSize:15,marginBottom:2}}>{m.icon}</div>
+              <div style={{fontSize:12,fontWeight:700,color:active?ws.color:G.text}}>{m.label}</div>
+              <div style={{fontSize:10,color:G.textSub}}>{m.desc}</div>
+            </button>
+          })}
+        </div>
+        {/* Assignees — always shown, picking who does the work */}
+        <div style={{marginBottom:6,fontSize:11,fontWeight:700,color:G.textSub,textTransform:'uppercase',letterSpacing:'0.06em'}}>
+          {assignees.some(id=>id!==cu.id)?'Assigned to (will work on this):':'You are assigned to this task'}
+        </div>
+        <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10}}>
+          {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id);const isSelf=m.id===cu.id
+            return<div key={m.id} onClick={()=>toggleA(m.id)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 11px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.55)`:G.border}`,background:sel?`rgba(${rgb},0.09)`:G.surface,transition:G.trans,position:'relative'}}>
+              <Avatar user={eu} size={24}/>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:sel?ws.color:G.text}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
+                <div style={{fontSize:9,color:G.textSub}}>{sel?'✓ Assignee':'Click to assign'}</div>
               </div>
             </div>
           })}
         </div>
-        {assignees.length>1&&<div style={{marginTop:8,fontSize:11,color:'#818cf8'}}>ℹ All selected members will see this on their board</div>}
+        {/* Delegator row — shown when assigning to others */}
+        {assignees.some(id=>id!==cu.id)&&<div style={{background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:G.radiusMd,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>⚡ Delegated by:</span>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
+              return<div key={m.id} onClick={()=>setDelegatorId(m.id)} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?'rgba(245,158,11,0.55)':G.border}`,background:sel?'rgba(245,158,11,0.12)':G.surface,transition:G.trans}}>
+                <Avatar user={eu} size={20}/>
+                <span style={{fontSize:11,fontWeight:sel?700:500,color:sel?'#f59e0b':G.textSub}}>{m.name?.split(' ')[0]||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</span>
+              </div>
+            })}
+          </div>
+          <span style={{fontSize:10,color:G.textSub}}>— they oversee this task</span>
+        </div>}
+        {assignees.length>1&&<div style={{marginTop:8,fontSize:11,color:'#818cf8'}}>ℹ {assignees.length} members assigned — all will see this on their board</div>}
       </F>
       <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
       <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
@@ -492,8 +529,15 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:9,color:G.textSub,background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'1px 7px',fontWeight:600}}>{t}</span>)}
         {rec&&<span style={{fontSize:9,color:'#818cf8',background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>🔁 {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
         {cl.length>0&&<span style={{fontSize:9,color:clPct===100?'#10b981':'#f59e0b',background:clPct===100?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.1)',border:`1px solid ${clPct===100?'rgba(16,185,129,0.25)':'rgba(245,158,11,0.25)'}`,borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>☑ {clDone}/{cl.length}</span>}
-        {mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#818cf8',background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>ASSIGNED</span>}
-        {del&&!mir&&<span style={{marginLeft:'auto',fontSize:9,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>DELEGATED</span>}
+        {mir&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4}}>
+          {(()=>{const dlg=getUser(task.delegator_id||task.created_by,wsMembers);return dlg&&dlg.id!==cu.id?<div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'2px 7px 2px 4px'}}>
+            <Avatar user={dlg} size={13}/><span style={{fontSize:9,color:'#818cf8',fontWeight:700}}>via {dlg.name?.split(' ')[0]||dlg.email.split('@')[0]}</span>
+          </div>:<span style={{fontSize:9,color:'#818cf8',background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>ASSIGNED</span>})()}
+        </div>}
+        {del&&!mir&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3}}>
+          {assigneeUsers.slice(0,2).map(u=><Avatar key={u.id} user={u} size={13}/>)}
+          <span style={{fontSize:9,color:'#f59e0b',fontWeight:700,marginLeft:2}}>→ {assigneeUsers.map(u=>u.name?.split(' ')[0]||u.email.split('@')[0]).slice(0,2).join(', ')}{assigneeUsers.length>2?` +${assigneeUsers.length-2}`:''}</span>
+        </div>}
       </div>
       <div style={{fontSize:12,fontWeight:600,color:G.text,marginBottom:task.description?4:6,lineHeight:1.35}}>{task.title}</div>
       {task.description&&<div style={{fontSize:10,color:G.textSub,marginBottom:6,lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:1,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
@@ -781,6 +825,19 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     }
   }
   const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
+
+  const claimTask=useCallback(async(task)=>{
+    const existing=getAssignees(task)
+    if(existing.includes(cu.id)){showToast('Already on your board!');return}
+    const newAssignees=[...existing,cu.id]
+    const delegator=task.delegator_id||task.created_by
+    const{data}=await updateTask(task.id,{assignees:newAssignees,assigned_to:newAssignees[0],delegator_id:delegator})
+    if(data){
+      setTasks(p=>p.map(t=>t.id===task.id?data:t))
+      showToast(`✋ Claimed! "${task.title}" added to your board`)
+      await logActivity(task.id,cu.id,'Claimed task')
+    }else{showToast('Failed to claim task','err')}
+  },[cu.id,tasks])
   const drop=useCallback(async(st,insertIdx)=>{
     if(!dragId)return
     const task=tasks.find(t=>t.id===dragId)
@@ -975,17 +1032,20 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             </div>
             <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,overflow:'hidden'}}>
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr style={{borderBottom:`1px solid ${G.border}`}}>{['Task','Status','Priority','Creator','Assignees','Due','Recurrence',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
+                <thead><tr style={{borderBottom:`1px solid ${G.border}`}}>{['Task','Status','Priority','Delegator','Assignees','Due','',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {allT.map(t=>{const asgns=getAssignees(t).map(id=>getUser(id,wsMembers)).filter(Boolean);const crea=getUser(t.created_by,wsMembers);const ovd=isOvd(t.due_date);const col=SC[t.status]||wsColor;const rl=rrLabel(t.recurrence_type,t.recurrence_interval);return<tr key={t.id} style={{borderBottom:`1px solid ${G.border}`,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><span style={{fontSize:13,fontWeight:600,color:G.text}}>{t.title}</span></div></td>
+                  {allT.map(t=>{const asgns=getAssignees(t).map(id=>getUser(id,wsMembers)).filter(Boolean);const dlg=getUser(t.delegator_id||t.created_by,wsMembers);const ovd=isOvd(t.due_date);const col=SC[t.status]||wsColor;const isMine=getAssignees(t).includes(cu.id);const canClaim=!isMine;return<tr key={t.id} style={{borderBottom:`1px solid ${G.border}`,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><div><div style={{fontSize:12,fontWeight:600,color:G.text}}>{t.title}</div>{t.project&&<div style={{fontSize:10,color:G.textSub,marginTop:1}}>{t.project}</div>}</div></div></td>
                     <td style={{padding:'10px 10px'}}><Tag label={t.status} color={col}/></td>
                     <td style={{padding:'10px 10px'}}><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/></td>
-                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={crea} size={18}/><span style={{fontSize:11,color:G.textSub}}>{crea?.name?.split(' ')[0]||'?'}</span></div></td>
-                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center'}}>{asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:G.textSub,marginLeft:4}}>+{asgns.length-3}</span>}</div></td>
+                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={dlg} size={18}/><span style={{fontSize:11,color:G.textSub}}>{dlg?.name?.split(' ')[0]||'?'}{dlg?.id===cu.id?' (You)':''}</span></div></td>
+                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:4}}>{asgns.length===0?<span style={{fontSize:11,color:G.textMut,fontStyle:'italic'}}>Unassigned</span>:asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:G.textSub,marginLeft:4}}>+{asgns.length-3}</span>}{isMine&&<span style={{fontSize:9,color:'#10b981',fontWeight:700,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:'100px',padding:'1px 6px',marginLeft:4}}>You</span>}</div></td>
                     <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
-                    <td style={{padding:'10px 10px'}}>{rl?<Tag label={`🔁 ${rl}`} color="#6366f1"/>:<span style={{fontSize:11,color:G.textMut}}>—</span>}</td>
-                    <td style={{padding:'10px 10px'}}><Btn onClick={()=>setEditTask(t)} outline color={wsColor} sm>Edit</Btn></td>
+                    <td style={{padding:'8px 10px'}}>{canClaim
+                      ?<button onClick={e=>{e.stopPropagation();claimTask(t)}} style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:G.radiusMd,padding:'5px 11px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(16,185,129,0.2)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(16,185,129,0.1)'}>🙋 Claim</button>
+                      :<span style={{fontSize:10,color:'#10b981',fontWeight:700}}>✓ Mine</span>}
+                    </td>
+                    <td style={{padding:'8px 10px'}}><Btn onClick={()=>setEditTask(t)} outline color={wsColor} sm>Edit</Btn></td>
                   </tr>})}
                   {allT.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:G.textMut,fontSize:13}}>No tasks yet</td></tr>}
                 </tbody>
