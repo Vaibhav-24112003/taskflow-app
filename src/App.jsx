@@ -358,7 +358,7 @@ function ChecklistEditor({items,onChange,wsColor}){
   const [newText,setNewText]=useState('');const [hideChecked,setHideChecked]=useState(false)
   const inputRef=useRef();const rgb=hexRgb(wsColor)
   const done=items.filter(i=>i.done).length;const pct=items.length?Math.round(done/items.length*100):0
-  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');requestAnimationFrame(()=>inputRef.current?.focus())}
+  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');requestAnimationFrame(()=>{requestAnimationFrame(()=>inputRef.current?.focus())})}
   const toggle=id=>onChange(items.map(i=>i.id===id?{...i,done:!i.done}:i))
   const edit=(id,text)=>onChange(items.map(i=>i.id===id?{...i,text}:i))
   const remove=id=>onChange(items.filter(i=>i.id!==id))
@@ -378,7 +378,7 @@ function ChecklistEditor({items,onChange,wsColor}){
       </div>
     </div>}
     <div style={{display:'flex',flexDirection:'column',gap:3,marginBottom:10}}>
-      {visible.map(item=><ChecklistItem key={item.id} item={item} onToggle={toggle} onEdit={edit} onRemove={remove} onEnter={()=>inputRef.current?.focus()}/>)}
+      {visible.map(item=><ChecklistItem key={item.id} item={item} onToggle={toggle} onEdit={edit} onRemove={remove} onEnter={()=>requestAnimationFrame(()=>inputRef.current?.focus())}/>)}
     </div>
     <div style={{display:'flex',gap:7}}>
       <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();add()}}} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
@@ -539,7 +539,9 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     setChecklist(task?.checklist||[])
     if(task){const a=task.assignees?.length>0?task.assignees:task.assigned_to?[task.assigned_to]:[cu.id];setAssignees(a);setDelegatorId(task.delegator_id||task.created_by||cu.id)}
     else{setAssignees([cu.id]);setDelegatorId(cu.id)}
-  },[open,task,defaultStatus,statuses,cu])
+    // Focus title only once when modal opens — never on re-renders
+    requestAnimationFrame(()=>titleRef.current?.focus())
+  },[open])
 
   if(!open||!ws||!cu)return null
   const rgb=hexRgb(ws.color)
@@ -556,7 +558,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 
   return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
-      <F full label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
+      <F full label="Title *"><input ref={titleRef} defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
       <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
