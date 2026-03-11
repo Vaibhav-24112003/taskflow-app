@@ -336,36 +336,82 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
 
 // ── Checklist Editor ──────────────────────────────────────────────────────────
 // ── Checklist Item — uncontrolled to avoid cursor-jump on every keystroke ────
-function ChecklistItem({item,onToggle,onEdit,onRemove,onEnter}){
+function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
   const [text,setText]=useState(item.text)
-  const ref=useRef()
-  // sync if parent resets (e.g. modal reopen)
+  const [focused,setFocused]=useState(false)
+  // sync text only when item.id changes (modal reopen with different task)
   useEffect(()=>{setText(item.text)},[item.id])
-  const commit=()=>{const t=text.trim();if(t!==item.text)onEdit(item.id,t||item.text);if(!t)onRemove(item.id)}
-  return<div style={{display:'flex',alignItems:'center',gap:8,background:item.done?'rgba(16,185,129,0.04)':'transparent',borderRadius:G.radiusXs,padding:'5px 6px'}}>
-    <div onClick={()=>onToggle(item.id)} style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
+  const commit=()=>{
+    const t=text.trim()
+    if(!t){onRemove(item.id);return}
+    if(t!==item.text)onEdit(item.id,t)
+    setFocused(false)
+  }
+  return<div style={{display:'flex',alignItems:'center',gap:8,borderRadius:G.radiusXs,padding:'3px 4px',background:focused?'rgba(255,255,255,0.03)':'transparent',transition:'background 0.15s'}}>
+    {/* checkbox — onMouseDown preventDefault stops blur firing on the text input */}
+    <div onMouseDown={e=>e.preventDefault()} onClick={()=>onToggle(item.id)}
+      style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
       {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
     </div>
-    <input ref={ref} value={text} onChange={e=>setText(e.target.value)}
+    <input
+      ref={itemRef}
+      value={text}
+      onChange={e=>setText(e.target.value)}
+      onFocus={()=>setFocused(true)}
       onBlur={commit}
-      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commit();onEnter()}else if(e.key==='Backspace'&&!text){e.preventDefault();e.stopPropagation();onRemove(item.id);onEnter()}}}
-      style={{flex:1,background:'none',border:'none',outline:'none',color:item.done?G.textSub:G.text,fontSize:12,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.5}}/>
-    <button onClick={()=>onRemove(item.id)} style={{background:'none',border:'none',color:G.textMut,cursor:'pointer',fontSize:13,padding:'0 3px',lineHeight:1,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=G.textMut}>✕</button>
+      onKeyDown={e=>{
+        if(e.key==='Enter'){
+          e.preventDefault();e.stopPropagation()
+          const t=text.trim()
+          if(t&&t!==item.text)onEdit(item.id,t)
+          onEnterNext()
+        } else if(e.key==='Backspace'&&!text){
+          e.preventDefault();e.stopPropagation()
+          onRemove(item.id);onEnterNext()
+        }
+      }}
+      style={{flex:1,background:'none',border:'none',borderBottom:focused?`1px solid rgba(255,255,255,0.12)`:'1px solid transparent',outline:'none',color:item.done?G.textSub:G.text,fontSize:13,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.6,padding:'1px 2px',transition:'border-color 0.15s'}}/>
+    {/* remove — onMouseDown preventDefault stops blur on text input */}
+    <button onMouseDown={e=>e.preventDefault()} onClick={()=>onRemove(item.id)}
+      style={{background:'none',border:'none',color:focused?G.textSub:G.textMut,cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1,fontFamily:G.font,opacity:focused?1:0.4,transition:'opacity 0.15s'}}
+      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:G.textMut}>✕</button>
   </div>
 }
 
 function ChecklistEditor({items,onChange,wsColor}){
   const [newText,setNewText]=useState('');const [hideChecked,setHideChecked]=useState(false)
-  const inputRef=useRef();const rgb=hexRgb(wsColor)
+  const addInputRef=useRef();const itemRefs=useRef({});const rgb=hexRgb(wsColor)
   const done=items.filter(i=>i.done).length;const pct=items.length?Math.round(done/items.length*100):0
-  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');requestAnimationFrame(()=>{requestAnimationFrame(()=>inputRef.current?.focus())})}
+
+  const focusAdd=()=>setTimeout(()=>addInputRef.current?.focus(),30)
+  const focusItem=(id)=>setTimeout(()=>itemRefs.current[id]?.focus(),30)
+
+  const add=()=>{
+    const t=newText.trim();if(!t)return
+    const newId=Date.now()+Math.random()
+    onChange([...items,{id:newId,text:t,done:false}])
+    setNewText('')
+    setTimeout(()=>addInputRef.current?.focus(),30)
+  }
   const toggle=id=>onChange(items.map(i=>i.id===id?{...i,done:!i.done}:i))
   const edit=(id,text)=>onChange(items.map(i=>i.id===id?{...i,text}:i))
   const remove=id=>onChange(items.filter(i=>i.id!==id))
   const visible=hideChecked?items.filter(i=>!i.done):items
+
+  // On Enter in item at index idx: focus next item, or add-input if last
+  const handleEnterNext=(item)=>{
+    const idx=items.indexOf(item)
+    const next=items[idx+1]
+    if(next) focusItem(next.id)
+    else focusAdd()
+  }
+
   return<div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'14px 16px'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-      <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:700,color:G.text}}>Checklist</span>{items.length>0&&<span style={{fontSize:11,color:pct===100?'#10b981':wsColor,fontWeight:700}}>{done}/{items.length}</span>}</div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <span style={{fontSize:13,fontWeight:700,color:G.text}}>Checklist</span>
+        {items.length>0&&<span style={{fontSize:11,color:pct===100?'#10b981':wsColor,fontWeight:700}}>{done}/{items.length}</span>}
+      </div>
       <div style={{display:'flex',gap:6}}>
         {items.some(i=>i.done)&&<button onClick={()=>setHideChecked(h=>!h)} style={{background:'none',border:`1px solid ${G.border}`,borderRadius:G.radiusXs,padding:'3px 9px',color:G.textSub,cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>{hideChecked?'Show all':'Hide done'}</button>}
         {items.length>0&&<button onClick={()=>{if(window.confirm('Clear all?'))onChange([])}} style={{background:'none',border:'1px solid rgba(239,68,68,0.25)',borderRadius:G.radiusXs,padding:'3px 9px',color:'#f87171',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>Clear</button>}
@@ -377,12 +423,19 @@ function ChecklistEditor({items,onChange,wsColor}){
         <div style={{height:'100%',width:pct+'%',background:pct===100?'#10b981':wsColor,borderRadius:3,boxShadow:`0 0 8px rgba(${rgb},0.4)`,transition:'width 0.35s ease'}}/>
       </div>
     </div>}
-    <div style={{display:'flex',flexDirection:'column',gap:3,marginBottom:10}}>
-      {visible.map(item=><ChecklistItem key={item.id} item={item} onToggle={toggle} onEdit={edit} onRemove={remove} onEnter={()=>requestAnimationFrame(()=>inputRef.current?.focus())}/>)}
+    <div style={{display:'flex',flexDirection:'column',gap:2,marginBottom:10}}>
+      {visible.map(item=><ChecklistItem
+        key={item.id} item={item}
+        itemRef={el=>{ itemRefs.current[item.id]=el }}
+        onToggle={toggle} onEdit={edit} onRemove={remove}
+        onEnterNext={()=>handleEnterNext(item)}/>)}
     </div>
-    <div style={{display:'flex',gap:7}}>
-      <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();add()}}} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
-      <button onClick={add} style={{background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusMd,padding:'7px 14px',color:wsColor,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font}}>+ Add</button>
+    <div style={{display:'flex',gap:7,marginTop:8,paddingTop:10,borderTop:`1px solid ${G.border}`}}>
+      <input ref={addInputRef} value={newText} onChange={e=>setNewText(e.target.value)}
+        onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();add()}}}
+        placeholder="New item… press Enter to add"
+        style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
+      <button onClick={add} style={{background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusMd,padding:'7px 14px',color:wsColor,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}}>+ Add</button>
     </div>
   </div>
 }
