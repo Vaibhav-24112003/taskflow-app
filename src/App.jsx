@@ -560,55 +560,59 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
       <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
-      <F full label="👥 Task Assignment">
-        {/* Mode pills */}
-        <div style={{display:'flex',gap:6,marginBottom:14}}>
-          {[{id:'self',icon:'🙋',label:"I'll do this",desc:'Assigned to yourself'},{id:'delegate',icon:'➡️',label:'Delegate',desc:'Assign to someone else'},{id:'both',icon:'🤝',label:'Both',desc:'You + others work on it'}].map(m=>{
-            const selfInAssignees=assignees.includes(cu.id)
-            const othersInAssignees=assignees.some(id=>id!==cu.id)
-            const curMode=selfInAssignees&&!othersInAssignees?'self':!selfInAssignees&&othersInAssignees?'delegate':'both'
-            const active=curMode===m.id
-            const mrgb=hexRgb(active?ws.color:'#64748b')
-            return<button key={m.id} onClick={()=>{
-              if(m.id==='self'){setAssignees([cu.id]);setDelegatorId(cu.id)}
-              else if(m.id==='delegate'){const others=wsMembers.filter(x=>x.id!==cu.id);setAssignees(others.length?[others[0].id]:[cu.id]);setDelegatorId(cu.id)}
-              else{setAssignees([cu.id,...wsMembers.filter(x=>x.id!==cu.id).slice(0,1).map(x=>x.id)]);setDelegatorId(cu.id)}
-            }} style={{flex:1,background:active?`rgba(${mrgb},0.1)`:'transparent',border:`1.5px solid ${active?`rgba(${mrgb},0.5)`:G.border}`,borderRadius:G.radiusMd,padding:'9px 12px',cursor:'pointer',fontFamily:G.font,textAlign:'left',transition:G.trans}}>
-              <div style={{fontSize:15,marginBottom:2}}>{m.icon}</div>
-              <div style={{fontSize:12,fontWeight:700,color:active?ws.color:G.text}}>{m.label}</div>
-              <div style={{fontSize:10,color:G.textSub}}>{m.desc}</div>
-            </button>
-          })}
-        </div>
-        {/* Assignees — always shown, picking who does the work */}
-        <div style={{marginBottom:6,fontSize:11,fontWeight:700,color:G.textSub,textTransform:'uppercase',letterSpacing:'0.06em'}}>
-          {assignees.some(id=>id!==cu.id)?'Assigned to (will work on this):':'You are assigned to this task'}
-        </div>
-        <div style={{display:'flex',gap:7,flexWrap:'wrap',marginBottom:10}}>
-          {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id);const isSelf=m.id===cu.id
-            return<div key={m.id} onClick={()=>toggleA(m.id)} style={{display:'flex',alignItems:'center',gap:7,padding:'7px 11px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.55)`:G.border}`,background:sel?`rgba(${rgb},0.09)`:G.surface,transition:G.trans,position:'relative'}}>
-              <Avatar user={eu} size={24}/>
+      {/* ── DELEGATOR / MANAGER ── */}
+      <F full label="⚡ Delegator / Manager — Who is overseeing this task?">
+        <div style={{fontSize:10,color:G.textSub,marginBottom:8}}>The person responsible for this task being done. Defaults to you.</div>
+        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+          {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
+            return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:G.radiusMd,cursor:'pointer',
+                border:`1.5px solid ${sel?'rgba(245,158,11,0.6)':G.border}`,
+                background:sel?'rgba(245,158,11,0.1)':G.surface,
+                transition:G.trans,flex:'0 0 auto'}}>
+              <Avatar user={eu} size={26}/>
               <div>
-                <div style={{fontSize:11,fontWeight:700,color:sel?ws.color:G.text}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-                <div style={{fontSize:9,color:G.textSub}}>{sel?'✓ Assignee':'Click to assign'}</div>
+                <div style={{fontSize:12,fontWeight:700,color:sel?'#f59e0b':G.text}}>
+                  {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
+                </div>
+                <div style={{fontSize:10,color:sel?'rgba(245,158,11,0.7)':G.textSub}}>
+                  {sel?'✓ Manager / Delegator':m.email}
+                </div>
               </div>
             </div>
           })}
         </div>
-        {/* Delegator row — shown when assigning to others */}
-        {assignees.some(id=>id!==cu.id)&&<div style={{background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:G.radiusMd,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-          <span style={{fontSize:11,color:'#f59e0b',fontWeight:700}}>⚡ Delegated by:</span>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
-              return<div key={m.id} onClick={()=>setDelegatorId(m.id)} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?'rgba(245,158,11,0.55)':G.border}`,background:sel?'rgba(245,158,11,0.12)':G.surface,transition:G.trans}}>
-                <Avatar user={eu} size={20}/>
-                <span style={{fontSize:11,fontWeight:sel?700:500,color:sel?'#f59e0b':G.textSub}}>{m.name?.split(' ')[0]||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</span>
+      </F>
+      {/* ── ASSIGNEES ── */}
+      <F full label={`✅ Assignee(s) — Who will execute this task? (${assignees.length} selected)`}>
+        <div style={{fontSize:10,color:G.textSub,marginBottom:8}}>Select one or more people. All selected members will see this task on their board.</div>
+        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+          {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
+            return<div key={m.id} onClick={()=>toggleA(m.id)}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:G.radiusMd,cursor:'pointer',
+                border:`1.5px solid ${sel?`rgba(${rgb},0.6)`:G.border}`,
+                background:sel?`rgba(${rgb},0.1)`:G.surface,
+                transition:G.trans,flex:'0 0 auto'}}>
+              <Avatar user={eu} size={26}/>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>
+                  {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
+                </div>
+                <div style={{fontSize:10,color:sel?`rgba(${rgb},0.7)`:G.textSub}}>
+                  {sel?'✓ Assignee':m.email}
+                </div>
               </div>
-            })}
+              <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?ws.color:G.textMut}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:2}}>
+                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
+              </div>
+            </div>
+          })}
+        </div>
+        {delegatorId&&assignees.length>0&&!assignees.includes(delegatorId)&&
+          <div style={{marginTop:8,fontSize:11,color:'#f59e0b',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.15)',borderRadius:G.radiusSm,padding:'6px 10px'}}>
+            ⚡ Manager ({wsMembers.find(m=>m.id===delegatorId)?.name||'?'}) is overseeing — assignees will see this as delegated work
           </div>
-          <span style={{fontSize:10,color:G.textSub}}>— they oversee this task</span>
-        </div>}
-        {assignees.length>1&&<div style={{marginTop:8,fontSize:11,color:'#818cf8'}}>ℹ {assignees.length} members assigned — all will see this on their board</div>}
+        }
       </F>
       <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
       <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
