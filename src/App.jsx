@@ -339,8 +339,9 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
 function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
   const [text,setText]=useState(item.text)
   const [focused,setFocused]=useState(false)
-  // sync text only when item.id changes (modal reopen with different task)
   useEffect(()=>{setText(item.text)},[item.id])
+  // commit is called by onBlur only — never on Enter, to avoid triggering a
+  // parent state update that would cause the modal to scroll to top
   const commit=()=>{
     const t=text.trim()
     if(!t){onRemove(item.id);return}
@@ -348,7 +349,6 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
     setFocused(false)
   }
   return<div style={{display:'flex',alignItems:'center',gap:8,borderRadius:G.radiusXs,padding:'3px 4px',background:focused?'rgba(255,255,255,0.03)':'transparent',transition:'background 0.15s'}}>
-    {/* checkbox — onMouseDown preventDefault stops blur firing on the text input */}
     <div onMouseDown={e=>e.preventDefault()} onClick={()=>onToggle(item.id)}
       style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
       {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
@@ -361,9 +361,10 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
       onBlur={commit}
       onKeyDown={e=>{
         if(e.key==='Enter'){
+          // KEY FIX: do NOT call onEdit here — that would trigger setChecklist
+          // in the parent, causing a re-render + modal scroll-to-top.
+          // Just move focus; onBlur will commit the text automatically.
           e.preventDefault();e.stopPropagation()
-          const t=text.trim()
-          if(t&&t!==item.text)onEdit(item.id,t)
           onEnterNext()
         } else if(e.key==='Backspace'&&!text){
           e.preventDefault();e.stopPropagation()
@@ -371,7 +372,6 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
         }
       }}
       style={{flex:1,background:'none',border:'none',borderBottom:focused?`1px solid rgba(255,255,255,0.12)`:'1px solid transparent',outline:'none',color:item.done?G.textSub:G.text,fontSize:13,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.6,padding:'1px 2px',transition:'border-color 0.15s'}}/>
-    {/* remove — onMouseDown preventDefault stops blur on text input */}
     <button onMouseDown={e=>e.preventDefault()} onClick={()=>onRemove(item.id)}
       style={{background:'none',border:'none',color:focused?G.textSub:G.textMut,cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1,fontFamily:G.font,opacity:focused?1:0.4,transition:'opacity 0.15s'}}
       onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:G.textMut}>✕</button>
@@ -383,14 +383,15 @@ function ChecklistEditor({items,onChange,wsColor}){
   const addInputRef=useRef();const itemRefs=useRef({});const rgb=hexRgb(wsColor)
   const done=items.filter(i=>i.done).length;const pct=items.length?Math.round(done/items.length*100):0
 
-  const focusAdd=()=>setTimeout(()=>addInputRef.current?.focus(),30)
-  const focusItem=(id)=>setTimeout(()=>itemRefs.current[id]?.focus(),30)
+  // No setTimeout needed for Enter — no state update happens so DOM is stable
+  const focusAdd=()=>addInputRef.current?.focus()
+  const focusItem=(id)=>itemRefs.current[id]?.focus()
 
   const add=()=>{
     const t=newText.trim();if(!t)return
-    const newId=Date.now()+Math.random()
-    onChange([...items,{id:newId,text:t,done:false}])
+    onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}])
     setNewText('')
+    // add-input loses focus due to state update; restore after render
     setTimeout(()=>addInputRef.current?.focus(),30)
   }
   const toggle=id=>onChange(items.map(i=>i.id===id?{...i,done:!i.done}:i))
@@ -398,10 +399,10 @@ function ChecklistEditor({items,onChange,wsColor}){
   const remove=id=>onChange(items.filter(i=>i.id!==id))
   const visible=hideChecked?items.filter(i=>!i.done):items
 
-  // On Enter in item at index idx: focus next item, or add-input if last
-  const handleEnterNext=(item)=>{
-    const idx=items.indexOf(item)
-    const next=items[idx+1]
+  const handleEnterNext=(itemId)=>{
+    // find position in visible list so we respect hide-checked filter
+    const idx=visible.findIndex(i=>i.id===itemId)
+    const next=visible[idx+1]
     if(next) focusItem(next.id)
     else focusAdd()
   }
@@ -428,7 +429,7 @@ function ChecklistEditor({items,onChange,wsColor}){
         key={item.id} item={item}
         itemRef={el=>{ itemRefs.current[item.id]=el }}
         onToggle={toggle} onEdit={edit} onRemove={remove}
-        onEnterNext={()=>handleEnterNext(item)}/>)}
+        onEnterNext={()=>handleEnterNext(item.id)}/>)}
     </div>
     <div style={{display:'flex',gap:7,marginTop:8,paddingTop:10,borderTop:`1px solid ${G.border}`}}>
       <input ref={addInputRef} value={newText} onChange={e=>setNewText(e.target.value)}
