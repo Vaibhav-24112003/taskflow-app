@@ -348,7 +348,7 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnter}){
     </div>
     <input ref={ref} value={text} onChange={e=>setText(e.target.value)}
       onBlur={commit}
-      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();commit();onEnter()}else if(e.key==='Backspace'&&!text){e.preventDefault();onRemove(item.id);onEnter()}}}
+      onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();commit();onEnter()}else if(e.key==='Backspace'&&!text){e.preventDefault();e.stopPropagation();onRemove(item.id);onEnter()}}}
       style={{flex:1,background:'none',border:'none',outline:'none',color:item.done?G.textSub:G.text,fontSize:12,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.5}}/>
     <button onClick={()=>onRemove(item.id)} style={{background:'none',border:'none',color:G.textMut,cursor:'pointer',fontSize:13,padding:'0 3px',lineHeight:1,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=G.textMut}>✕</button>
   </div>
@@ -358,7 +358,7 @@ function ChecklistEditor({items,onChange,wsColor}){
   const [newText,setNewText]=useState('');const [hideChecked,setHideChecked]=useState(false)
   const inputRef=useRef();const rgb=hexRgb(wsColor)
   const done=items.filter(i=>i.done).length;const pct=items.length?Math.round(done/items.length*100):0
-  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');setTimeout(()=>inputRef.current?.focus(),50)}
+  const add=()=>{const t=newText.trim();if(!t)return;onChange([...items,{id:Date.now()+Math.random(),text:t,done:false}]);setNewText('');requestAnimationFrame(()=>inputRef.current?.focus())}
   const toggle=id=>onChange(items.map(i=>i.id===id?{...i,done:!i.done}:i))
   const edit=(id,text)=>onChange(items.map(i=>i.id===id?{...i,text}:i))
   const remove=id=>onChange(items.filter(i=>i.id!==id))
@@ -381,7 +381,7 @@ function ChecklistEditor({items,onChange,wsColor}){
       {visible.map(item=><ChecklistItem key={item.id} item={item} onToggle={toggle} onEdit={edit} onRemove={remove} onEnter={()=>inputRef.current?.focus()}/>)}
     </div>
     <div style={{display:'flex',gap:7}}>
-      <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
+      <input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();add()}}} placeholder="Add item… press Enter" style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
       <button onClick={add} style={{background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusMd,padding:'7px 14px',color:wsColor,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font}}>+ Add</button>
     </div>
   </div>
@@ -556,7 +556,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 
   return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
-      <F full label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>e.key==='Enter'&&save()}/></F>
+      <F full label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
       <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
