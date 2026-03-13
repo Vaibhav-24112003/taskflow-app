@@ -1112,14 +1112,24 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   },[dragId,tasks,cu.id])
   const importTasks=async rows=>{
     const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase())
-    let a=0,s=0
+    const normDate=d=>{
+      if(!d)return null
+      if(/^\d{4}-\d{2}-\d{2}$/.test(d))return d
+      const m1=d.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/)
+      if(m1)return`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`
+      const parsed=new Date(d)
+      if(!isNaN(parsed))return parsed.toISOString().slice(0,10)
+      return null
+    }
+    let a=0,s=0,errs=[]
     for(const r of rows){
       const assignee=byName(r.assigned_to_name)?.id||cu.id
       const delegator=byName(r.delegator_name)?.id||cu.id
-      const{data}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:assignee,assignees:[assignee],delegator_id:delegator,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:[]})
-      if(data){setTasks(p=>[...p,data]);a++}else{s++}
+      const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:assignee,assignees:[assignee],delegator_id:delegator,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:normDate(r.due_date),recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:r.checklist||[]})
+      if(data){setTasks(p=>[...p,data]);a++}else{s++;if(error)errs.push(r.title+': '+(error.message||'err'))}
     }
-    showToast(`Imported ${a}${s?`, ${s} skipped`:''}`)
+    if(errs.length)console.error('Import errors:',errs)
+    showToast(a>0?`✅ Imported ${a} task${a>1?'s':''}${s?' · '+s+' skipped':''}`:`❌ Import failed — ${s} row${s>1?'s':''} skipped`,'err')
   }
 
   const acceptInv=async inv=>{
