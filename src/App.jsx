@@ -144,6 +144,25 @@ function Toast({toast}){
   </div>
 }
 
+// ── CustomSelect ─────────────────────────────────────────────────────────────
+function CustomSelect({value,onChange,options,style}){
+  const [open,setOpen]=useState(false);const ref=useRef()
+  useEffect(()=>{const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
+  return<div ref={ref} style={{position:'relative',...style}}>
+    <div onClick={()=>setOpen(p=>!p)} style={{...INP,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',userSelect:'none'}}>
+      <span>{value}</span>
+      <span style={{color:G.textSub,fontSize:11,marginLeft:8,transition:G.trans,transform:open?'rotate(180deg)':'none',display:'inline-block'}}>▾</span>
+    </div>
+    {open&&<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'#0d1426',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,zIndex:999,overflow:'hidden',boxShadow:'0 8px 32px rgba(0,0,0,0.6)'}}>
+      {options.map(opt=><div key={opt} onClick={()=>{onChange(opt);setOpen(false)}}
+        style={{padding:'9px 14px',fontSize:14,cursor:'pointer',color:opt===value?'#818cf8':G.text,background:opt===value?'rgba(99,102,241,0.12)':'transparent',fontWeight:opt===value?700:400,transition:G.transSnap,fontFamily:G.font}}
+        onMouseEnter={e=>{if(opt!==value)e.currentTarget.style.background='rgba(255,255,255,0.05)'}}
+        onMouseLeave={e=>{if(opt!==value)e.currentTarget.style.background='transparent'}}
+      >{opt}</div>)}
+    </div>}
+  </div>
+}
+
 // ── Auth Screen ───────────────────────────────────────────────────────────────
 function AuthScreen({ inviteToken }){
   const [loading,setLoading]=useState(false)
@@ -614,11 +633,10 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
       <F full label="Title *"><input ref={titleRef} defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
-      <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
-      <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
+      <F label="Status"><CustomSelect value={status} onChange={setStatus} options={statuses} style={{width:'100%'}}/></F>
+      <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
       {/* ── DELEGATOR / MANAGER ── */}
-      <F full label="⚡ Delegator / Manager — Who is overseeing this task?">
-        <div style={{fontSize:10,color:G.textSub,marginBottom:8}}>The person responsible for this task being done. Defaults to you.</div>
+      <F full label="⚡ Manager / Delegator">
         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
           {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
             return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
@@ -632,7 +650,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                   {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
                 </div>
                 <div style={{fontSize:10,color:sel?'rgba(245,158,11,0.7)':G.textSub}}>
-                  {sel?'✓ Manager / Delegator':m.email}
+                  {sel?'✓ Manager':m.email}
                 </div>
               </div>
             </div>
@@ -640,8 +658,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
         </div>
       </F>
       {/* ── ASSIGNEES ── */}
-      <F full label={`✅ Assignee(s) — Who will execute this task? (${assignees.length} selected)`}>
-        <div style={{fontSize:10,color:G.textSub,marginBottom:8}}>Select one or more people. All selected members will see this task on their board.</div>
+      <F full label={`✅ Assignee${assignees.length>1?'s':''} (${assignees.length})`}>
         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
           {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
             return<div key={m.id} onClick={()=>toggleA(m.id)}
@@ -666,7 +683,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
         </div>
         {delegatorId&&assignees.length>0&&!assignees.includes(delegatorId)&&
           <div style={{marginTop:8,fontSize:11,color:'#f59e0b',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.15)',borderRadius:G.radiusSm,padding:'6px 10px'}}>
-            ⚡ Manager ({wsMembers.find(m=>m.id===delegatorId)?.name||'?'}) is overseeing — assignees will see this as delegated work
+            ⚡ Delegated via {wsMembers.find(m=>m.id===delegatorId)?.name||'?'}
           </div>
         }
       </F>
