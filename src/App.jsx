@@ -803,35 +803,65 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
   const esc=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s}
   const doExport=()=>{
     const nm=id=>wsMembers.find(m=>m.id===id)?.name||id||''
-    const h=['Title','Description','Status','Priority','Assigned To','Created By','Project','Tags','Due Date','Recurrence','Interval']
-    const rows=tasks.map(t=>[t.title,t.description||'',t.status,t.priority,nm(t.assigned_to),nm(t.created_by),t.project||'',(t.tags||[]).join(';'),t.due_date||'',t.recurrence_type||'none',t.recurrence_interval||1].map(esc))
+    const h=['Title','Description','Status','Priority','Assigned To','Delegator','Project','Tags','Due Date','Recurrence','Interval']
+    const rows=tasks.map(t=>[t.title,t.description||'',t.status,t.priority,nm(t.assigned_to),nm(t.delegator_id||t.created_by),t.project||'',(t.tags||[]).join(';'),t.due_date||'',t.recurrence_type||'none',t.recurrence_interval||1].map(esc))
     const csv=[h,...rows].map(r=>r.join(',')).join('\n')
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`${wsName}_${new Date().toISOString().slice(0,10)}.csv`;a.click()
+  }
+  const downloadSample=()=>{
+    const members=wsMembers.slice(0,2)
+    const name1=members[0]?.name||'Alice'
+    const name2=members[1]?.name||'Bob'
+    const today=new Date();const fmt=d=>`${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`
+    const d1=fmt(new Date(today.getTime()+7*864e5))
+    const d2=fmt(new Date(today.getTime()+14*864e5))
+    const d3=fmt(new Date(today.getTime()+3*864e5))
+    const rows=[
+      ['Title','Description','Status','Priority','Assigned To','Delegator','Project','Tags','Due Date','Recurrence','Interval'],
+      ['Design landing page','Create wireframes and mockups for new homepage','Todo','High',name1,name2,'Website Redesign','Design;Frontend',d1,'none',1],
+      ['Write API documentation','Document all REST endpoints with request/response examples','In Progress','Medium',name2,name2,'Developer Portal','Docs;Backend',d2,'weekly',1],
+      ['Fix login bug','Users are unable to login on mobile Safari','Todo','Critical',name1,name1,'Bug Fixes','Bug;Mobile',d3,'none',1],
+      ['Weekly team sync','Prepare agenda and meeting notes','Todo','Low',name2,name1,'Operations','Meeting',d1,'weekly',1],
+      ['Code review PR #42','Review and approve the authentication refactor pull request','Todo','Medium',name1,name2,'Backend','Code Review','','none',1],
+    ]
+    const csv=rows.map(r=>r.map(v=>{const s=String(v??'');return s.includes(',')||s.includes('"')?`"${s.replace(/"/g,'""')}"`  :s}).join(',')).join('\n')
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='taskflow_sample_import.csv';a.click()
   }
   const parseCSV=text=>{
     const pr=row=>{const c=[];let cur='',q=false;for(const ch of row){if(ch==='"'&&!q)q=true;else if(ch==='"'&&q)q=false;else if(ch===','&&!q){c.push(cur.trim());cur=''}else cur+=ch}c.push(cur.trim());return c}
     const lines=text.split('\n').map(l=>l.trim()).filter(Boolean);if(lines.length<2)return null
     const hd=pr(lines[0]).map(h=>h.toLowerCase().replace(/[\s-]+/g,'_').replace(/[^a-z_]/g,''));const gi=k=>hd.indexOf(k)
-    return lines.slice(1).map(line=>{const c=pr(line);return{title:(c[gi('title')]||'').trim(),description:(c[gi('description')]||'').trim(),status:(c[gi('status')]||'').trim(),priority:(c[gi('priority')]||'').trim(),assigned_to_name:(c[gi('assigned_to')]||'').trim(),project:(c[gi('project')]||'').trim(),tags:(c[gi('tags')]||'').split(';').map(t=>t.trim()).filter(Boolean),due_date:(c[gi('due_date')]||'').trim()||null,recurrence_type:(c[gi('recurrence')]||'none').trim(),recurrence_interval:Math.max(1,parseInt(c[gi('interval')])||1)}}).filter(r=>r.title)
+    return lines.slice(1).map(line=>{const c=pr(line);return{title:(c[gi('title')]||'').trim(),description:(c[gi('description')]||'').trim(),status:(c[gi('status')]||'').trim(),priority:(c[gi('priority')]||'').trim(),assigned_to_name:(c[gi('assigned_to')]||'').trim(),delegator_name:(c[gi('delegator')]||'').trim(),project:(c[gi('project')]||'').trim(),tags:(c[gi('tags')]||'').split(';').map(t=>t.trim()).filter(Boolean),due_date:(c[gi('due_date')]||'').trim()||null,recurrence_type:(c[gi('recurrence')]||'none').trim(),recurrence_interval:Math.max(1,parseInt(c[gi('interval')])||1)}}).filter(r=>r.title)
   }
   const handleFile=async f=>{if(!f)return;const rows=parseCSV(await f.text());if(!rows?.length){alert('Could not parse CSV.');return};setPreview(rows)}
-  return<Modal open={open} onClose={()=>{onClose();setPreview(null);setTab('export')}} title="Import / Export" width={600}>
+  return<Modal open={open} onClose={()=>{onClose();setPreview(null);setTab('export')}} title="Import / Export" width={620}>
     <div style={{display:'flex',gap:4,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:4,marginBottom:20}}>
       {[{id:'export',lb:'⬇ Export CSV'},{id:'import',lb:'⬆ Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(99,102,241,0.85)':'transparent',color:tab===t.id?'#fff':G.textSub,transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
     </div>
-    {tab==='export'&&<div><div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:G.textSub}}>Export <strong style={{color:G.text}}>{tasks.length} tasks</strong> as CSV.</div><Btn onClick={doExport} color="#10b981" full>⬇ Download CSV</Btn></div>}
+    {tab==='export'&&<div><div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:G.textSub}}>Export <strong style={{color:G.text}}>{tasks.length} tasks</strong> as CSV. Includes Assigned To and Delegator columns.</div><Btn onClick={doExport} color="#10b981" full>⬇ Download CSV</Btn></div>}
     {tab==='import'&&!preview&&<div>
-      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${drag?'#6366f1':G.border}`,borderRadius:G.radiusMd,padding:'48px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(99,102,241,0.04)':'transparent',transition:G.trans}}>
+      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${drag?'#6366f1':G.border}`,borderRadius:G.radiusMd,padding:'40px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(99,102,241,0.04)':'transparent',transition:G.trans,marginBottom:14}}>
         <div style={{fontSize:36,marginBottom:10}}>📂</div>
         <p style={{fontSize:13,fontWeight:600,color:G.textSub,margin:'0 0 4px'}}>Drop CSV here or click to browse</p>
+        <p style={{fontSize:11,color:G.textMut,margin:0}}>Columns: Title, Description, Status, Priority, Assigned To, Delegator, Project, Tags, Due Date, Recurrence, Interval</p>
         <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])}/>
       </div>
+      <button onClick={downloadSample} style={{width:'100%',background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.25)',borderRadius:G.radiusMd,padding:'10px',color:'#818cf8',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font}}>
+        📥 Download Sample CSV (with roles pre-filled from your workspace members)
+      </button>
     </div>}
     {tab==='import'&&preview&&<div>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}><strong style={{fontSize:14,color:G.text}}>{preview.length} rows ready</strong><button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:G.textSub,cursor:'pointer',fontSize:12,fontFamily:G.font}}>← Back</button></div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}><strong style={{fontSize:14,color:G.text}}>{preview.length} rows ready to import</strong><button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:G.textSub,cursor:'pointer',fontSize:12,fontFamily:G.font}}>← Back</button></div>
       <div style={{maxHeight:240,overflow:'auto',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,marginBottom:16}}>
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><thead><tr>{['Title','Status','Priority','Assigned','Due'].map(h=><th key={h} style={{padding:'9px 14px',textAlign:'left',color:G.textSub,fontWeight:700,borderBottom:`1px solid ${G.border}`,background:'rgba(4,9,20,0.9)',position:'sticky',top:0}}>{h}</th>)}</tr></thead>
-        <tbody>{preview.map((r,i)=><tr key={i} style={{borderBottom:`1px solid ${G.border}`}}><td style={{padding:'8px 14px',color:G.text,fontWeight:600}}>{r.title}</td><td style={{padding:'8px 10px',color:G.textSub}}>{r.status||'—'}</td><td style={{padding:'8px 10px',color:G.textSub}}>{r.priority||'—'}</td><td style={{padding:'8px 10px',color:G.textSub}}>{r.assigned_to_name||'—'}</td><td style={{padding:'8px 10px',color:G.textSub}}>{r.due_date||'—'}</td></tr>)}</tbody></table>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}><thead><tr>{['Title','Status','Priority','Assigned To','Delegator','Due'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:G.textSub,fontWeight:700,borderBottom:`1px solid ${G.border}`,background:'rgba(4,9,20,0.9)',position:'sticky',top:0,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+        <tbody>{preview.map((r,i)=><tr key={i} style={{borderBottom:`1px solid ${G.border}`}}>
+          <td style={{padding:'7px 12px',color:G.text,fontWeight:600,maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</td>
+          <td style={{padding:'7px 10px',color:G.textSub,whiteSpace:'nowrap'}}>{r.status||'—'}</td>
+          <td style={{padding:'7px 10px',color:G.textSub,whiteSpace:'nowrap'}}>{r.priority||'—'}</td>
+          <td style={{padding:'7px 10px',color:'#10b981',whiteSpace:'nowrap'}}>{r.assigned_to_name||'—'}</td>
+          <td style={{padding:'7px 10px',color:'#f59e0b',whiteSpace:'nowrap'}}>{r.delegator_name||'—'}</td>
+          <td style={{padding:'7px 10px',color:G.textSub,whiteSpace:'nowrap'}}>{r.due_date||'—'}</td>
+        </tr>)}</tbody></table>
       </div>
       <div style={{display:'flex',gap:10}}><Btn onClick={()=>setPreview(null)} outline color="#64748b" full>Back</Btn><Btn onClick={()=>{onImport(preview);onClose();setPreview(null)}} color="#6366f1" full>Import {preview.length} Tasks</Btn></div>
     </div>}
@@ -1055,7 +1085,17 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     await Promise.all(updates.map(u=>updateTask(u.id,{sort_order:u.sort_order,...(u.id===dragId&&statusChanged?{status:st}:{})})))
     if(statusChanged)await logActivity(dragId,cu.id,`→${st}`)
   },[dragId,tasks,cu.id])
-  const importTasks=async rows=>{const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase());let a=0,s=0;for(const r of rows){const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:byName(r.assigned_to_name)?.id||cu.id,assignees:[byName(r.assigned_to_name)?.id||cu.id],created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:[]});if(data){setTasks(p=>[...p,data]);a++}else{s++}};showToast(`Imported ${a}${s?`, ${s} skipped`:''}`)}
+  const importTasks=async rows=>{
+    const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase())
+    let a=0,s=0
+    for(const r of rows){
+      const assignee=byName(r.assigned_to_name)?.id||cu.id
+      const delegator=byName(r.delegator_name)?.id||cu.id
+      const{data}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:assignee,assignees:[assignee],delegator_id:delegator,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:r.due_date,recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:[]})
+      if(data){setTasks(p=>[...p,data]);a++}else{s++}
+    }
+    showToast(`Imported ${a}${s?`, ${s} skipped`:''}`)
+  }
 
   const acceptInv=async inv=>{
     const{data,error}=await acceptInvitation(inv.id,inv.invitee_email,inv.workspace_id,cu.id)
