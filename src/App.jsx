@@ -18,17 +18,26 @@ const WS_COLORS = ['#6366f1','#ec4899','#10b981','#f59e0b','#06b6d4','#8b5cf6','
 const WS_ICONS  = ['⬡','◈','◉','⊛','◆','▲','●','■']
 const SCPAL = ['#64748b','#6366f1','#f59e0b','#10b981','#ec4899','#06b6d4','#8b5cf6','#ef4444']
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
+// ── Design tokens — CSS variable based (proper light/dark, no filter hack) ─────
 const G = {
-  bg:'#040912', panel:'rgba(4,9,20,0.94)', overlay:'rgba(2,5,14,0.88)',
-  surface:'rgba(255,255,255,0.025)', surfaceHov:'rgba(255,255,255,0.045)',
-  border:'rgba(255,255,255,0.07)', borderHov:'rgba(255,255,255,0.14)',
-  text:'#e8edf5', textSub:'#5a6a85', textMut:'#2a3448',
-  blur:'blur(24px)', blurSm:'blur(12px)',
-  radius:'18px', radiusMd:'12px', radiusSm:'8px', radiusXs:'5px',
-  trans:'all 0.2s cubic-bezier(0.4,0,0.2,1)', transSnap:'all 0.1s ease',
-  font:"'Plus Jakarta Sans','Segoe UI',system-ui,sans-serif",
-  shadow:'0 8px 32px rgba(0,0,0,0.5)', shadowLg:'0 24px 80px rgba(0,0,0,0.8)',
+  // All color tokens are CSS vars — set by GlobalStyle on :root / [data-theme]
+  bg:'var(--tf-bg)', panel:'var(--tf-panel)', overlay:'var(--tf-overlay)',
+  surface:'var(--tf-surface)', surfaceHov:'var(--tf-surface-hov)',
+  border:'var(--tf-border)', borderHov:'var(--tf-border-hov)',
+  text:'var(--tf-text)', textSub:'var(--tf-text-sub)', textMut:'var(--tf-text-mut)',
+  input:'var(--tf-input)',
+  // Static (same in both modes)
+  blur:'blur(18px)', blurSm:'blur(10px)',
+  radius:'14px', radiusMd:'10px', radiusSm:'7px', radiusXs:'5px',
+  trans:'all 0.18s cubic-bezier(0.4,0,0.2,1)', transSnap:'all 0.09s ease',
+  font:"'DM Sans','Helvetica Neue',system-ui,sans-serif",
+  fontDisplay:"'Bricolage Grotesque','DM Sans',system-ui,sans-serif",
+  shadow:'0 4px 24px var(--tf-shadow)', shadowLg:'0 20px 64px var(--tf-shadow-lg)',
+}
+// Raw resolved values for hexRgb operations (always dark values for accents)
+const GR = {
+  bg:'#0b0f1a', surface:'#131825', surfaceHov:'#1a2133',
+  border:'rgba(255,255,255,0.07)', text:'#eaecf5', textSub:'#5c6b87', textMut:'#2a3655',
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -48,23 +57,47 @@ const isMirrored   = (t,uid)=>getAssignees(t).includes(uid)&&t.created_by!==uid
 const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
 const rrLabel=(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
-// ── Global styles ─────────────────────────────────────────────────────────────
+// ── Global styles — CSS variable theming, crisp DM Sans font ──────────────────
 function GlobalStyle({ lightMode }) {
   useEffect(() => {
-    document.documentElement.style.filter = lightMode ? 'invert(1) hue-rotate(180deg)' : ''
-    document.documentElement.style.transition = 'filter 0.2s'
-    return () => { document.documentElement.style.filter = '' }
+    const html = document.documentElement
+    html.setAttribute('data-theme', lightMode ? 'light' : 'dark')
+    html.style.transition = 'background 0.25s, color 0.25s'
+    html.style.filter = '' // NEVER use filter:invert — it blurs fonts
   }, [lightMode])
   useEffect(() => {
+    // Fonts
+    const lf=document.getElementById('tf-font')
+    if(!lf){const l=document.createElement('link');l.id='tf-font';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Bricolage+Grotesque:wght@500;600;700;800&display=swap';document.head.appendChild(l)}
+    // CSS vars + scrollbars
     const id='tf-gs';if(document.getElementById(id))return
     const s=document.createElement('style');s.id=id
     s.textContent=`
-      .tf-board::-webkit-scrollbar{height:5px}.tf-board::-webkit-scrollbar-track{background:rgba(255,255,255,0.02)}.tf-board::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.11);border-radius:3px}.tf-board::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.22)}.tf-board{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.11) transparent}
-      .tf-col::-webkit-scrollbar{width:3px}.tf-col::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}.tf-col{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.08) transparent}
-    `
+:root,[data-theme="dark"]{
+  --tf-bg:#0b0f1a;--tf-panel:rgba(11,15,28,0.94);--tf-overlay:rgba(5,7,18,0.82);
+  --tf-surface:#131825;--tf-surface-hov:#1a2133;
+  --tf-border:rgba(255,255,255,0.07);--tf-border-hov:rgba(255,255,255,0.14);
+  --tf-input:#0e1220;
+  --tf-text:#eaecf5;--tf-text-sub:#5c6b87;--tf-text-mut:#26324a;
+  --tf-shadow:rgba(0,0,0,0.55);--tf-shadow-lg:rgba(0,0,0,0.75);
+}
+[data-theme="light"]{
+  --tf-bg:#f0f2f7;--tf-panel:rgba(255,255,255,0.97);--tf-overlay:rgba(15,20,40,0.55);
+  --tf-surface:#ffffff;--tf-surface-hov:#f5f7fc;
+  --tf-border:rgba(0,0,0,0.09);--tf-border-hov:rgba(0,0,0,0.18);
+  --tf-input:#f8f9fd;
+  --tf-text:#111827;--tf-text-sub:#6b7a99;--tf-text-mut:#c0c9dd;
+  --tf-shadow:rgba(0,0,0,0.08);--tf-shadow-lg:rgba(0,0,0,0.15);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+input,textarea,select,button{font-family:inherit;-webkit-font-smoothing:antialiased}
+.tf-board::-webkit-scrollbar{height:4px}.tf-board::-webkit-scrollbar-track{background:transparent}.tf-board::-webkit-scrollbar-thumb{background:var(--tf-border-hov);border-radius:2px}.tf-board{scrollbar-width:thin;scrollbar-color:var(--tf-border-hov) transparent}
+.tf-col::-webkit-scrollbar{width:3px}.tf-col::-webkit-scrollbar-thumb{background:var(--tf-border);border-radius:2px}.tf-col{scrollbar-width:thin;scrollbar-color:var(--tf-border) transparent}
+input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:pointer}
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{filter:none;opacity:0.5}
+`
     document.head.appendChild(s)
-    const lf=document.getElementById('tf-font')
-    if(!lf){const l=document.createElement('link');l.id='tf-font';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap';document.head.appendChild(l)}
   },[])
   return null
 }
@@ -80,10 +113,10 @@ function KanbanBoard({ children, isDragging }) {
   const scrollBy=dir=>scrollRef.current?.scrollBy({left:dir*320,behavior:'smooth'})
   return(
     <div style={{position:'relative',flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
-      {canLeft&&<button onClick={()=>scrollBy(-1)} style={{position:'absolute',left:0,top:'50%',transform:'translate(-50%,-50%)',zIndex:30,width:36,height:36,borderRadius:'50%',background:'rgba(10,14,28,0.95)',border:'1px solid rgba(255,255,255,0.16)',color:G.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(99,102,241,0.3)';e.currentTarget.style.borderColor='rgba(99,102,241,0.5)'}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(10,14,28,0.95)';e.currentTarget.style.borderColor='rgba(255,255,255,0.16)'}}>‹</button>}
-      {canRight&&<button onClick={()=>scrollBy(1)} style={{position:'absolute',right:0,top:'50%',transform:'translate(50%,-50%)',zIndex:30,width:36,height:36,borderRadius:'50%',background:'rgba(10,14,28,0.95)',border:'1px solid rgba(255,255,255,0.16)',color:G.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,boxShadow:'0 4px 20px rgba(0,0,0,0.7)',transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(99,102,241,0.3)';e.currentTarget.style.borderColor='rgba(99,102,241,0.5)'}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(10,14,28,0.95)';e.currentTarget.style.borderColor='rgba(255,255,255,0.16)'}}>›</button>}
-      {canLeft&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:48,background:'linear-gradient(to right,rgba(4,9,18,0.6),transparent)',pointerEvents:'none',zIndex:10}}/>}
-      {canRight&&<div style={{position:'absolute',right:0,top:0,bottom:0,width:48,background:'linear-gradient(to left,rgba(4,9,18,0.6),transparent)',pointerEvents:'none',zIndex:10}}/>}
+      {canLeft&&<button onClick={()=>scrollBy(-1)} style={{position:'absolute',left:0,top:'50%',transform:'translate(-50%,-50%)',zIndex:30,width:34,height:34,borderRadius:'50%',background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',color:'var(--tf-text)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,boxShadow:G.shadow,transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(99,102,241,0.2)';e.currentTarget.style.borderColor='rgba(99,102,241,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-panel)';e.currentTarget.style.borderColor='var(--tf-border-hov)'}}>‹</button>}
+      {canRight&&<button onClick={()=>scrollBy(1)} style={{position:'absolute',right:0,top:'50%',transform:'translate(50%,-50%)',zIndex:30,width:34,height:34,borderRadius:'50%',background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',color:'var(--tf-text)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,boxShadow:G.shadow,transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(99,102,241,0.2)';e.currentTarget.style.borderColor='rgba(99,102,241,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-panel)';e.currentTarget.style.borderColor='var(--tf-border-hov)'}}>›</button>}
+      {canLeft&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:56,background:'linear-gradient(to right,var(--tf-bg),transparent)',pointerEvents:'none',zIndex:10}}/>}
+      {canRight&&<div style={{position:'absolute',right:0,top:0,bottom:0,width:56,background:'linear-gradient(to left,var(--tf-bg),transparent)',pointerEvents:'none',zIndex:10}}/>}
       <div ref={scrollRef} className="tf-board" style={{flex:1,overflowX:'auto',overflowY:'hidden',display:'flex',gap:12,alignItems:'stretch',paddingBottom:4}}>
         {children}
       </div>
@@ -93,53 +126,53 @@ function KanbanBoard({ children, isDragging }) {
 
 // ── Atoms ─────────────────────────────────────────────────────────────────────
 function Avatar({user,size=32,ring}){
-  const s={width:size,height:size,borderRadius:'50%',flexShrink:0,border:ring?`2px solid ${ring}`:'1.5px solid rgba(255,255,255,0.08)'}
-  if(!user)return<div style={{...s,background:G.surface}}/>
+  const s={width:size,height:size,borderRadius:'50%',flexShrink:0,border:ring?`2px solid ${ring}`:'1.5px solid var(--tf-border)'}
+  if(!user)return<div style={{...s,background:'var(--tf-surface)'}}/>
   if(user.avatar_url)return<img src={user.avatar_url} alt={user.name} style={{...s,objectFit:'cover'}}/>
-  return<div title={user.name} style={{...s,background:`linear-gradient(135deg,${user.color}cc,${user.color}66)`,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:700,userSelect:'none'}}>{user.initials}</div>
+  return<div title={user.name||user.email} style={{...s,background:`linear-gradient(135deg,${user.color},${user.color}99)`,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:size*0.36,fontWeight:700,userSelect:'none',letterSpacing:'-0.02em'}}>{user.initials}</div>
 }
 function Tag({label,color}){const rgb=hexRgb(color);return<span style={{display:'inline-flex',alignItems:'center',gap:3,background:`rgba(${rgb},0.1)`,color,border:`1px solid rgba(${rgb},0.22)`,borderRadius:'100px',padding:'2px 9px',fontSize:10,fontWeight:600,whiteSpace:'nowrap'}}><span style={{width:4,height:4,borderRadius:'50%',background:color,flexShrink:0}}/>{label}</span>}
-function Btn({children,onClick,color='#6366f1',outline,sm,full,danger,style={}}){
+function Btn({children,onClick,color='#6366f1',outline,sm,full,danger,disabled,style={}}){
   const rgb=hexRgb(danger?'#ef4444':color);const c=danger?'#ef4444':color
-  const base={display:'flex',alignItems:'center',justifyContent:'center',gap:6,cursor:'pointer',fontFamily:G.font,fontWeight:700,fontSize:sm?11:13,borderRadius:G.radiusMd,padding:sm?'5px 12px':'9px 20px',width:full?'100%':undefined,transition:G.trans,border:'none',...style}
-  if(outline||danger)return<button onClick={onClick} style={{...base,background:`rgba(${rgb},0.08)`,border:`1px solid rgba(${rgb},0.25)`,color:c}}>{children}</button>
-  return<button onClick={onClick} style={{...base,background:`linear-gradient(135deg,${c},${c}cc)`,color:'#fff',boxShadow:`0 4px 18px rgba(${rgb},0.35)`}}>{children}</button>
+  const base={display:'flex',alignItems:'center',justifyContent:'center',gap:5,cursor:disabled?'not-allowed':'pointer',fontFamily:G.font,fontWeight:600,fontSize:sm?11:13,borderRadius:G.radiusMd,padding:sm?'5px 12px':'9px 18px',width:full?'100%':undefined,transition:G.trans,border:'none',opacity:disabled?0.5:1,flexShrink:0,...style}
+  if(outline||danger)return<button onClick={disabled?undefined:onClick} style={{...base,background:`rgba(${rgb},0.07)`,border:`1px solid rgba(${rgb},0.22)`,color:c}}>{children}</button>
+  return<button onClick={disabled?undefined:onClick} style={{...base,background:c,color:'#fff',boxShadow:`0 2px 12px rgba(${rgb},0.28)`}}>{children}</button>
 }
 function Modal({open,onClose,title,width=600,children}){
   if(!open)return null
-  return<div onClick={onClose} style={{position:'fixed',inset:0,background:G.overlay,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:'rgba(4,9,22,0.97)',border:`1px solid ${G.border}`,borderRadius:'20px',width:'100%',maxWidth:width,maxHeight:'92vh',overflow:'auto',boxShadow:G.shadowLg}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 24px',borderBottom:`1px solid ${G.border}`,position:'sticky',top:0,background:'rgba(4,9,22,0.98)',zIndex:1}}>
-        <span style={{fontSize:15,fontWeight:700,color:G.text,letterSpacing:'-0.02em'}}>{title}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:G.surface,border:`1px solid ${G.border}`,color:G.textSub,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center'}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>✕</button>
+  return<div onClick={onClose} style={{position:'fixed',inset:0,background:'var(--tf-overlay)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',justifyContent:'center',zIndex:2000,padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radius,width:'100%',maxWidth:width,maxHeight:'92vh',overflow:'auto',boxShadow:G.shadowLg}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 22px',borderBottom:'1px solid var(--tf-border)',position:'sticky',top:0,background:'var(--tf-panel)',zIndex:1,backdropFilter:G.blurSm,WebkitBackdropFilter:G.blurSm}}>
+        <span style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',fontFamily:G.fontDisplay}}>{title}</span>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>✕</button>
       </div>
-      <div style={{padding:'22px 24px'}}>{children}</div>
+      <div style={{padding:'20px 22px'}}>{children}</div>
     </div>
   </div>
 }
 function Confirm({open,icon,title,body,confirmLabel,confirmColor='#ef4444',onConfirm,onCancel}){
   if(!open)return null;const rgb=hexRgb(confirmColor)
-  return<div onClick={onCancel} style={{position:'fixed',inset:0,background:G.overlay,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',justifyContent:'center',zIndex:3000,padding:16}}>
-    <div onClick={e=>e.stopPropagation()} style={{background:'rgba(4,9,22,0.98)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:'20px',width:'100%',maxWidth:370,padding:30,boxShadow:G.shadowLg}}>
-      <div style={{fontSize:40,textAlign:'center',marginBottom:14}}>{icon}</div>
-      <div style={{fontSize:16,fontWeight:700,color:G.text,textAlign:'center',marginBottom:8}}>{title}</div>
-      <div style={{fontSize:13,color:G.textSub,textAlign:'center',marginBottom:26,lineHeight:1.7}}>{body}</div>
-      <div style={{display:'flex',gap:10}}>
-        <button onClick={onCancel} style={{flex:1,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px',color:G.textSub,cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:G.font}}>Cancel</button>
+  return<div onClick={onCancel} style={{position:'fixed',inset:0,background:'var(--tf-overlay)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',justifyContent:'center',zIndex:3000,padding:16}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radius,width:'100%',maxWidth:360,padding:28,boxShadow:G.shadowLg}}>
+      <div style={{fontSize:36,textAlign:'center',marginBottom:12}}>{icon}</div>
+      <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',textAlign:'center',marginBottom:6,fontFamily:G.fontDisplay}}>{title}</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)',textAlign:'center',marginBottom:24,lineHeight:1.65}}>{body}</div>
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onCancel} style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:G.font}}>Cancel</button>
         <button onClick={onConfirm} style={{flex:1,background:confirmColor,border:'none',borderRadius:G.radiusMd,padding:'10px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:`0 4px 18px rgba(${rgb},0.4)`,fontFamily:G.font}}>{confirmLabel}</button>
       </div>
     </div>
   </div>
 }
-const INP={display:'block',width:'100%',boxSizing:'border-box',background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px 14px',color:G.text,fontSize:14,outline:'none',fontFamily:G.font,lineHeight:1.5,transition:G.trans}
-const LBL={display:'block',fontSize:10,color:G.textSub,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.08em'}
+const INP={display:'block',width:'100%',boxSizing:'border-box',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',color:'var(--tf-text)',fontSize:14,outline:'none',fontFamily:G.font,lineHeight:1.5,transition:G.trans}
+const LBL={display:'block',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginBottom:6,letterSpacing:'0.01em'}
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({toast}){
   if(!toast)return null
   const c=toast.type==='ok'?'#10b981':toast.type==='warn'?'#f59e0b':'#ef4444'
   const ic=toast.type==='ok'?'✓':toast.type==='warn'?'⚠':'✕'
-  return<div style={{position:'fixed',bottom:32,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:`rgba(4,9,22,0.96)`,color:G.text,borderRadius:'100px',padding:'10px 22px',fontSize:13,fontWeight:600,backdropFilter:G.blur,boxShadow:`0 8px 32px rgba(0,0,0,0.5),0 0 0 1px ${c}44`,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:8}}>
+  return<div style={{position:'fixed',bottom:32,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:'var(--tf-panel)',color:'var(--tf-text)',borderRadius:'100px',padding:'10px 22px',fontSize:13,fontWeight:600,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,boxShadow:`0 8px 40px var(--tf-shadow-lg),0 0 0 1px ${c}55`,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:8}}>
     <span style={{color:c,fontSize:14}}>{ic}</span>{toast.msg}
   </div>
 }
@@ -150,13 +183,13 @@ function CustomSelect({value,onChange,options,style}){
   useEffect(()=>{const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
   return<div ref={ref} style={{position:'relative',...style}}>
     <div onClick={()=>setOpen(p=>!p)} style={{...INP,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',userSelect:'none'}}>
-      <span>{value}</span>
-      <span style={{color:G.textSub,fontSize:11,marginLeft:8,transition:G.trans,transform:open?'rotate(180deg)':'none',display:'inline-block'}}>▾</span>
+      <span style={{fontWeight:500}}>{value}</span>
+      <span style={{color:'var(--tf-text-sub)',fontSize:10,marginLeft:8,transition:G.trans,transform:open?'rotate(180deg)':'none',display:'inline-block',lineHeight:1}}>▾</span>
     </div>
-    {open&&<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'#0d1426',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,zIndex:999,overflow:'hidden',boxShadow:'0 8px 32px rgba(0,0,0,0.6)'}}>
+    {open&&<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',borderRadius:G.radiusMd,zIndex:999,overflow:'hidden',boxShadow:G.shadowLg}}>
       {options.map(opt=><div key={opt} onClick={()=>{onChange(opt);setOpen(false)}}
-        style={{padding:'9px 14px',fontSize:14,cursor:'pointer',color:opt===value?'#818cf8':G.text,background:opt===value?'rgba(99,102,241,0.12)':'transparent',fontWeight:opt===value?700:400,transition:G.transSnap,fontFamily:G.font}}
-        onMouseEnter={e=>{if(opt!==value)e.currentTarget.style.background='rgba(255,255,255,0.05)'}}
+        style={{padding:'9px 13px',fontSize:13,cursor:'pointer',color:opt===value?'#6366f1':'var(--tf-text)',background:opt===value?'rgba(99,102,241,0.09)':'transparent',fontWeight:opt===value?600:400,transition:G.transSnap,fontFamily:G.font}}
+        onMouseEnter={e=>{if(opt!==value)e.currentTarget.style.background='var(--tf-surface-hov)'}}
         onMouseLeave={e=>{if(opt!==value)e.currentTarget.style.background='transparent'}}
       >{opt}</div>)}
     </div>}
@@ -166,29 +199,30 @@ function CustomSelect({value,onChange,options,style}){
 // ── Auth Screen ───────────────────────────────────────────────────────────────
 function AuthScreen({ inviteToken }){
   const [loading,setLoading]=useState(false)
-  return<div style={{minHeight:'100vh',background:G.bg,fontFamily:G.font,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
-    <div style={{position:'absolute',top:'5%',left:'20%',width:600,height:600,background:'radial-gradient(ellipse,rgba(99,102,241,0.06) 0%,transparent 65%)',pointerEvents:'none'}}/>
-    <div style={{position:'absolute',bottom:'10%',right:'15%',width:400,height:400,background:'radial-gradient(ellipse,rgba(16,185,129,0.04) 0%,transparent 65%)',pointerEvents:'none'}}/>
-    <div style={{maxWidth:440,width:'100%',padding:40,textAlign:'center',position:'relative'}}>
-      <div style={{width:64,height:64,borderRadius:'18px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto 22px',boxShadow:'0 12px 40px rgba(99,102,241,0.35)'}}>✦</div>
-      <h1 style={{fontSize:36,fontWeight:800,color:G.text,margin:'0 0 10px',letterSpacing:'-0.04em'}}>TaskFlow</h1>
+  return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:G.font,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
+    <GlobalStyle lightMode={false}/>
+    <div style={{position:'absolute',top:'15%',left:'30%',width:500,height:500,background:'radial-gradient(ellipse,rgba(99,102,241,0.08) 0%,transparent 65%)',pointerEvents:'none'}}/>
+    <div style={{position:'absolute',bottom:'10%',right:'20%',width:350,height:350,background:'radial-gradient(ellipse,rgba(16,185,129,0.05) 0%,transparent 65%)',pointerEvents:'none'}}/>
+    <div style={{maxWidth:420,width:'100%',padding:'44px 40px',textAlign:'center',position:'relative'}}>
+      <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 20px',boxShadow:'0 8px 32px rgba(99,102,241,0.4)'}}>✦</div>
+      <h1 style={{fontSize:32,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.04em',fontFamily:G.fontDisplay}}>TaskFlow</h1>
       {inviteToken
-        ?<div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:G.radiusMd,padding:'14px 18px',marginBottom:24}}>
-          <p style={{fontSize:13,color:'#818cf8',margin:0,lineHeight:1.6}}>🎉 You've been invited to a workspace!<br/>Sign in to view and accept the invitation.</p>
+        ?<div style={{background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.22)',borderRadius:G.radiusMd,padding:'12px 16px',marginBottom:24}}>
+          <p style={{fontSize:13,color:'#818cf8',margin:0,lineHeight:1.6}}>🎉 You've been invited!<br/>Sign in to accept your workspace invitation.</p>
         </div>
-        :<p style={{fontSize:14,color:G.textSub,lineHeight:1.7,margin:'0 0 32px'}}>Create your workspace and invite your team.<br/>Free to use, no approval needed.</p>
+        :<p style={{fontSize:13,color:'var(--tf-text-sub)',lineHeight:1.7,margin:'0 0 28px'}}>Organize your team's work in one place.<br/>Free to use, no approval needed.</p>
       }
       <button onClick={async()=>{setLoading(true);await signInWithGoogle()}} disabled={loading}
-        style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:14,padding:'16px 24px',background:'rgba(255,255,255,0.96)',borderRadius:G.radiusMd,border:'none',cursor:'pointer',fontSize:15,fontWeight:600,color:'#111',boxShadow:'0 4px 28px rgba(0,0,0,0.45)',opacity:loading?0.7:1,transition:G.trans,fontFamily:G.font}}>
-        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-        {loading?'Redirecting…':'Continue with Google'}
+        style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:12,padding:'14px 22px',background:'rgba(255,255,255,0.97)',borderRadius:G.radiusMd,border:'1px solid rgba(255,255,255,0.2)',cursor:'pointer',fontSize:14,fontWeight:600,color:'#111827',boxShadow:'0 4px 24px rgba(0,0,0,0.35)',opacity:loading?0.7:1,transition:G.trans,fontFamily:G.font}}>
+        <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        {loading?'Signing in…':'Continue with Google'}
       </button>
-      <div style={{marginTop:36,display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,textAlign:'left'}}>
-        {[['🚀','Instant access','No admin approval'],['👥','Invite your team','Share workspace links'],['🔁','Recurring tasks','Auto-creates next'],['📊','Dashboards','Track progress']].map(([ic,t,d])=>(
-          <div key={t} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'12px 14px'}}>
-            <div style={{fontSize:18,marginBottom:6}}>{ic}</div>
-            <div style={{fontSize:12,fontWeight:700,color:G.text,marginBottom:2}}>{t}</div>
-            <div style={{fontSize:11,color:G.textSub}}>{d}</div>
+      <div style={{marginTop:28,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,textAlign:'left'}}>
+        {[['⊞','Kanban boards','Drag & drop tasks'],['👥','Team workspaces','Invite anyone'],['↻','Recurring tasks','Auto-generates next'],['⬡','Dashboards','Track progress']].map(([ic,t,d])=>(
+          <div key={t} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'12px 14px'}}>
+            <div style={{fontSize:16,marginBottom:5,color:'var(--tf-text-sub)'}}>{ic}</div>
+            <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',marginBottom:2}}>{t}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{d}</div>
           </div>
         ))}
       </div>
@@ -199,15 +233,15 @@ function AuthScreen({ inviteToken }){
 // ── Pending Invitations Banner ────────────────────────────────────────────────
 function InviteBanner({invites,onAccept,onDecline}){
   if(!invites||invites.length===0)return null
-  return<div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:G.radiusMd,padding:'14px 18px',marginBottom:20}}>
-    <div style={{fontSize:13,fontWeight:700,color:'#818cf8',marginBottom:10}}>🎉 Pending workspace invitations ({invites.length})</div>
+  return<div style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.18)',borderRadius:G.radiusMd,padding:'14px 18px',marginBottom:20}}>
+    <div style={{fontSize:13,fontWeight:600,color:'#818cf8',marginBottom:10}}>Pending workspace invitations ({invites.length})</div>
     {invites.map(inv=>{
       const ws=inv.workspace;const inviter=inv.inviter;const rgb=hexRgb(ws?.color||'#6366f1')
-      return<div key={inv.id} style={{display:'flex',alignItems:'center',gap:12,background:G.surface,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:8}}>
+      return<div key={inv.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.18)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:8}}>
         <div style={{width:36,height:36,borderRadius:'10px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{ws?.icon||'⬡'}</div>
         <div style={{flex:1}}>
-          <div style={{fontSize:13,fontWeight:700,color:G.text}}>{ws?.name||'Workspace'}</div>
-          <div style={{fontSize:11,color:G.textSub}}>Invited by {inviter?.name||inviter?.email} · {fmtAgo(inv.created_at)}</div>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>{ws?.name||'Workspace'}</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)'}>Invited by {inviter?.name||inviter?.email} · {fmtAgo(inv.created_at)}</div>
         </div>
         <div style={{display:'flex',gap:6}}>
           <Btn onClick={()=>onAccept(inv)} color="#10b981" sm>✓ Accept</Btn>
@@ -270,17 +304,17 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
           {loading?'…':'Send Invite'}
         </Btn>
       </div>
-      <p style={{fontSize:11,color:G.textSub,marginTop:8,lineHeight:1.6}}>They'll see a notification when they sign in, or you can copy the invite link to share directly.</p>
+      <p style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8,lineHeight:1.6}}>They'll see a notification when they sign in, or you can copy the invite link to share directly.</p>
     </div>}
 
     {/* Pending invitations */}
     {isAdmin&&invitations.length>0&&<div style={{marginBottom:24}}>
       <label style={LBL}>Pending Invitations — {invitations.length}</label>
       {invitations.map(inv=>(
-        <div key={inv.id} style={{display:'flex',alignItems:'center',gap:10,background:G.surface,border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:6}}>
+        <div key={inv.id} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:6}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:600,color:G.text}}>{inv.invitee_email}</div>
-            <div style={{fontSize:11,color:G.textSub}}>Sent {fmtAgo(inv.created_at)}</div>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}>{inv.invitee_email}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}>Sent {fmtAgo(inv.created_at)}</div>
           </div>
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>copyLink(inv)} style={{background:`rgba(${rgb},0.1)`,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusXs,padding:'5px 10px',color:ws?.color,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font}}>📋 Copy link</button>
@@ -295,11 +329,11 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
       <label style={LBL}>Current Members — {wsMembers.length}</label>
       {wsMembers.map(m=>{
         const eu=enrich(m);const isSelf=m.id===cu.id;const rc=roleColors[m.role]||G.textSub
-        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:12,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:8}}>
+        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:8}}>
           <Avatar user={eu} size={36}/>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:G.text}}>{m.name||m.email}{isSelf?<span style={{fontSize:10,color:G.textSub,marginLeft:6}}>(You)</span>:''}</div>
-            <div style={{fontSize:11,color:G.textSub}}>{m.email}</div>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>{m.name||m.email}{isSelf?<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:6}}>(You)</span>:''}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}>{m.email}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:10,fontWeight:700,color:rc,background:`${rc}18`,border:`1px solid ${rc}30`,borderRadius:'100px',padding:'2px 9px'}}>{(m.role||'member').toUpperCase()}</span>
@@ -321,11 +355,11 @@ function StatusManager({open,onClose,statuses,wsColor,onSave}){
   const del=s=>{if(list.length<=1)return;setList(p=>p.filter(x=>x!==s))}
   const mv=(i,d)=>{const a=[...list],j=i+d;if(j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];setList(a)}
   return<Modal open={open} onClose={onClose} title="Manage Columns" width={420}>
-    {list.map((s,i)=>{const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{display:'flex',alignItems:'center',gap:10,background:G.surface,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusMd,padding:'9px 14px',marginBottom:8}}>
+    {list.map((s,i)=>{const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusMd,padding:'9px 14px',marginBottom:8}}>
       <div style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,boxShadow:`0 0 8px ${col}99`}}/>
-      <span style={{flex:1,fontSize:13,fontWeight:600,color:G.text}}>{s}</span>
-      <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?G.textMut:G.textSub,cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>↑</button>
-      <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?G.textMut:G.textSub,cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>↓</button>
+      <span style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)'}>{s}</span>
+      <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?G.textMut:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>↑</button>
+      <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?G.textMut:'var(--tf-text-sub)',cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>↓</button>
       <Btn onClick={()=>del(s)} danger sm>✕</Btn>
     </div>})}
     <div style={{display:'flex',gap:8,margin:'16px 0'}}><input ref={ref} placeholder="New status…" style={{...INP,flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/><Btn onClick={add} color={wsColor}>Add</Btn></div>
@@ -344,7 +378,7 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
     <div style={{marginBottom:16}}><label style={LBL}>Description</label><textarea ref={descRef} defaultValue={ws?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="What's this workspace for?"/></div>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px',marginBottom:20}}>
       <div><label style={LBL}>Color</label><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{WS_COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'9px',background:c,cursor:'pointer',border:`2.5px solid ${color===c?'rgba(255,255,255,0.9)':'transparent'}`,boxShadow:color===c?`0 0 0 3px rgba(${hexRgb(c)},0.35)`:'none',transition:G.trans}}/>)}</div></div>
-      <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:'9px',background:icon===ic?`rgba(${rgb},0.15)`:G.surface,border:`1.5px solid ${icon===ic?color:G.border}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:G.trans}}>{ic}</div>)}</div></div>
+      <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:'9px',background:icon===ic?`rgba(${rgb},0.15):'var(--tf-surface)',border:`1.5px solid ${icon===ic?color:'var(--tf-border)'}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:G.trans}}>{ic}</div>)}</div></div>
     </div>
     <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
       <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
@@ -367,9 +401,9 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
     if(t!==item.text)onEdit(item.id,t)
     setFocused(false)
   }
-  return<div style={{display:'flex',alignItems:'center',gap:8,borderRadius:G.radiusXs,padding:'3px 4px',background:focused?'rgba(255,255,255,0.03)':'transparent',transition:'background 0.15s'}}>
+  return<div style={{display:'flex',alignItems:'center',gap:8,borderRadius:G.radiusXs,padding:'3px 4px',background:focused?'var(--tf-surface-hov)':'transparent',transition:'background 0.15s'}}>
     <div onMouseDown={e=>e.preventDefault()} onClick={()=>onToggle(item.id)}
-      style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':G.textMut}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
+      style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':'var(--tf-text-mut)'}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
       {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
     </div>
     <input
@@ -390,10 +424,10 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
           onRemove(item.id);onEnterNext()
         }
       }}
-      style={{flex:1,background:'none',border:'none',borderBottom:focused?`1px solid rgba(255,255,255,0.12)`:'1px solid transparent',outline:'none',color:item.done?G.textSub:G.text,fontSize:13,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.6,padding:'1px 2px',transition:'border-color 0.15s'}}/>
+      style={{flex:1,background:'none',border:'none',borderBottom:focused?'1px solid var(--tf-border-hov)':'1px solid transparent',outline:'none',color:item.done?'var(--tf-text-sub)':'var(--tf-text)',fontSize:13,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.6,padding:'1px 2px',transition:'border-color 0.15s'}}/>
     <button onMouseDown={e=>e.preventDefault()} onClick={()=>onRemove(item.id)}
-      style={{background:'none',border:'none',color:focused?G.textSub:G.textMut,cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1,fontFamily:G.font,opacity:focused?1:0.4,transition:'opacity 0.15s'}}
-      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:G.textMut}>✕</button>
+      style={{background:'none',border:'none',color:focused?G.textSub:'var(--tf-text-mut)',cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1,fontFamily:G.font,opacity:focused?1:0.4,transition:'opacity 0.15s'}}
+      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:'var(--tf-text-mut)'}>✕</button>
   </div>
 }
 
@@ -426,19 +460,19 @@ function ChecklistEditor({items,onChange,wsColor}){
     else focusAdd()
   }
 
-  return<div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'14px 16px'}}>
+  return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'14px 16px'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span style={{fontSize:13,fontWeight:700,color:G.text}}>Checklist</span>
+        <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>Checklist</span>
         {items.length>0&&<span style={{fontSize:11,color:pct===100?'#10b981':wsColor,fontWeight:700}}>{done}/{items.length}</span>}
       </div>
       <div style={{display:'flex',gap:6}}>
-        {items.some(i=>i.done)&&<button onClick={()=>setHideChecked(h=>!h)} style={{background:'none',border:`1px solid ${G.border}`,borderRadius:G.radiusXs,padding:'3px 9px',color:G.textSub,cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>{hideChecked?'Show all':'Hide done'}</button>}
+        {items.some(i=>i.done)&&<button onClick={()=>setHideChecked(h=>!h)} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:G.radiusXs,padding:'3px 9px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>{hideChecked?'Show all':'Hide done'}</button>}
         {items.length>0&&<button onClick={()=>{if(window.confirm('Clear all?'))onChange([])}} style={{background:'none',border:'1px solid rgba(239,68,68,0.25)',borderRadius:G.radiusXs,padding:'3px 9px',color:'#f87171',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>Clear</button>}
       </div>
     </div>
     {items.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-      <span style={{fontSize:10,color:G.textSub,fontWeight:700,width:28,flexShrink:0}}>{pct}%</span>
+      <span style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:700,width:28,flexShrink:0}}>{pct}%</span>
       <div style={{flex:1,height:5,background:'rgba(255,255,255,0.06)',borderRadius:3,overflow:'hidden'}}>
         <div style={{height:'100%',width:pct+'%',background:pct===100?'#10b981':wsColor,borderRadius:3,boxShadow:`0 0 8px rgba(${rgb},0.4)`,transition:'width 0.35s ease'}}/>
       </div>
@@ -450,7 +484,7 @@ function ChecklistEditor({items,onChange,wsColor}){
         onToggle={toggle} onEdit={edit} onRemove={remove}
         onEnterNext={()=>handleEnterNext(item.id)}/>)}
     </div>
-    <div style={{display:'flex',gap:7,marginTop:8,paddingTop:10,borderTop:`1px solid ${G.border}`}}>
+    <div style={{display:'flex',gap:7,marginTop:8,paddingTop:10,borderTop:'1px solid var(--tf-border)'}}>
       <input ref={addInputRef} value={newText} onChange={e=>setNewText(e.target.value)}
         onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();add()}}}
         placeholder="New item… press Enter to add"
@@ -463,16 +497,16 @@ function ChecklistEditor({items,onChange,wsColor}){
 // ── Recurrence Picker ─────────────────────────────────────────────────────────
 function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onIntervalChange}){
   const show=recurrenceType!=='none'
-  return<div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'14px 16px'}}>
+  return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'14px 16px'}}>
     <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:show?12:0}}>
-      {RECURRENCE_TYPES.map(rt=><button key={rt} onClick={()=>onTypeChange(rt)} style={{padding:'5px 13px',borderRadius:'100px',border:`1.5px solid ${recurrenceType===rt?'#6366f1':G.border}`,background:recurrenceType===rt?'rgba(99,102,241,0.15)':'transparent',color:recurrenceType===rt?'#818cf8':G.textSub,cursor:'pointer',fontSize:11,fontWeight:recurrenceType===rt?700:500,transition:G.trans,fontFamily:G.font}}>
+      {RECURRENCE_TYPES.map(rt=><button key={rt} onClick={()=>onTypeChange(rt)} style={{padding:'5px 13px',borderRadius:'100px',border:`1.5px solid ${recurrenceType===rt?'#6366f1':'var(--tf-border)'}`,background:recurrenceType===rt?'rgba(99,102,241,0.15)':'transparent',color:recurrenceType===rt?'#818cf8':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:recurrenceType===rt?700:500,transition:G.trans,fontFamily:G.font}}>
         {rt==='none'?'No repeat':rt.charAt(0).toUpperCase()+rt.slice(1)}
       </button>)}
     </div>
-    {show&&<div style={{display:'flex',alignItems:'center',gap:12,background:'rgba(0,0,0,0.2)',borderRadius:G.radiusSm,padding:'10px 14px',border:`1px solid ${G.border}`}}>
-      <span style={{fontSize:12,color:G.textSub,flexShrink:0}}>Every</span>
+    {show&&<div style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface-hov)',borderRadius:G.radiusSm,padding:'10px 14px',border:'1px solid var(--tf-border)'}}>
+      <span style={{fontSize:12,color:'var(--tf-text-sub)',flexShrink:0}}>Every</span>
       <input type="number" min={1} max={365} value={recurrenceInterval} onChange={e=>onIntervalChange(Math.max(1,parseInt(e.target.value)||1))} style={{...INP,width:62,padding:'5px 10px',fontSize:13,flex:'none'}}/>
-      <span style={{fontSize:12,color:G.textSub}}>{recurrenceType==='weekly'?'week(s)':recurrenceType==='monthly'?'month(s)':'day(s)'}</span>
+      <span style={{fontSize:12,color:'var(--tf-text-sub)'}>{recurrenceType==='weekly'?'week(s)':recurrenceType==='monthly'?'month(s)':'day(s)'}</span>
       <Tag label={`🔁 ${rrLabel(recurrenceType,recurrenceInterval)}`} color="#6366f1"/>
     </div>}
   </div>
@@ -516,13 +550,13 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
   const MemberCard=({m,selected,onClick,accent})=>{
     const eu=enrich(m);const isSelf=m.id===cu.id
     const ac=accent||ws.color;const acRgb=hexRgb(ac)
-    return<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${selected?`rgba(${acRgb},0.55)`:G.border}`,background:selected?`rgba(${acRgb},0.09)`:G.surface,transition:G.trans,flex:'1 1 180px'}}>
+    return<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${selected?`rgba(${acRgb},0.55)`:'var(--tf-border)'}`,background:selected?`rgba(${acRgb},0.09)`:'var(--tf-surface)',transition:G.trans,flex:'1 1 180px'}}>
       <Avatar user={eu} size={32}/>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12,fontWeight:700,color:selected?ac:G.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-        <div style={{fontSize:10,color:G.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
+        <div style={{fontSize:12,fontWeight:700,color:selected?ac:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
       </div>
-      <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:G.textMut}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+      <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:'var(--tf-text-mut)'}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
         {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
       </div>
     </div>
@@ -530,28 +564,28 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
 
   return<Modal open={open} onClose={onClose} title="Assign Task" width={520}>
     {/* Task summary */}
-    <div style={{background:G.surfaceHov,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:18}}>
-      <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:2}}>{task.title}</div>
-      {task.project&&<div style={{fontSize:11,color:G.textSub}}>📁 {task.project}</div>}
+    <div style={{background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:18}}>
+      <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{task.title}</div>
+      {task.project&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}>📁 {task.project}</div>}
     </div>
 
     {/* Mode tabs */}
     <div style={{display:'flex',gap:8,marginBottom:20}}>
-      <button onClick={()=>setMode('self')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='self'?`rgba(${rgb},0.5)`:G.border}`,background:mode==='self'?`rgba(${rgb},0.08)`:'transparent',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
+      <button onClick={()=>setMode('self')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='self'?`rgba(${rgb},0.5)`:'var(--tf-border)'}`,background:mode==='self'?`rgba(${rgb},0.08)`:'var(--tf-surface)',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
         <div style={{fontSize:20,marginBottom:4}}>🙋</div>
-        <div style={{fontSize:13,fontWeight:800,color:mode==='self'?ws.color:G.text}}>I'll take this</div>
-        <div style={{fontSize:10,color:G.textSub,marginTop:2}}>Self-assign under a manager</div>
+        <div style={{fontSize:13,fontWeight:800,color:mode==='self'?ws.color:'var(--tf-text)'}>I'll take this</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Self-assign under a manager</div>
       </button>
-      <button onClick={()=>setMode('delegate')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='delegate'?'rgba(245,158,11,0.5)':G.border}`,background:mode==='delegate'?'rgba(245,158,11,0.08)':'transparent',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
+      <button onClick={()=>setMode('delegate')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='delegate'?'rgba(245,158,11,0.5)':'var(--tf-border)'}`,background:mode==='delegate'?'rgba(245,158,11,0.08)':'var(--tf-surface)',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
         <div style={{fontSize:20,marginBottom:4}}>➡️</div>
-        <div style={{fontSize:13,fontWeight:800,color:mode==='delegate'?'#f59e0b':G.text}}>Delegate to team</div>
-        <div style={{fontSize:10,color:G.textSub,marginTop:2}}>Assign to subordinates</div>
+        <div style={{fontSize:13,fontWeight:800,color:mode==='delegate'?'#f59e0b':'var(--tf-text)'}}>Delegate to team</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Assign to subordinates</div>
       </button>
     </div>
 
     {/* CASE A: Self-assign → pick manager */}
     {mode==='self'&&<>
-      <div style={{fontSize:11,fontWeight:700,color:G.textSub,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
         ⚡ Who is your Manager / Delegator for this task?
       </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
@@ -564,12 +598,12 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
 
     {/* CASE B: Delegate → pick subordinates */}
     {mode==='delegate'&&<>
-      <div style={{fontSize:11,fontWeight:700,color:G.textSub,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>
         👥 Select subordinates to assign this task to
       </div>
-      <div style={{fontSize:10,color:G.textSub,marginBottom:10}}>You will be the Manager / Delegator. Selected members will see it on their board.</div>
+      <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:10}}>You will be the Manager / Delegator. Selected members will see it on their board.</div>
       {others.length===0
-        ?<div style={{padding:20,textAlign:'center',color:G.textMut,fontSize:12}}>No other members in this workspace</div>
+        ?<div style={{padding:20,textAlign:'center',color:'var(--tf-text-mut)',fontSize:12}}>No other members in this workspace</div>
         :<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
           {others.map(m=><MemberCard key={m.id} m={m} selected={subordinates.includes(m.id)} onClick={()=>toggleSub(m.id)} accent={ws.color}/>)}
         </div>
@@ -578,12 +612,12 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
         <Avatar user={enrich(wsMembers.find(m=>m.id===cu.id)||{id:cu.id})} size={28}/>
         <div style={{fontSize:11,color:'#f59e0b'}}>
           <strong>You</strong> will be tagged as <strong>Manager / Delegator</strong> on this task.
-          {subordinates.length>0&&<span style={{color:G.textSub}}> {subordinates.length} member{subordinates.length>1?'s':''} will be assigned.</span>}
+          {subordinates.length>0&&<span style={{color:'var(--tf-text-sub)'}> {subordinates.length} member{subordinates.length>1?'s':''} will be assigned.</span>}
         </div>
       </div>
     </>}
 
-    <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:18,paddingTop:14,borderTop:`1px solid ${G.border}`}}>
+    <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:18,paddingTop:14,borderTop:'1px solid var(--tf-border)'}}>
       <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
       <Btn onClick={save} color={mode==='delegate'?'#f59e0b':ws.color}
         disabled={mode==='delegate'&&subordinates.length===0}>
@@ -641,15 +675,15 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
           {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
             return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
               style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:G.radiusMd,cursor:'pointer',
-                border:`1.5px solid ${sel?'rgba(245,158,11,0.6)':G.border}`,
-                background:sel?'rgba(245,158,11,0.1)':G.surface,
+                border:`1.5px solid ${sel?'rgba(245,158,11,0.6)':'var(--tf-border)'}`,
+                background:sel?'rgba(245,158,11,0.1)':'var(--tf-surface)',
                 transition:G.trans,flex:'0 0 auto'}}>
               <Avatar user={eu} size={26}/>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:sel?'#f59e0b':G.text}}>
+                <div style={{fontSize:12,fontWeight:700,color:sel?'#f59e0b':'var(--tf-text)'}}>
                   {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
                 </div>
-                <div style={{fontSize:10,color:sel?'rgba(245,158,11,0.7)':G.textSub}}>
+                <div style={{fontSize:10,color:sel?'rgba(245,158,11,0.7)':'var(--tf-text-sub)'}}>
                   {sel?'✓ Manager':m.email}
                 </div>
               </div>
@@ -663,19 +697,19 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
           {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
             return<div key={m.id} onClick={()=>toggleA(m.id)}
               style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:G.radiusMd,cursor:'pointer',
-                border:`1.5px solid ${sel?`rgba(${rgb},0.6)`:G.border}`,
-                background:sel?`rgba(${rgb},0.1)`:G.surface,
+                border:`1.5px solid ${sel?`rgba(${rgb},0.6)`:'var(--tf-border)'}`,
+                background:sel?`rgba(${rgb},0.1)`:'var(--tf-surface)',
                 transition:G.trans,flex:'0 0 auto'}}>
               <Avatar user={eu} size={26}/>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>
+                <div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'var(--tf-text)'}>
                   {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
                 </div>
-                <div style={{fontSize:10,color:sel?`rgba(${rgb},0.7)`:G.textSub}}>
+                <div style={{fontSize:10,color:sel?`rgba(${rgb},0.7)`:'var(--tf-text-sub)'}}>
                   {sel?'✓ Assignee':m.email}
                 </div>
               </div>
-              <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?ws.color:G.textMut}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:2}}>
+              <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?ws.color:'var(--tf-text-mut)'}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:2}}>
                 {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
               </div>
             </div>
@@ -693,7 +727,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
       <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
     </div>
-    <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
+    <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
       {isEdit?<Btn onClick={()=>setCdel(true)} danger>Delete</Btn>:<div/>}
       <div style={{display:'flex',gap:8}}><Btn onClick={onClose} outline color="#64748b">Cancel</Btn><Btn onClick={save} color={ws.color}>{isEdit?'Save Changes':'Create Task'}</Btn></div>
     </div>
@@ -712,42 +746,45 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
   const cl=task.checklist||[];const clDone=cl.filter(i=>i.done).length;const clPct=cl.length?Math.round(clDone/cl.length*100):0
   const [hov,setHov]=useState(false);const [cdel,setCdel]=useState(false)
   const acc=mir?'#818cf8':del?'#f59e0b':wsColor;const rgb=hexRgb(acc)
+  const pColor=PC[task.priority]||'#64748b'
   return<>
     <div draggable={!mir}
       onDragStart={e=>{if(mir)return;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',task.id);onDragStart(task.id)}}
       onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{background:hov?`rgba(${rgb},0.06)`:G.surface,border:`1px solid ${hov?`rgba(${rgb},0.28)`:G.border}`,borderRadius:G.radiusMd,padding:'8px 11px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.25:1,transform:hov&&!isDragging?'translateY(-2px)':'none',boxShadow:hov&&!isDragging?`0 10px 28px rgba(0,0,0,0.35),0 0 0 1px rgba(${rgb},0.12)`:'none',userSelect:'none',borderLeft:`3px solid rgba(${rgb},${hov?0.8:0.35})`}}>
-      <div style={{display:'flex',flexWrap:'wrap',gap:3,marginBottom:5}}>
-        {(task.tags||[]).slice(0,2).map(t=><span key={t} style={{fontSize:9,color:G.textSub,background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'1px 7px',fontWeight:600}}>{t}</span>)}
-        {rec&&<span style={{fontSize:9,color:'#818cf8',background:'rgba(99,102,241,0.1)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>🔁 {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
-        {cl.length>0&&<span style={{fontSize:9,color:clPct===100?'#10b981':'#f59e0b',background:clPct===100?'rgba(16,185,129,0.1)':'rgba(245,158,11,0.1)',border:`1px solid ${clPct===100?'rgba(16,185,129,0.25)':'rgba(245,158,11,0.25)'}`,borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>☑ {clDone}/{cl.length}</span>}
-        {mir&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4}}>
-          {(()=>{const dlg=getUser(task.delegator_id||task.created_by,wsMembers);return dlg&&dlg.id!==cu.id?<div style={{display:'flex',alignItems:'center',gap:4,background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'2px 7px 2px 4px'}}>
-            <Avatar user={dlg} size={13}/><span style={{fontSize:9,color:'#818cf8',fontWeight:700}}>via {dlg.name?.split(' ')[0]||dlg.email.split('@')[0]}</span>
-          </div>:<span style={{fontSize:9,color:'#818cf8',background:'rgba(129,140,248,0.1)',border:'1px solid rgba(129,140,248,0.2)',borderRadius:'100px',padding:'1px 7px',fontWeight:700}}>ASSIGNED</span>})()}
-        </div>}
+      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'11px 13px 9px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.2:1,transform:hov&&!isDragging?'translateY(-1px)':'none',boxShadow:hov&&!isDragging?`0 8px 24px var(--tf-shadow),0 0 0 1px rgba(${rgb},0.18)`:'none',userSelect:'none',borderLeft:`3px solid ${hov?acc:`rgba(${rgb},0.4)`}`,position:'relative'}}>
+      {/* Top meta row */}
+      <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:7,flexWrap:'wrap'}}>
+        <span style={{fontSize:10,fontWeight:600,color:pColor,background:`rgba(${hexRgb(pColor)},0.1)`,borderRadius:4,padding:'1px 6px'}}>{PI[task.priority]} {task.priority}</span>
+        {rec&&<span style={{fontSize:10,color:'#818cf8',background:'rgba(99,102,241,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>↻ {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
+        {cl.length>0&&<span style={{fontSize:10,color:clPct===100?'#10b981':'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>☑ {clDone}/{cl.length}</span>}
+        {ovd&&<span style={{fontSize:10,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Overdue</span>}
+        {mir&&(()=>{const dlg=getUser(task.delegator_id||task.created_by,wsMembers);return dlg&&dlg.id!==cu.id?<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3,background:'rgba(129,140,248,0.1)',borderRadius:4,padding:'1px 6px'}}>
+            <Avatar user={dlg} size={12}/><span style={{fontSize:10,color:'#818cf8',fontWeight:600}}>via {dlg.name?.split(' ')[0]||dlg.email.split('@')[0]}</span>
+          </div>:<span style={{marginLeft:'auto',fontSize:10,color:'#818cf8',background:'rgba(129,140,248,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Assigned</span>})()}
         {del&&!mir&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3}}>
-          {assigneeUsers.slice(0,2).map(u=><Avatar key={u.id} user={u} size={13}/>)}
-          <span style={{fontSize:9,color:'#f59e0b',fontWeight:700,marginLeft:2}}>→ {assigneeUsers.map(u=>u.name?.split(' ')[0]||u.email.split('@')[0]).slice(0,2).join(', ')}{assigneeUsers.length>2?` +${assigneeUsers.length-2}`:''}</span>
+          {assigneeUsers.slice(0,2).map(u=><Avatar key={u.id} user={u} size={14}/>)}
+          <span style={{fontSize:10,color:'#f59e0b',fontWeight:600,marginLeft:2}}>→{assigneeUsers.map(u=>u.name?.split(' ')[0]||'?').slice(0,2).join(',')}</span>
         </div>}
       </div>
-      <div style={{fontSize:12,fontWeight:600,color:G.text,marginBottom:task.description?4:6,lineHeight:1.35}}>{task.title}</div>
-      {task.description&&<div style={{fontSize:10,color:G.textSub,marginBottom:6,lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:1,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
-      {cl.length>0&&<div style={{marginBottom:6}}><div style={{height:2,background:'rgba(255,255,255,0.06)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div></div>}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-        <div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
-          <Tag label={`${PI[task.priority]} ${task.priority}`} color={PC[task.priority]}/>
-          {ovd&&<Tag label="Overdue" color="#ef4444"/>}
+      {/* Title */}
+      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:task.description?4:8,lineHeight:1.4,fontFamily:G.font}}>{task.title}</div>
+      {task.description&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.45,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
+      {/* Checklist progress bar */}
+      {cl.length>0&&<div style={{marginBottom:8,height:3,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div>}
+      {/* Tags */}
+      {(task.tags||[]).length>0&&<div style={{display:'flex',gap:4,marginBottom:8,flexWrap:'wrap'}}>
+        {(task.tags||[]).slice(0,3).map(t=><span key={t} style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 7px',fontWeight:500}}>{t}</span>)}
+      </div>}
+      {/* Bottom row */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+        <div style={{display:'flex',alignItems:'center',gap:-3}}>
+          {mir?<Avatar user={creator} size={20}/>:assigneeUsers.slice(0,4).map((u,i)=><div key={u.id} style={{marginLeft:i?-6:0,zIndex:10-i}}><Avatar user={u} size={20}/></div>)}
+          {!mir&&assigneeUsers.length>4&&<div style={{marginLeft:-6,width:20,height:20,borderRadius:'50%',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:'var(--tf-text-sub)',fontWeight:700}}>+{assigneeUsers.length-4}</div>}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-          {task.due_date&&<span style={{fontSize:10,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{fmtDate(task.due_date)}</span>}
-          <div style={{display:'flex',alignItems:'center'}}>
-            {mir?<Avatar user={creator} size={18}/>:assigneeUsers.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0,zIndex:10-i}}><Avatar user={u} size={18}/></div>)}
-            {!mir&&assigneeUsers.length>3&&<div style={{marginLeft:-5,width:18,height:18,borderRadius:'50%',background:G.surface,border:`1px solid ${G.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,color:G.textSub,fontWeight:700}}>+{assigneeUsers.length-3}</div>}
-          </div>
-        </div>
+        {task.due_date&&<span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{fmtDate(task.due_date)}</span>}
       </div>
-      {!mir&&<div style={{display:'flex',gap:5,marginTop:7,paddingTop:7,borderTop:`1px solid ${G.border}`,opacity:hov?1:0,transform:hov?'none':'translateY(3px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
+      {/* Hover actions */}
+      {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
         <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm full>Edit</Btn>
         <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm full>Delete</Btn>
       </div>}
@@ -793,17 +830,17 @@ function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,
 
   const InsertLine=()=><div style={{height:2,background:col,borderRadius:2,margin:'2px 0',boxShadow:`0 0 8px ${col}88`,transition:'opacity 0.1s'}}/>
 
-  return<div style={{minWidth:272,flex:'0 0 272px',display:'flex',flexDirection:'column',minHeight:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10,padding:'10px 14px',background:overCol?`rgba(${rgb},0.08)`:G.surface,border:`1px solid ${overCol?`rgba(${rgb},0.4)`:G.border}`,borderRadius:G.radiusMd,borderTop:`3px solid ${col}`,transition:G.trans,flexShrink:0}}>
-      <span style={{fontSize:12,fontWeight:700,color:G.text,flex:1}}>{status}</span>
-      <span style={{fontSize:11,fontWeight:700,color:col,background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.22)`,borderRadius:'100px',padding:'2px 9px'}}>{tasks.length}</span>
-      <button onClick={()=>onAdd(status)} style={{width:24,height:24,borderRadius:'7px',background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.22)`,color:col,cursor:'pointer',fontSize:17,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,flexShrink:0,padding:0,lineHeight:1,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=`rgba(${rgb},0.25)`} onMouseLeave={e=>e.currentTarget.style.background=`rgba(${rgb},0.12)`}>+</button>
+  return<div style={{minWidth:268,flex:'0 0 268px',display:'flex',flexDirection:'column',minHeight:0}}>
+    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'10px 13px',background:overCol?`rgba(${rgb},0.06)`:'var(--tf-surface)',border:`1px solid ${overCol?`rgba(${rgb},0.35)`:'var(--tf-border)'}`,borderRadius:G.radiusMd,borderTop:`3px solid ${col}`,transition:G.trans,flexShrink:0}}>
+      <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',flex:1,fontFamily:G.fontDisplay}}>{status}</span>
+      <span style={{fontSize:11,fontWeight:700,color:col,background:`rgba(${rgb},0.12)`,borderRadius:'20px',padding:'1px 8px',minWidth:20,textAlign:'center'}}>{tasks.length}</span>
+      <button onClick={()=>onAdd(status)} style={{width:22,height:22,borderRadius:6,background:`rgba(${rgb},0.12)`,border:`1px solid rgba(${rgb},0.2)`,color:col,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,flexShrink:0,padding:0,lineHeight:1,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=`rgba(${rgb},0.24)`} onMouseLeave={e=>e.currentTarget.style.background=`rgba(${rgb},0.12)`}>+</button>
     </div>
     <div ref={colRef} className="tf-col"
       onDragOver={handleDragOver} onDragEnter={handleDragOver}
       onDragLeave={handleDragLeave} onDrop={handleDrop}
-      style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:4,padding:'4px 2px',background:overCol?`rgba(${rgb},0.03)`:'transparent',border:`2px dashed ${overCol?`rgba(${rgb},0.35)`:'transparent'}`,borderRadius:G.radiusMd,transition:G.trans,minHeight:120}}>
-      {tasks.length===0&&!overCol&&<div style={{border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,padding:'22px 16px',textAlign:'center',color:G.textMut,fontSize:12}}>Drop tasks here</div>}
+      style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column',gap:5,padding:'3px 1px',background:overCol?`rgba(${rgb},0.03)`:'transparent',border:`2px dashed ${overCol?`rgba(${rgb},0.3)`:'transparent'}`,borderRadius:G.radiusMd,transition:G.trans,minHeight:120}}>
+      {tasks.length===0&&!overCol&&<div style={{border:'1px dashed var(--tf-border)',borderRadius:G.radiusMd,padding:'24px 16px',textAlign:'center',color:'var(--tf-text-mut)',fontSize:12}}>Drop tasks here</div>}
       {tasks.length===0&&overCol&&insertIdx===0&&<InsertLine/>}
       {tasks.map((t,i)=><div key={t.id} data-card data-id={t.id} style={{display:'flex',flexDirection:'column',gap:0}}>
         {overCol&&insertIdx===i&&<InsertLine/>}
@@ -863,15 +900,15 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
   }
   const handleFile=async f=>{if(!f)return;const rows=parseCSV(await f.text());if(!rows?.length){alert('Could not parse CSV.');return};setPreview(rows)}
   return<Modal open={open} onClose={()=>{onClose();setPreview(null);setTab('export')}} title="Import / Export" width={640}>
-    <div style={{display:'flex',gap:4,background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:4,marginBottom:20}}>
-      {[{id:'export',lb:'⬇ Export CSV'},{id:'import',lb:'⬆ Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(99,102,241,0.85)':'transparent',color:tab===t.id?'#fff':G.textSub,transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
+    <div style={{display:'flex',gap:4,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:4,marginBottom:20}}>
+      {[{id:'export',lb:'⬇ Export CSV'},{id:'import',lb:'⬆ Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(99,102,241,0.85)':'transparent',color:tab===t.id?'#fff':'var(--tf-text-sub)',transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
     </div>
-    {tab==='export'&&<div><div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:G.textSub}}>Export <strong style={{color:G.text}}>{tasks.length} tasks</strong> as CSV — includes Assigned To, Delegator, and Checklist items.</div><Btn onClick={doExport} color="#10b981" full>⬇ Download CSV</Btn></div>}
+    {tab==='export'&&<div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:'var(--tf-text-sub)'}>Export <strong style={{color:'var(--tf-text)'}>{tasks.length} tasks</strong> as CSV — includes Assigned To, Delegator, and Checklist items.</div><Btn onClick={doExport} color="#10b981" full>⬇ Download CSV</Btn></div>}
     {tab==='import'&&!preview&&<div>
-      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${drag?'#6366f1':G.border}`,borderRadius:G.radiusMd,padding:'36px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(99,102,241,0.04)':'transparent',transition:G.trans,marginBottom:14}}>
+      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${drag?'#6366f1':'var(--tf-border)'}`,borderRadius:G.radiusMd,padding:'36px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(99,102,241,0.04)':'transparent',transition:G.trans,marginBottom:14}}>
         <div style={{fontSize:36,marginBottom:10}}>📂</div>
-        <p style={{fontSize:13,fontWeight:600,color:G.textSub,margin:'0 0 6px'}}>Drop CSV here or click to browse</p>
-        <p style={{fontSize:11,color:G.textMut,margin:0,lineHeight:1.8}}>
+        <p style={{fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',margin:'0 0 6px'}}>Drop CSV here or click to browse</p>
+        <p style={{fontSize:11,color:'var(--tf-text-mut)',margin:0,lineHeight:1.8}}>
           Columns: Title, Description, Status, Priority, Assigned To, Delegator, Project, Tags, Due Date, Recurrence, Interval, <strong style={{color:'#818cf8'}}>Checklist</strong><br/>
           <span style={{color:'rgba(129,140,248,0.6)'}}>Checklist items separated by semicolons e.g. "Step 1;Step 2;Step 3"</span>
         </p>
@@ -883,21 +920,21 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
     </div>}
     {tab==='import'&&preview&&<div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-        <strong style={{fontSize:14,color:G.text}}>{preview.length} rows ready to import</strong>
-        <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:G.textSub,cursor:'pointer',fontSize:12,fontFamily:G.font}}>← Back</button>
+        <strong style={{fontSize:14,color:'var(--tf-text)'}>{preview.length} rows ready to import</strong>
+        <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font}}>← Back</button>
       </div>
-      <div style={{maxHeight:260,overflow:'auto',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,marginBottom:16}}>
+      <div style={{maxHeight:260,overflow:'auto',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,marginBottom:16}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
-          <thead><tr>{['Title','Status','Assigned To','Delegator','Checklist'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:G.textSub,fontWeight:700,borderBottom:`1px solid ${G.border}`,background:'rgba(4,9,20,0.9)',position:'sticky',top:0,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
-          <tbody>{preview.map((r,i)=><tr key={i} style={{borderBottom:`1px solid ${G.border}`}}>
-            <td style={{padding:'7px 12px',color:G.text,fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</td>
-            <td style={{padding:'7px 10px',color:G.textSub,whiteSpace:'nowrap'}}>{r.status||'—'}</td>
+          <thead><tr>{['Title','Status','Assigned To','Delegator','Checklist'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:'var(--tf-text-sub)',fontWeight:700,borderBottom:'1px solid var(--tf-border)',background:'rgba(4,9,20,0.9)',position:'sticky',top:0,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
+          <tbody>{preview.map((r,i)=><tr key={i} style={{borderBottom:'1px solid var(--tf-border)'}}>
+            <td style={{padding:'7px 12px',color:'var(--tf-text)',fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</td>
+            <td style={{padding:'7px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.status||'—'}</td>
             <td style={{padding:'7px 10px',color:'#10b981',whiteSpace:'nowrap'}}>{r.assigned_to_name||'—'}</td>
             <td style={{padding:'7px 10px',color:'#f59e0b',whiteSpace:'nowrap'}}>{r.delegator_name||'—'}</td>
             <td style={{padding:'7px 10px',color:'#818cf8'}}>
               {r.checklist?.length>0
                 ?<span title={r.checklist.map(c=>c.text).join('\n')}>☑ {r.checklist.length} item{r.checklist.length>1?'s':''}</span>
-                :<span style={{color:G.textMut}}>—</span>}
+                :<span style={{color:'var(--tf-text-mut)'}}>—</span>}
             </td>
           </tr>)}</tbody>
         </table>
@@ -927,9 +964,9 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
   const displayTasks = filter==='own'?memberOwn : filter==='assigned'?memberAssigned : memberAll
 
   if(wsMembers.filter(m=>m.id!==cu.id).length===0)return(
-    <div style={{textAlign:'center',padding:56,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut}}>
+    <div style={{textAlign:'center',padding:56,border:'1px dashed var(--tf-border)',borderRadius:G.radius,color:'var(--tf-text-mut)'}}>
       <div style={{fontSize:36,marginBottom:12}}>👥</div>
-      <div style={{fontSize:14,fontWeight:700,color:G.textSub,marginBottom:8}}>No teammates yet</div>
+      <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8}}>No teammates yet</div>
       <div style={{fontSize:12,marginBottom:20}}>Invite colleagues to collaborate on tasks.</div>
       <Btn onClick={()=>setShowMembers(true)} color={wsColor}>+ Invite Members</Btn>
     </div>
@@ -938,15 +975,15 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
   return<div style={{display:'flex',flexDirection:'column',gap:16}}>
     {/* Member picker row */}
     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-      <span style={{fontSize:11,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginRight:4}}>Member</span>
+      <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginRight:4}}>Member</span>
       {wsMembers.map(m=>{
         const eu=enrich(m);const sel=m.id===teamMemberId;const isSelf=m.id===cu.id
         const mAll=allT.filter(t=>isOnMyBoard(t,m.id)).length
-        return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.5)`:G.border}`,background:sel?`rgba(${rgb},0.1)`:G.surface,transition:G.trans}}>
+        return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.5)`:'var(--tf-border)'}`,background:sel?`rgba(${rgb},0.1)`:'var(--tf-surface)',transition:G.trans}}>
           <Avatar user={eu} size={28}/>
           <div>
-            <div style={{fontSize:12,fontWeight:700,color:sel?wsColor:G.text}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-            <div style={{fontSize:10,color:G.textSub}}>{mAll} task{mAll!==1?'s':''}</div>
+            <div style={{fontSize:12,fontWeight:700,color:sel?wsColor:'var(--tf-text)'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)'}>{mAll} task{mAll!==1?'s':''}</div>
           </div>
           {sel&&<div style={{width:6,height:6,borderRadius:'50%',background:wsColor,marginLeft:4,boxShadow:`0 0 8px ${wsColor}`}}/>}
         </div>
@@ -955,11 +992,11 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 
     {selMem&&<>
       {/* Member header + stats */}
-      <div style={{background:G.surface,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radius,padding:'18px 22px',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+      <div style={{background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radius,padding:'18px 22px',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
         <Avatar user={enrich(selMem)} size={52} ring={wsColor}/>
         <div style={{flex:1,minWidth:160}}>
-          <div style={{fontSize:18,fontWeight:800,color:G.text,letterSpacing:'-0.02em'}}>{selMem.name||selMem.email}</div>
-          <div style={{fontSize:12,color:G.textSub,marginTop:2}}>{selMem.email}</div>
+          <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{selMem.name||selMem.email}</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{selMem.email}</div>
           <div style={{fontSize:11,color:'#10b981',marginTop:4,fontWeight:600}}>● Workspace member</div>
         </div>
         {/* Stats */}
@@ -973,9 +1010,9 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
           ].map(x=>{
             const xrgb=hexRgb(x.c);const active=filter===x.f
             return<div key={x.l} onClick={x.f?()=>setFilter(f=>f===x.f?'all':x.f):undefined}
-              style={{textAlign:'center',background:active?`rgba(${xrgb},0.15)`:G.surface,border:`1px solid ${active?`rgba(${xrgb},0.4)`:G.border}`,borderRadius:G.radiusMd,padding:'10px 16px',cursor:x.f?'pointer':'default',transition:G.trans,minWidth:60}}>
+              style={{textAlign:'center',background:active?`rgba(${xrgb},0.15):'var(--tf-surface)',border:`1px solid ${active?`rgba(${xrgb},0.4)`:'var(--tf-border)'}`,borderRadius:G.radiusMd,padding:'10px 16px',cursor:x.f?'pointer':'default',transition:G.trans,minWidth:60}}>
               <div style={{fontSize:22,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
-              <div style={{fontSize:10,color:active?x.c:G.textSub,fontWeight:700,marginTop:3,textTransform:'uppercase',letterSpacing:'0.06em'}}>{x.l}</div>
+              <div style={{fontSize:10,color:active?x.c:'var(--tf-text-sub)',fontWeight:700,marginTop:3,textTransform:'uppercase',letterSpacing:'0.06em'}}>{x.l}</div>
             </div>
           })}
         </div>
@@ -983,16 +1020,16 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 
       {/* Filter tabs */}
       <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span style={{fontSize:11,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Showing:</span>
+        <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Showing:</span>
         {[{id:'all',label:`Full Board (${memberAll.length})`},{id:'own',label:`Created by them (${memberOwn.length})`},{id:'assigned',label:`Assigned to them (${memberAssigned.length})`}].map(f=>{
           const active=filter===f.id;const frgb=hexRgb(wsColor)
-          return<button key={f.id} onClick={()=>setFilter(f.id)} style={{padding:'6px 14px',borderRadius:'100px',border:`1.5px solid ${active?`rgba(${frgb},0.5)`:G.border}`,background:active?`rgba(${frgb},0.12)`:'transparent',color:active?wsColor:G.textSub,cursor:'pointer',fontSize:12,fontWeight:active?700:500,transition:G.trans,fontFamily:G.font}}>{f.label}</button>
+          return<button key={f.id} onClick={()=>setFilter(f.id)} style={{padding:'6px 14px',borderRadius:'100px',border:`1.5px solid ${active?`rgba(${frgb},0.5)`:'var(--tf-border)'}`,background:active?`rgba(${frgb},0.12)`:'transparent',color:active?wsColor:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,transition:G.trans,fontFamily:G.font}}>{f.label}</button>
         })}
       </div>
 
       {/* Full Kanban board */}
       {displayTasks.length===0
-        ?<div style={{textAlign:'center',padding:40,border:`1px dashed ${G.border}`,borderRadius:G.radiusMd,color:G.textMut,fontSize:13}}>
+        ?<div style={{textAlign:'center',padding:40,border:'1px dashed var(--tf-border)',borderRadius:G.radiusMd,color:'var(--tf-text-mut)',fontSize:13}}>
           No tasks{filter==='assigned'?' assigned to ':filter==='own'?' created by ':' on the board for '}{selMem.name?.split(' ')[0]||'this member'} yet.
         </div>
         :<div style={{height:'calc(100vh - 340px)',minHeight:320,display:'flex',flexDirection:'column'}}>
@@ -1166,86 +1203,87 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const curUser=enrich(cu)
   const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'⊛'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'⬡'}]
 
-  if(loading)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 16px',boxShadow:'0 8px 28px rgba(99,102,241,0.4)'}}>✦</div>Loading…</div></div>
+  if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(99,102,241,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
 
-  return<div style={{minHeight:'100vh',background:G.bg,fontFamily:G.font,color:G.text,display:'flex',flexDirection:'column',WebkitFontSmoothing:'antialiased',position:'relative'}} onDragEnd={()=>setDragId(null)}>
+  return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:G.font,color:'var(--tf-text)',display:'flex',flexDirection:'column',WebkitFontSmoothing:'antialiased',MozOsxFontSmoothing:'grayscale',position:'relative'}} onDragEnd={()=>setDragId(null)}>
     <GlobalStyle lightMode={lightMode}/>
-    {activeWs&&<div style={{position:'fixed',top:0,left:'25%',right:0,height:'35vh',background:`radial-gradient(ellipse at 65% 0%,rgba(${wsRgb},0.055) 0%,transparent 70%)`,pointerEvents:'none',zIndex:0}}/>}
+    {activeWs&&<div style={{position:'fixed',top:0,left:'20%',right:0,height:'32vh',background:`radial-gradient(ellipse at 60% 0%,rgba(${wsRgb},0.06) 0%,transparent 68%)`,pointerEvents:'none',zIndex:0}}/>}
     <Toast toast={toastData}/>
 
     {/* TOP NAV */}
-    <nav style={{height:54,background:G.panel,borderBottom:`1px solid ${G.border}`,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 18px',gap:6,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
-      <div style={{width:32,height:32,borderRadius:'9px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,boxShadow:'0 3px 12px rgba(99,102,241,0.35)',flexShrink:0,cursor:'pointer'}} onClick={()=>setActiveWsId(null)}>✦</div>
-      <span style={{fontSize:14,fontWeight:800,color:G.text,letterSpacing:'-0.03em',marginRight:8}}>TaskFlow</span>
-      <div style={{width:1,height:18,background:G.border,marginRight:4}}/>
-      <div style={{display:'flex',alignItems:'center',gap:3,overflowX:'auto',flex:1}}>
-        {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.35)`:G.border}`,background:active?`rgba(${wrgb},0.12)`:'transparent',color:active?ws.color:G.textSub,cursor:'pointer',fontSize:12,fontWeight:active?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=G.surface;e.currentTarget.style.color=G.text}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color=G.textSub}}}><span style={{fontSize:13}}>{ws.icon}</span>{ws.name}</button>})}
-        <button onClick={()=>setWsForm('new')} style={{width:26,height:26,borderRadius:G.radiusSm,border:`1px dashed ${G.border}`,background:'transparent',color:G.textMut,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.color='#6366f1'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textMut}}>+</button>
+    <nav style={{height:52,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 16px',gap:5,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>setActiveWsId(null)}>
+        <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(99,102,241,0.35)'}}>✦</div>
+        <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
-      {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'5px 13px',color:G.text,fontSize:12,outline:'none',width:130,fontFamily:G.font,flexShrink:0}}/>}
-      {activeWs&&<select value={fPriority} onChange={e=>setFPriority(e.target.value)} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusSm,padding:'5px 8px',color:G.textSub,fontSize:11,cursor:'pointer',outline:'none',fontFamily:G.font,flexShrink:0}}><option value="">Priority</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select>}
-      {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:G.font}}>✕</button>}
+      <div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
+      <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
+        {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
+        <button onClick={()=>setWsForm('new')} style={{width:24,height:24,borderRadius:G.radiusSm,border:'1px dashed var(--tf-border)',background:'transparent',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.color='#6366f1'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-mut)'}}>+</button>
+      </div>
+      {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tasks…" style={{background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:G.radiusSm,padding:'5px 11px',color:'var(--tf-text)',fontSize:12,outline:'none',width:140,fontFamily:G.font,flexShrink:0}}/>}
+      {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:G.font,flexShrink:0}}>✕ Clear</button>}
       {/* Workspace settings dropdown */}
       {activeWs&&<div ref={wsMenuRef} style={{position:'relative',flexShrink:0}}>
-        <button onClick={()=>setShowWsMenu(v=>!v)} style={{width:28,height:28,borderRadius:G.radiusSm,background:G.surface,border:`1px solid ${G.border}`,color:G.textSub,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>⚙</button>
-        {showWsMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'rgba(4,9,22,0.98)',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,minWidth:210,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
+        <button onClick={()=>setShowWsMenu(v=>!v)} title="Workspace settings" style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>⚙</button>
+        {showWsMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:200,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
           {[
-            ...(myRole==='owner'||myRole==='admin'?[{label:'✏️ Edit workspace',action:()=>{setWsForm({...activeWs});setShowWsMenu(false)}},{label:'⚙️ Manage columns',action:()=>{setStatusMgr(true);setShowWsMenu(false)}}]:[]),
-            {label:'👥 Members & Invites',action:()=>{setShowMembers(true);setShowWsMenu(false)}},
-            {label:'📊 Import / Export',action:()=>{setShowImEx(true);setShowWsMenu(false)}},
-            ...(myRole==='owner'?[{label:'🗑 Delete workspace',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[{label:'🚪 Leave workspace',action:()=>{if(window.confirm('Leave this workspace?'))leaveWs();setShowWsMenu(false)},danger:true}])
-          ].map((item,i)=><button key={i} onClick={item.action} style={{display:'block',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#f87171':G.text,fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surface} onMouseLeave={e=>e.currentTarget.style.background='none'}>{item.label}</button>)}
+            ...(myRole==='owner'||myRole==='admin'?[{label:'Edit workspace',icon:'✏️',action:()=>{setWsForm({...activeWs});setShowWsMenu(false)}},{label:'Manage columns',icon:'⚙',action:()=>{setStatusMgr(true);setShowWsMenu(false)}}]:[]),
+            {label:'Members & Invites',icon:'👥',action:()=>{setShowMembers(true);setShowWsMenu(false)}},
+            {label:'Import / Export',icon:'📊',action:()=>{setShowImEx(true);setShowWsMenu(false)}},
+            ...(myRole==='owner'?[{label:'Delete workspace',icon:'🗑',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[{label:'Leave workspace',icon:'🚪',action:()=>{if(window.confirm('Leave this workspace?'))leaveWs();setShowWsMenu(false)},danger:true}])
+          ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
-      {/* Light/dark */}
-      <button onClick={()=>setLightMode(v=>!v)} style={{width:28,height:28,borderRadius:G.radiusSm,background:G.surface,border:`1px solid ${G.border}`,color:G.textSub,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}>{lightMode?'🌙':'☀️'}</button>
+      {/* Light/dark toggle */}
+      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
       <div ref={userMenuRef} style={{position:'relative',flexShrink:0}}>
-        <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:`1.5px solid ${G.border}`,position:'relative'}}>
-          <Avatar user={curUser} size={30}/>
-          {pendingInvites.length>0&&<div style={{position:'absolute',top:-2,right:-2,width:10,height:10,borderRadius:'50%',background:'#6366f1',border:'2px solid rgba(4,9,18,0.9)'}}/>}
+        <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'1.5px solid var(--tf-border)',position:'relative'}}>
+          <Avatar user={curUser} size={28}/>
+          {pendingInvites.length>0&&<div style={{position:'absolute',top:-2,right:-2,width:9,height:9,borderRadius:'50%',background:'#6366f1',border:'2px solid var(--tf-bg)'}}/>}
         </div>
-        {showUserMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'rgba(4,9,22,0.98)',border:`1px solid ${G.border}`,borderRadius:G.radiusMd,minWidth:230,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
-          <div style={{padding:'14px 16px',borderBottom:`1px solid ${G.border}`,display:'flex',gap:10,alignItems:'center'}}>
-            <Avatar user={curUser} size={34}/>
-            <div><div style={{fontSize:13,fontWeight:700,color:G.text}}>{cu.user_metadata?.full_name||cu.email}</div><div style={{fontSize:11,color:G.textSub}}>{cu.email}</div><div style={{fontSize:10,color:'#10b981',marginTop:2,fontWeight:600}}>● Active</div></div>
+        {showUserMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:220,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
+          <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:10,alignItems:'center'}}>
+            <Avatar user={curUser} size={32}/>
+            <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{cu.user_metadata?.full_name||cu.email.split('@')[0]}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cu.email}</div></div>
           </div>
-          {pendingInvites.length>0&&<div style={{borderBottom:`1px solid ${G.border}`,background:'rgba(99,102,241,0.04)'}}>
-            <div style={{padding:'8px 16px 4px',fontSize:10,fontWeight:800,color:'#818cf8',textTransform:'uppercase',letterSpacing:'0.08em'}}>🎉 Pending Invitations</div>
-            {pendingInvites.map(inv=>{const ws=inv.workspace;const rgb=hexRgb(ws?.color||'#6366f1');return<div key={inv.id} style={{padding:'8px 14px',borderTop:`1px solid rgba(${rgb},0.1)`}}>
+          {pendingInvites.length>0&&<div style={{borderBottom:'1px solid var(--tf-border)'}}>
+            <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:'#818cf8',textTransform:'uppercase',letterSpacing:'0.06em'}}>Pending Invitations</div>
+            {pendingInvites.map(inv=>{const ws=inv.workspace;const rgb=hexRgb(ws?.color||'#6366f1');return<div key={inv.id} style={{padding:'8px 12px',borderTop:`1px solid rgba(${rgb},0.08)`}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                <div style={{width:28,height:28,borderRadius:'8px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}}>{ws?.icon||'⬡'}</div>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:G.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ws?.name||'Workspace'}</div><div style={{fontSize:10,color:G.textSub}}>by {inv.inviter?.name||inv.inviter?.email}</div></div>
+                <div style={{width:26,height:26,borderRadius:'7px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{ws?.icon||'⬡'}</div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ws?.name||'Workspace'}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>from {inv.inviter?.name||inv.inviter?.email}</div></div>
               </div>
-              <div style={{display:'flex',gap:6}}>
-                <button onClick={async e=>{e.stopPropagation();setShowUserMenu(false);await acceptInv(inv)}} style={{flex:1,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusXs,padding:'5px 0',color:ws?.color||'#818cf8',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font}}>✓ Accept</button>
-                <button onClick={async e=>{e.stopPropagation();await declineInv(inv)}} style={{flex:1,background:'rgba(239,68,68,0.07)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:G.radiusXs,padding:'5px 0',color:'#f87171',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>Decline</button>
+              <div style={{display:'flex',gap:5}}>
+                <button onClick={async e=>{e.stopPropagation();setShowUserMenu(false);await acceptInv(inv)}} style={{flex:1,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.28)`,borderRadius:G.radiusXs,padding:'5px 0',color:ws?.color||'#818cf8',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>✓ Accept</button>
+                <button onClick={async e=>{e.stopPropagation();await declineInv(inv)}} style={{flex:1,background:'rgba(239,68,68,0.07)',border:'1px solid rgba(239,68,68,0.18)',borderRadius:G.radiusXs,padding:'5px 0',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>Decline</button>
               </div>
             </div>})}
           </div>}
-          <button onClick={()=>{setShowUserMenu(false);onSignOut()}} style={{display:'block',width:'100%',padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:13,textAlign:'left',fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background=G.surface} onMouseLeave={e=>e.currentTarget.style.background='none'}>⎋ Sign out</button>
+          <button onClick={()=>{setShowUserMenu(false);onSignOut()}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 14px',background:'none',border:'none',cursor:'pointer',color:'#ef4444',fontSize:13,textAlign:'left',fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>⎋ Sign out</button>
         </div>}
       </div>
     </nav>
 
     {/* CONTENT */}
     {!activeWs
-      ?<div style={{flex:1,padding:'32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
-        <h1 style={{fontSize:22,fontWeight:800,color:G.text,margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
-        <p style={{fontSize:13,color:G.textSub,margin:'0 0 24px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
+        <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
-          {workspaces.map(ws=>{const wrgb=hexRgb(ws.color);return<div key={ws.id} onClick={()=>setActiveWsId(ws.id)} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background=G.surfaceHov;e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.surface;e.currentTarget.style.transform='none'}}>
+          {workspaces.map(ws=>{const wrgb=hexRgb(ws.color);return<div key={ws.id} onClick={()=>setActiveWsId(ws.id)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
             <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${ws.color},${ws.color}44)`}}/>
             <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
               <div style={{width:42,height:42,borderRadius:'12px',background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{ws.icon}</div>
-              <div><div style={{fontSize:14,fontWeight:700,color:G.text}}>{ws.name}</div><div style={{fontSize:11,color:G.textSub,marginTop:2}}>{ws.description||'No description'}</div></div>
+              <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}>{ws.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{ws.description||'No description'}</div></div>
             </div>
           </div>})}
-          <div onClick={()=>setWsForm('new')} style={{background:G.surface,border:`1px dashed ${G.border}`,borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.background=G.surfaceHov;e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.background=G.surface;e.currentTarget.style.transform='none'}}>
-            <div style={{width:42,height:42,borderRadius:'12px',border:`2px dashed ${G.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:G.textMut}}>+</div>
-            <span style={{fontSize:13,fontWeight:600,color:G.textMut}}>New Workspace</span>
+          <div onClick={()=>setWsForm('new')} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+            <div style={{width:42,height:42,borderRadius:'12px',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:'var(--tf-text-mut)'}}>+</div>
+            <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
           </div>
         </div>
       </div>
@@ -1253,8 +1291,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {/* Invite banner inside workspace too */}
         {pendingInvites.length>0&&<div style={{padding:'10px 24px 0',flexShrink:0}}><InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/></div>}
       {/* View tabs */}
-        <div style={{background:G.panel,borderBottom:`1px solid ${G.border}`,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,padding:'0 24px',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
-          {views.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:G.textSub,cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
+        <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,padding:'0 24px',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
+          {views.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
             <span>{v.icon}</span>{v.label}
             {v.id==='recurring'&&recT.length>0&&<span style={{fontSize:10,fontWeight:700,color:wsColor,background:`rgba(${wsRgb},0.14)`,borderRadius:'100px',padding:'1px 7px'}}>{recT.length}</span>}
           </button>)}
@@ -1262,7 +1300,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* Stacked member avatars */}
           <div style={{display:'flex',alignItems:'center',marginRight:8,cursor:'pointer'}} onClick={()=>setShowMembers(true)} title="Manage Members">
             {wsMembers.slice(0,5).map((m,i)=><div key={m.id} style={{marginLeft:i?-7:0,zIndex:wsMembers.length-i}}><Avatar user={enrich(m)} size={24} ring={i===0?wsColor:undefined}/></div>)}
-            {wsMembers.length>5&&<div style={{width:24,height:24,borderRadius:'50%',background:G.surface,border:`1px solid ${G.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:G.textSub,fontWeight:700,marginLeft:-7}}>+{wsMembers.length-5}</div>}
+            {wsMembers.length>5&&<div style={{width:24,height:24,borderRadius:'50%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'var(--tf-text-sub)',fontWeight:700,marginLeft:-7}}>+{wsMembers.length-5}</div>}
             <div style={{width:24,height:24,borderRadius:'50%',background:`rgba(${wsRgb},0.12)`,border:`1px dashed rgba(${wsRgb},0.3)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:wsColor,marginLeft:4,cursor:'pointer'}}>+</div>
           </div>
           <Btn onClick={()=>openNew()} color={wsColor} style={{margin:'7px 0',fontSize:12,padding:'7px 16px'}}>+ New Task</Btn>
@@ -1271,7 +1309,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {/* BOARD */}
         {view==='board'&&<div style={{height:'calc(100vh - 54px - 46px)',display:'flex',flexDirection:'column',overflow:'hidden',padding:'20px 24px 8px',boxSizing:'border-box'}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,flexShrink:0}}>
-            <div><h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:G.textSub}}>{myTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
+            <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}>{myTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
           </div>
           <KanbanBoard isDragging={!!dragId}>
             {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
@@ -1287,19 +1325,19 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* RECURRING */}
           {view==='recurring'&&<div>
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}}>
-              <div><h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 4px',letterSpacing:'-0.03em'}}>🔁 Recurring Tasks</h2><p style={{fontSize:12,color:G.textSub,margin:0}}>{recT.length} recurring — mark Done to create next</p></div>
+              <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>🔁 Recurring Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{recT.length} recurring — mark Done to create next</p></div>
               <Btn onClick={()=>openNew()} color="#6366f1">+ New Recurring</Btn>
             </div>
             {recT.length===0
-              ?<div style={{textAlign:'center',padding:56,border:`1px dashed ${G.border}`,borderRadius:G.radius,color:G.textMut}}><div style={{fontSize:36,marginBottom:12}}>🔁</div><div style={{fontSize:14,fontWeight:700,color:G.textSub,marginBottom:8}}>No recurring tasks</div><div style={{fontSize:12,marginBottom:20}}>Create a task with a recurrence schedule.</div><Btn onClick={()=>openNew()} color="#6366f1">Create First</Btn></div>
+              ?<div style={{textAlign:'center',padding:56,border:'1px dashed var(--tf-border)',borderRadius:G.radius,color:'var(--tf-text-mut)'}}><div style={{fontSize:36,marginBottom:12}}>🔁</div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8}}>No recurring tasks</div><div style={{fontSize:12,marginBottom:20}}>Create a task with a recurrence schedule.</div><Btn onClick={()=>openNew()} color="#6366f1">Create First</Btn></div>
               :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:12}}>
-                {recT.map(t=>{const assignee=getUser(t.assigned_to,wsMembers);const ovd=isOvd(t.due_date);const rl=rrLabel(t.recurrence_type,t.recurrence_interval);const nd=nextDate(t.due_date,t.recurrence_type,t.recurrence_interval);const col=SC[t.status]||wsColor;return<div key={t.id} onClick={()=>setEditTask(t)} style={{background:G.surface,border:'1px solid rgba(99,102,241,0.2)',borderRadius:G.radius,padding:16,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.4)';e.currentTarget.style.background=G.surfaceHov;e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.2)';e.currentTarget.style.background=G.surface;e.currentTarget.style.transform='none'}}>
+                {recT.map(t=>{const assignee=getUser(t.assigned_to,wsMembers);const ovd=isOvd(t.due_date);const rl=rrLabel(t.recurrence_type,t.recurrence_interval);const nd=nextDate(t.due_date,t.recurrence_type,t.recurrence_interval);const col=SC[t.status]||wsColor;return<div key={t.id} onClick={()=>setEditTask(t)} style={{background:'var(--tf-surface)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:G.radius,padding:16,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.4)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(99,102,241,0.2)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
                   <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6366f1,#8b5cf6)'}}/>
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}><div style={{fontSize:14,fontWeight:700,color:G.text,flex:1,lineHeight:1.4}}>{t.title}</div><Tag label={`🔁 ${rl}`} color="#6366f1"/></div>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',flex:1,lineHeight:1.4}}>{t.title}</div><Tag label={`🔁 ${rl}`} color="#6366f1"/></div>
                   <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}><Tag label={t.status} color={col}/><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/>{ovd&&<Tag label="⚠ Overdue" color="#ef4444"/>}</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,background:'rgba(0,0,0,0.2)',borderRadius:G.radiusSm,padding:'10px 12px'}}>
-                    <div><div style={{fontSize:10,color:G.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Current Due</div><div style={{fontSize:12,color:ovd?'#f87171':G.textSub,fontWeight:600}}>{t.due_date?fmtFull(t.due_date):'Not set'}</div></div>
-                    <div><div style={{fontSize:10,color:G.textMut,fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next After Done</div><div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nd?fmtFull(nd):'—'}</div></div>
+                    <div><div style={{fontSize:10,color:'var(--tf-text-mut)',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Current Due</div><div style={{fontSize:12,color:ovd?'#f87171':'var(--tf-text-sub)',fontWeight:600}}>{t.due_date?fmtFull(t.due_date):'Not set'}</div></div>
+                    <div><div style={{fontSize:10,color:'var(--tf-text-mut)',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next After Done</div><div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nd?fmtFull(nd):'—'}</div></div>
                   </div>
                 </div>})}
               </div>}
@@ -1308,27 +1346,27 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* ALL TASKS */}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
-              <div><h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:G.textSub,margin:0}}>{allT.length} tasks</p></div>
+              <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{allT.length} tasks</p></div>
               <Btn onClick={()=>setShowImEx(true)} outline color="#64748b">📊 Import / Export</Btn>
             </div>
-            <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,overflow:'hidden'}}>
+            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,overflow:'hidden'}}>
               <table style={{width:'100%',borderCollapse:'collapse'}}>
-                <thead><tr style={{borderBottom:`1px solid ${G.border}`}}>{['Task','Status','Priority','Delegator','Assignees','Due','',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:G.textSub,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
+                <thead><tr style={{borderBottom:'1px solid var(--tf-border)'}}>{['Task','Status','Priority','Delegator','Assignees','Due','',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {allT.map(t=>{const asgns=getAssignees(t).map(id=>getUser(id,wsMembers)).filter(Boolean);const dlg=getUser(t.delegator_id||t.created_by,wsMembers);const ovd=isOvd(t.due_date);const col=SC[t.status]||wsColor;const isMine=getAssignees(t).includes(cu.id);const canClaim=!isMine;return<tr key={t.id} style={{borderBottom:`1px solid ${G.border}`,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><div><div style={{fontSize:12,fontWeight:600,color:G.text}}>{t.title}</div>{t.project&&<div style={{fontSize:10,color:G.textSub,marginTop:1}}>{t.project}</div>}</div></div></td>
+                  {allT.map(t=>{const asgns=getAssignees(t).map(id=>getUser(id,wsMembers)).filter(Boolean);const dlg=getUser(t.delegator_id||t.created_by,wsMembers);const ovd=isOvd(t.due_date);const col=SC[t.status]||wsColor;const isMine=getAssignees(t).includes(cu.id);const canClaim=!isMine;return<tr key={t.id} style={{borderBottom:'1px solid var(--tf-border)',transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><div><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}>{t.title}</div>{t.project&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{t.project}</div>}</div></div></td>
                     <td style={{padding:'10px 10px'}}><Tag label={t.status} color={col}/></td>
                     <td style={{padding:'10px 10px'}}><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/></td>
-                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={dlg} size={18}/><span style={{fontSize:11,color:G.textSub}}>{dlg?.name?.split(' ')[0]||'?'}{dlg?.id===cu.id?' (You)':''}</span></div></td>
-                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:4}}>{asgns.length===0?<span style={{fontSize:11,color:G.textMut,fontStyle:'italic'}}>Unassigned</span>:asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:G.textSub,marginLeft:4}}>+{asgns.length-3}</span>}{isMine&&<span style={{fontSize:9,color:'#10b981',fontWeight:700,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:'100px',padding:'1px 6px',marginLeft:4}}>You</span>}</div></td>
-                    <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':G.textSub,fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
+                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={dlg} size={18}/><span style={{fontSize:11,color:'var(--tf-text-sub)'}>{dlg?.name?.split(' ')[0]||'?'}{dlg?.id===cu.id?' (You)':''}</span></div></td>
+                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:4}}>{asgns.length===0?<span style={{fontSize:11,color:'var(--tf-text-mut)',fontStyle:'italic'}}>Unassigned</span>:asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:4}}>+{asgns.length-3}</span>}{isMine&&<span style={{fontSize:9,color:'#10b981',fontWeight:700,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:'100px',padding:'1px 6px',marginLeft:4}}>You</span>}</div></td>
+                    <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':'var(--tf-text-sub)',fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
                     <td style={{padding:'8px 10px'}}>{canClaim
                       ?<button onClick={e=>{e.stopPropagation();setAssignTask(t)}} style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:G.radiusMd,padding:'5px 11px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(16,185,129,0.2)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(16,185,129,0.1)'}>🙋 Assign</button>
                       :<span style={{fontSize:10,color:'#10b981',fontWeight:700}}>✓ Mine</span>}
                     </td>
                     <td style={{padding:'8px 10px'}}><Btn onClick={()=>setEditTask(t)} outline color={wsColor} sm>Edit</Btn></td>
                   </tr>})}
-                  {allT.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:G.textMut,fontSize:13}}>No tasks yet</td></tr>}
+                  {allT.length===0&&<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'var(--tf-text-mut)',fontSize:13}}>No tasks yet</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1336,21 +1374,21 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
           {/* DASHBOARD */}
           {view==='dashboard'&&<div>
-            <h2 style={{fontSize:18,fontWeight:800,color:G.text,margin:'0 0 20px',letterSpacing:'-0.03em'}}>Dashboard</h2>
+            <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 20px',letterSpacing:'-0.03em'}}>Dashboard</h2>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:16}}>
-              {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&getAssignees(t).some(id=>id!==cu.id)).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'},{l:'Members',v:wsMembers.length,c:'#10b981'}].map(x=>{const rgb=hexRgb(x.c);return<div key={x.l} style={{background:G.surface,border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans,cursor:x.l==='Members'?'pointer':undefined}} onClick={x.l==='Members'?()=>setShowMembers(true):undefined} onMouseEnter={e=>e.currentTarget.style.background=G.surfaceHov} onMouseLeave={e=>e.currentTarget.style.background=G.surface}><div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2}}>{x.v}</div><div style={{fontSize:12,fontWeight:600,color:G.text}}>{x.l}</div></div>})}
+              {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&getAssignees(t).some(id=>id!==cu.id)).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'},{l:'Members',v:wsMembers.length,c:'#10b981'}].map(x=>{const rgb=hexRgb(x.c);return<div key={x.l} style={{background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans,cursor:x.l==='Members'?'pointer':undefined}} onClick={x.l==='Members'?()=>setShowMembers(true):undefined} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}><div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2}}>{x.v}</div><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}>{x.l}</div></div>})}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:18}}>
-                <div style={{fontSize:13,fontWeight:700,color:G.text,marginBottom:14}}>Status Breakdown</div>
-                {statuses.map(s=>{const c=tasks.filter(t=>t.status===s).length;const p=tasks.length?Math.round((c/tasks.length)*100):0;const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{marginBottom:12}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:G.textSub}}>{s}</span><span style={{fontSize:12,color:col,fontWeight:700}}>{c}</span></div><div style={{height:4,background:G.surfaceHov,borderRadius:2,overflow:'hidden'}}><div style={{width:p+'%',height:'100%',background:col,borderRadius:2,boxShadow:`0 0 8px rgba(${rgb},0.5)`,transition:'width 0.5s ease'}}/></div></div>})}
+              <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:18}}>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>Status Breakdown</div>
+                {statuses.map(s=>{const c=tasks.filter(t=>t.status===s).length;const p=tasks.length?Math.round((c/tasks.length)*100):0;const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{marginBottom:12}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:'var(--tf-text-sub)'}>{s}</span><span style={{fontSize:12,color:col,fontWeight:700}}>{c}</span></div><div style={{height:4,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{width:p+'%',height:'100%',background:col,borderRadius:2,boxShadow:`0 0 8px rgba(${rgb},0.5)`,transition:'width 0.5s ease'}}/></div></div>})}
               </div>
-              <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radius,padding:18}}>
+              <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:18}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-                  <div style={{fontSize:13,fontWeight:700,color:G.text}}>Team Workload</div>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>Team Workload</div>
                   {(myRole==='owner'||myRole==='admin')&&<button onClick={()=>setShowMembers(true)} style={{background:'none',border:'none',color:'#818cf8',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>+ Invite</button>}
                 </div>
-                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:G.text}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:G.textMut}}>·</span><span style={{fontSize:10,color:G.textSub}}>{o} own</span></div></div></div>})}
+                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:'var(--tf-text-mut)'}}>·</span><span style={{fontSize:10,color:'var(--tf-text-sub)'}>{o} own</span></div></div></div>})}
               </div>
             </div>
           </div>}
@@ -1375,7 +1413,7 @@ class ErrorBoundary extends React.Component{
   static getDerivedStateFromError(e){return{err:e}}
   render(){
     if(this.state.err)return(
-      <div style={{minHeight:'100vh',background:'#040912',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui',color:'#e8edf5',padding:24}}>
+      <div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui',color:'#e8edf5',padding:24}}>
         <div style={{maxWidth:480,textAlign:'center'}}>
           <div style={{fontSize:48,marginBottom:16}}>⚠️</div>
           <div style={{fontSize:20,fontWeight:700,marginBottom:8}}>Something went wrong</div>
@@ -1431,7 +1469,7 @@ export default function App(){
 
   const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
 
-  if(loading)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 14px',boxShadow:'0 8px 28px rgba(99,102,241,0.4)'}}>✦</div><div>Loading…</div></div></div>
+  if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(99,102,241,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
   if(!session)return<AuthScreen inviteToken={inviteToken}/>
   return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
 }
