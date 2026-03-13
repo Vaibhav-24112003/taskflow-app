@@ -144,7 +144,7 @@ function Modal({open,onClose,title,width=600,children}){
     <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radius,width:'100%',maxWidth:width,maxHeight:'92vh',overflow:'auto',boxShadow:G.shadowLg}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 22px',borderBottom:'1px solid var(--tf-border)',position:'sticky',top:0,background:'var(--tf-panel)',zIndex:1,backdropFilter:G.blurSm,WebkitBackdropFilter:G.blurSm}}>
         <span style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',fontFamily:G.fontDisplay}}>{title}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>✕</button>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}}>✕</button>
       </div>
       <div style={{padding:'20px 22px'}}>{children}</div>
     </div>
@@ -240,8 +240,8 @@ function InviteBanner({invites,onAccept,onDecline}){
       return<div key={inv.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.18)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:8}}>
         <div style={{width:36,height:36,borderRadius:'10px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{ws?.icon||'⬡'}</div>
         <div style={{flex:1}}>
-          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>{ws?.name||'Workspace'}</div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)'}>Invited by {inviter?.name||inviter?.email} · {fmtAgo(inv.created_at)}</div>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{ws?.name||'Workspace'}</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Invited by {inviter?.name||inviter?.email} · {fmtAgo(inv.created_at)}</div>
         </div>
         <div style={{display:'flex',gap:6}}>
           <Btn onClick={()=>onAccept(inv)} color="#10b981" sm>✓ Accept</Btn>
@@ -313,8 +313,8 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
       {invitations.map(inv=>(
         <div key={inv.id} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:6}}>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}>{inv.invitee_email}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)'}>Sent {fmtAgo(inv.created_at)}</div>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{inv.invitee_email}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Sent {fmtAgo(inv.created_at)}</div>
           </div>
           <div style={{display:'flex',gap:6}}>
             <button onClick={()=>copyLink(inv)} style={{background:`rgba(${rgb},0.1)`,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusXs,padding:'5px 10px',color:ws?.color,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font}}>📋 Copy link</button>
@@ -332,8 +332,8 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
         return<div key={m.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:8}}>
           <Avatar user={eu} size={36}/>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>{m.name||m.email}{isSelf?<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:6}}>(You)</span>:''}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)'}>{m.email}</div>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{m.name||m.email}{isSelf?<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:6}}>(You)</span>:''}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{m.email}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:10,fontWeight:700,color:rc,background:`${rc}18`,border:`1px solid ${rc}30`,borderRadius:'100px',padding:'2px 9px'}}>{(m.role||'member').toUpperCase()}</span>
@@ -357,7 +357,7 @@ function StatusManager({open,onClose,statuses,wsColor,onSave}){
   return<Modal open={open} onClose={onClose} title="Manage Columns" width={420}>
     {list.map((s,i)=>{const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusMd,padding:'9px 14px',marginBottom:8}}>
       <div style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,boxShadow:`0 0 8px ${col}99`}}/>
-      <span style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)'}>{s}</span>
+      <span style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{s}</span>
       <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?G.textMut:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>↑</button>
       <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?G.textMut:'var(--tf-text-sub)',cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>↓</button>
       <Btn onClick={()=>del(s)} danger sm>✕</Btn>
@@ -427,7 +427,7 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
       style={{flex:1,background:'none',border:'none',borderBottom:focused?'1px solid var(--tf-border-hov)':'1px solid transparent',outline:'none',color:item.done?'var(--tf-text-sub)':'var(--tf-text)',fontSize:13,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.6,padding:'1px 2px',transition:'border-color 0.15s'}}/>
     <button onMouseDown={e=>e.preventDefault()} onClick={()=>onRemove(item.id)}
       style={{background:'none',border:'none',color:focused?G.textSub:'var(--tf-text-mut)',cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1,fontFamily:G.font,opacity:focused?1:0.4,transition:'opacity 0.15s'}}
-      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:'var(--tf-text-mut)'}>✕</button>
+      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:'var(--tf-text-mut)'}}>✕</button>
   </div>
 }
 
@@ -463,7 +463,7 @@ function ChecklistEditor({items,onChange,wsColor}){
   return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'14px 16px'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
-        <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>Checklist</span>
+        <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Checklist</span>
         {items.length>0&&<span style={{fontSize:11,color:pct===100?'#10b981':wsColor,fontWeight:700}}>{done}/{items.length}</span>}
       </div>
       <div style={{display:'flex',gap:6}}>
@@ -506,7 +506,7 @@ function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onInte
     {show&&<div style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface-hov)',borderRadius:G.radiusSm,padding:'10px 14px',border:'1px solid var(--tf-border)'}}>
       <span style={{fontSize:12,color:'var(--tf-text-sub)',flexShrink:0}}>Every</span>
       <input type="number" min={1} max={365} value={recurrenceInterval} onChange={e=>onIntervalChange(Math.max(1,parseInt(e.target.value)||1))} style={{...INP,width:62,padding:'5px 10px',fontSize:13,flex:'none'}}/>
-      <span style={{fontSize:12,color:'var(--tf-text-sub)'}>{recurrenceType==='weekly'?'week(s)':recurrenceType==='monthly'?'month(s)':'day(s)'}</span>
+      <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{recurrenceType==='weekly'?'week(s)':recurrenceType==='monthly'?'month(s)':'day(s)'}</span>
       <Tag label={`🔁 ${rrLabel(recurrenceType,recurrenceInterval)}`} color="#6366f1"/>
     </div>}
   </div>
@@ -566,14 +566,14 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
     {/* Task summary */}
     <div style={{background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:18}}>
       <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{task.title}</div>
-      {task.project&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}>📁 {task.project}</div>}
+      {task.project&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>📁 {task.project}</div>}
     </div>
 
     {/* Mode tabs */}
     <div style={{display:'flex',gap:8,marginBottom:20}}>
       <button onClick={()=>setMode('self')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='self'?`rgba(${rgb},0.5)`:'var(--tf-border)'}`,background:mode==='self'?`rgba(${rgb},0.08)`:'var(--tf-surface)',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
         <div style={{fontSize:20,marginBottom:4}}>🙋</div>
-        <div style={{fontSize:13,fontWeight:800,color:mode==='self'?ws.color:'var(--tf-text)'}>I'll take this</div>
+        <div style={{fontSize:13,fontWeight:800,color:mode==='self'?ws.color:'var(--tf-text)'}}>I'll take this</div>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Self-assign under a manager</div>
       </button>
       <button onClick={()=>setMode('delegate')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='delegate'?'rgba(245,158,11,0.5)':'var(--tf-border)'}`,background:mode==='delegate'?'rgba(245,158,11,0.08)':'var(--tf-surface)',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
@@ -612,7 +612,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
         <Avatar user={enrich(wsMembers.find(m=>m.id===cu.id)||{id:cu.id})} size={28}/>
         <div style={{fontSize:11,color:'#f59e0b'}}>
           <strong>You</strong> will be tagged as <strong>Manager / Delegator</strong> on this task.
-          {subordinates.length>0&&<span style={{color:'var(--tf-text-sub)'}> {subordinates.length} member{subordinates.length>1?'s':''} will be assigned.</span>}
+          {subordinates.length>0&&<span style={{color:'var(--tf-text-sub)'}}> {subordinates.length} member{subordinates.length>1?'s':''} will be assigned.</span>}
         </div>
       </div>
     </>}
@@ -702,7 +702,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                 transition:G.trans,flex:'0 0 auto'}}>
               <Avatar user={eu} size={26}/>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'var(--tf-text)'}>
+                <div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'var(--tf-text)'}}>
                   {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
                 </div>
                 <div style={{fontSize:10,color:sel?`rgba(${rgb},0.7)`:'var(--tf-text-sub)'}}>
@@ -903,7 +903,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
     <div style={{display:'flex',gap:4,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:4,marginBottom:20}}>
       {[{id:'export',lb:'⬇ Export CSV'},{id:'import',lb:'⬆ Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(99,102,241,0.85)':'transparent',color:tab===t.id?'#fff':'var(--tf-text-sub)',transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
     </div>
-    {tab==='export'&&<div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:'var(--tf-text-sub)'}>Export <strong style={{color:'var(--tf-text)'}>{tasks.length} tasks</strong> as CSV — includes Assigned To, Delegator, and Checklist items.</div><Btn onClick={doExport} color="#10b981" full>⬇ Download CSV</Btn></div>}
+    {tab==='export'&&<div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:'var(--tf-text-sub)'}}>Export <strong style={{color:'var(--tf-text)'}}>{tasks.length} tasks</strong> as CSV — includes Assigned To, Delegator, and Checklist items.</div><Btn onClick={doExport} color="#10b981" full>⬇ Download CSV</Btn></div>}
     {tab==='import'&&!preview&&<div>
       <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${drag?'#6366f1':'var(--tf-border)'}`,borderRadius:G.radiusMd,padding:'36px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(99,102,241,0.04)':'transparent',transition:G.trans,marginBottom:14}}>
         <div style={{fontSize:36,marginBottom:10}}>📂</div>
@@ -920,7 +920,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
     </div>}
     {tab==='import'&&preview&&<div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-        <strong style={{fontSize:14,color:'var(--tf-text)'}>{preview.length} rows ready to import</strong>
+        <strong style={{fontSize:14,color:'var(--tf-text)'}}>{preview.length} rows ready to import</strong>
         <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font}}>← Back</button>
       </div>
       <div style={{maxHeight:260,overflow:'auto',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,marginBottom:16}}>
@@ -983,7 +983,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
           <Avatar user={eu} size={28}/>
           <div>
             <div style={{fontSize:12,fontWeight:700,color:sel?wsColor:'var(--tf-text)'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-            <div style={{fontSize:10,color:'var(--tf-text-sub)'}>{mAll} task{mAll!==1?'s':''}</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{mAll} task{mAll!==1?'s':''}</div>
           </div>
           {sel&&<div style={{width:6,height:6,borderRadius:'50%',background:wsColor,marginLeft:4,boxShadow:`0 0 8px ${wsColor}`}}/>}
         </div>
@@ -1225,7 +1225,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:G.font,flexShrink:0}}>✕ Clear</button>}
       {/* Workspace settings dropdown */}
       {activeWs&&<div ref={wsMenuRef} style={{position:'relative',flexShrink:0}}>
-        <button onClick={()=>setShowWsMenu(v=>!v)} title="Workspace settings" style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>⚙</button>
+        <button onClick={()=>setShowWsMenu(v=>!v)} title="Workspace settings" style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}}>⚙</button>
         {showWsMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:200,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
           {[
             ...(myRole==='owner'||myRole==='admin'?[{label:'Edit workspace',icon:'✏️',action:()=>{setWsForm({...activeWs});setShowWsMenu(false)}},{label:'Manage columns',icon:'⚙',action:()=>{setStatusMgr(true);setShowWsMenu(false)}}]:[]),
@@ -1236,7 +1236,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         </div>}
       </div>}
       {/* Light/dark toggle */}
-      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
+      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
       <div ref={userMenuRef} style={{position:'relative',flexShrink:0}}>
         <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'1.5px solid var(--tf-border)',position:'relative'}}>
@@ -1278,7 +1278,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${ws.color},${ws.color}44)`}}/>
             <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
               <div style={{width:42,height:42,borderRadius:'12px',background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{ws.icon}</div>
-              <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}>{ws.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{ws.description||'No description'}</div></div>
+              <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{ws.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{ws.description||'No description'}</div></div>
             </div>
           </div>})}
           <div onClick={()=>setWsForm('new')} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
@@ -1309,7 +1309,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {/* BOARD */}
         {view==='board'&&<div style={{height:'calc(100vh - 54px - 46px)',display:'flex',flexDirection:'column',overflow:'hidden',padding:'20px 24px 8px',boxSizing:'border-box'}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,flexShrink:0}}>
-            <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}>{myTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
+            <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}}>{myTasks.length} tasks · <span style={{color:'#818cf8'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
           </div>
           <KanbanBoard isDragging={!!dragId}>
             {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
@@ -1354,10 +1354,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                 <thead><tr style={{borderBottom:'1px solid var(--tf-border)'}}>{['Task','Status','Priority','Delegator','Assignees','Due','',''].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
                 <tbody>
                   {allT.map(t=>{const asgns=getAssignees(t).map(id=>getUser(id,wsMembers)).filter(Boolean);const dlg=getUser(t.delegator_id||t.created_by,wsMembers);const ovd=isOvd(t.due_date);const col=SC[t.status]||wsColor;const isMine=getAssignees(t).includes(cu.id);const canClaim=!isMine;return<tr key={t.id} style={{borderBottom:'1px solid var(--tf-border)',transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                    <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><div><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}>{t.title}</div>{t.project&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{t.project}</div>}</div></div></td>
+                    <td style={{padding:'10px 14px'}}><div style={{display:'flex',alignItems:'center',gap:9}}><div style={{width:3,height:26,borderRadius:2,background:PC[t.priority],flexShrink:0}}/><div><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{t.title}</div>{t.project&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{t.project}</div>}</div></div></td>
                     <td style={{padding:'10px 10px'}}><Tag label={t.status} color={col}/></td>
                     <td style={{padding:'10px 10px'}}><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/></td>
-                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={dlg} size={18}/><span style={{fontSize:11,color:'var(--tf-text-sub)'}>{dlg?.name?.split(' ')[0]||'?'}{dlg?.id===cu.id?' (You)':''}</span></div></td>
+                    <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={dlg} size={18}/><span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{dlg?.name?.split(' ')[0]||'?'}{dlg?.id===cu.id?' (You)':''}</span></div></td>
                     <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:4}}>{asgns.length===0?<span style={{fontSize:11,color:'var(--tf-text-mut)',fontStyle:'italic'}}>Unassigned</span>:asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:4}}>+{asgns.length-3}</span>}{isMine&&<span style={{fontSize:9,color:'#10b981',fontWeight:700,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:'100px',padding:'1px 6px',marginLeft:4}}>You</span>}</div></td>
                     <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':'var(--tf-text-sub)',fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'—'}</span></td>
                     <td style={{padding:'8px 10px'}}>{canClaim
@@ -1376,19 +1376,19 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {view==='dashboard'&&<div>
             <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 20px',letterSpacing:'-0.03em'}}>Dashboard</h2>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:16}}>
-              {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&getAssignees(t).some(id=>id!==cu.id)).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'},{l:'Members',v:wsMembers.length,c:'#10b981'}].map(x=>{const rgb=hexRgb(x.c);return<div key={x.l} style={{background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans,cursor:x.l==='Members'?'pointer':undefined}} onClick={x.l==='Members'?()=>setShowMembers(true):undefined} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}><div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2}}>{x.v}</div><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}>{x.l}</div></div>})}
+              {[{l:'Total',v:tasks.length,c:wsColor},{l:'On My Board',v:myTasks.length,c:'#818cf8'},{l:'Recurring',v:recT.length,c:'#6366f1'},{l:'Delegated',v:tasks.filter(t=>t.created_by===cu.id&&getAssignees(t).some(id=>id!==cu.id)).length,c:'#f59e0b'},{l:'Overdue',v:tasks.filter(t=>isOvd(t.due_date)).length,c:'#ef4444'},{l:'Members',v:wsMembers.length,c:'#10b981'}].map(x=>{const rgb=hexRgb(x.c);return<div key={x.l} style={{background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radius,padding:'16px 18px',transition:G.trans,cursor:x.l==='Members'?'pointer':undefined}} onClick={x.l==='Members'?()=>setShowMembers(true):undefined} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}}><div style={{fontSize:28,fontWeight:800,color:x.c,marginBottom:2}}>{x.v}</div><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{x.l}</div></div>})}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:18}}>
                 <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>Status Breakdown</div>
-                {statuses.map(s=>{const c=tasks.filter(t=>t.status===s).length;const p=tasks.length?Math.round((c/tasks.length)*100):0;const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{marginBottom:12}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:'var(--tf-text-sub)'}>{s}</span><span style={{fontSize:12,color:col,fontWeight:700}}>{c}</span></div><div style={{height:4,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{width:p+'%',height:'100%',background:col,borderRadius:2,boxShadow:`0 0 8px rgba(${rgb},0.5)`,transition:'width 0.5s ease'}}/></div></div>})}
+                {statuses.map(s=>{const c=tasks.filter(t=>t.status===s).length;const p=tasks.length?Math.round((c/tasks.length)*100):0;const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{marginBottom:12}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{s}</span><span style={{fontSize:12,color:col,fontWeight:700}}>{c}</span></div><div style={{height:4,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{width:p+'%',height:'100%',background:col,borderRadius:2,boxShadow:`0 0 8px rgba(${rgb},0.5)`,transition:'width 0.5s ease'}}/></div></div>})}
               </div>
               <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:18}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
-                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}>Team Workload</div>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Team Workload</div>
                   {(myRole==='owner'||myRole==='admin')&&<button onClick={()=>setShowMembers(true)} style={{background:'none',border:'none',color:'#818cf8',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>+ Invite</button>}
                 </div>
-                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:'var(--tf-text-mut)'}}>·</span><span style={{fontSize:10,color:'var(--tf-text-sub)'}>{o} own</span></div></div></div>})}
+                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#818cf8'}}>{a} assigned</span><span style={{fontSize:10,color:'var(--tf-text-mut)'}}>·</span><span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{o} own</span></div></div></div>})}
               </div>
             </div>
           </div>}
