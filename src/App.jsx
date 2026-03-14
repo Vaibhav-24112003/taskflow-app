@@ -13,9 +13,9 @@ const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
 const PRIORITIES = ['Low','Medium','High','Critical']
 const RECURRENCE_TYPES = ['none','daily','weekly','monthly','custom']
 const PC = {'Low':'#64748b','Medium':'#38bdf8','High':'#fb923c','Critical':'#f87171'}
-const PI = {'Low':'','Medium':'','High':'','Critical':'!'}
+const PI = {'Low':'↓','Medium':'→','High':'↑','Critical':'⚡'}
 const WS_COLORS = ['#6b8cad','#ec4899','#10b981','#f59e0b','#06b6d4','#4a7a9b','#ef4444','#3b82f6']
-const WS_ICONS  = ['*','#','@','&','+','~','-','=']
+const WS_ICONS  = ['*','#','@','&','+','▲','●','■']
 const SCPAL = ['#64748b','#6b8cad','#f59e0b','#10b981','#ec4899','#06b6d4','#4a7a9b','#ef4444']
 
 // ── Design tokens — CSS variable based (proper light/dark, no filter hack) ─────
@@ -751,7 +751,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
     <div draggable={!mir}
       onDragStart={e=>{if(mir)return;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',task.id);onDragStart(task.id)}}
       onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'9px 12px 7px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.2:1,transform:hov&&!isDragging?'translateY(-1px)':'none',boxShadow:hov&&!isDragging?`0 8px 24px var(--tf-shadow),0 0 0 1px rgba(${rgb},0.18)`:'none',userSelect:'none',borderLeft:`3px solid ${hov?acc:`rgba(${rgb},0.4)`}`,position:'relative'}}>
+      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'11px 13px 9px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.2:1,transform:hov&&!isDragging?'translateY(-1px)':'none',boxShadow:hov&&!isDragging?`0 8px 24px var(--tf-shadow),0 0 0 1px rgba(${rgb},0.18)`:'none',userSelect:'none',borderLeft:`3px solid ${hov?acc:`rgba(${rgb},0.4)`}`,position:'relative'}}>
       {/* Top meta row */}
       <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:7,flexWrap:'wrap'}}>
         <span style={{fontSize:10,fontWeight:600,color:pColor,background:`rgba(${hexRgb(pColor)},0.1)`,borderRadius:4,padding:'1px 6px'}}>{PI[task.priority]} {task.priority}</span>
@@ -767,7 +767,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         </div>}
       </div>
       {/* Title */}
-      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:task.description?3:7,lineHeight:1.3,fontFamily:G.font}}>{task.title}</div>
+      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:task.description?4:8,lineHeight:1.4,fontFamily:G.font}}>{task.title}</div>
       {task.description&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.45,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
       {/* Checklist progress bar */}
       {cl.length>0&&<div style={{marginBottom:8,height:3,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div>}
@@ -776,14 +776,15 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         {(task.tags||[]).slice(0,3).map(t=><span key={t} style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 7px',fontWeight:500}}>{t}</span>)}
       </div>}
       {/* Bottom row */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>{task.due_date&&<span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{fmtDate(task.due_date)}</span>}<div style={{display:'flex',alignItems:'center',gap:-3}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+        <span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{task.due_date?fmtDate(task.due_date):''}</span>
+        <div style={{display:'flex',alignItems:'center'}}>
           {mir?<Avatar user={creator} size={18}/>:assigneeUsers.slice(0,4).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0,zIndex:10-i}}><Avatar user={u} size={18}/></div>)}
-          {!mir&&assigneeUsers.length>4&&<div style={{marginLeft:-6,width:20,height:20,borderRadius:'50%',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:'var(--tf-text-sub)',fontWeight:700}}>+{assigneeUsers.length-4}</div>}
+          {!mir&&assigneeUsers.length>4&&<div style={{marginLeft:-5,width:18,height:18,borderRadius:'50%',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,color:'var(--tf-text-sub)',fontWeight:700}}>+{assigneeUsers.length-4}</div>}
         </div>
-        {task.due_date&&<span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{fmtDate(task.due_date)}</span>}
       </div>
       {/* Hover actions */}
-      {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transition:'opacity 0.15s',pointerEvents:hov?'auto':'none'}}>
+      {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
         <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
         <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn>
       </div>}
@@ -940,7 +941,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
       </div>
       <div style={{display:'flex',gap:10}}>
         <Btn onClick={()=>setPreview(null)} outline color="#64748b" full>Back</Btn>
-        <Btn onClick={()=>{onImport(preview);onClose();setPreview(null)}} color="#6b8cad" full>Import {preview.length} Tasks</Btn>
+        <Btn onClick={()=>{onImport(preview);onClose();setPreview(null)}} color="#6b8cad" sm>Import {preview.length} Tasks</Btn>
       </div>
     </div>}
   </Modal>
@@ -1200,7 +1201,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
-  const views=[{id:'board',label:'My Board',icon:''},{id:'team',label:'Team',icon:''},{id:'recurring',label:'Recurring',icon:'[R]'},{id:'list',label:'All Tasks',icon:''},{id:'dashboard',label:'Dashboard',icon:''}]
+  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'}]
 
   if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
 
