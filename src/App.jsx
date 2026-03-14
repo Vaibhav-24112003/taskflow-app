@@ -8,19 +8,19 @@ import {
   getTasks, createTask, updateTask, deleteTask, logActivity
 } from './lib/supabase.js'
 
-// ââ Constants âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Constants Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
 const PRIORITIES = ['Low','Medium','High','Critical']
 const RECURRENCE_TYPES = ['none','daily','weekly','monthly','custom']
 const PC = {'Low':'#64748b','Medium':'#38bdf8','High':'#fb923c','Critical':'#f87171'}
-const PI = {'Low':'â','Medium':'â','High':'â','Critical':'â¡'}
+const PI = {'Low':'Ã¢ÂÂ','Medium':'Ã¢ÂÂ','High':'Ã¢ÂÂ','Critical':'Ã¢ÂÂ¡'}
 const WS_COLORS = ['#6b8cad','#ec4899','#10b981','#f59e0b','#06b6d4','#4a7a9b','#ef4444','#3b82f6']
-const WS_ICONS  = ['â¬¡','â','â','â','â','â²','â','â ']
+const WS_ICONS  = ['Ã¢Â¬Â¡','Ã¢ÂÂ','Ã¢ÂÂ','Ã¢ÂÂ','Ã¢ÂÂ','Ã¢ÂÂ²','Ã¢ÂÂ','Ã¢ÂÂ ']
 const SCPAL = ['#64748b','#6b8cad','#f59e0b','#10b981','#ec4899','#06b6d4','#4a7a9b','#ef4444']
 
-// ââ Design tokens â CSS variable based (proper light/dark, no filter hack) âââââ
+// Ã¢ÂÂÃ¢ÂÂ Design tokens Ã¢ÂÂ CSS variable based (proper light/dark, no filter hack) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 const G = {
-  // All color tokens are CSS vars â set by GlobalStyle on :root / [data-theme]
+  // All color tokens are CSS vars Ã¢ÂÂ set by GlobalStyle on :root / [data-theme]
   bg:'var(--tf-bg)', panel:'var(--tf-panel)', overlay:'var(--tf-overlay)',
   surface:'var(--tf-surface)', surfaceHov:'var(--tf-surface-hov)',
   border:'var(--tf-border)', borderHov:'var(--tf-border-hov)',
@@ -40,13 +40,13 @@ const GR = {
   border:'rgba(255,255,255,0.07)', text:'#eaecf5', textSub:'#5c6b87', textMut:'#2a3655',
 }
 
-// ââ Utilities âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Utilities Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 const hexRgb  = h=>{if(!h||h.length<7)return'107,140,173';return`${parseInt(h.slice(1,3),16)},${parseInt(h.slice(3,5),16)},${parseInt(h.slice(5,7),16)}`}
 const mkColor = e=>{let n=0;for(let c of e)n+=c.charCodeAt(0);return WS_COLORS[n%WS_COLORS.length]}
 const mkInit  = n=>n.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?'
 const isOvd   = d=>d&&new Date(d)<new Date()
-const fmtDate = d=>{if(!d)return'â';const dt=new Date(d),now=new Date(),diff=Math.round((dt-now)/864e5);if(diff===0)return'Today';if(diff===1)return'Tomorrow';if(diff===-1)return'Yesterday';return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-const fmtFull = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'â'
+const fmtDate = d=>{if(!d)return'Ã¢ÂÂ';const dt=new Date(d),now=new Date(),diff=Math.round((dt-now)/864e5);if(diff===0)return'Today';if(diff===1)return'Tomorrow';if(diff===-1)return'Yesterday';return dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+const fmtFull = d=>d?new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'Ã¢ÂÂ'
 const fmtAgo  = d=>{if(!d)return'';const s=Math.round((Date.now()-new Date(d))/1000);if(s<60)return'just now';if(s<3600)return`${Math.floor(s/60)}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`}
 const enrich  = u=>u?{...u,initials:mkInit(u.name||u.email||'?'),color:mkColor(u.email||'')}:null
 const getUser = (id,list=[])=>enrich(list.find(u=>u.id===id))||null
@@ -57,13 +57,13 @@ const isMirrored   = (t,uid)=>getAssignees(t).includes(uid)&&t.created_by!==uid
 const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
 const rrLabel=(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
-// ââ Global styles â CSS variable theming, crisp DM Sans font ââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Global styles Ã¢ÂÂ CSS variable theming, crisp DM Sans font Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function GlobalStyle({ lightMode }) {
   useEffect(() => {
     const html = document.documentElement
     html.setAttribute('data-theme', lightMode ? 'light' : 'dark')
     html.style.transition = 'background 0.25s, color 0.25s'
-    html.style.filter = '' // NEVER use filter:invert â it blurs fonts
+    html.style.filter = '' // NEVER use filter:invert Ã¢ÂÂ it blurs fonts
   }, [lightMode])
   useEffect(() => {
     // Fonts
@@ -102,7 +102,7 @@ input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:
   return null
 }
 
-// ââ KanbanBoard âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ KanbanBoard Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function KanbanBoard({ children, isDragging }) {
   const scrollRef=useRef();const dragXRef=useRef(null);const rafRef=useRef()
   const [canLeft,setCanLeft]=useState(false);const [canRight,setCanRight]=useState(false)
@@ -113,8 +113,8 @@ function KanbanBoard({ children, isDragging }) {
   const scrollBy=dir=>scrollRef.current?.scrollBy({left:dir*320,behavior:'smooth'})
   return(
     <div style={{position:'relative',flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
-      {canLeft&&<button onClick={()=>scrollBy(-1)} style={{position:'absolute',left:0,top:'50%',transform:'translate(-50%,-50%)',zIndex:30,width:34,height:34,borderRadius:'50%',background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',color:'var(--tf-text)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,boxShadow:G.shadow,transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(107,140,173,0.2)';e.currentTarget.style.borderColor='rgba(107,140,173,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-panel)';e.currentTarget.style.borderColor='var(--tf-border-hov)'}}>â¹</button>}
-      {canRight&&<button onClick={()=>scrollBy(1)} style={{position:'absolute',right:0,top:'50%',transform:'translate(50%,-50%)',zIndex:30,width:34,height:34,borderRadius:'50%',background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',color:'var(--tf-text)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,boxShadow:G.shadow,transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(107,140,173,0.2)';e.currentTarget.style.borderColor='rgba(107,140,173,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-panel)';e.currentTarget.style.borderColor='var(--tf-border-hov)'}}>âº</button>}
+      {canLeft&&<button onClick={()=>scrollBy(-1)} style={{position:'absolute',left:0,top:'50%',transform:'translate(-50%,-50%)',zIndex:30,width:34,height:34,borderRadius:'50%',background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',color:'var(--tf-text)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,boxShadow:G.shadow,transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(107,140,173,0.2)';e.currentTarget.style.borderColor='rgba(107,140,173,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-panel)';e.currentTarget.style.borderColor='var(--tf-border-hov)'}}>Ã¢ÂÂ¹</button>}
+      {canRight&&<button onClick={()=>scrollBy(1)} style={{position:'absolute',right:0,top:'50%',transform:'translate(50%,-50%)',zIndex:30,width:34,height:34,borderRadius:'50%',background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',color:'var(--tf-text)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,boxShadow:G.shadow,transition:G.trans,fontFamily:G.font}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(107,140,173,0.2)';e.currentTarget.style.borderColor='rgba(107,140,173,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-panel)';e.currentTarget.style.borderColor='var(--tf-border-hov)'}}>Ã¢ÂÂº</button>}
       {canLeft&&<div style={{position:'absolute',left:0,top:0,bottom:0,width:56,background:'linear-gradient(to right,var(--tf-bg),transparent)',pointerEvents:'none',zIndex:10}}/>}
       {canRight&&<div style={{position:'absolute',right:0,top:0,bottom:0,width:56,background:'linear-gradient(to left,var(--tf-bg),transparent)',pointerEvents:'none',zIndex:10}}/>}
       <div ref={scrollRef} className="tf-board" style={{flex:1,overflowX:'auto',overflowY:'hidden',display:'flex',gap:12,alignItems:'stretch',paddingBottom:4}}>
@@ -124,7 +124,7 @@ function KanbanBoard({ children, isDragging }) {
   )
 }
 
-// ââ Atoms âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Atoms Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function Avatar({user,size=32,ring}){
   const s={width:size,height:size,borderRadius:'50%',flexShrink:0,border:ring?`2px solid ${ring}`:'1.5px solid var(--tf-border)'}
   if(!user)return<div style={{...s,background:'var(--tf-surface)'}}/>
@@ -144,7 +144,7 @@ function Modal({open,onClose,title,width=600,children}){
     <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radius,width:'100%',maxWidth:width,maxHeight:'92vh',overflow:'auto',boxShadow:G.shadowLg}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 22px',borderBottom:'1px solid var(--tf-border)',position:'sticky',top:0,background:'var(--tf-panel)',zIndex:1,backdropFilter:G.blurSm,WebkitBackdropFilter:G.blurSm}}>
         <span style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',fontFamily:G.fontDisplay}}>{title}</span>
-        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>â</button>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>Ã¢ÂÂ</button>
       </div>
       <div style={{padding:'20px 22px'}}>{children}</div>
     </div>
@@ -167,24 +167,24 @@ function Confirm({open,icon,title,body,confirmLabel,confirmColor='#ef4444',onCon
 const INP={display:'block',width:'100%',boxSizing:'border-box',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',color:'var(--tf-text)',fontSize:14,outline:'none',fontFamily:G.font,lineHeight:1.5,transition:G.trans}
 const LBL={display:'block',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginBottom:6,letterSpacing:'0.01em'}
 
-// ââ Toast âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Toast Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function Toast({toast}){
   if(!toast)return null
   const c=toast.type==='ok'?'#10b981':toast.type==='warn'?'#f59e0b':'#ef4444'
-  const ic=toast.type==='ok'?'â':toast.type==='warn'?'â ':'â'
+  const ic=toast.type==='ok'?'Ã¢ÂÂ':toast.type==='warn'?'Ã¢ÂÂ ':'Ã¢ÂÂ'
   return<div style={{position:'fixed',bottom:32,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:'var(--tf-panel)',color:'var(--tf-text)',borderRadius:'100px',padding:'10px 22px',fontSize:13,fontWeight:600,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,boxShadow:`0 8px 40px var(--tf-shadow-lg),0 0 0 1px ${c}55`,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:8}}>
     <span style={{color:c,fontSize:14}}>{ic}</span>{toast.msg}
   </div>
 }
 
-// ââ CustomSelect âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ CustomSelect Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function CustomSelect({value,onChange,options,style}){
   const [open,setOpen]=useState(false);const ref=useRef()
   useEffect(()=>{const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
   return<div ref={ref} style={{position:'relative',...style}}>
     <div onClick={()=>setOpen(p=>!p)} style={{...INP,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between',userSelect:'none'}}>
       <span style={{fontWeight:500}}>{value}</span>
-      <span style={{color:'var(--tf-text-sub)',fontSize:10,marginLeft:8,transition:G.trans,transform:open?'rotate(180deg)':'none',display:'inline-block',lineHeight:1}}>â¾</span>
+      <span style={{color:'var(--tf-text-sub)',fontSize:10,marginLeft:8,transition:G.trans,transform:open?'rotate(180deg)':'none',display:'inline-block',lineHeight:1}}>Ã¢ÂÂ¾</span>
     </div>
     {open&&<div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border-hov)',borderRadius:G.radiusMd,zIndex:999,overflow:'hidden',boxShadow:G.shadowLg}}>
       {options.map(opt=><div key={opt} onClick={()=>{onChange(opt);setOpen(false)}}
@@ -196,7 +196,7 @@ function CustomSelect({value,onChange,options,style}){
   </div>
 }
 
-// ââ Auth Screen âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Auth Screen Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function AuthScreen({ inviteToken }){
   const [loading,setLoading]=useState(false)
   return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:G.font,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',overflow:'hidden'}}>
@@ -204,21 +204,21 @@ function AuthScreen({ inviteToken }){
     <div style={{position:'absolute',top:'15%',left:'30%',width:500,height:500,background:'radial-gradient(ellipse,rgba(107,140,173,0.08) 0%,transparent 65%)',pointerEvents:'none'}}/>
     <div style={{position:'absolute',bottom:'10%',right:'20%',width:350,height:350,background:'radial-gradient(ellipse,rgba(16,185,129,0.05) 0%,transparent 65%)',pointerEvents:'none'}}/>
     <div style={{maxWidth:420,width:'100%',padding:'44px 40px',textAlign:'center',position:'relative'}}>
-      <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 20px',boxShadow:'0 8px 32px rgba(107,140,173,0.4)'}}>â¦</div>
+      <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 20px',boxShadow:'0 8px 32px rgba(107,140,173,0.4)'}}>Ã¢ÂÂ¦</div>
       <h1 style={{fontSize:32,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.04em',fontFamily:G.fontDisplay}}>TaskFlow</h1>
       {inviteToken
         ?<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.22)',borderRadius:G.radiusMd,padding:'12px 16px',marginBottom:24}}>
-          <p style={{fontSize:13,color:'#8fa5be',margin:0,lineHeight:1.6}}>ð You've been invited!<br/>Sign in to accept your workspace invitation.</p>
+          <p style={{fontSize:13,color:'#8fa5be',margin:0,lineHeight:1.6}}>Ã°ÂÂÂ You've been invited!<br/>Sign in to accept your workspace invitation.</p>
         </div>
         :<p style={{fontSize:13,color:'var(--tf-text-sub)',lineHeight:1.7,margin:'0 0 28px'}}>Organize your team's work in one place.<br/>Free to use, no approval needed.</p>
       }
       <button onClick={async()=>{setLoading(true);await signInWithGoogle()}} disabled={loading}
         style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:12,padding:'14px 22px',background:'rgba(255,255,255,0.97)',borderRadius:G.radiusMd,border:'1px solid rgba(255,255,255,0.2)',cursor:'pointer',fontSize:14,fontWeight:600,color:'#111827',boxShadow:'0 4px 24px rgba(0,0,0,0.35)',opacity:loading?0.7:1,transition:G.trans,fontFamily:G.font}}>
         <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-        {loading?'Signing inâ¦':'Continue with Google'}
+        {loading?'Signing inÃ¢ÂÂ¦':'Continue with Google'}
       </button>
       <div style={{marginTop:28,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,textAlign:'left'}}>
-        {[['â','Kanban boards','Drag & drop tasks'],['ð¥','Team workspaces','Invite anyone'],['â»','Recurring tasks','Auto-generates next'],['â¬¡','Dashboards','Track progress']].map(([ic,t,d])=>(
+        {[['Ã¢ÂÂ','Kanban boards','Drag & drop tasks'],['Ã°ÂÂÂ¥','Team workspaces','Invite anyone'],['Ã¢ÂÂ»','Recurring tasks','Auto-generates next'],['Ã¢Â¬Â¡','Dashboards','Track progress']].map(([ic,t,d])=>(
           <div key={t} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'12px 14px'}}>
             <div style={{fontSize:16,marginBottom:5,color:'var(--tf-text-sub)'}}>{ic}</div>
             <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',marginBottom:2}}>{t}</div>
@@ -230,7 +230,7 @@ function AuthScreen({ inviteToken }){
   </div>
 }
 
-// ââ Pending Invitations Banner ââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Pending Invitations Banner Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function InviteBanner({invites,onAccept,onDecline}){
   if(!invites||invites.length===0)return null
   return<div style={{background:'rgba(107,140,173,0.08)',border:'1px solid rgba(107,140,173,0.18)',borderRadius:G.radiusMd,padding:'14px 18px',marginBottom:20}}>
@@ -238,13 +238,13 @@ function InviteBanner({invites,onAccept,onDecline}){
     {invites.map(inv=>{
       const ws=inv.workspace;const inviter=inv.inviter;const rgb=hexRgb(ws?.color||'#6b8cad')
       return<div key={inv.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.18)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:8}}>
-        <div style={{width:36,height:36,borderRadius:'10px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{ws?.icon||'â¬¡'}</div>
+        <div style={{width:36,height:36,borderRadius:'10px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>{ws?.icon||'Ã¢Â¬Â¡'}</div>
         <div style={{flex:1}}>
           <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{ws?.name||'Workspace'}</div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Invited by {inviter?.name||inviter?.email} Â· {fmtAgo(inv.created_at)}</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Invited by {inviter?.name||inviter?.email} ÃÂ· {fmtAgo(inv.created_at)}</div>
         </div>
         <div style={{display:'flex',gap:6}}>
-          <Btn onClick={()=>onAccept(inv)} color="#10b981" sm>â Accept</Btn>
+          <Btn onClick={()=>onAccept(inv)} color="#10b981" sm>Ã¢ÂÂ Accept</Btn>
           <Btn onClick={()=>onDecline(inv)} danger sm>Decline</Btn>
         </div>
       </div>
@@ -252,7 +252,7 @@ function InviteBanner({invites,onAccept,onDecline}){
   </div>
 }
 
-// ââ Member Management Modal (invite + manage) âââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Member Management Modal (invite + manage) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
   const [inviteEmail,setInviteEmail]=useState('')
   const [invitations,setInvitations]=useState([])
@@ -274,7 +274,7 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
     if(error){showToast('Failed to invite','err')}else{
       setInviteEmail('')
       await loadInvites()
-      showToast(`Invite sent to ${email} â`)
+      showToast(`Invite sent to ${email} Ã¢ÂÂ`)
     }
     setLoading(false)
   }
@@ -301,7 +301,7 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
           placeholder="colleague@company.com"
           style={{...INP,flex:1}}/>
         <Btn onClick={sendInvite} color={ws?.color} style={{flexShrink:0}} disabled={loading}>
-          {loading?'â¦':'Send Invite'}
+          {loading?'Ã¢ÂÂ¦':'Send Invite'}
         </Btn>
       </div>
       <p style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8,lineHeight:1.6}}>They'll see a notification when they sign in, or you can copy the invite link to share directly.</p>
@@ -309,7 +309,7 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
 
     {/* Pending invitations */}
     {isAdmin&&invitations.length>0&&<div style={{marginBottom:24}}>
-      <label style={LBL}>Pending Invitations â {invitations.length}</label>
+      <label style={LBL}>Pending Invitations Ã¢ÂÂ {invitations.length}</label>
       {invitations.map(inv=>(
         <div key={inv.id} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:G.radiusSm,padding:'10px 14px',marginBottom:6}}>
           <div style={{flex:1}}>
@@ -317,8 +317,8 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
             <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Sent {fmtAgo(inv.created_at)}</div>
           </div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={()=>copyLink(inv)} style={{background:`rgba(${rgb},0.1)`,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusXs,padding:'5px 10px',color:ws?.color,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font}}>ð Copy link</button>
-            <button onClick={()=>cancelInv(inv)} style={{background:'none',border:`1px solid rgba(239,68,68,0.2)`,borderRadius:G.radiusXs,padding:'5px 8px',color:'#f87171',cursor:'pointer',fontSize:11,fontFamily:G.font}}>â</button>
+            <button onClick={()=>copyLink(inv)} style={{background:`rgba(${rgb},0.1)`,border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusXs,padding:'5px 10px',color:ws?.color,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font}}>Ã°ÂÂÂ Copy link</button>
+            <button onClick={()=>cancelInv(inv)} style={{background:'none',border:`1px solid rgba(239,68,68,0.2)`,borderRadius:G.radiusXs,padding:'5px 8px',color:'#f87171',cursor:'pointer',fontSize:11,fontFamily:G.font}}>Ã¢ÂÂ</button>
           </div>
         </div>
       ))}
@@ -326,7 +326,7 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
 
     {/* Current members */}
     <div>
-      <label style={LBL}>Current Members â {wsMembers.length}</label>
+      <label style={LBL}>Current Members Ã¢ÂÂ {wsMembers.length}</label>
       {wsMembers.map(m=>{
         const eu=enrich(m);const isSelf=m.id===cu.id;const rc=roleColors[m.role]||G.textSub
         return<div key={m.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:8}}>
@@ -342,11 +342,11 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
         </div>
       })}
     </div>
-    <Confirm open={!!cdel} icon="ð¤" title="Remove member?" body={`Remove ${cdel?.name} from this workspace?`} confirmLabel="Remove" onConfirm={()=>{removeMember(cdel);setCdel(null)}} onCancel={()=>setCdel(null)}/>
+    <Confirm open={!!cdel} icon="Ã°ÂÂÂ¤" title="Remove member?" body={`Remove ${cdel?.name} from this workspace?`} confirmLabel="Remove" onConfirm={()=>{removeMember(cdel);setCdel(null)}} onCancel={()=>setCdel(null)}/>
   </Modal>
 }
 
-// ââ Status Manager ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Status Manager Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function StatusManager({open,onClose,statuses,wsColor,onSave}){
   const [list,setList]=useState([...statuses]);const ref=useRef()
   useEffect(()=>{if(open)setList([...statuses])},[open,statuses])
@@ -358,16 +358,16 @@ function StatusManager({open,onClose,statuses,wsColor,onSave}){
     {list.map((s,i)=>{const col=SC[s];const rgb=hexRgb(col);return<div key={s} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radiusMd,padding:'9px 14px',marginBottom:8}}>
       <div style={{width:8,height:8,borderRadius:'50%',background:col,flexShrink:0,boxShadow:`0 0 8px ${col}99`}}/>
       <span style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{s}</span>
-      <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?G.textMut:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>â</button>
-      <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?G.textMut:'var(--tf-text-sub)',cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>â</button>
-      <Btn onClick={()=>del(s)} danger sm>â</Btn>
+      <button onClick={()=>mv(i,-1)} disabled={i===0} style={{background:'none',border:'none',color:i===0?G.textMut:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:14,padding:'0 4px'}}>Ã¢ÂÂ</button>
+      <button onClick={()=>mv(i,1)} disabled={i===list.length-1} style={{background:'none',border:'none',color:i===list.length-1?G.textMut:'var(--tf-text-sub)',cursor:i===list.length-1?'default':'pointer',fontSize:14,padding:'0 4px'}}>Ã¢ÂÂ</button>
+      <Btn onClick={()=>del(s)} danger sm>Ã¢ÂÂ</Btn>
     </div>})}
-    <div style={{display:'flex',gap:8,margin:'16px 0'}}><input ref={ref} placeholder="New statusâ¦" style={{...INP,flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/><Btn onClick={add} color={wsColor}>Add</Btn></div>
+    <div style={{display:'flex',gap:8,margin:'16px 0'}}><input ref={ref} placeholder="New statusÃ¢ÂÂ¦" style={{...INP,flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/><Btn onClick={add} color={wsColor}>Add</Btn></div>
     <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><Btn onClick={onClose} outline color="#64748b">Cancel</Btn><Btn onClick={()=>{onSave(list);onClose()}} color={wsColor}>Save</Btn></div>
   </Modal>
 }
 
-// ââ Workspace Form ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Workspace Form Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
   const nameRef=useRef(),descRef=useRef()
   const [color,setColor]=useState(WS_COLORS[0]);const [icon,setIcon]=useState(WS_ICONS[0])
@@ -387,13 +387,13 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
   </Modal>
 }
 
-// ââ Checklist Editor ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-// ââ Checklist Item â uncontrolled to avoid cursor-jump on every keystroke ââââ
+// Ã¢ÂÂÃ¢ÂÂ Checklist Editor Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// Ã¢ÂÂÃ¢ÂÂ Checklist Item Ã¢ÂÂ uncontrolled to avoid cursor-jump on every keystroke Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
   const [text,setText]=useState(item.text)
   const [focused,setFocused]=useState(false)
   useEffect(()=>{setText(item.text)},[item.id])
-  // commit is called by onBlur only â never on Enter, to avoid triggering a
+  // commit is called by onBlur only Ã¢ÂÂ never on Enter, to avoid triggering a
   // parent state update that would cause the modal to scroll to top
   const commit=()=>{
     const t=text.trim()
@@ -404,7 +404,7 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
   return<div style={{display:'flex',alignItems:'center',gap:8,borderRadius:G.radiusXs,padding:'3px 4px',background:focused?'var(--tf-surface-hov)':'transparent',transition:'background 0.15s'}}>
     <div onMouseDown={e=>e.preventDefault()} onClick={()=>onToggle(item.id)}
       style={{width:16,height:16,borderRadius:4,border:`2px solid ${item.done?'#10b981':'var(--tf-text-mut)'}`,background:item.done?'#10b981':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0,transition:G.trans,boxShadow:item.done?'0 2px 6px rgba(16,185,129,0.35)':'none'}}>
-      {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>â</span>}
+      {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>Ã¢ÂÂ</span>}
     </div>
     <input
       ref={itemRef}
@@ -414,7 +414,7 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
       onBlur={commit}
       onKeyDown={e=>{
         if(e.key==='Enter'){
-          // KEY FIX: do NOT call onEdit here â that would trigger setChecklist
+          // KEY FIX: do NOT call onEdit here Ã¢ÂÂ that would trigger setChecklist
           // in the parent, causing a re-render + modal scroll-to-top.
           // Just move focus; onBlur will commit the text automatically.
           e.preventDefault();e.stopPropagation()
@@ -427,7 +427,7 @@ function ChecklistItem({item,onToggle,onEdit,onRemove,onEnterNext,itemRef}){
       style={{flex:1,background:'none',border:'none',borderBottom:focused?'1px solid var(--tf-border-hov)':'1px solid transparent',outline:'none',color:item.done?'var(--tf-text-sub)':'var(--tf-text)',fontSize:13,fontFamily:G.font,textDecoration:item.done?'line-through':'none',lineHeight:1.6,padding:'1px 2px',transition:'border-color 0.15s'}}/>
     <button onMouseDown={e=>e.preventDefault()} onClick={()=>onRemove(item.id)}
       style={{background:'none',border:'none',color:focused?G.textSub:'var(--tf-text-mut)',cursor:'pointer',fontSize:13,padding:'0 4px',lineHeight:1,fontFamily:G.font,opacity:focused?1:0.4,transition:'opacity 0.15s'}}
-      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:'var(--tf-text-mut)'}>â</button>
+      onMouseEnter={e=>e.currentTarget.style.color='#f87171'} onMouseLeave={e=>e.currentTarget.style.color=focused?G.textSub:'var(--tf-text-mut)'}>Ã¢ÂÂ</button>
   </div>
 }
 
@@ -436,7 +436,7 @@ function ChecklistEditor({items,onChange,wsColor}){
   const addInputRef=useRef();const itemRefs=useRef({});const rgb=hexRgb(wsColor)
   const done=items.filter(i=>i.done).length;const pct=items.length?Math.round(done/items.length*100):0
 
-  // No setTimeout needed for Enter â no state update happens so DOM is stable
+  // No setTimeout needed for Enter Ã¢ÂÂ no state update happens so DOM is stable
   const focusAdd=()=>addInputRef.current?.focus()
   const focusItem=(id)=>itemRefs.current[id]?.focus()
 
@@ -487,14 +487,14 @@ function ChecklistEditor({items,onChange,wsColor}){
     <div style={{display:'flex',gap:7,marginTop:8,paddingTop:10,borderTop:'1px solid var(--tf-border)'}}>
       <input ref={addInputRef} value={newText} onChange={e=>setNewText(e.target.value)}
         onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();add()}}}
-        placeholder="New itemâ¦ press Enter to add"
+        placeholder="New itemÃ¢ÂÂ¦ press Enter to add"
         style={{...INP,flex:1,padding:'7px 12px',fontSize:12}}/>
       <button onClick={add} style={{background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.3)`,borderRadius:G.radiusMd,padding:'7px 14px',color:wsColor,cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}}>+ Add</button>
     </div>
   </div>
 }
 
-// ââ Recurrence Picker âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Recurrence Picker Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onIntervalChange}){
   const show=recurrenceType!=='none'
   return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'14px 16px'}}>
@@ -507,13 +507,13 @@ function RecurrencePicker({recurrenceType,recurrenceInterval,onTypeChange,onInte
       <span style={{fontSize:12,color:'var(--tf-text-sub)',flexShrink:0}}>Every</span>
       <input type="number" min={1} max={365} value={recurrenceInterval} onChange={e=>onIntervalChange(Math.max(1,parseInt(e.target.value)||1))} style={{...INP,width:62,padding:'5px 10px',fontSize:13,flex:'none'}}/>
       <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{recurrenceType==='weekly'?'week(s)':recurrenceType==='monthly'?'month(s)':'day(s)'}</span>
-      <Tag label={`ð ${rrLabel(recurrenceType,recurrenceInterval)}`} color="#6b8cad"/>
+      <Tag label={`Ã°ÂÂÂ ${rrLabel(recurrenceType,recurrenceInterval)}`} color="#6b8cad"/>
     </div>}
   </div>
 }
 
 
-// ââ Assign Task Modal âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Assign Task Modal Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 // Handles both: (A) self-assign under a manager, (B) delegate to subordinates
 function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
   const [mode,setMode]=useState('self')   // 'self' | 'delegate'
@@ -557,7 +557,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
         <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
       </div>
       <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:'var(--tf-text-mut)'}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-        {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>â</span>}
+        {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>Ã¢ÂÂ</span>}
       </div>
     </div>
   }
@@ -566,40 +566,40 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
     {/* Task summary */}
     <div style={{background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:18}}>
       <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{task.title}</div>
-      {task.project&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>ð {task.project}</div>}
+      {task.project&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Ã°ÂÂÂ {task.project}</div>}
     </div>
 
     {/* Mode tabs */}
     <div style={{display:'flex',gap:8,marginBottom:20}}>
       <button onClick={()=>setMode('self')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='self'?`rgba(${rgb},0.5)`:'var(--tf-border)'}`,background:mode==='self'?`rgba(${rgb},0.08)`:'var(--tf-surface)',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
-        <div style={{fontSize:20,marginBottom:4}}>ð</div>
+        <div style={{fontSize:20,marginBottom:4}}>Ã°ÂÂÂ</div>
         <div style={{fontSize:13,fontWeight:800,color:mode==='self'?ws.color:'var(--tf-text)'}}>I'll take this</div>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Self-assign under a manager</div>
       </button>
       <button onClick={()=>setMode('delegate')} style={{flex:1,padding:'12px',borderRadius:G.radiusMd,border:`2px solid ${mode==='delegate'?'rgba(245,158,11,0.5)':'var(--tf-border)'}`,background:mode==='delegate'?'rgba(245,158,11,0.08)':'var(--tf-surface)',cursor:'pointer',fontFamily:G.font,transition:G.trans}}>
-        <div style={{fontSize:20,marginBottom:4}}>â¡ï¸</div>
+        <div style={{fontSize:20,marginBottom:4}}>Ã¢ÂÂ¡Ã¯Â¸Â</div>
         <div style={{fontSize:13,fontWeight:800,color:mode==='delegate'?'#f59e0b':'var(--tf-text)'}}>Delegate to team</div>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Assign to subordinates</div>
       </button>
     </div>
 
-    {/* CASE A: Self-assign â pick manager */}
+    {/* CASE A: Self-assign Ã¢ÂÂ pick manager */}
     {mode==='self'&&<>
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
-        â¡ Who is your Manager / Delegator for this task?
+        Ã¢ÂÂ¡ Who is your Manager / Delegator for this task?
       </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
         {wsMembers.map(m=><MemberCard key={m.id} m={m} selected={delegatorId===m.id} onClick={()=>setDelegatorId(m.id)} accent='#f59e0b'/>)}
       </div>
       <div style={{background:'rgba(143,165,190,0.06)',border:'1px solid rgba(143,165,190,0.15)',borderRadius:G.radiusMd,padding:'10px 14px',fontSize:11,color:'#8fa5be'}}>
-        â¹ This task will appear on <strong>your board</strong> as "Assigned by [Manager]". The manager sees it as a delegated task under their watch.
+        Ã¢ÂÂ¹ This task will appear on <strong>your board</strong> as "Assigned by [Manager]". The manager sees it as a delegated task under their watch.
       </div>
     </>}
 
-    {/* CASE B: Delegate â pick subordinates */}
+    {/* CASE B: Delegate Ã¢ÂÂ pick subordinates */}
     {mode==='delegate'&&<>
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>
-        ð¥ Select subordinates to assign this task to
+        Ã°ÂÂÂ¥ Select subordinates to assign this task to
       </div>
       <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:10}}>You will be the Manager / Delegator. Selected members will see it on their board.</div>
       {others.length===0
@@ -621,13 +621,13 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
       <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
       <Btn onClick={save} color={mode==='delegate'?'#f59e0b':ws.color}
         disabled={mode==='delegate'&&subordinates.length===0}>
-        {mode==='self'?'â Take this task':'â¡ï¸ Delegate task'}
+        {mode==='self'?'Ã¢ÂÂ Take this task':'Ã¢ÂÂ¡Ã¯Â¸Â Delegate task'}
       </Btn>
     </div>
   </Modal>
 }
 
-// ââ Task Form Modal âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Task Form Modal Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
   const [status,setStatus]=useState(defaultStatus||statuses[0]||'Todo')
@@ -646,7 +646,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     setChecklist(task?.checklist||[])
     if(task){const a=task.assignees?.length>0?task.assignees:task.assigned_to?[task.assigned_to]:[cu.id];setAssignees(a);setDelegatorId(task.delegator_id||task.created_by||cu.id)}
     else{setAssignees([cu.id]);setDelegatorId(cu.id)}
-    // Focus title only once when modal opens â never on re-renders
+    // Focus title only once when modal opens Ã¢ÂÂ never on re-renders
     requestAnimationFrame(()=>titleRef.current?.focus())
   },[open])
 
@@ -666,11 +666,11 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
       <F full label="Title *"><input ref={titleRef} defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
-      <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional detailsâ¦"/></F>
+      <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional detailsÃ¢ÂÂ¦"/></F>
       <F label="Status"><CustomSelect value={status} onChange={setStatus} options={statuses} style={{width:'100%'}}/></F>
       <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
-      {/* ââ DELEGATOR / MANAGER ââ */}
-      <F full label="â¡ Manager / Delegator">
+      {/* Ã¢ÂÂÃ¢ÂÂ DELEGATOR / MANAGER Ã¢ÂÂÃ¢ÂÂ */}
+      <F full label="Ã¢ÂÂ¡ Manager / Delegator">
         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
           {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
             return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
@@ -684,15 +684,15 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                   {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
                 </div>
                 <div style={{fontSize:10,color:sel?'rgba(245,158,11,0.7)':'var(--tf-text-sub)'}}>
-                  {sel?'â Manager':m.email}
+                  {sel?'Ã¢ÂÂ Manager':m.email}
                 </div>
               </div>
             </div>
           })}
         </div>
       </F>
-      {/* ââ ASSIGNEES ââ */}
-      <F full label={`â Assignee${assignees.length>1?'s':''} (${assignees.length})`}>
+      {/* Ã¢ÂÂÃ¢ÂÂ ASSIGNEES Ã¢ÂÂÃ¢ÂÂ */}
+      <F full label={`Ã¢ÂÂ Assignee${assignees.length>1?'s':''} (${assignees.length})`}>
         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
           {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
             return<div key={m.id} onClick={()=>toggleA(m.id)}
@@ -706,36 +706,36 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
                   {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
                 </div>
                 <div style={{fontSize:10,color:sel?`rgba(${rgb},0.7)`:'var(--tf-text-sub)'}}>
-                  {sel?'â Assignee':m.email}
+                  {sel?'Ã¢ÂÂ Assignee':m.email}
                 </div>
               </div>
               <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?ws.color:'var(--tf-text-mut)'}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:2}}>
-                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>â</span>}
+                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>Ã¢ÂÂ</span>}
               </div>
             </div>
           })}
         </div>
         {delegatorId&&assignees.length>0&&!assignees.includes(delegatorId)&&
           <div style={{marginTop:8,fontSize:11,color:'#f59e0b',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.15)',borderRadius:G.radiusSm,padding:'6px 10px'}}>
-            â¡ Delegated via {wsMembers.find(m=>m.id===delegatorId)?.name||'?'}
+            Ã¢ÂÂ¡ Delegated via {wsMembers.find(m=>m.id===delegatorId)?.name||'?'}
           </div>
         }
       </F>
       <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
-      <F full label="ð Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
+      <F full label="Ã°ÂÂÂ Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
       <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
       <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
-      <F full label="â Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
+      <F full label="Ã¢ÂÂ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
     </div>
     <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
       {isEdit?<Btn onClick={()=>setCdel(true)} danger>Delete</Btn>:<div/>}
       <div style={{display:'flex',gap:8}}><Btn onClick={onClose} outline color="#64748b">Cancel</Btn><Btn onClick={save} color={ws.color}>{isEdit?'Save Changes':'Create Task'}</Btn></div>
     </div>
   </Modal>
-  <Confirm open={cdel} icon="ðï¸" title="Delete task?" body={`"${task?.title}" will be removed.`} confirmLabel="Delete" onConfirm={async()=>{setCdel(false);await onDelete(task.id);onClose()}} onCancel={()=>setCdel(false)}/></>
+  <Confirm open={cdel} icon="Ã°ÂÂÂÃ¯Â¸Â" title="Delete task?" body={`"${task?.title}" will be removed.`} confirmLabel="Delete" onConfirm={async()=>{setCdel(false);await onDelete(task.id);onClose()}} onCancel={()=>setCdel(false)}/></>
 }
 
-// ââ Task Card âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Task Card Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging}){
   const taskAssignees=getAssignees(task)
   const assigneeUsers=taskAssignees.map(id=>getUser(id,wsMembers)).filter(Boolean)
@@ -755,15 +755,15 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       {/* Top meta row */}
       <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:7,flexWrap:'wrap'}}>
         <span style={{fontSize:10,fontWeight:600,color:pColor,background:`rgba(${hexRgb(pColor)},0.1)`,borderRadius:4,padding:'1px 6px'}}>{PI[task.priority]} {task.priority}</span>
-        {rec&&<span style={{fontSize:10,color:'#8fa5be',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>â» {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
-        {cl.length>0&&<span style={{fontSize:10,color:clPct===100?'#10b981':'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>â {clDone}/{cl.length}</span>}
+        {rec&&<span style={{fontSize:10,color:'#8fa5be',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Ã¢ÂÂ» {rrLabel(task.recurrence_type,task.recurrence_interval)}</span>}
+        {cl.length>0&&<span style={{fontSize:10,color:clPct===100?'#10b981':'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Ã¢ÂÂ {clDone}/{cl.length}</span>}
         {ovd&&<span style={{fontSize:10,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Overdue</span>}
         {mir&&(()=>{const dlg=getUser(task.delegator_id||task.created_by,wsMembers);return dlg&&dlg.id!==cu.id?<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3,background:'rgba(143,165,190,0.1)',borderRadius:4,padding:'1px 6px'}}>
             <Avatar user={dlg} size={12}/><span style={{fontSize:10,color:'#8fa5be',fontWeight:600}}>via {dlg.name?.split(' ')[0]||dlg.email.split('@')[0]}</span>
           </div>:<span style={{marginLeft:'auto',fontSize:10,color:'#8fa5be',background:'rgba(143,165,190,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Assigned</span>})()}
         {del&&!mir&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3}}>
           {assigneeUsers.slice(0,2).map(u=><Avatar key={u.id} user={u} size={14}/>)}
-          <span style={{fontSize:10,color:'#f59e0b',fontWeight:600,marginLeft:2}}>â{assigneeUsers.map(u=>u.name?.split(' ')[0]||'?').slice(0,2).join(',')}</span>
+          <span style={{fontSize:10,color:'#f59e0b',fontWeight:600,marginLeft:2}}>Ã¢ÂÂ{assigneeUsers.map(u=>u.name?.split(' ')[0]||'?').slice(0,2).join(',')}</span>
         </div>}
       </div>
       {/* Title */}
@@ -789,11 +789,11 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm full>Delete</Btn>
       </div>}
     </div>
-    <Confirm open={cdel} icon="ðï¸" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
+    <Confirm open={cdel} icon="Ã°ÂÂÂÃ¯Â¸Â" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
   </>
 }
 
-// ââ Kanban Column âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Kanban Column Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
   const [overCol,setOverCol]=useState(false)
   const [insertIdx,setInsertIdx]=useState(null) // index to show insertion line
@@ -851,7 +851,7 @@ function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,
   </div>
 }
 
-// ââ Import/Export Modal âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Import/Export Modal Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImport}){
   const [tab,setTab]=useState('export');const [drag,setDrag]=useState(false);const [preview,setPreview]=useState(null);const fileRef=useRef()
   const esc=v=>{const s=String(v??'');return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s}
@@ -901,12 +901,12 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
   const handleFile=async f=>{if(!f)return;const rows=parseCSV(await f.text());if(!rows?.length){alert('Could not parse CSV.');return};setPreview(rows)}
   return<Modal open={open} onClose={()=>{onClose();setPreview(null);setTab('export')}} title="Import / Export" width={640}>
     <div style={{display:'flex',gap:4,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:4,marginBottom:20}}>
-      {[{id:'export',lb:'â¬ Export CSV'},{id:'import',lb:'â¬ Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(107,140,173,0.85)':'transparent',color:tab===t.id?'#fff':'var(--tf-text-sub)',transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
+      {[{id:'export',lb:'Ã¢Â¬Â Export CSV'},{id:'import',lb:'Ã¢Â¬Â Import CSV'}].map(t=><button key={t.id} onClick={()=>{setTab(t.id);setPreview(null)}} style={{flex:1,padding:'8px',borderRadius:G.radiusSm,border:'none',cursor:'pointer',fontSize:13,fontWeight:600,background:tab===t.id?'rgba(107,140,173,0.85)':'transparent',color:tab===t.id?'#fff':'var(--tf-text-sub)',transition:G.trans,fontFamily:G.font}}>{t.lb}</button>)}
     </div>
-    {tab==='export'&&<div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:'var(--tf-text-sub)'}}>Export <strong style={{color:'var(--tf-text)'}}>{tasks.length} tasks</strong> as CSV â includes Assigned To, Delegator, and Checklist items.</div><Btn onClick={doExport} color="#10b981" full>â¬ Download CSV</Btn></div>}
+    {tab==='export'&&<div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:16,marginBottom:16,fontSize:13,color:'var(--tf-text-sub)'}}>Export <strong style={{color:'var(--tf-text)'}}>{tasks.length} tasks</strong> as CSV Ã¢ÂÂ includes Assigned To, Delegator, and Checklist items.</div><Btn onClick={doExport} color="#10b981" full>Ã¢Â¬Â Download CSV</Btn></div>}
     {tab==='import'&&!preview&&<div>
       <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0])}} onClick={()=>fileRef.current?.click()} style={{border:`2px dashed ${drag?'#6b8cad':'var(--tf-border)'}`,borderRadius:G.radiusMd,padding:'36px 20px',textAlign:'center',cursor:'pointer',background:drag?'rgba(107,140,173,0.04)':'transparent',transition:G.trans,marginBottom:14}}>
-        <div style={{fontSize:36,marginBottom:10}}>ð</div>
+        <div style={{fontSize:36,marginBottom:10}}>Ã°ÂÂÂ</div>
         <p style={{fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',margin:'0 0 6px'}}>Drop CSV here or click to browse</p>
         <p style={{fontSize:11,color:'var(--tf-text-mut)',margin:0,lineHeight:1.8}}>
           Columns: Title, Description, Status, Priority, Assigned To, Delegator, Project, Tags, Due Date, Recurrence, Interval, <strong style={{color:'#8fa5be'}}>Checklist</strong><br/>
@@ -915,26 +915,26 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
         <input ref={fileRef} type="file" accept=".csv" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])}/>
       </div>
       <button onClick={downloadSample} style={{width:'100%',background:'rgba(107,140,173,0.08)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:G.radiusMd,padding:'10px',color:'#8fa5be',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font}}>
-        ð¥ Download Sample CSV â includes checklist items + roles pre-filled
+        Ã°ÂÂÂ¥ Download Sample CSV Ã¢ÂÂ includes checklist items + roles pre-filled
       </button>
     </div>}
     {tab==='import'&&preview&&<div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
         <strong style={{fontSize:14,color:'var(--tf-text)'}}>{preview.length} rows ready to import</strong>
-        <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font}}>â Back</button>
+        <button onClick={()=>setPreview(null)} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font}}>Ã¢ÂÂ Back</button>
       </div>
       <div style={{maxHeight:260,overflow:'auto',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,marginBottom:16}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
           <thead><tr>{['Title','Status','Assigned To','Delegator','Checklist'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',color:'var(--tf-text-sub)',fontWeight:700,borderBottom:'1px solid var(--tf-border)',background:'rgba(4,9,20,0.9)',position:'sticky',top:0,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
           <tbody>{preview.map((r,i)=><tr key={i} style={{borderBottom:'1px solid var(--tf-border)'}}>
             <td style={{padding:'7px 12px',color:'var(--tf-text)',fontWeight:600,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.title}</td>
-            <td style={{padding:'7px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.status||'â'}</td>
-            <td style={{padding:'7px 10px',color:'#10b981',whiteSpace:'nowrap'}}>{r.assigned_to_name||'â'}</td>
-            <td style={{padding:'7px 10px',color:'#f59e0b',whiteSpace:'nowrap'}}>{r.delegator_name||'â'}</td>
+            <td style={{padding:'7px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.status||'Ã¢ÂÂ'}</td>
+            <td style={{padding:'7px 10px',color:'#10b981',whiteSpace:'nowrap'}}>{r.assigned_to_name||'Ã¢ÂÂ'}</td>
+            <td style={{padding:'7px 10px',color:'#f59e0b',whiteSpace:'nowrap'}}>{r.delegator_name||'Ã¢ÂÂ'}</td>
             <td style={{padding:'7px 10px',color:'#8fa5be'}}>
               {r.checklist?.length>0
-                ?<span title={r.checklist.map(c=>c.text).join('\n')}>â {r.checklist.length} item{r.checklist.length>1?'s':''}</span>
-                :<span style={{color:'var(--tf-text-mut)'}}>â</span>}
+                ?<span title={r.checklist.map(c=>c.text).join('\n')}>Ã¢ÂÂ {r.checklist.length} item{r.checklist.length>1?'s':''}</span>
+                :<span style={{color:'var(--tf-text-mut)'}}>Ã¢ÂÂ</span>}
             </td>
           </tr>)}</tbody>
         </table>
@@ -947,8 +947,8 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
   </Modal>
 }
 
-// ââ Main App ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-// ââ Team View Panel âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Main App Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// Ã¢ÂÂÃ¢ÂÂ Team View Panel Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,openNew,setShowMembers,isOvd}){
   const [filter,setFilter]=useState('all') // 'all' | 'own' | 'assigned'
   const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
@@ -965,7 +965,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 
   if(wsMembers.filter(m=>m.id!==cu.id).length===0)return(
     <div style={{textAlign:'center',padding:56,border:'1px dashed var(--tf-border)',borderRadius:G.radius,color:'var(--tf-text-mut)'}}>
-      <div style={{fontSize:36,marginBottom:12}}>ð¥</div>
+      <div style={{fontSize:36,marginBottom:12}}>Ã°ÂÂÂ¥</div>
       <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8}}>No teammates yet</div>
       <div style={{fontSize:12,marginBottom:20}}>Invite colleagues to collaborate on tasks.</div>
       <Btn onClick={()=>setShowMembers(true)} color={wsColor}>+ Invite Members</Btn>
@@ -997,7 +997,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
         <div style={{flex:1,minWidth:160}}>
           <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{selMem.name||selMem.email}</div>
           <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{selMem.email}</div>
-          <div style={{fontSize:11,color:'#10b981',marginTop:4,fontWeight:600}}>â Workspace member</div>
+          <div style={{fontSize:11,color:'#10b981',marginTop:4,fontWeight:600}}>Ã¢ÂÂ Workspace member</div>
         </div>
         {/* Stats */}
         <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -1085,10 +1085,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   },[activeWsId,cu.id])
 
   const saveWS=async({id,name,description,color,icon})=>{
-    if(id){const{error}=await updateWorkspace(id,{name,description,color,icon});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===id?{...w,name,description,color,icon}:w));showToast('Updated â')}
-    else{const{data:ws,error}=await createWorkspace({name,description,color,icon,owner_id:cu.id});if(error||!ws){showToast('Failed to create: '+(error?.message||'unknown error'),'err');return};/* trigger auto-adds owner; also add explicitly for safety */await addMemberToWorkspace(ws.id,cu.id,'owner');showToast('Workspace created! Invite members â');await loadWS(ws.id)}
+    if(id){const{error}=await updateWorkspace(id,{name,description,color,icon});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===id?{...w,name,description,color,icon}:w));showToast('Updated Ã¢ÂÂ')}
+    else{const{data:ws,error}=await createWorkspace({name,description,color,icon,owner_id:cu.id});if(error||!ws){showToast('Failed to create: '+(error?.message||'unknown error'),'err');return};/* trigger auto-adds owner; also add explicitly for safety */await addMemberToWorkspace(ws.id,cu.id,'owner');showToast('Workspace created! Invite members Ã¢ÂÂ');await loadWS(ws.id)}
   }
-  const saveStatuses=async ss=>{if(!activeWsId)return;const{error}=await updateWorkspace(activeWsId,{custom_statuses:ss});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===activeWsId?{...w,custom_statuses:ss}:w));showToast('Saved â')}
+  const saveStatuses=async ss=>{if(!activeWsId)return;const{error}=await updateWorkspace(activeWsId,{custom_statuses:ss});if(error){showToast('Failed','err');return};setWorkspaces(p=>p.map(w=>w.id===activeWsId?{...w,custom_statuses:ss}:w));showToast('Saved Ã¢ÂÂ')}
   const delWsHandler=async id=>{await deleteWorkspace(id);setActiveWsId(null);setDelWs(null);await loadWS()}
   const leaveWs=async()=>{await removeMemberFromWorkspace(activeWsId,cu.id);setActiveWsId(null);await loadWS();showToast('Left workspace')}
 
@@ -1100,13 +1100,13 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       const becameDone=prev&&prev.status!==statuses[statuses.length-1]&&td.status===statuses[statuses.length-1]
       if(becameDone&&td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date){
         const nd=nextDate(td.due_date,td.recurrence_type,td.recurrence_interval)
-        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt}=await createTask(clone);if(nt){setTasks(p=>[...p,nt]);showToast(`Next task created â ${fmtFull(nd)} ð`);return}}
+        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt}=await createTask(clone);if(nt){setTasks(p=>[...p,nt]);showToast(`Next task created Ã¢ÂÂ ${fmtFull(nd)} Ã°ÂÂÂ`);return}}
       }
-      showToast('Saved â')
+      showToast('Saved Ã¢ÂÂ')
     } else {
       const{data,error}=await createTask(td);if(error){showToast('Failed','err');return}
       if(data){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created')}
-      showToast(rrLabel(td.recurrence_type,td.recurrence_interval)?`Created ð ${rrLabel(td.recurrence_type,td.recurrence_interval)}`:'Created â')
+      showToast(rrLabel(td.recurrence_type,td.recurrence_interval)?`Created Ã°ÂÂÂ ${rrLabel(td.recurrence_type,td.recurrence_interval)}`:'Created Ã¢ÂÂ')
     }
   }
   const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
@@ -1119,7 +1119,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     const{data}=await updateTask(task.id,{assignees:newAssignees,assigned_to:newAssignees[0],delegator_id:delegator})
     if(data){
       setTasks(p=>p.map(t=>t.id===task.id?data:t))
-      showToast(`â Claimed! "${task.title}" added to your board`)
+      showToast(`Ã¢ÂÂ Claimed! "${task.title}" added to your board`)
       await logActivity(task.id,cu.id,'Claimed task')
     }else{showToast('Failed to claim task','err')}
   },[cu.id,tasks])
@@ -1130,9 +1130,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       setTasks(p=>p.map(t=>t.id===task.id?data:t))
       const isSelf=updates.assignees?.includes(cu.id)&&updates.delegator_id!==cu.id
       const isDel=updates.delegator_id===cu.id&&!updates.assignees?.includes(cu.id)
-      if(isSelf) showToast(`â Added to your board under manager`)
-      else if(isDel) showToast(`â¡ï¸ Delegated to ${updates.assignees?.length} member(s)`)
-      else showToast('Assignment updated â')
+      if(isSelf) showToast(`Ã¢ÂÂ Added to your board under manager`)
+      else if(isDel) showToast(`Ã¢ÂÂ¡Ã¯Â¸Â Delegated to ${updates.assignees?.length} member(s)`)
+      else showToast('Assignment updated Ã¢ÂÂ')
       await logActivity(task.id,cu.id,isSelf?'Self-assigned under manager':'Delegated task')
     }else showToast('Failed to update','err')
   },[cu.id])
@@ -1162,7 +1162,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     // Persist all sort_order changes + status change
     await Promise.all(updates.map(u=>updateTask(u.id,{sort_order:u.sort_order,...(u.id===dragId&&statusChanged?{status:st}:{})})))
-    if(statusChanged)await logActivity(dragId,cu.id,`â${st}`)
+    if(statusChanged)await logActivity(dragId,cu.id,`Ã¢ÂÂ${st}`)
   },[dragId,tasks,cu.id])
   const importTasks=async rows=>{
     const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase())
@@ -1183,7 +1183,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       if(data){setTasks(p=>[...p,data]);a++}else{s++;if(error)errs.push(r.title+': '+(error.message||'err'))}
     }
     if(errs.length)console.error('Import errors:',errs)
-    showToast(a>0?`â Imported ${a} task${a>1?'s':''}${s?' Â· '+s+' skipped':''}`:`â Import failed â ${s} row${s>1?'s':''} skipped`,'err')
+    showToast(a>0?`Ã¢ÂÂ Imported ${a} task${a>1?'s':''}${s?' ÃÂ· '+s+' skipped':''}`:`Ã¢ÂÂ Import failed Ã¢ÂÂ ${s} row${s>1?'s':''} skipped`,'err')
   }
 
   const acceptInv=async inv=>{
@@ -1191,7 +1191,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     if(error){showToast('Failed to join workspace','err');return}
     await refreshInvites()
     await loadWS(inv.workspace_id)
-    showToast(`Joined ${inv.workspace?.name||'workspace'}! ð`)
+    showToast(`Joined ${inv.workspace?.name||'workspace'}! Ã°ÂÂÂ`)
   }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
@@ -1201,9 +1201,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
-  const views=[{id:'board',label:'My Board',icon:'â'},{id:'team',label:'Team',icon:'â'},{id:'recurring',label:'Recurring',icon:'ð'},{id:'list',label:'All Tasks',icon:'â°'},{id:'dashboard',label:'Dashboard',icon:'â¬¡'}]
+  const views=[{id:'board',label:'My Board',icon:'Ã¢ÂÂ'},{id:'team',label:'Team',icon:'Ã¢ÂÂ'},{id:'recurring',label:'Recurring',icon:'Ã°ÂÂÂ'},{id:'list',label:'All Tasks',icon:'Ã¢ÂÂ°'},{id:'dashboard',label:'Dashboard',icon:'Ã¢Â¬Â¡'}]
 
-  if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>â¦</div><div style={{fontSize:13}}>Loadingâ¦</div></div></div>
+  if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>Ã¢ÂÂ¦</div><div style={{fontSize:13}}>LoadingÃ¢ÂÂ¦</div></div></div>
 
   return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:G.font,color:'var(--tf-text)',display:'flex',flexDirection:'column',WebkitFontSmoothing:'antialiased',MozOsxFontSmoothing:'grayscale',position:'relative'}} onDragEnd={()=>setDragId(null)}>
     <GlobalStyle lightMode={lightMode}/>
@@ -1213,7 +1213,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {/* TOP NAV */}
     <nav style={{height:52,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 16px',gap:5,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>setActiveWsId(null)}>
-        <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>â¦</div>
+        <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>Ã¢ÂÂ¦</div>
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
       <div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
@@ -1221,22 +1221,22 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
         <button onClick={()=>setWsForm('new')} style={{width:24,height:24,borderRadius:G.radiusSm,border:'1px dashed var(--tf-border)',background:'transparent',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.color='#6b8cad'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-mut)'}}>+</button>
       </div>
-      {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tasksâ¦" style={{background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:G.radiusSm,padding:'5px 11px',color:'var(--tf-text)',fontSize:12,outline:'none',width:140,fontFamily:G.font,flexShrink:0}}/>}
-      {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:G.font,flexShrink:0}}>â Clear</button>}
+      {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tasksÃ¢ÂÂ¦" style={{background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:G.radiusSm,padding:'5px 11px',color:'var(--tf-text)',fontSize:12,outline:'none',width:140,fontFamily:G.font,flexShrink:0}}/>}
+      {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:G.font,flexShrink:0}}>Ã¢ÂÂ Clear</button>}
       {/* Workspace settings dropdown */}
       {activeWs&&<div ref={wsMenuRef} style={{position:'relative',flexShrink:0}}>
-        <button onClick={()=>setShowWsMenu(v=>!v)} title="Workspace settings" style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>â</button>
+        <button onClick={()=>setShowWsMenu(v=>!v)} title="Workspace settings" style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>Ã¢ÂÂ</button>
         {showWsMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:200,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
           {[
-            ...(myRole==='owner'||myRole==='admin'?[{label:'Edit workspace',icon:'âï¸',action:()=>{setWsForm({...activeWs});setShowWsMenu(false)}},{label:'Manage columns',icon:'â',action:()=>{setStatusMgr(true);setShowWsMenu(false)}}]:[]),
-            {label:'Members & Invites',icon:'ð¥',action:()=>{setShowMembers(true);setShowWsMenu(false)}},
-            {label:'Import / Export',icon:'ð',action:()=>{setShowImEx(true);setShowWsMenu(false)}},
-            ...(myRole==='owner'?[{label:'Delete workspace',icon:'ð',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[{label:'Leave workspace',icon:'ðª',action:()=>{if(window.confirm('Leave this workspace?'))leaveWs();setShowWsMenu(false)},danger:true}])
+            ...(myRole==='owner'||myRole==='admin'?[{label:'Edit workspace',icon:'Ã¢ÂÂÃ¯Â¸Â',action:()=>{setWsForm({...activeWs});setShowWsMenu(false)}},{label:'Manage columns',icon:'Ã¢ÂÂ',action:()=>{setStatusMgr(true);setShowWsMenu(false)}}]:[]),
+            {label:'Members & Invites',icon:'Ã°ÂÂÂ¥',action:()=>{setShowMembers(true);setShowWsMenu(false)}},
+            {label:'Import / Export',icon:'Ã°ÂÂÂ',action:()=>{setShowImEx(true);setShowWsMenu(false)}},
+            ...(myRole==='owner'?[{label:'Delete workspace',icon:'Ã°ÂÂÂ',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[{label:'Leave workspace',icon:'Ã°ÂÂÂª',action:()=>{if(window.confirm('Leave this workspace?'))leaveWs();setShowWsMenu(false)},danger:true}])
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
       {/* Light/dark toggle */}
-      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'ð':'âï¸'}</button>
+      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'Ã°ÂÂÂ':'Ã¢ÂÂÃ¯Â¸Â'}</button>
       {/* User menu */}
       <div ref={userMenuRef} style={{position:'relative',flexShrink:0}}>
         <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'1.5px solid var(--tf-border)',position:'relative'}}>
@@ -1252,16 +1252,16 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:'#8fa5be',textTransform:'uppercase',letterSpacing:'0.06em'}}>Pending Invitations</div>
             {pendingInvites.map(inv=>{const ws=inv.workspace;const rgb=hexRgb(ws?.color||'#6b8cad');return<div key={inv.id} style={{padding:'8px 12px',borderTop:`1px solid rgba(${rgb},0.08)`}}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                <div style={{width:26,height:26,borderRadius:'7px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{ws?.icon||'â¬¡'}</div>
+                <div style={{width:26,height:26,borderRadius:'7px',background:`rgba(${rgb},0.15)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}}>{ws?.icon||'Ã¢Â¬Â¡'}</div>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ws?.name||'Workspace'}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>from {inv.inviter?.name||inv.inviter?.email}</div></div>
               </div>
               <div style={{display:'flex',gap:5}}>
-                <button onClick={async e=>{e.stopPropagation();setShowUserMenu(false);await acceptInv(inv)}} style={{flex:1,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.28)`,borderRadius:G.radiusXs,padding:'5px 0',color:ws?.color||'#8fa5be',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>â Accept</button>
+                <button onClick={async e=>{e.stopPropagation();setShowUserMenu(false);await acceptInv(inv)}} style={{flex:1,background:`rgba(${rgb},0.15)`,border:`1px solid rgba(${rgb},0.28)`,borderRadius:G.radiusXs,padding:'5px 0',color:ws?.color||'#8fa5be',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>Ã¢ÂÂ Accept</button>
                 <button onClick={async e=>{e.stopPropagation();await declineInv(inv)}} style={{flex:1,background:'rgba(239,68,68,0.07)',border:'1px solid rgba(239,68,68,0.18)',borderRadius:G.radiusXs,padding:'5px 0',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>Decline</button>
               </div>
             </div>})}
           </div>}
-          <button onClick={()=>{setShowUserMenu(false);onSignOut()}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 14px',background:'none',border:'none',cursor:'pointer',color:'#ef4444',fontSize:13,textAlign:'left',fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>â Sign out</button>
+          <button onClick={()=>{setShowUserMenu(false);onSignOut()}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 14px',background:'none',border:'none',cursor:'pointer',color:'#ef4444',fontSize:13,textAlign:'left',fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>Ã¢ÂÂ Sign out</button>
         </div>}
       </div>
     </nav>
@@ -1309,7 +1309,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {/* BOARD */}
         {view==='board'&&<div style={{height:'calc(100vh - 54px - 46px)',display:'flex',flexDirection:'column',overflow:'hidden',padding:'20px 24px 8px',boxSizing:'border-box'}}>
           <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,flexShrink:0}}>
-            <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}}>{myTasks.length} tasks Â· <span style={{color:'#8fa5be'}}>ð¥ assigned</span> Â· <span style={{color:'#f59e0b'}}>ð¤ delegated</span></p></div>
+            <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}}>{myTasks.length} tasks ÃÂ· <span style={{color:'#8fa5be'}}>Ã°ÂÂÂ¥ assigned</span> ÃÂ· <span style={{color:'#f59e0b'}}>Ã°ÂÂÂ¤ delegated</span></p></div>
           </div>
           <KanbanBoard isDragging={!!dragId}>
             {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
@@ -1325,19 +1325,19 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* RECURRING */}
           {view==='recurring'&&<div>
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20}}>
-              <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>ð Recurring Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{recT.length} recurring â mark Done to create next</p></div>
+              <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>Ã°ÂÂÂ Recurring Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{recT.length} recurring Ã¢ÂÂ mark Done to create next</p></div>
               <Btn onClick={()=>openNew()} color="#6b8cad">+ New Recurring</Btn>
             </div>
             {recT.length===0
-              ?<div style={{textAlign:'center',padding:56,border:'1px dashed var(--tf-border)',borderRadius:G.radius,color:'var(--tf-text-mut)'}}><div style={{fontSize:36,marginBottom:12}}>ð</div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8}}>No recurring tasks</div><div style={{fontSize:12,marginBottom:20}}>Create a task with a recurrence schedule.</div><Btn onClick={()=>openNew()} color="#6b8cad">Create First</Btn></div>
+              ?<div style={{textAlign:'center',padding:56,border:'1px dashed var(--tf-border)',borderRadius:G.radius,color:'var(--tf-text-mut)'}}><div style={{fontSize:36,marginBottom:12}}>Ã°ÂÂÂ</div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8}}>No recurring tasks</div><div style={{fontSize:12,marginBottom:20}}>Create a task with a recurrence schedule.</div><Btn onClick={()=>openNew()} color="#6b8cad">Create First</Btn></div>
               :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:12}}>
                 {recT.map(t=>{const assignee=getUser(t.assigned_to,wsMembers);const ovd=isOvd(t.due_date);const rl=rrLabel(t.recurrence_type,t.recurrence_interval);const nd=nextDate(t.due_date,t.recurrence_type,t.recurrence_interval);const col=SC[t.status]||wsColor;return<div key={t.id} onClick={()=>setEditTask(t)} style={{background:'var(--tf-surface)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:G.radius,padding:16,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.4)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.2)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
                   <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
-                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',flex:1,lineHeight:1.4}}>{t.title}</div><Tag label={`ð ${rl}`} color="#6b8cad"/></div>
-                  <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}><Tag label={t.status} color={col}/><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/>{ovd&&<Tag label="â  Overdue" color="#ef4444"/>}</div>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',flex:1,lineHeight:1.4}}>{t.title}</div><Tag label={`Ã°ÂÂÂ ${rl}`} color="#6b8cad"/></div>
+                  <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:10}}><Tag label={t.status} color={col}/><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/>{ovd&&<Tag label="Ã¢ÂÂ  Overdue" color="#ef4444"/>}</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,background:'rgba(0,0,0,0.2)',borderRadius:G.radiusSm,padding:'10px 12px'}}>
                     <div><div style={{fontSize:10,color:'var(--tf-text-mut)',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Current Due</div><div style={{fontSize:12,color:ovd?'#f87171':'var(--tf-text-sub)',fontWeight:600}}>{t.due_date?fmtFull(t.due_date):'Not set'}</div></div>
-                    <div><div style={{fontSize:10,color:'var(--tf-text-mut)',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next After Done</div><div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nd?fmtFull(nd):'â'}</div></div>
+                    <div><div style={{fontSize:10,color:'var(--tf-text-mut)',fontWeight:700,textTransform:'uppercase',marginBottom:2}}>Next After Done</div><div style={{fontSize:12,color:'#10b981',fontWeight:600}}>{nd?fmtFull(nd):'Ã¢ÂÂ'}</div></div>
                   </div>
                 </div>})}
               </div>}
@@ -1347,7 +1347,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
               <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{allT.length} tasks</p></div>
-              <Btn onClick={()=>setShowImEx(true)} outline color="#64748b">ð Import / Export</Btn>
+              <Btn onClick={()=>setShowImEx(true)} outline color="#64748b">Ã°ÂÂÂ Import / Export</Btn>
             </div>
             <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,overflow:'hidden'}}>
               <table style={{width:'100%',borderCollapse:'collapse'}}>
@@ -1359,10 +1359,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                     <td style={{padding:'10px 10px'}}><Tag label={`${PI[t.priority]} ${t.priority}`} color={PC[t.priority]}/></td>
                     <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:5}}><Avatar user={dlg} size={18}/><span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{dlg?.name?.split(' ')[0]||'?'}{dlg?.id===cu.id?' (You)':''}</span></div></td>
                     <td style={{padding:'10px 10px'}}><div style={{display:'flex',alignItems:'center',gap:4}}>{asgns.length===0?<span style={{fontSize:11,color:'var(--tf-text-mut)',fontStyle:'italic'}}>Unassigned</span>:asgns.slice(0,3).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0}}><Avatar user={u} size={20}/></div>)}{asgns.length>3&&<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:4}}>+{asgns.length-3}</span>}{isMine&&<span style={{fontSize:9,color:'#10b981',fontWeight:700,background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.2)',borderRadius:'100px',padding:'1px 6px',marginLeft:4}}>You</span>}</div></td>
-                    <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':'var(--tf-text-sub)',fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'â'}</span></td>
+                    <td style={{padding:'10px 10px'}}><span style={{fontSize:11,color:ovd?'#f87171':'var(--tf-text-sub)',fontWeight:ovd?700:400}}>{t.due_date?fmtDate(t.due_date):'Ã¢ÂÂ'}</span></td>
                     <td style={{padding:'8px 10px'}}>{canClaim
-                      ?<button onClick={e=>{e.stopPropagation();setAssignTask(t)}} style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:G.radiusMd,padding:'5px 11px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(16,185,129,0.2)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(16,185,129,0.1)'}>ð Assign</button>
-                      :<span style={{fontSize:10,color:'#10b981',fontWeight:700}}>â Mine</span>}
+                      ?<button onClick={e=>{e.stopPropagation();setAssignTask(t)}} style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:G.radiusMd,padding:'5px 11px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:G.font,whiteSpace:'nowrap'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(16,185,129,0.2)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(16,185,129,0.1)'}>Ã°ÂÂÂ Assign</button>
+                      :<span style={{fontSize:10,color:'#10b981',fontWeight:700}}>Ã¢ÂÂ Mine</span>}
                     </td>
                     <td style={{padding:'8px 10px'}}><Btn onClick={()=>setEditTask(t)} outline color={wsColor} sm>Edit</Btn></td>
                   </tr>})}
@@ -1388,7 +1388,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                   <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Team Workload</div>
                   {(myRole==='owner'||myRole==='admin')&&<button onClick={()=>setShowMembers(true)} style={{background:'none',border:'none',color:'#8fa5be',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>+ Invite</button>}
                 </div>
-                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#8fa5be'}}>{a} assigned</span><span style={{fontSize:10,color:'var(--tf-text-mut)'}}>Â·</span><span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{o} own</span></div></div></div>})}
+                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#8fa5be'}}>{a} assigned</span><span style={{fontSize:10,color:'var(--tf-text-mut)'}}>ÃÂ·</span><span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{o} own</span></div></div></div>})}
               </div>
             </div>
           </div>}
@@ -1403,11 +1403,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     <StatusManager open={statusMgr} onClose={()=>setStatusMgr(false)} statuses={statuses} wsColor={wsColor} onSave={saveStatuses}/>
     {showImEx&&activeWs&&<ImportExportModal open onClose={()=>setShowImEx(false)} tasks={tasks} wsMembers={wsMembers} statuses={statuses} wsName={activeWs.name} onImport={importTasks}/>}
     {showMembers&&activeWs&&<MembersModal open onClose={()=>setShowMembers(false)} ws={activeWs} wsMembers={wsMembers} cu={cu} myRole={myRole} showToast={showToast}/>}
-    <Confirm open={!!delWs} icon="â ï¸" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
+    <Confirm open={!!delWs} icon="Ã¢ÂÂ Ã¯Â¸Â" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
   </div>
 }
 
-// ââ Root ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂ Root Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 class ErrorBoundary extends React.Component{
   constructor(p){super(p);this.state={err:null}}
   static getDerivedStateFromError(e){return{err:e}}
@@ -1415,7 +1415,7 @@ class ErrorBoundary extends React.Component{
     if(this.state.err)return(
       <div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui',color:'#e8edf5',padding:24}}>
         <div style={{maxWidth:480,textAlign:'center'}}>
-          <div style={{fontSize:48,marginBottom:16}}>â ï¸</div>
+          <div style={{fontSize:48,marginBottom:16}}>Ã¢ÂÂ Ã¯Â¸Â</div>
           <div style={{fontSize:20,fontWeight:700,marginBottom:8}}>Something went wrong</div>
           <div style={{fontSize:13,color:'#5a6a85',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:12,padding:'14px 18px',marginBottom:20,textAlign:'left',wordBreak:'break-all'}}>{this.state.err?.message||String(this.state.err)}</div>
           <button onClick={()=>window.location.reload()} style={{background:'#6b8cad',border:'none',borderRadius:10,padding:'10px 24px',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer'}}>Reload</button>
@@ -1469,7 +1469,7 @@ export default function App(){
 
   const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
 
-  if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>â¦</div><div style={{fontSize:13}}>Loadingâ¦</div></div></div>
+  if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>Ã¢ÂÂ¦</div><div style={{fontSize:13}}>LoadingÃ¢ÂÂ¦</div></div></div>
   if(!session)return<AuthScreen inviteToken={inviteToken}/>
   return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
 }
