@@ -751,7 +751,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
     <div draggable={!mir}
       onDragStart={e=>{if(mir)return;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',task.id);onDragStart(task.id)}}
       onClick={()=>onEdit(task)} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
-      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'11px 13px 9px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.2:1,transform:hov&&!isDragging?'translateY(-1px)':'none',boxShadow:hov&&!isDragging?`0 8px 24px var(--tf-shadow),0 0 0 1px rgba(${rgb},0.18)`:'none',userSelect:'none',borderLeft:`3px solid ${hov?acc:`rgba(${rgb},0.4)`}`,position:'relative'}}>
+      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'9px 12px 7px',cursor:mir?'default':'grab',transition:G.trans,opacity:isDragging?0.2:1,transform:hov&&!isDragging?'translateY(-1px)':'none',boxShadow:hov&&!isDragging?`0 8px 24px var(--tf-shadow),0 0 0 1px rgba(${rgb},0.18)`:'none',userSelect:'none',borderLeft:`3px solid ${hov?acc:`rgba(${rgb},0.4)`}`,position:'relative'}}>
       {/* Top meta row */}
       <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:7,flexWrap:'wrap'}}>
         <span style={{fontSize:10,fontWeight:600,color:pColor,background:`rgba(${hexRgb(pColor)},0.1)`,borderRadius:4,padding:'1px 6px'}}>{PI[task.priority]} {task.priority}</span>
@@ -767,7 +767,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         </div>}
       </div>
       {/* Title */}
-      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:task.description?4:8,lineHeight:1.4,fontFamily:G.font}}>{task.title}</div>
+      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:task.description?3:7,lineHeight:1.3,fontFamily:G.font}}>{task.title}</div>
       {task.description&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.45,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
       {/* Checklist progress bar */}
       {cl.length>0&&<div style={{marginBottom:8,height:3,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div>}
@@ -776,9 +776,8 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         {(task.tags||[]).slice(0,3).map(t=><span key={t} style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 7px',fontWeight:500}}>{t}</span>)}
       </div>}
       {/* Bottom row */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-        <div style={{display:'flex',alignItems:'center',gap:-3}}>
-          {mir?<Avatar user={creator} size={20}/>:assigneeUsers.slice(0,4).map((u,i)=><div key={u.id} style={{marginLeft:i?-6:0,zIndex:10-i}}><Avatar user={u} size={20}/></div>)}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>{task.due_date&&<span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{fmtDate(task.due_date)}</span>}<div style={{display:'flex',alignItems:'center',gap:-3}}>
+          {mir?<Avatar user={creator} size={18}/>:assigneeUsers.slice(0,4).map((u,i)=><div key={u.id} style={{marginLeft:i?-5:0,zIndex:10-i}}><Avatar user={u} size={18}/></div>)}
           {!mir&&assigneeUsers.length>4&&<div style={{marginLeft:-6,width:20,height:20,borderRadius:'50%',background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:'var(--tf-text-sub)',fontWeight:700}}>+{assigneeUsers.length-4}</div>}
         </div>
         {task.due_date&&<span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{fmtDate(task.due_date)}</span>}
