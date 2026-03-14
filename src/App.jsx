@@ -940,7 +940,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
         </table>
       </div>
       <div style={{display:'flex',gap:10}}>
-        <Btn onClick={()=>setPreview(null)} outline color="#64748b" full>Back</Btn>
+        <Btn onClick={()=>setPreview(null)} outline color="#64748b" sm>Back</Btn>
         <Btn onClick={()=>{onImport(preview);onClose();setPreview(null)}} color="#6b8cad" sm>Import {preview.length} Tasks</Btn>
       </div>
     </div>}
