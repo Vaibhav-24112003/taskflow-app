@@ -13,9 +13,9 @@ const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
 const PRIORITIES = ['Low','Medium','High','Critical']
 const RECURRENCE_TYPES = ['none','daily','weekly','monthly','custom']
 const PC = {'Low':'#64748b','Medium':'#38bdf8','High':'#fb923c','Critical':'#f87171'}
-const PI = {'Low':'Ã¢ÂÂ','Medium':'Ã¢ÂÂ','High':'Ã¢ÂÂ','Critical':'Ã¢ÂÂ¡'}
+const PI={'Low':'▼','Medium':'▶','High':'▲','Critical':'⚡'}
 const WS_COLORS = ['#6b8cad','#ec4899','#10b981','#f59e0b','#06b6d4','#4a7a9b','#ef4444','#3b82f6']
-const WS_ICONS  = ['Ã¢Â¬Â¡','Ã¢ÂÂ','Ã¢ÂÂ','Ã¢ÂÂ','Ã¢ÂÂ','Ã¢ÂÂ²','Ã¢ÂÂ','Ã¢ÂÂ ']
+const WS_ICONS=['🔷','🔹','🟦','🔵','🟣','🔶','🔴','🟢']
 const SCPAL = ['#64748b','#6b8cad','#f59e0b','#10b981','#ec4899','#06b6d4','#4a7a9b','#ef4444']
 
 // Ã¢ÂÂÃ¢ÂÂ Design tokens Ã¢ÂÂ CSS variable based (proper light/dark, no filter hack) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
@@ -784,9 +784,9 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         {task.due_date&&<span style={{fontSize:10,color:ovd?'#ef4444':'var(--tf-text-sub)',fontWeight:ovd?600:400}}>{fmtDate(task.due_date)}</span>}
       </div>
       {/* Hover actions */}
-      {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
-        <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm full>Edit</Btn>
-        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm full>Delete</Btn>
+      {!mir&&hov&&<div style={{display:'flex',gap:4,marginTop:6,paddingTop:6,borderTop:'1px solid var(--tf-border)',justifyContent:'flex-end'}}>
+        <button onClick={e=>{e.stopPropagation();onEdit(task)}} style={{background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:5,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>Edit</button>
+        <button onClick={e=>{e.stopPropagation();setCdel(true)}} style={{background:'rgba(239,100,100,0.1)',border:'1px solid rgba(239,100,100,0.2)',borderRadius:5,padding:'3px 10px',color:'#ef6464',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:G.font}}>Delete</button>
       </div>}
     </div>
     <Confirm open={cdel} icon="Ã°ÂÂÂÃ¯Â¸Â" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
@@ -830,7 +830,7 @@ function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,
 
   const InsertLine=()=><div style={{height:2,background:col,borderRadius:2,margin:'2px 0',boxShadow:`0 0 8px ${col}88`,transition:'opacity 0.1s'}}/>
 
-  return<div style={{minWidth:268,flex:'0 0 268px',display:'flex',flexDirection:'column',minHeight:0}}>
+  return<div style={{minWidth:252,flex:'0 0 252px',display:'flex',flexDirection:'column',minHeight:0}}>
     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'10px 13px',background:overCol?`rgba(${rgb},0.06)`:'var(--tf-surface)',border:`1px solid ${overCol?`rgba(${rgb},0.35)`:'var(--tf-border)'}`,borderRadius:G.radiusMd,borderTop:`3px solid ${col}`,transition:G.trans,flexShrink:0}}>
       <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',flex:1,fontFamily:G.fontDisplay}}>{status}</span>
       <span style={{fontSize:11,fontWeight:700,color:col,background:`rgba(${rgb},0.12)`,borderRadius:'20px',padding:'1px 8px',minWidth:20,textAlign:'center'}}>{tasks.length}</span>
@@ -1201,7 +1201,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
-  const views=[{id:'board',label:'My Board',icon:'Ã¢ÂÂ'},{id:'team',label:'Team',icon:'Ã¢ÂÂ'},{id:'recurring',label:'Recurring',icon:'Ã°ÂÂÂ'},{id:'list',label:'All Tasks',icon:'Ã¢ÂÂ°'},{id:'dashboard',label:'Dashboard',icon:'Ã¢Â¬Â¡'}]
+  const views=[{id:'board',label:'My Board',icon:'📋'},{id:'team',label:'Team',icon:'👥'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'📄'},{id:'dashboard',label:'Dashboard',icon:'📊'}]
 
   if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>Ã¢ÂÂ¦</div><div style={{fontSize:13}}>LoadingÃ¢ÂÂ¦</div></div></div>
 
