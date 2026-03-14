@@ -785,8 +785,8 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       </div>
       {/* Hover actions */}
       {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transition:'opacity 0.15s',pointerEvents:hov?'auto':'none'}}>
-        <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm full>Edit</Btn>
-        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm full>Delete</Btn>
+        <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
+        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn>
       </div>}
     </div>
     <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
