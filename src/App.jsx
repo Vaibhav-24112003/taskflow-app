@@ -382,7 +382,7 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
     </div>
     <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
       <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
-      <Btn onClick={async()=>{const name=nameRef.current?.value?.trim();if(!name)return;await onSave({id:ws?.id,name,description:descVal?.trim()||'',color,icon});onClose()}} color={color}>{ws?'Save':'Create Workspace'}</Btn>
+      <Btn onClick={async()=>{const name=nameRef.current?.value?.trim();if(!name)return;await onSave({id:ws?.id,name,description:descRef.current?.value?.trim()||'',color,icon});onClose()}} color={color}>{ws?'Save':'Create Workspace'}</Btn>
     </div>
   </Modal>
 }
