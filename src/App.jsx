@@ -146,7 +146,7 @@ function Modal({open,onClose,title,width=600,children}){
         <span style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',fontFamily:G.fontDisplay}}>{title}</span>
         <button onClick={onClose} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>✕</button>
       </div>
-      <div style={{padding:'22px 32px'}}>{children}</div>
+      <div style={{padding:'20px 22px'}}>{children}</div>
     </div>
   </div>
 }
@@ -376,7 +376,7 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
   return<Modal open={open} onClose={onClose} title={ws?'Edit Workspace':'New Workspace'} width={460}>
     <div style={{marginBottom:16}}><label style={LBL}>Name *</label><input ref={nameRef} defaultValue={ws?.name||''} placeholder="e.g. Q4 Product Launch" style={INP} autoFocus/></div>
     <div style={{marginBottom:16}}><label style={LBL}>Description</label><textarea ref={descRef} defaultValue={ws?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="What's this workspace for?"/></div>
-    <div style={{display:'flex',gap:0}}><div style={{flex:1,minWidth:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px',paddingRight:24,marginBottom:20}}>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px',marginBottom:20}}>
       <div><label style={LBL}>Color</label><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{WS_COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'9px',background:c,cursor:'pointer',border:`2.5px solid ${color===c?'rgba(255,255,255,0.9)':'transparent'}`,boxShadow:color===c?`0 0 0 3px rgba(${hexRgb(c)},0.35)`:'none',transition:G.trans}}/>)}</div></div>
       <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:'9px',background:icon===ic?`rgba(${rgb},0.15)`:'var(--tf-surface)',border:`1.5px solid ${icon===ic?color:'var(--tf-border)'}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:G.trans}}>{ic}</div>)}</div></div>
     </div>
@@ -554,7 +554,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
       <Avatar user={eu} size={32}/>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:12,fontWeight:700,color:selected?ac:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-        <div style={{fontSize:10,color:'var(--tf-text-sub)',wordBreak:'break-all'}}>{m.email}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
       </div>
       <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:'var(--tf-text-mut)'}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
         {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
@@ -586,7 +586,6 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
     {/* CASE A: Self-assign → pick manager */}
     {mode==='self'&&<>
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
-</div><div style={{flex:1,display:'flex',flexDirection:'column',gap:0}}>
         ⚡ Who is your Manager / Delegator for this task?
       </div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
@@ -630,7 +629,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
 
 // ── Task Form Modal ───────────────────────────────────────────────────────────
 // Field wrapper — defined OUTSIDE modal to prevent remount on every keystroke
-function F({label,children,full,col3}){return<div style={{marginBottom:16,gridColumn:col3?'3':full?'1/3':undefined,paddingLeft:col3?20:0,borderLeft:col3?'1.5px solid var(--tf-border)':undefined}}><label style={LBL}>{label}</label>{children}</div>;}
+function F({label,children,full}){return<div style={{marginBottom:16,gridColumn:full?'1/-1':undefined}}><label style={LBL}>{label}</label>{children}</div>;}
 
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
@@ -669,19 +668,14 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   }
 
 
-  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={900}>
-    <div style={{display:'flex',gap:20}}><div style={{flex:1,minWidth:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
+  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={800}>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
       <F full label="Title *"><input value={titleVal} onChange={e=>setTitleVal(e.target.value)} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details..."/></F>
       <F label="Status"><CustomSelect value={status} onChange={setStatus} options={statuses} style={{width:'100%'}}/></F>
       <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
       {/* ── DELEGATOR / MANAGER ── */}
-            <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
-      <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
-      <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
-      <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
-      <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
-      </div><div style={{width:290,flexShrink:0,paddingLeft:24,borderLeft:'1.5px solid var(--tf-border)'}}><F full label="⚡ Manager / Delegator">
+      <F full label="⚡ Manager / Delegator">
         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
           {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
             return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
@@ -732,8 +726,13 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
           </div>
         }
       </F>
+      <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
+      <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
+      <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
+      <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
+      <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
     </div>
-    </div></div><div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
+    <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
       {isEdit?<Btn onClick={()=>setCdel(true)} danger>Delete</Btn>:<div/>}
       <div style={{display:'flex',gap:8}}><Btn onClick={onClose} outline color="#64748b">Cancel</Btn><Btn onClick={save} color={ws.color}>{isEdit?'Save Changes':'Create Task'}</Btn></div>
     </div>
@@ -774,7 +773,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       </div>
       {/* Title */}
       <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:task.description?4:8,lineHeight:1.4,fontFamily:G.font}}>{task.title}</div>
-      
+      {task.description&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.45,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{task.description}</div>}
       {/* Checklist progress bar */}
       {cl.length>0&&<div style={{marginBottom:8,height:3,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:clPct+'%',background:clPct===100?'#10b981':wsColor,borderRadius:2,transition:'width 0.3s ease'}}/></div>}
       {/* Tags */}
