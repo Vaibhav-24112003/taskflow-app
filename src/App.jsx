@@ -634,7 +634,6 @@ function F({label,children,full}){return<div style={{marginBottom:16,gridColumn:
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
   const [titleVal,setTitleVal]=useState(task?.title||'')
-  const [descVal,setDescVal]=useState(task?.description||'')
   const [status,setStatus]=useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]=useState('Medium')
   const [assignees,setAssignees]=useState([])
@@ -646,7 +645,6 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   useEffect(()=>{
     if(!open||!cu)return
     setTitleVal(task?.title||'')
-    setDescVal(task?.description||'')
     setStatus(task?.status||defaultStatus||statuses[0]||'Todo')
     setPriority(task?.priority||'Medium')
     setRt(task?.recurrence_type||'none');setRi(task?.recurrence_interval||1)
@@ -673,7 +671,6 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
       <F full label="Title *"><input value={titleVal} onChange={e=>setTitleVal(e.target.value)} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
-      <F full label="Description"><textarea value={descVal||''} onChange={e=>setDescVal(e.target.value)} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><CustomSelect value={status} onChange={setStatus} options={statuses} style={{width:'100%'}}/></F>
       <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
       {/* ── DELEGATOR / MANAGER ── */}
