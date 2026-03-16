@@ -376,7 +376,7 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
   return<Modal open={open} onClose={onClose} title={ws?'Edit Workspace':'New Workspace'} width={460}>
     <div style={{marginBottom:16}}><label style={LBL}>Name *</label><input ref={nameRef} defaultValue={ws?.name||''} placeholder="e.g. Q4 Product Launch" style={INP} autoFocus/></div>
     <div style={{marginBottom:16}}><label style={LBL}>Description</label><textarea ref={descRef} defaultValue={ws?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="What's this workspace for?"/></div>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px',marginBottom:20}}>
+    <div style={{display:'flex',gap:0}}><div style={{flex:1,minWidth:0,display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px',paddingRight:24,marginBottom:20}}>
       <div><label style={LBL}>Color</label><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{WS_COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'9px',background:c,cursor:'pointer',border:`2.5px solid ${color===c?'rgba(255,255,255,0.9)':'transparent'}`,boxShadow:color===c?`0 0 0 3px rgba(${hexRgb(c)},0.35)`:'none',transition:G.trans}}/>)}</div></div>
       <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:'9px',background:icon===ic?`rgba(${rgb},0.15)`:'var(--tf-surface)',border:`1.5px solid ${icon===ic?color:'var(--tf-border)'}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:G.trans}}>{ic}</div>)}</div></div>
     </div>
@@ -669,14 +669,14 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   }
 
 
-  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={700}>
+  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={900}>
     <div style={{display:'flex',gap:20}}><div style={{flex:'0 0 380px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
       <F full label="Title *"><input value={titleVal} onChange={e=>setTitleVal(e.target.value)} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
       <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details..."/></F>
       <F label="Status"><CustomSelect value={status} onChange={setStatus} options={statuses} style={{width:'100%'}}/></F>
       <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
       {/* ── DELEGATOR / MANAGER ── */}
-      <F full label="⚡ Manager / Delegator">
+      </div><div style={{width:290,flexShrink:0,paddingLeft:24,borderLeft:'1.5px solid var(--tf-border)'}}><F full label="⚡ Manager / Delegator">
         <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
           {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
             return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
@@ -733,7 +733,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
       <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
     </div>
-    </div><div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
+    </div></div><div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
       {isEdit?<Btn onClick={()=>setCdel(true)} danger>Delete</Btn>:<div/>}
       <div style={{display:'flex',gap:8}}><Btn onClick={onClose} outline color="#64748b">Cancel</Btn><Btn onClick={save} color={ws.color}>{isEdit?'Save Changes':'Create Task'}</Btn></div>
     </div>
