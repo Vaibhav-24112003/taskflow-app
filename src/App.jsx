@@ -382,7 +382,7 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
     </div>
     <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
       <Btn onClick={onClose} outline color="#64748b">Cancel</Btn>
-      <Btn onClick={async()=>{const name=nameRef.current?.value?.trim();if(!name)return;await onSave({id:ws?.id,name,description:descRef.current?.value?.trim()||'',color,icon});onClose()}} color={color}>{ws?'Save':'Create Workspace'}</Btn>
+      <Btn onClick={async()=>{const name=nameRef.current?.value?.trim();if(!name)return;await onSave({id:ws?.id,name,description:descVal?.trim()||'',color,icon});onClose()}} color={color}>{ws?'Save':'Create Workspace'}</Btn>
     </div>
   </Modal>
 }
@@ -630,6 +630,8 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
 // ── Task Form Modal ───────────────────────────────────────────────────────────
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
+  const [titleVal,setTitleVal]=useState(task?.title||'')
+  const [descVal,setDescVal]=useState(task?.description||'')
   const [status,setStatus]=useState(defaultStatus||statuses[0]||'Todo')
   const [priority,setPriority]=useState('Medium')
   const [assignees,setAssignees]=useState([])
@@ -640,6 +642,8 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 
   useEffect(()=>{
     if(!open||!cu)return
+    setTitleVal(task?.title||'')
+    setDescVal(task?.description||'')
     setStatus(task?.status||defaultStatus||statuses[0]||'Todo')
     setPriority(task?.priority||'Medium')
     setRt(task?.recurrence_type||'none');setRi(task?.recurrence_interval||1)
@@ -656,7 +660,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   const toggleA=id=>setAssignees(p=>{if(p.includes(id)){if(p.length===1)return p;return p.filter(x=>x!==id)};return[...p,id]})
 
   const save=async()=>{
-    const title=titleRef.current?.value?.trim();if(!title)return
+    const title=titleVal?.trim();if(!title)return
     const fa=assignees.length>0?assignees:[cu.id]
     const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assignees:fa,assigned_to:fa[0],delegator_id:delegatorId||cu.id,workspace_id:ws.id,created_by:task?.created_by||cu.id,checklist}
     await onSave(isEdit?{...task,...payload}:payload);onClose()
@@ -665,8 +669,8 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 
   return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
-      <F full label="Title *"><input ref={titleRef} defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
-      <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
+      <F full label="Title *"><input value={titleVal} onChange={e=>setTitleVal(e.target.value)} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>{if(e.key==='Enter'){e.stopPropagation();save()}}}/></F>
+      <F full label="Description"><textarea value={descVal||''} onChange={e=>setDescVal(e.target.value)} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
       <F label="Status"><CustomSelect value={status} onChange={setStatus} options={statuses} style={{width:'100%'}}/></F>
       <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
       {/* ── DELEGATOR / MANAGER ── */}
