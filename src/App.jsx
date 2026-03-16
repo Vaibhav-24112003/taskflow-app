@@ -425,33 +425,43 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assignees:fa,assigned_to:fa[0],workspace_id:ws.id,created_by:task?.created_by||cu.id,checklist}
     await onSave(isEdit?{...task,...payload}:payload);onClose()
   }
-  const F=({label,children,full})=><div style={{marginBottom:16,gridColumn:full?'1/-1':undefined}}><label style={LBL}>{label}</label>{children}</div>
+  const F=({label,children})=><div style={{marginBottom:16}}><label style={LBL}>{label}</label>{children}</div>
 
-  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={660}>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 18px'}}>
-      <F full label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>e.key==='Enter'&&save()}/></F>
-      <F full label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="Optional details…"/></F>
-      <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
-      <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
-      <F full label={`Assignees — ${assignees.length} selected`}>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
-            return<div key={m.id} onClick={()=>toggleA(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.55)`:G.border}`,background:sel?`rgba(${rgb},0.09)`:G.surface,transition:G.trans}}>
-              <Avatar user={eu} size={28}/>
-              <div><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text}}>{m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</div><div style={{fontSize:10,color:G.textSub}}>{m.email}</div></div>
-              <div style={{width:16,height:16,borderRadius:5,border:`2px solid ${sel?ws.color:G.textMut}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:G.trans,marginLeft:4}}>
-                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
+  return<><Modal open={open} onClose={onClose} title={isEdit?'Edit Task':'New Task'} width={900}>
+    <div style={{display:'grid',gridTemplateColumns:'minmax(0,1.6fr) minmax(280px,1fr)',gap:20,alignItems:'start'}}>
+      <div style={{minWidth:0}}>
+        <F label="Title *"><input ref={titleRef} autoFocus defaultValue={task?.title||''} placeholder="What needs to be done?" style={{...INP,fontSize:15,fontWeight:600}} onKeyDown={e=>e.key==='Enter'&&save()}/></F>
+        <F label="Description"><textarea ref={descRef} defaultValue={task?.description||''} rows={7} style={{...INP,resize:'vertical',minHeight:160}} placeholder="Optional details…"/></F>
+        <F label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
+      </div>
+
+      <div style={{minWidth:0,paddingLeft:16,borderLeft:`1px solid ${G.border}`}}>
+        <F label={`Assignees — ${assignees.length} selected`}>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
+              return<div key={m.id} onClick={()=>toggleA(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.55)`:G.border}`,background:sel?`rgba(${rgb},0.09)`:G.surface,transition:G.trans,width:'100%'}}>
+                <Avatar user={eu} size={28}/>
+                <div style={{minWidth:0,flex:1}}><div style={{fontSize:12,fontWeight:700,color:sel?ws.color:G.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</div><div style={{fontSize:10,color:G.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div></div>
+                <div style={{width:16,height:16,borderRadius:5,border:`2px solid ${sel?ws.color:G.textMut}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:G.trans,marginLeft:4}}>
+                  {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:800,lineHeight:1}}>✓</span>}
+                </div>
               </div>
-            </div>
-          })}
+            })}
+          </div>
+          {assignees.length>1&&<div style={{marginTop:8,fontSize:11,color:'#818cf8'}}>ℹ All selected members will see this on their board</div>}
+        </F>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <F label="Status"><select value={status} onChange={e=>setStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>{statuses.map(s=><option key={s}>{s}</option>)}</select></F>
+          <F label="Priority"><select value={priority} onChange={e=>setPriority(e.target.value)} style={{...INP,cursor:'pointer'}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></F>
         </div>
-        {assignees.length>1&&<div style={{marginTop:8,fontSize:11,color:'#818cf8'}}>ℹ All selected members will see this on their board</div>}
-      </F>
-      <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
-      <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
-      <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
-      <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
-      <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
+        <F label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
+        <F label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
+          <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
+        </div>
+      </div>
     </div>
     <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:`1px solid ${G.border}`}}>
       {isEdit?<Btn onClick={()=>setCdel(true)} danger>Delete</Btn>:<div/>}
@@ -508,6 +518,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
     <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
   </>
 }
+
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
 function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
