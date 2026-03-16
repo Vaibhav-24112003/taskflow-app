@@ -376,7 +376,7 @@ function WorkspaceFormModal({open,onClose,ws,cu,onSave}){
   return<Modal open={open} onClose={onClose} title={ws?'Edit Workspace':'New Workspace'} width={460}>
     <div style={{marginBottom:16}}><label style={LBL}>Name *</label><input ref={nameRef} defaultValue={ws?.name||''} placeholder="e.g. Q4 Product Launch" style={INP} autoFocus/></div>
     <div style={{marginBottom:16}}><label style={LBL}>Description</label><textarea ref={descRef} defaultValue={ws?.description||''} rows={2} style={{...INP,resize:'vertical'}} placeholder="What's this workspace for?"/></div>
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 280px',gap:'0 24px',marginBottom:20}}>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 300px',gap:'0 24px',alignItems:'start',marginBottom:20}}>
       <div><label style={LBL}>Color</label><div style={{display:'flex',gap:7,flexWrap:'wrap'}}>{WS_COLORS.map(c=><div key={c} onClick={()=>setColor(c)} style={{width:28,height:28,borderRadius:'9px',background:c,cursor:'pointer',border:`2.5px solid ${color===c?'rgba(255,255,255,0.9)':'transparent'}`,boxShadow:color===c?`0 0 0 3px rgba(${hexRgb(c)},0.35)`:'none',transition:G.trans}}/>)}</div></div>
       <div><label style={LBL}>Icon</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{WS_ICONS.map(ic=><div key={ic} onClick={()=>setIcon(ic)} style={{width:34,height:34,borderRadius:'9px',background:icon===ic?`rgba(${rgb},0.15)`:'var(--tf-surface)',border:`1.5px solid ${icon===ic?color:'var(--tf-border)'}`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,transition:G.trans}}>{ic}</div>)}</div></div>
     </div>
@@ -630,7 +630,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
 
 // ── Task Form Modal ───────────────────────────────────────────────────────────
 // Field wrapper — defined OUTSIDE modal to prevent remount on every keystroke
-function F({label,children,full,col3}){return<div style={{marginBottom:16,gridColumn:col3?'3':full?'1/3':undefined,gridRow:col3?'1/12':undefined,paddingLeft:col3?20:0,borderLeft:col3?'1.5px solid var(--tf-border)':undefined}}><label style={LBL}>{label}</label>{children}</div>;}
+function F({label,children,full,col3}){return<div style={{marginBottom:16,gridColumn:col3?'3':full?'1/3':undefined,paddingLeft:col3?20:0,borderLeft:col3?'1.5px solid var(--tf-border)':undefined}}><label style={LBL}>{label}</label>{children}</div>;}
 
 function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus,onSave,onDelete}){
   const titleRef=useRef(),descRef=useRef(),projRef=useRef(),tagsRef=useRef(),dateRef=useRef()
