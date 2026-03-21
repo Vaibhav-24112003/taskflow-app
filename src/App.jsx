@@ -1206,7 +1206,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
-  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'},{id:'clients',label:'📋 Clients',icon:''}]
+  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'},{id:'clients',label:'📋 Clients',icon:''},{id:'orgs',label:'🏢 Organisations',icon:''}]
 
   if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
 
@@ -1297,7 +1297,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {pendingInvites.length>0&&<div style={{padding:'10px 24px 0',flexShrink:0}}><InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/></div>}
       {/* View tabs */}
         <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,padding:'0 24px',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
-          {views.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
+          {views.filter(v=>(!['clients','orgs'].includes(v.id))||ws?.org_id).map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
             <span>{v.icon}</span>{v.label}
             {v.id==='recurring'&&recT.length>0&&<span style={{fontSize:10,fontWeight:700,color:wsColor,background:`rgba(${wsRgb},0.14)`,borderRadius:'100px',padding:'1px 7px'}}>{recT.length}</span>}
           </button>)}
@@ -1349,6 +1349,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
 
           {view==='clients'&&<ClientsModule cu={cu} wsId={ws?.id} orgId={ws?.org_id} supabase={supabase}/>}
+          {view==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWs||[]} onOrgChange={()=>setView('board')}/>}
           {/* ALL TASKS */}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
@@ -1465,7 +1466,7 @@ function ClientsModule({cu,orgId,supabase}){
 
   async function loadClients(){
     setLoading(true);
-    const {data,error}=await supabase.from('clients').select('*').order('name');
+    const {data,error}=await supabase.from('clients').select('*').match(orgId?{org_id:orgId}:{}).order('name');
     if(!error) setClients(data||[]);
     setLoading(false);
   }
@@ -1658,7 +1659,7 @@ function ClientForm({client,orgId,supabase,onClose,onSaved}){
     const cf={};
     customFields.forEach(f=>{if(f.key&&f.value!=='') cf[f.key]=f.value;});
 
-    const payload={org_id:orgId,name:name.trim(),display_name:displayName.trim()||null,client_type:clientType,email:email.trim()||null,phone:phone.trim()||null,address:address.trim()||null,city:city.trim()||null,state:state.trim()||null,pincode:pincode.trim()||null,pan:pan.trim().toUpperCase()||null,gstin:gstin.trim().toUpperCase()||null,tan:tan.trim().toUpperCase()||null,aadhar:aadhar.trim()||null,payment_terms_days:Number(paymentTerms)||30,status,notes:notes.trim()||null,custom_fields:cf,created_by:undefined};
+    const payload={org_id:orgId||null,name:name.trim(),display_name:displayName.trim()||null,client_type:clientType,email:email.trim()||null,phone:phone.trim()||null,address:address.trim()||null,city:city.trim()||null,state:state.trim()||null,pincode:pincode.trim()||null,pan:pan.trim().toUpperCase()||null,gstin:gstin.trim().toUpperCase()||null,tan:tan.trim().toUpperCase()||null,aadhar:aadhar.trim()||null,payment_terms_days:Number(paymentTerms)||30,status,notes:notes.trim()||null,custom_fields:cf,created_by:undefined};
 
     let error;
     if(isEdit){
@@ -1980,6 +1981,214 @@ function ClientImport({orgId,supabase,onClose,onImported}){
             <button onClick={importAll} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Import {rows.length} Clients</button>
           </>}
           {step==='done'&&<button onClick={onImported} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Done</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// ORGANISATION MANAGEMENT MODULE
+// ══════════════════════════════════════════════════════════════════
+
+function OrgManagementPanel({cu, supabase, allWorkspaces, onOrgChange}){
+  const [orgs,setOrgs]=React.useState([]);
+  const [loading,setLoading]=React.useState(true);
+  const [showCreateOrg,setShowCreateOrg]=React.useState(false);
+  const [editingOrg,setEditingOrg]=React.useState(null);
+  const [toast,setToast]=React.useState(null);
+
+  React.useEffect(()=>{loadOrgs();},[]);
+
+  async function loadOrgs(){
+    setLoading(true);
+    const {data:orgsData}=await supabase.from('organizations').select('*').order('name');
+    const {data:wsData}=await supabase.from('workspaces').select('id,name,color,org_id').order('name');
+    if(orgsData){
+      // Attach workspaces to each org
+      const enriched=(orgsData||[]).map(o=>({
+        ...o,
+        workspaces:(wsData||[]).filter(w=>w.org_id===o.id)
+      }));
+      setOrgs(enriched);
+    }
+    setLoading(false);
+  }
+
+  function showT(msg,type='success'){setToast({msg,type});setTimeout(()=>setToast(null),3000);}
+
+  async function assignWorkspace(wsId, orgId){
+    const {error}=await supabase.from('workspaces').update({org_id:orgId||null}).eq('id',wsId);
+    if(!error){await loadOrgs();if(onOrgChange)onOrgChange();showT(orgId?'Workspace assigned to org':'Workspace unassigned (now personal)');}
+    else showT('Error: '+error.message,'error');
+  }
+
+  async function deleteOrg(org){
+    if(!window.confirm('Delete "'+org.name+'"? Workspaces will become personal (unassigned).')) return;
+    // Unassign all workspaces first
+    await supabase.from('workspaces').update({org_id:null}).eq('org_id',org.id);
+    const {error}=await supabase.from('organizations').delete().eq('id',org.id);
+    if(!error){await loadOrgs();if(onOrgChange)onOrgChange();showT('Organisation deleted');}
+    else showT('Error: '+error.message,'error');
+  }
+
+  const personalWs=allWorkspaces.filter(w=>!w.org_id);
+  const orgIds=orgs.map(o=>o.id);
+
+  const G_CARD={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:14};
+
+  return(
+    <div style={{maxWidth:800,margin:'0 auto',padding:'4px 0 40px'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Organisations</h2>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Assign workspaces to organisations to share Client Master Data, Billing, and Time Tracking</div>
+        </div>
+        <button onClick={()=>{setEditingOrg(null);setShowCreateOrg(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}}>+ New Organisation</button>
+      </div>
+
+      {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:(
+        <>
+          {/* Organisations */}
+          {orgs.length===0?(
+            <div style={{...G_CARD,textAlign:'center',padding:48,border:'1px dashed var(--tf-border)'}}>
+              <div style={{fontSize:36,marginBottom:12}}>🏢</div>
+              <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:8}}>No organisations yet</div>
+              <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:20}}>Create an organisation to share Client Data, Billing, and Time Tracking across multiple workspaces.</div>
+              <button onClick={()=>setShowCreateOrg(true)} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'9px 22px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}}>Create First Organisation</button>
+            </div>
+          ):(
+            orgs.map(org=>(
+              <div key={org.id} style={G_CARD}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:40,height:40,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:'#fff',flexShrink:0}}>
+                      {org.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:16,color:'var(--tf-text)'}}>{org.name}</div>
+                      {org.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{org.description}</div>}
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.workspaces.length} workspace{org.workspaces.length!==1?'s':''} · Created {new Date(org.created_at).toLocaleDateString('en-IN',{month:'short',year:'numeric'})}</div>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>{setEditingOrg(org);setShowCreateOrg(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'5px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
+                    <button onClick={()=>deleteOrg(org)} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Delete</button>
+                  </div>
+                </div>
+
+                {/* Assigned workspaces */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>Assigned Workspaces</div>
+                  {org.workspaces.length===0?(
+                    <div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No workspaces assigned yet</div>
+                  ):(
+                    <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                      {org.workspaces.map(w=>(
+                        <div key={w.id} style={{display:'flex',alignItems:'center',gap:6,background:`rgba(107,140,173,0.1)`,border:'1px solid rgba(107,140,173,0.25)',borderRadius:20,padding:'4px 10px 4px 8px'}}>
+                          <div style={{width:8,height:8,borderRadius:'50%',background:w.color||'#6b8cad',flexShrink:0}}/>
+                          <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{w.name}</span>
+                          <button onClick={()=>assignWorkspace(w.id,null)} title="Remove from org (make personal)" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1,padding:'0 0 0 2px'}}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Add workspace dropdown */}
+                {personalWs.length>0&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6}}>Add Workspace</div>
+                    <select onChange={e=>{if(e.target.value){assignWorkspace(e.target.value,org.id);e.target.value='';} }} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',maxWidth:280}}>
+                      <option value=''>Select a personal workspace to add...</option>
+                      {personalWs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+
+          {/* Personal Workspaces */}
+          <div style={{...G_CARD,borderStyle:personalWs.length>0?'dashed':'solid',borderColor:personalWs.length>0?'rgba(107,140,173,0.3)':'var(--tf-border)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}>
+              <div style={{fontSize:20}}>👤</div>
+              <div>
+                <div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>Personal Workspaces</div>
+                <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Not linked to any organisation · No shared Client/Billing data</div>
+              </div>
+            </div>
+            {personalWs.length===0?(
+              <div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic'}}>All workspaces are assigned to organisations</div>
+            ):(
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {personalWs.map(w=>(
+                  <div key={w.id} style={{display:'flex',alignItems:'center',gap:6,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.2)',borderRadius:20,padding:'4px 12px 4px 8px'}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:w.color||'#94a3b8',flexShrink:0}}/>
+                    <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{w.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {personalWs.length>0&&orgs.length>0&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:10}}>💡 Assign these to an organisation using the "Add Workspace" dropdown above</div>}
+          </div>
+        </>
+      )}
+
+      {/* Create/Edit Org Modal */}
+      {showCreateOrg&&<OrgFormModal org={editingOrg} cu={cu} supabase={supabase} onClose={()=>setShowCreateOrg(false)} onSaved={()=>{loadOrgs();if(onOrgChange)onOrgChange();setShowCreateOrg(false);showT(editingOrg?'Organisation updated':'Organisation created');}}/>}
+
+      {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+function OrgFormModal({org,cu,supabase,onClose,onSaved}){
+  const [name,setName]=React.useState(org?.name||'');
+  const [desc,setDesc]=React.useState(org?.description||'');
+  const [saving,setSaving]=React.useState(false);
+  const [error,setError]=React.useState('');
+
+  async function save(){
+    if(!name.trim()){setError('Organisation name is required');return;}
+    setSaving(true);
+    const slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    let err;
+    if(org){
+      ({error:err}=await supabase.from('organizations').update({name:name.trim(),description:desc.trim()||null}).eq('id',org.id));
+    } else {
+      ({error:err}=await supabase.from('organizations').insert({name:name.trim(),slug:slug+'_'+Date.now(),description:desc.trim()||null,created_by:cu.id}));
+    }
+    setSaving(false);
+    if(!err)onSaved();
+    else setError(err.message);
+  }
+
+  const INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+  const LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:5,display:'block'};
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:420,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid var(--tf-border)'}}>
+          <h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>{org?'Edit Organisation':'New Organisation'}</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>
+        </div>
+        <div style={{padding:'18px 20px'}}>
+          <div style={{marginBottom:14}}>
+            <label style={LBL}>Organisation Name *</label>
+            <input value={name} onChange={e=>setName(e.target.value)} style={INP} placeholder="e.g. Paresh Sarda & Co." autoFocus/>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={LBL}>Description (optional)</label>
+            <input value={desc} onChange={e=>setDesc(e.target.value)} style={INP} placeholder="Brief description"/>
+          </div>
+          {error&&<div style={{color:'#ef4444',fontSize:12,marginBottom:10,background:'rgba(239,68,68,0.08)',padding:'8px 12px',borderRadius:8}}>{error}</div>}
+        </div>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,padding:'12px 20px',borderTop:'1px solid var(--tf-border)'}}>
+          <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Save'}</button>
         </div>
       </div>
     </div>
