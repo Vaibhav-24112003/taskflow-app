@@ -1039,7 +1039,6 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
         </div>
         :<div style={{height:'calc(100vh - 340px)',minHeight:320,display:'flex',flexDirection:'column'}}>
           <KanbanBoard isDragging={!!dragId}>
-      {view==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase}/>}
             {statuses.map(st=><KanbanCol key={st} status={st}
               tasks={displayTasks.filter(t=>t.status===st)}
               wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
@@ -1349,7 +1348,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
               </div>}
           </div>}
 
-          {view==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase}/>}
+          {view==='clients'&&<ClientsModule cu={cu} wsId={ws?.id} orgId={ws?.org_id} supabase={supabase}/>}
           {/* ALL TASKS */}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
@@ -1466,7 +1465,7 @@ function ClientsModule({cu,orgId,supabase}){
 
   async function loadClients(){
     setLoading(true);
-    const {data,error}=await supabase.from('clients').select('*').eq('org_id',orgId).order('name');
+    const {data,error}=await supabase.from('clients').select('*').order('name');
     if(!error) setClients(data||[]);
     setLoading(false);
   }
