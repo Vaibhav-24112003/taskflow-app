@@ -1039,6 +1039,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
         </div>
         :<div style={{height:'calc(100vh - 340px)',minHeight:320,display:'flex',flexDirection:'column'}}>
           <KanbanBoard isDragging={!!dragId}>
+      {activeView==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id||orgId} supabase={supabase}/>}
             {statuses.map(st=><KanbanCol key={st} status={st}
               tasks={displayTasks.filter(t=>t.status===st)}
               wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
@@ -1430,6 +1431,561 @@ class ErrorBoundary extends React.Component{
     return this.props.children
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// CLIENTS MODULE
+// ══════════════════════════════════════════════════════════════════
+
+const CLIENT_STATUSES = ['active','inactive','prospect'];
+const CLIENT_TYPES = ['business','individual'];
+const PAYMENT_MODES = ['bank_transfer','upi','cheque','cash','card','other'];
+
+const DEFAULT_CUSTOM_FIELDS = [
+  {key:'file_no', label:'File No.', type:'text'},
+  {key:'engagement_type', label:'Engagement Type', type:'text'},
+];
+
+// Standard export columns
+const CSV_EXPORT_COLS = [
+  'name','display_name','client_type','email','phone','address','city','state',
+  'pincode','pan','gstin','tan','aadhar','payment_terms_days','status','notes'
+];
+
+function ClientsModule({cu,orgId,supabase}){
+  const [clients,setClients]=React.useState([]);
+  const [loading,setLoading]=React.useState(true);
+  const [search,setSearch]=React.useState('');
+  const [filterStatus,setFilterStatus]=React.useState('all');
+  const [showForm,setShowForm]=React.useState(false);
+  const [editClient,setEditClient]=React.useState(null);
+  const [showImport,setShowImport]=React.useState(false);
+  const [toast,setToast]=React.useState(null);
+
+  React.useEffect(()=>{loadClients();},[orgId]);
+
+  async function loadClients(){
+    setLoading(true);
+    const {data,error}=await supabase.from('clients').select('*').eq('org_id',orgId).order('name');
+    if(!error) setClients(data||[]);
+    setLoading(false);
+  }
+
+  function showToast(msg,type='success'){
+    setToast({msg,type});
+    setTimeout(()=>setToast(null),3000);
+  }
+
+  async function deleteClient(id){
+    if(!window.confirm('Delete this client? This cannot be undone.')) return;
+    const {error}=await supabase.from('clients').delete().eq('id',id);
+    if(!error){setClients(c=>c.filter(x=>x.id!==id));showToast('Client deleted');}
+    else showToast('Error deleting client','error');
+  }
+
+  // Export CSV
+  function exportCSV(){
+    const allCols=[...CSV_EXPORT_COLS];
+    // Collect all custom field keys across all clients
+    const customKeys=new Set();
+    clients.forEach(c=>{Object.keys(c.custom_fields||{}).forEach(k=>customKeys.add(k));});
+    const extraCols=[...customKeys];
+    const cols=[...allCols,...extraCols];
+
+    const rows=clients.map(c=>{
+      const cf=c.custom_fields||{};
+      return cols.map(col=>{
+        const val=col in cf?cf[col]:c[col];
+        const s=val==null?'':String(val);
+        return s.includes(',')|| s.includes('"')||s.includes('\n')?'"'+s.replace(/"/g,'""')+'"':s;
+      }).join(',');
+    });
+    const csv=[cols.join(','),...rows].join('\n');
+    const blob=new Blob([csv],{type:'text/csv'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download='clients_export.csv';a.click();
+    URL.revokeObjectURL(url);
+    showToast('Exported '+clients.length+' clients');
+  }
+
+  const filtered=clients.filter(c=>{
+    const q=search.toLowerCase();
+    const matchSearch=!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q)||(c.gstin||'').toLowerCase().includes(q)||(c.phone||'').includes(q);
+    const matchStatus=filterStatus==='all'||c.status===filterStatus;
+    return matchSearch&&matchStatus;
+  });
+
+  const statusColors={'active':'#22c55e','inactive':'#94a3b8','prospect':'#f59e0b'};
+
+  return(
+    <div style={{padding:'0 0 40px',maxWidth:1200,margin:'0 auto'}}>
+      {/* Header */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:24,flexWrap:'wrap',gap:12}}>
+        <div>
+          <h2 style={{fontSize:22,fontWeight:700,color:'var(--tf-text)',margin:0}}>Client Master Data</h2>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(c=>c.status==='active').length} active</div>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button onClick={()=>setShowImport(true)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+            <span>⬆</span> Import CSV
+          </button>
+          <button onClick={exportCSV} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:6}}>
+            <span>⬇</span> Export CSV
+          </button>
+          <button onClick={()=>{setEditClient(null);setShowForm(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+            + New Client
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, PAN, GSTIN..." style={{flex:1,minWidth:200,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 12px',color:'var(--tf-text)',fontSize:13,outline:'none'}}/>
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 12px',color:'var(--tf-text)',fontSize:13,outline:'none',cursor:'pointer'}}>
+          <option value="all">All Status</option>
+          {CLIENT_STATUSES.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
+      {loading?(
+        <div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading clients...</div>
+      ):filtered.length===0?(
+        <div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)'}}>
+          {clients.length===0?<>No clients yet. <button onClick={()=>{setEditClient(null);setShowForm(true);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontWeight:600,fontSize:14}}>Add your first client →</button></>:'No clients match your search.'}
+        </div>
+      ):(
+        <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead>
+              <tr style={{background:'rgba(107,140,173,0.08)'}}>
+                {['Client Name','Type','Email / Phone','PAN / GSTIN','Status','Actions'].map(h=>(
+                  <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,whiteSpace:'nowrap',borderBottom:'1px solid var(--tf-border)'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c,i)=>(
+                <tr key={c.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2===0?'transparent':'rgba(107,140,173,0.02)'}}>
+                  <td style={{padding:'10px 14px'}}>
+                    <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:14}}>{c.name}</div>
+                    {c.display_name&&c.display_name!==c.name&&<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>{c.display_name}</div>}
+                  </td>
+                  <td style={{padding:'10px 14px',fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{c.client_type}</td>
+                  <td style={{padding:'10px 14px'}}>
+                    {c.email&&<div style={{fontSize:13,color:'var(--tf-text)'}}>{c.email}</div>}
+                    {c.phone&&<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>{c.phone}</div>}
+                  </td>
+                  <td style={{padding:'10px 14px'}}>
+                    {c.pan&&<div style={{fontSize:12,fontFamily:'monospace',color:'var(--tf-text)'}}>{c.pan}</div>}
+                    {c.gstin&&<div style={{fontSize:11,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>}
+                  </td>
+                  <td style={{padding:'10px 14px'}}>
+                    <span style={{background:statusColors[c.status]+'20',color:statusColors[c.status],border:'1px solid '+statusColors[c.status]+'40',borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:600,textTransform:'capitalize'}}>{c.status}</span>
+                  </td>
+                  <td style={{padding:'10px 14px'}}>
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>{setEditClient(c);setShowForm(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'4px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
+                      <button onClick={()=>deleteClient(c.id)} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:600,zIndex:9999,boxShadow:'0 4px 16px rgba(0,0,0,0.2)'}}>{toast.msg}</div>}
+
+      {/* Modals */}
+      {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} onClose={()=>setShowForm(false)} onSaved={c=>{loadClients();setShowForm(false);showToast(editClient?'Client updated':'Client added');}}/>}
+      {showImport&&<ClientImport orgId={orgId} supabase={supabase} onClose={()=>setShowImport(false)} onImported={()=>{loadClients();setShowImport(false);showToast('Import complete');}}/>}
+    </div>
+  );
+}
+
+// ── Client Form Modal ──────────────────────────────────────────────
+function ClientForm({client,orgId,supabase,onClose,onSaved}){
+  const isEdit=!!client;
+  const [tab,setTab]=React.useState('basic');
+  const [saving,setSaving]=React.useState(false);
+  const [errors,setErrors]=React.useState({});
+
+  // Standard fields
+  const [name,setName]=React.useState(client?.name||'');
+  const [displayName,setDisplayName]=React.useState(client?.display_name||'');
+  const [clientType,setClientType]=React.useState(client?.client_type||'business');
+  const [email,setEmail]=React.useState(client?.email||'');
+  const [phone,setPhone]=React.useState(client?.phone||'');
+  const [address,setAddress]=React.useState(client?.address||'');
+  const [city,setCity]=React.useState(client?.city||'');
+  const [state,setState]=React.useState(client?.state||'');
+  const [pincode,setPincode]=React.useState(client?.pincode||'');
+  const [pan,setPan]=React.useState(client?.pan||'');
+  const [gstin,setGstin]=React.useState(client?.gstin||'');
+  const [tan,setTan]=React.useState(client?.tan||'');
+  const [aadhar,setAadhar]=React.useState(client?.aadhar||'');
+  const [paymentTerms,setPaymentTerms]=React.useState(client?.payment_terms_days||30);
+  const [status,setStatus]=React.useState(client?.status||'active');
+  const [notes,setNotes]=React.useState(client?.notes||'');
+
+  // Custom fields - each has {key, label, type, value}
+  const [customFields,setCustomFields]=React.useState(()=>{
+    const existing=client?.custom_fields||{};
+    // Merge default fields with any existing values
+    const defaults=DEFAULT_CUSTOM_FIELDS.map(f=>({...f,value:existing[f.key]||''}));
+    const extra=Object.entries(existing)
+      .filter(([k])=>!DEFAULT_CUSTOM_FIELDS.find(f=>f.key===k))
+      .map(([k,v])=>({key:k,label:k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),type:'text',value:String(v)}));
+    return [...defaults,...extra];
+  });
+
+  function addCustomField(){
+    const newKey='field_'+Date.now();
+    setCustomFields(f=>[...f,{key:newKey,label:'New Field',type:'text',value:''}]);
+  }
+  function removeCustomField(idx){setCustomFields(f=>f.filter((_,i)=>i!==idx));}
+  function updateCF(idx,prop,val){setCustomFields(f=>f.map((cf,i)=>i===idx?{...cf,[prop]:val}:cf));}
+
+  async function save(){
+    const errs={};
+    if(!name.trim()) errs.name='Client name is required';
+    if(Object.keys(errs).length){setErrors(errs);return;}
+    setSaving(true);
+
+    // Build custom_fields object
+    const cf={};
+    customFields.forEach(f=>{if(f.key&&f.value!=='') cf[f.key]=f.value;});
+
+    const payload={org_id:orgId,name:name.trim(),display_name:displayName.trim()||null,client_type:clientType,email:email.trim()||null,phone:phone.trim()||null,address:address.trim()||null,city:city.trim()||null,state:state.trim()||null,pincode:pincode.trim()||null,pan:pan.trim().toUpperCase()||null,gstin:gstin.trim().toUpperCase()||null,tan:tan.trim().toUpperCase()||null,aadhar:aadhar.trim()||null,payment_terms_days:Number(paymentTerms)||30,status,notes:notes.trim()||null,custom_fields:cf,created_by:undefined};
+
+    let error;
+    if(isEdit){
+      ({error}=await supabase.from('clients').update(payload).eq('id',client.id));
+    } else {
+      ({error}=await supabase.from('clients').insert({...payload,created_by:(await supabase.auth.getUser()).data.user?.id}));
+    }
+    setSaving(false);
+    if(!error) onSaved();
+    else setErrors({save:error.message});
+  }
+
+  const INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+  const LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:5,display:'block'};
+  const TABS=['basic','tax','custom','notes'];
+  const TAB_LABELS={'basic':'Basic Info','tax':'Tax & IDs','custom':'Custom Fields','notes':'Notes'};
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:620,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 22px',borderBottom:'1px solid var(--tf-border)'}}>
+          <h3 style={{margin:0,fontSize:17,fontWeight:700,color:'var(--tf-text)'}}>{isEdit?'Edit Client':'New Client'}</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:'flex',gap:4,padding:'10px 22px 0',borderBottom:'1px solid var(--tf-border)'}}>
+          {TABS.map(t=>(
+            <button key={t} onClick={()=>setTab(t)} style={{background:'none',border:'none',padding:'6px 12px',cursor:'pointer',fontSize:13,fontWeight:tab===t?700:500,color:tab===t?'#6b8cad':'var(--tf-text-sub)',borderBottom:tab===t?'2px solid #6b8cad':'2px solid transparent',marginBottom:-1}}>
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div style={{padding:'18px 22px',overflowY:'auto',flex:1}}>
+          {tab==='basic'&&(
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
+              <div style={{gridColumn:'1/-1',marginBottom:14}}>
+                <label style={LBL}>Client Name *</label>
+                <input value={name} onChange={e=>setName(e.target.value)} style={{...INP,border:errors.name?'1px solid #ef4444':INP.border}} placeholder="Full legal name"/>
+                {errors.name&&<div style={{color:'#ef4444',fontSize:11,marginTop:3}}>{errors.name}</div>}
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>Display / Trade Name</label>
+                <input value={displayName} onChange={e=>setDisplayName(e.target.value)} style={INP} placeholder="Short / trading name"/>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>Type</label>
+                <select value={clientType} onChange={e=>setClientType(e.target.value)} style={{...INP,cursor:'pointer'}}>
+                  {CLIENT_TYPES.map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}
+                </select>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>Email</label>
+                <input value={email} onChange={e=>setEmail(e.target.value)} style={INP} placeholder="contact@company.com" type="email"/>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>Phone</label>
+                <input value={phone} onChange={e=>setPhone(e.target.value)} style={INP} placeholder="+91 98765 43210"/>
+              </div>
+              <div style={{gridColumn:'1/-1',marginBottom:14}}>
+                <label style={LBL}>Address</label>
+                <input value={address} onChange={e=>setAddress(e.target.value)} style={INP} placeholder="Street address"/>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>City</label>
+                <input value={city} onChange={e=>setCity(e.target.value)} style={INP} placeholder="Mumbai"/>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>State</label>
+                <input value={state} onChange={e=>setState(e.target.value)} style={INP} placeholder="Maharashtra"/>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>Pincode</label>
+                <input value={pincode} onChange={e=>setPincode(e.target.value)} style={INP} placeholder="400001"/>
+              </div>
+              <div style={{marginBottom:14}}>
+                <label style={LBL}>Payment Terms (days)</label>
+                <input value={paymentTerms} onChange={e=>setPaymentTerms(e.target.value)} style={INP} type="number" min="0"/>
+              </div>
+              <div style={{gridColumn:'1/-1',marginBottom:14}}>
+                <label style={LBL}>Status</label>
+                <div style={{display:'flex',gap:8}}>
+                  {CLIENT_STATUSES.map(s=>(
+                    <button key={s} onClick={()=>setStatus(s)} style={{flex:1,padding:'7px',borderRadius:8,border:'1px solid',borderColor:status===s?'#6b8cad':'var(--tf-border)',background:status===s?'rgba(107,140,173,0.12)':'var(--tf-surface)',color:status===s?'#6b8cad':'var(--tf-text-sub)',fontWeight:status===s?700:500,cursor:'pointer',fontSize:13,textTransform:'capitalize'}}>{s}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab==='tax'&&(
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 16px'}}>
+              {[['PAN','pan',pan,setPan,'ABCDE1234F'],['GSTIN','gstin',gstin,setGstin,'22ABCDE1234F1Z5'],['TAN','tan',tan,setTan,'ABCD12345E'],['Aadhaar','aadhar',aadhar,setAadhar,'XXXX XXXX XXXX']].map(([label,key,val,setter,ph])=>(
+                <div key={key} style={{marginBottom:16}}>
+                  <label style={LBL}>{label}</label>
+                  <input value={val} onChange={e=>setter(e.target.value.toUpperCase())} style={{...INP,fontFamily:'monospace'}} placeholder={ph}/>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab==='custom'&&(
+            <div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+                <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Add any extra fields specific to your practice</div>
+                <button onClick={addCustomField} style={{background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:8,padding:'6px 14px',color:'#6b8cad',cursor:'pointer',fontSize:13,fontWeight:600}}>+ Add Field</button>
+              </div>
+              {customFields.length===0?(
+                <div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)',border:'1px dashed var(--tf-border)',borderRadius:10}}>No custom fields yet. Click "+ Add Field" to create one.</div>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                  {customFields.map((cf,i)=>(
+                    <div key={i} style={{display:'flex',gap:8,alignItems:'center',background:'var(--tf-surface)',borderRadius:10,padding:'10px 12px',border:'1px solid var(--tf-border)'}}>
+                      <div style={{flex:'0 0 140px'}}>
+                        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:3,fontWeight:600}}>FIELD NAME</div>
+                        <input value={cf.label} onChange={e=>updateCF(i,'label',e.target.value)} style={{...INP,padding:'5px 8px',fontSize:12}} placeholder="Field name"/>
+                      </div>
+                      <div style={{flex:'0 0 90px'}}>
+                        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:3,fontWeight:600}}>TYPE</div>
+                        <select value={cf.type} onChange={e=>updateCF(i,'type',e.target.value)} style={{...INP,padding:'5px 8px',fontSize:12,cursor:'pointer'}}>
+                          <option value="text">Text</option>
+                          <option value="number">Number</option>
+                          <option value="date">Date</option>
+                          <option value="boolean">Yes/No</option>
+                        </select>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:3,fontWeight:600}}>VALUE</div>
+                        {cf.type==='boolean'?(
+                          <select value={cf.value} onChange={e=>updateCF(i,'value',e.target.value)} style={{...INP,padding:'5px 8px',fontSize:12,cursor:'pointer'}}>
+                            <option value="">-</option><option value="Yes">Yes</option><option value="No">No</option>
+                          </select>
+                        ):(
+                          <input value={cf.value} onChange={e=>updateCF(i,'value',e.target.value)} type={cf.type==='number'?'number':cf.type==='date'?'date':'text'} style={{...INP,padding:'5px 8px',fontSize:12}} placeholder={cf.label}/>
+                        )}
+                      </div>
+                      <button onClick={()=>removeCustomField(i)} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:16,lineHeight:1,flexShrink:0}}>×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab==='notes'&&(
+            <div>
+              <label style={LBL}>Notes</label>
+              <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={8} style={{...INP,resize:'vertical'}} placeholder="Any additional notes about this client..."/>
+            </div>
+          )}
+
+          {errors.save&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 12px',borderRadius:8}}>{errors.save}</div>}
+        </div>
+
+        {/* Footer */}
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,padding:'14px 22px',borderTop:'1px solid var(--tf-border)'}}>
+          <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>
+            {saving?'Saving...':(isEdit?'Save Changes':'Add Client')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Import CSV Modal ───────────────────────────────────────────────
+function ClientImport({orgId,supabase,onClose,onImported}){
+  const [step,setStep]=React.useState('upload'); // upload | preview | importing | done
+  const [rows,setRows]=React.useState([]);
+  const [cols,setCols]=React.useState([]);
+  const [mapping,setMapping]=React.useState({});
+  const [progress,setProgress]=React.useState(0);
+  const [results,setResults]=React.useState(null);
+  const fileRef=React.useRef();
+
+  const KNOWN_COLS=['name','display_name','client_type','email','phone','address','city','state','pincode','pan','gstin','tan','aadhar','payment_terms_days','status','notes'];
+
+  function handleFile(e){
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      const text=ev.target.result;
+      const lines=text.split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length<2){alert('CSV must have a header row and at least one data row');return;}
+      const headers=parseCSVRow(lines[0]);
+      const data=lines.slice(1).map(l=>parseCSVRow(l));
+      setCols(headers);
+      setRows(data);
+      // Auto-map columns
+      const autoMap={};
+      headers.forEach((h,i)=>{
+        const lower=h.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z_]/g,'');
+        const match=KNOWN_COLS.find(c=>c===lower||c.includes(lower)||lower.includes(c));
+        if(match) autoMap[i]=match;
+        else autoMap[i]='__skip__';
+      });
+      setMapping(autoMap);
+      setStep('preview');
+    };
+    reader.readAsText(file);
+  }
+
+  function parseCSVRow(row){
+    const cells=[];let cur='';let inQ=false;
+    for(let i=0;i<row.length;i++){
+      const c=row[i];
+      if(c==='"'){if(inQ&&row[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+      else if(c===','&&!inQ){cells.push(cur);cur='';}
+      else cur+=c;
+    }
+    cells.push(cur);
+    return cells;
+  }
+
+  async function importAll(){
+    setStep('importing');
+    const userId=(await supabase.auth.getUser()).data.user?.id;
+    let ok=0,fail=0;
+    for(let i=0;i<rows.length;i++){
+      const row=rows[i];
+      const obj={org_id:orgId,created_by:userId,custom_fields:{}};
+      cols.forEach((col,ci)=>{
+        const target=mapping[ci];
+        if(!target||target==='__skip__') return;
+        const val=row[ci]?.trim()||null;
+        if(KNOWN_COLS.includes(target)){
+          if(target==='payment_terms_days') obj[target]=parseInt(val)||30;
+          else obj[target]=val;
+        } else {
+          obj.custom_fields[target]=val;
+        }
+      });
+      if(!obj.name){fail++;continue;}
+      const {error}=await supabase.from('clients').insert(obj);
+      if(!error) ok++;else fail++;
+      setProgress(Math.round((i+1)/rows.length*100));
+    }
+    setResults({ok,fail,total:rows.length});
+    setStep('done');
+  }
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>{if(e.target===e.currentTarget&&step!=='importing')onClose();}}>
+      <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:680,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'18px 22px',borderBottom:'1px solid var(--tf-border)'}}>
+          <h3 style={{margin:0,fontSize:17,fontWeight:700,color:'var(--tf-text)'}}>Import Clients from CSV</h3>
+          {step!=='importing'&&<button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>}
+        </div>
+
+        <div style={{padding:'18px 22px',overflowY:'auto',flex:1}}>
+          {step==='upload'&&(
+            <div>
+              <div style={{background:'rgba(107,140,173,0.06)',border:'1px dashed rgba(107,140,173,0.4)',borderRadius:12,padding:32,textAlign:'center',marginBottom:20}}>
+                <div style={{fontSize:32,marginBottom:12}}>📄</div>
+                <div style={{fontWeight:600,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>Select CSV File</div>
+                <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Required: name column. Optional: display_name, email, phone, pan, gstin, address, city, state, pincode, status, notes</div>
+                <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{display:'none'}}/>
+                <button onClick={()=>fileRef.current.click()} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'9px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Choose CSV File</button>
+              </div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.8}}>
+                <strong style={{color:'var(--tf-text)'}}>CSV Format Tips:</strong><br/>
+                • First row must be column headers<br/>
+                • Column names are auto-matched (flexible)<br/>
+                • Any extra columns become custom fields<br/>
+                • Status values: active, inactive, prospect
+              </div>
+            </div>
+          )}
+
+          {step==='preview'&&(
+            <div>
+              <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:14}}>{rows.length} rows detected. Map columns below:</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16,maxHeight:300,overflowY:'auto'}}>
+                {cols.map((col,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',borderRadius:8,padding:'8px 12px',border:'1px solid var(--tf-border)'}}>
+                    <div style={{flex:'0 0 160px',fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{col}</div>
+                    <div style={{color:'var(--tf-text-sub)',fontSize:16}}>→</div>
+                    <select value={mapping[i]||'__skip__'} onChange={e=>setMapping(m=>({...m,[i]:e.target.value}))} style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none'}}>
+                      <option value="__skip__">⊘ Skip this column</option>
+                      <optgroup label="Standard Fields">{KNOWN_COLS.map(c=><option key={c} value={c}>{c}</option>)}</optgroup>
+                      <option value={col.toLowerCase().replace(/\s+/g,'_')}>Custom: {col}</option>
+                    </select>
+                    <div style={{flex:'0 0 120px',fontSize:11,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rows[0]?.[i]||'—'}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Preview of first row values shown on right.</div>
+            </div>
+          )}
+
+          {step==='importing'&&(
+            <div style={{textAlign:'center',padding:32}}>
+              <div style={{fontSize:32,marginBottom:16}}>⏳</div>
+              <div style={{fontWeight:600,fontSize:15,color:'var(--tf-text)',marginBottom:12}}>Importing... {progress}%</div>
+              <div style={{background:'var(--tf-border)',borderRadius:99,height:8,overflow:'hidden'}}>
+                <div style={{width:progress+'%',height:'100%',background:'#6b8cad',transition:'width 0.3s'}}/>
+              </div>
+            </div>
+          )}
+
+          {step==='done'&&results&&(
+            <div style={{textAlign:'center',padding:32}}>
+              <div style={{fontSize:40,marginBottom:16}}>✅</div>
+              <div style={{fontWeight:700,fontSize:18,color:'var(--tf-text)',marginBottom:8}}>Import Complete</div>
+              <div style={{color:'#22c55e',fontWeight:600,fontSize:15}}>✓ {results.ok} clients imported successfully</div>
+              {results.fail>0&&<div style={{color:'#ef4444',fontSize:13,marginTop:4}}>✗ {results.fail} rows failed (missing name?)</div>}
+            </div>
+          )}
+        </div>
+
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,padding:'14px 22px',borderTop:'1px solid var(--tf-border)'}}>
+          {step==='upload'&&<button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>}
+          {step==='preview'&&<>
+            <button onClick={()=>setStep('upload')} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>
+            <button onClick={importAll} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Import {rows.length} Clients</button>
+          </>}
+          {step==='done'&&<button onClick={onImported} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Done</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App(){
   const [session,setSession]=useState(null)
   const [loading,setLoading]=useState(true)
