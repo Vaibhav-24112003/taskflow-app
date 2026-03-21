@@ -1039,7 +1039,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
         </div>
         :<div style={{height:'calc(100vh - 340px)',minHeight:320,display:'flex',flexDirection:'column'}}>
           <KanbanBoard isDragging={!!dragId}>
-      {activeView==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id||orgId} supabase={supabase}/>}
+      {view==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase}/>}
             {statuses.map(st=><KanbanCol key={st} status={st}
               tasks={displayTasks.filter(t=>t.status===st)}
               wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
@@ -1207,7 +1207,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
-  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'}]
+  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'},{id:'clients',label:'📋 Clients',icon:''}]
 
   if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
 
@@ -1349,6 +1349,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
               </div>}
           </div>}
 
+          {view==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase}/>}
           {/* ALL TASKS */}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
