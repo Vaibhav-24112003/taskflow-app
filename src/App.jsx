@@ -795,6 +795,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       </div>}
     </div>
     <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
+      <ModuleSidebar open={showModules} onClose={()=>setShowModules(false)} activeModule={activeModule} onSelectModule={(m)=>{setActiveModule(m);setView(view==='board'?view:view);}} ws={ws} cu={cu} supabase={supabase}/>
   </>
 }
 
@@ -1053,6 +1054,8 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 
 function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
+  const [showModules,setShowModules]=React.useState(false)
+  const [activeModule,setActiveModule]=React.useState(null)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1206,7 +1209,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
   const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
-  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'},{id:'clients',label:'📋 Clients',icon:''},{id:'orgs',label:'🏢 Organisations',icon:''}]
+  const views=[{id:'board',label:'My Board',icon:'⊞'},{id:'team',label:'Team',icon:'&'},{id:'recurring',label:'Recurring',icon:'🔁'},{id:'list',label:'All Tasks',icon:'☰'},{id:'dashboard',label:'Dashboard',icon:'*'}]
 
   if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
 
@@ -1297,7 +1300,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {pendingInvites.length>0&&<div style={{padding:'10px 24px 0',flexShrink:0}}><InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/></div>}
       {/* View tabs */}
         <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,padding:'0 24px',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
-          {views.filter(v=>(!['clients','orgs'].includes(v.id))||ws?.org_id).map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
+          {views.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'11px 14px',border:'none',borderBottom:`2px solid ${view===v.id?wsColor:'transparent'}`,background:'none',color:view===v.id?wsColor:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:view===v.id?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,position:'relative',top:1}}>
             <span>{v.icon}</span>{v.label}
             {v.id==='recurring'&&recT.length>0&&<span style={{fontSize:10,fontWeight:700,color:wsColor,background:`rgba(${wsRgb},0.14)`,borderRadius:'100px',padding:'1px 7px'}}>{recT.length}</span>}
           </button>)}
@@ -1351,6 +1354,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {view==='clients'&&<ClientsModule cu={cu} wsId={ws?.id} orgId={ws?.org_id} supabase={supabase}/>}
           {view==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWs||[]} onOrgChange={()=>setView('board')}/>}
           {/* ALL TASKS */}
+          {activeModule==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase}/>}
+          {activeModule==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWs||[]} onOrgChange={()=>setActiveModule(null)}/>}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
               <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{allT.length} tasks</p></div>
@@ -2192,6 +2197,174 @@ function OrgFormModal({org,cu,supabase,onClose,onSaved}){
         </div>
       </div>
     </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// GLOBAL MODULE SIDEBAR + NAVIGATOR
+// ══════════════════════════════════════════════════════════════════
+
+const MODULE_TREE = [
+  {
+    id: 'org_master',
+    label: 'Organisation Master',
+    icon: '🏢',
+    children: [
+      { id: 'clients',   label: 'Client Master Data', icon: '📋' },
+      { id: 'orgs',      label: 'Organisations',      icon: '🏛' },
+    ]
+  },
+  {
+    id: 'billing',
+    label: 'Billing & Invoices',
+    icon: '💰',
+    children: [
+      { id: 'invoices',  label: 'Invoices',           icon: '🧾' },
+      { id: 'payments',  label: 'Payments',           icon: '💳' },
+    ]
+  },
+  {
+    id: 'time',
+    label: 'Time Tracking',
+    icon: '⏱',
+    children: [
+      { id: 'timelog',   label: 'Time Entries',       icon: '🕐' },
+      { id: 'reports',   label: 'Reports',            icon: '📊' },
+    ]
+  },
+];
+
+const COMING_SOON = ['invoices','payments','timelog','reports'];
+
+function ModuleSidebar({ open, onClose, activeModule, onSelectModule, ws, cu, supabase }) {
+  const [expanded, setExpanded] = React.useState({ org_master: true });
+
+  function toggle(id) {
+    setExpanded(e => ({ ...e, [id]: !e[id] }));
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      {open && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+            zIndex: 900, backdropFilter: 'blur(2px)',
+          }}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, bottom: 0,
+        width: 260,
+        background: 'var(--tf-panel)',
+        borderRight: '1px solid var(--tf-border)',
+        zIndex: 901,
+        transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: open ? '4px 0 32px rgba(0,0,0,0.35)' : 'none',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '18px 16px 14px',
+          borderBottom: '1px solid var(--tf-border)',
+        }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--tf-text)', letterSpacing: '-0.02em' }}>
+              ✦ Modules
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--tf-text-sub)', marginTop: 2 }}>
+              {ws?.name || 'Select a workspace'}
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', color: 'var(--tf-text-sub)',
+            cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 4,
+          }}>×</button>
+        </div>
+
+        {/* Module tree */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px' }}>
+          {MODULE_TREE.map(group => (
+            <div key={group.id} style={{ marginBottom: 4 }}>
+              {/* Group header */}
+              <button
+                onClick={() => toggle(group.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '7px 10px', borderRadius: 8,
+                  color: 'var(--tf-text)', fontSize: 12, fontWeight: 700,
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{group.icon}</span>
+                <span style={{ flex: 1 }}>{group.label}</span>
+                <span style={{
+                  fontSize: 10, color: 'var(--tf-text-sub)',
+                  transform: expanded[group.id] ? 'rotate(90deg)' : 'none',
+                  transition: 'transform 0.15s',
+                }}>▶</span>
+              </button>
+
+              {/* Children */}
+              {expanded[group.id] && (
+                <div style={{ marginLeft: 8, marginTop: 2 }}>
+                  {group.children.map(item => {
+                    const isComing = COMING_SOON.includes(item.id);
+                    const isActive = activeModule === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => { if (!isComing) { onSelectModule(item.id); onClose(); } }}
+                        disabled={isComing}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                          background: isActive ? 'rgba(107,140,173,0.15)' : 'none',
+                          border: 'none', cursor: isComing ? 'default' : 'pointer',
+                          padding: '7px 12px', borderRadius: 7, marginBottom: 2,
+                          color: isComing ? 'var(--tf-text-sub)' : isActive ? '#6b8cad' : 'var(--tf-text)',
+                          fontSize: 12, fontWeight: isActive ? 700 : 500,
+                          textAlign: 'left', opacity: isComing ? 0.5 : 1,
+                          borderLeft: isActive ? '2px solid #6b8cad' : '2px solid transparent',
+                        }}
+                      >
+                        <span style={{ fontSize: 13 }}>{item.icon}</span>
+                        <span style={{ flex: 1 }}>{item.label}</span>
+                        {isComing && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, color: '#f59e0b',
+                            background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)',
+                            borderRadius: 4, padding: '1px 5px',
+                          }}>SOON</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 16px', borderTop: '1px solid var(--tf-border)',
+          fontSize: 11, color: 'var(--tf-text-sub)', lineHeight: 1.6,
+        }}>
+          {ws?.org_id
+            ? <span style={{ color: '#22c55e' }}>🏢 Org workspace — full access</span>
+            : <span>👤 Personal workspace — no shared data</span>
+          }
+        </div>
+      </div>
+    </>
   );
 }
 
