@@ -1055,6 +1055,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
   const [showModules,setShowModules]=useState(false)
   const [activeModule,setActiveModule]=useState(null)
+  const [orgs,setOrgs]=useState([])
+  const [activeOrg,setActiveOrg]=useState(null)
+  const [orgModule,setOrgModule]=useState('clients')
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1082,6 +1085,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
+      supabase.from('organizations').select('*').order('name').then(({data:od})=>setOrgs(od||[]))
   useEffect(()=>{loadWS()},[cu.id])
 
   useEffect(()=>{
@@ -1276,7 +1280,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* CONTENT */}
     {!activeWs
-      ?<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={()=>setActiveOrg(null)}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
@@ -1293,6 +1297,24 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div style={{width:42,height:42,borderRadius:'12px',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:'var(--tf-text-mut)'}}>+</div>
             <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
           </div>
+        <div style={{marginTop:32}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+            <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>Your Organisations</h2><p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Organisation Master Data · Client Data · Billing · Time Tracking</p></div>
+            <button onClick={async()=>{const nm=window.prompt('Organisation name:');if(!nm||!nm.trim())return;const slug=nm.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-')+'_'+Date.now();const{error}=await supabase.from('organizations').insert({name:nm.trim(),slug,created_by:cu.id});if(!error){const{data}=await supabase.from('organizations').select('*').order('name');setOrgs(data||[]);}}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Organisation</button>
+          </div>
+          {orgs.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:10}}>🏢</div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create an organisation to manage Client Master Data, Billing and Time Tracking across workspaces.</div><button onClick={async()=>{const nm=window.prompt('Organisation name:');if(!nm||!nm.trim())return;const slug=nm.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-')+'_'+Date.now();const{error}=await supabase.from('organizations').insert({name:nm.trim(),slug,created_by:cu.id});if(!error){const{data}=await supabase.from('organizations').select('*').order('name');setOrgs(data||[]);}}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create First Organisation</button></div>:
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+            {orgs.map(org=>{const wsCount=workspaces.filter(w=>w.org_id===org.id).length;return<div key={org.id} onClick={()=>setActiveOrg(org)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+              <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
+              <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
+                <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(107,140,173,0.14)',border:'1px solid rgba(107,140,173,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#6b8cad'}}>{org.name.charAt(0).toUpperCase()}</div>
+                <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
+              </div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
+                {['📋 Clients','🏛 Orgs','💰 Billing','⏱ Time'].map((m,mi)=><span key={m} style={{fontSize:10,fontWeight:600,color:mi<2?'#6b8cad':'var(--tf-text-sub)',background:mi<2?'rgba(107,140,173,0.1)':'rgba(148,163,184,0.08)',border:'1px solid',borderColor:mi<2?'rgba(107,140,173,0.25)':'rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>{m}{mi>=2?' (soon)':''}</span>)}
+              </div>
+            </div>;})}</div>}
+        </div>
         </div>
       </div>
       :<div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',zIndex:1,minHeight:0}}>
@@ -1775,6 +1797,40 @@ function OrgForm({org,cu,supabase,onClose,onSaved}){
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 18px',borderBottom:'1px solid var(--tf-border)'}}><h3 style={{margin:0,fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{org?'Edit Organisation':'New Organisation'}</h3><button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button></div>
       <div style={{padding:'16px 18px'}}><div style={{marginBottom:13}}><label style={LBL}>Name *</label><input value={name} onChange={e=>setName(e.target.value)} style={INP} placeholder="e.g. Paresh Sarda & Co." autoFocus/></div><div style={{marginBottom:13}}><label style={LBL}>Description</label><input value={desc} onChange={e=>setDesc(e.target.value)} style={INP}/></div>{err&&<div style={{color:'#ef4444',fontSize:12,background:'rgba(239,68,68,0.08)',padding:'7px 11px',borderRadius:7}}>{err}</div>}</div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'11px 18px',borderTop:'1px solid var(--tf-border)'}}><button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button><button onClick={save} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Save'}</button></div>
+    </div>
+  </div>;
+}
+
+
+// ── Org Dashboard ─────────────────────────────────────────────────
+function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
+  const [tab,setTab]=useState('clients');
+  const wsCount=allWorkspaces.filter(w=>w.org_id===org.id).length;
+  const TABS=[
+    {id:'clients',label:'📋 Client Master Data',available:true},
+    {id:'orgs',   label:'🏛 Organisation Settings',available:true},
+    {id:'billing',label:'💰 Billing & Invoices',available:false},
+    {id:'time',   label:'⏱ Time Tracking',available:false},
+  ];
+  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+    {/* Org Header */}
+    <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:16,paddingBottom:12}}>
+        <button onClick={onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>← Back</button>
+        <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
+        <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
+      </div>
+      <div style={{display:'flex',gap:2}}>
+        {TABS.map(t=><button key={t.id} onClick={()=>{if(t.available)setTab(t.id);}} disabled={!t.available}
+          style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.available?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.available?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.available?1:0.5,whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:5}}>
+          {t.label}{!t.available&&<span style={{fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
+        </button>)}
+      </div>
+    </div>
+    {/* Tab Content */}
+    <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
+      {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} onCreateTaskFromClient={(client,wt)=>{alert('Task creation from client coming soon: '+wt+' - '+client.name);}}/>}
+      {tab==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
     </div>
   </div>;
 }
