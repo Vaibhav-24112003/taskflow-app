@@ -1750,6 +1750,158 @@ function OrgFormModal({org,cu,supabase,onClose,onSaved}){
 }
 
 
+
+// ── Org Members Panel ───────────────────────────────────────────────
+function OrgMembersPanel({org,cu,supabase}){
+  var [members,setMembers]=useState([]);
+  var [invites,setInvites]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [email,setEmail]=useState('');
+  var [role,setRole]=useState('member');
+  var [sending,setSending]=useState(false);
+  var [err,setErr]=useState('');
+  var [toast,setToast]=useState(null);
+
+  useEffect(function(){loadAll();},[ org.id]);
+
+  async function loadAll(){
+    setLoading(true);
+    var rm=await supabase.from('organization_members').select('*, profiles(id,name,email,avatar_url)').eq('org_id',org.id);
+    var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending');
+    if(rm.data)setMembers(rm.data);
+    if(ri.data)setInvites(ri.data);
+    setLoading(false);
+  }
+
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  async function inviteMember(){
+    if(!email.trim()||!email.includes('@')){setErr('Enter a valid email');return;}
+    setSending(true);setErr('');
+    var res=await supabase.from('org_invitations').insert({
+      org_id:org.id,
+      inviter_id:cu.id,
+      invitee_email:email.trim().toLowerCase(),
+      role:role
+    });
+    setSending(false);
+    if(res.error){setErr(res.error.message);return;}
+    setEmail('');
+    loadAll();
+    showToast('Invitation sent to '+email.trim());
+  }
+
+  async function removeMember(userId){
+    if(!window.confirm('Remove this member from the organisation?'))return;
+    await supabase.from('organization_members').delete().eq('org_id',org.id).eq('user_id',userId);
+    loadAll();showToast('Member removed');
+  }
+
+  async function cancelInvite(inviteId){
+    await supabase.from('org_invitations').update({status:'declined'}).eq('id',inviteId);
+    loadAll();showToast('Invitation cancelled');
+  }
+
+  async function changeRole(userId,newRole){
+    await supabase.from('organization_members').update({role:newRole}).eq('org_id',org.id).eq('user_id',userId);
+    loadAll();showToast('Role updated');
+  }
+
+  var myRole=members.find(function(m){return m.user_id===cu.id;})?members.find(function(m){return m.user_id===cu.id;}).role:'member';
+  var canManage=myRole==='owner'||myRole==='admin';
+  var ROLE_COLORS={owner:'#f59e0b',admin:'#6b8cad',member:'#22c55e'};
+
+  return<div style={{maxWidth:700,margin:'0 auto'}}>
+    <div style={{marginBottom:24}}>
+      <h3 style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',margin:'0 0 4px'}}>Organisation Members</h3>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Members can access this organisation's Client Data, Billing and Time Tracking</div>
+    </div>
+
+    {/* Invite form */}
+    {canManage&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:20}}>
+      <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:12}}>Invite Member</div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <input value={email} onChange={function(e){setEmail(e.target.value);setErr('');}} placeholder="colleague@email.com" type="email"
+          style={{flex:'1 1 200px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}
+          onKeyDown={function(e){if(e.key==='Enter')inviteMember();}}/>
+        <select value={role} onChange={function(e){setRole(e.target.value);}}
+          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',cursor:'pointer'}}>
+          <option value="member">Member</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button onClick={inviteMember} disabled={sending}
+          style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:sending?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:sending?0.6:1,whiteSpace:'nowrap'}}>
+          {sending?'Sending...':'Send Invite'}
+        </button>
+      </div>
+      {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8}}>{err}</div>}
+    </div>}
+
+    {/* Current members */}
+    {loading?<div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)'}}>Loading...</div>:<div>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>
+        Current Members ({members.length})
+      </div>
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',marginBottom:16}}>
+        {members.length===0?<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No members yet</div>:
+          members.map(function(m,i){
+            var p=m.profiles||{};
+            var isMe=m.user_id===cu.id;
+            return<div key={m.user_id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<members.length-1?'1px solid var(--tf-border)':'none'}}>
+              <div style={{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>
+                {(p.name||p.email||'?').charAt(0).toUpperCase()}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{p.name||p.email}{isMe&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginLeft:6}}>(you)</span>}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{p.email}</div>
+              </div>
+              <span style={{fontSize:11,fontWeight:700,color:ROLE_COLORS[m.role]||'#94a3b8',background:(ROLE_COLORS[m.role]||'#94a3b8')+'18',border:'1px solid '+(ROLE_COLORS[m.role]||'#94a3b8')+'30',borderRadius:20,padding:'2px 9px',textTransform:'capitalize'}}>
+                {m.role}
+              </span>
+              {canManage&&!isMe&&<div style={{display:'flex',gap:5}}>
+                {m.role!=='owner'&&<select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
+                  style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none'}}>
+                  <option value="admin">Admin</option>
+                  <option value="member">Member</option>
+                </select>}
+                <button onClick={function(){removeMember(m.user_id);}}
+                  style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>
+                  Remove
+                </button>
+              </div>}
+            </div>;
+          })
+        }
+      </div>
+
+      {/* Pending invitations */}
+      {invites.length>0&&<div>
+        <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>
+          Pending Invitations ({invites.length})
+        </div>
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+          {invites.map(function(inv,i){
+            return<div key={inv.id} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 16px',borderBottom:i<invites.length-1?'1px solid var(--tf-border)':'none'}}>
+              <div style={{width:34,height:34,borderRadius:'50%',background:'rgba(107,140,173,0.12)',border:'1px dashed rgba(107,140,173,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:'var(--tf-text-sub)',flexShrink:0}}>?</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{inv.invitee_email}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>Invited · expires {new Date(inv.expires_at).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</div>
+              </div>
+              <span style={{fontSize:11,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 9px',textTransform:'capitalize'}}>{inv.role}</span>
+              {canManage&&<button onClick={function(){cancelInvite(inv.id);}}
+                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>
+                Cancel
+              </button>}
+            </div>;
+          })}
+        </div>
+      </div>}
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Org Create Modal ───────────────────────────────────────────────
 function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
   var [name,setName]=useState('');
@@ -1797,7 +1949,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
         <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
       </div>
       <div style={{display:'flex',gap:2}}>
-        {[{id:'clients',label:'Client Master Data',avail:true},{id:'settings',label:'Organisation Settings',avail:true},{id:'billing',label:'Billing & Invoices',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
+        {[{id:'clients',label:'Client Master Data',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
           return<button key={t.id} onClick={function(){if(t.avail)setTab(t.id);}} disabled={!t.avail}
             style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.avail?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.avail?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.avail?1:0.5,whiteSpace:'nowrap'}}>
             {t.label}{!t.avail&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
@@ -1807,6 +1959,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     </div>
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
       {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {tab==='settings'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
     </div>
   </div>;
