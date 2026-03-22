@@ -1352,6 +1352,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
 
           {/* ALL TASKS */}
+          {activeModule==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase} allWorkspaces={allWs} onCreateTaskFromClient={(client,wt)=>{setActiveModule(null);openNew(statuses[0]);}}/>}
+          {activeModule==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWs||[]}/>}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
               <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{allT.length} tasks</p></div>
@@ -1487,6 +1489,7 @@ function ModuleSidebar({open,onClose,activeModule,onSelect}){
     </div>
     <div style={{padding:'10px 14px',borderTop:'1px solid var(--tf-border)',fontSize:11,color:'var(--tf-text-sub)'}}>Billing & Time Tracking coming soon</div>
   </div></>;
+      <ModuleSidebar open={showModules} onClose={()=>setShowModules(false)} activeModule={activeModule} onSelect={(m)=>setActiveModule(m)}/>
 }
 
 const CLIENT_STATUSES=['active','inactive','prospect'];
