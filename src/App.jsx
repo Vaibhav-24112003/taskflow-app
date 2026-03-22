@@ -1206,6 +1206,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
+  const createOrg=async()=>{const nm=window.prompt('Organisation name:');if(!nm||!nm.trim())return;const slug='org'+Date.now();const{error}=await supabase.from('organizations').insert({name:nm.trim(),slug,created_by:cu.id});if(!error){const{data}=await supabase.from('organizations').select('*').order('name');setOrgs(data||[]);}}
+  const handleOrgBack=async()=>{setActiveOrg(null);const r1=await supabase.from('workspaces').select('*');const r2=await supabase.from('organizations').select('*').order('name');if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);}
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
@@ -1280,7 +1282,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* CONTENT */}
     {!activeWs
-      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={async()=>{setActiveOrg(null);const r1=await supabase.from('workspaces').select('*');const r2=await supabase.from('organizations').select('*').order('name');if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);}}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={()=>handleOrgBack()}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
@@ -1301,9 +1303,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{marginTop:32}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
             <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>Your Organisations</h2><p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Organisation Master Data · Client Data · Billing · Time Tracking</p></div>
-            <button onClick={async()=>{const nm=window.prompt('Organisation name:');if(!nm||!nm.trim())return;const slug=nm.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-')+'_'+Date.now();const{error}=await supabase.from('organizations').insert({name:nm.trim(),slug,created_by:cu.id});if(!error){const{data}=await supabase.from('organizations').select('*').order('name');setOrgs(data||[]);}}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Organisation</button>
+            <button onClick={()=>createOrg()} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Organisation</button>
           </div>
-          {orgs.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:10}}>🏢</div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create an organisation to manage Client Master Data, Billing and Time Tracking across workspaces.</div><button onClick={async()=>{const nm=window.prompt('Organisation name:');if(!nm||!nm.trim())return;const slug=nm.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-')+'_'+Date.now();const{error}=await supabase.from('organizations').insert({name:nm.trim(),slug,created_by:cu.id});if(!error){const{data}=await supabase.from('organizations').select('*').order('name');setOrgs(data||[]);}}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create First Organisation</button></div>:
+          {orgs.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}><div style={{fontSize:32,marginBottom:10}}>🏢</div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create an organisation to manage Client Master Data, Billing and Time Tracking across workspaces.</div><button onClick={()=>createOrg()} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create First Organisation</button></div>:
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
             {orgs.map(org=>{const wsCount=workspaces.filter(w=>w.org_id===org.id).length;return<div key={org.id} onClick={()=>setActiveOrg(org)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
               <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
@@ -1312,12 +1314,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                 <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
               </div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-                {['📋 Clients','🏛 Orgs','💰 Billing','⏱ Time'].map((m,mi)=><span key={m} style={{fontSize:10,fontWeight:600,color:mi<2?'#6b8cad':'var(--tf-text-sub)',background:mi<2?'rgba(107,140,173,0.1)':'rgba(148,163,184,0.08)',border:'1px solid',borderColor:mi<2?'rgba(107,140,173,0.25)':'rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>{m}{mi>=2?' (soon)':''}</span>)}
+                {['Clients','Orgs','Billing','Time'].map((m,mi)=><span key={m} style={{fontSize:10,fontWeight:600,color:mi<2?'#6b8cad':'var(--tf-text-sub)',background:mi<2?'rgba(107,140,173,0.1)':'rgba(148,163,184,0.08)',border:'1px solid',borderColor:mi<2?'rgba(107,140,173,0.25)':'rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>{mi>=2?m+' (soon)':m}</span>)}
               </div>
             </div>;})}</div>}
         </div>
-        </div>
-      </div>
       :<div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',zIndex:1,minHeight:0}}>
         {/* Invite banner inside workspace too */}
         {pendingInvites.length>0&&<div style={{padding:'10px 24px 0',flexShrink:0}}><InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/></div>}
