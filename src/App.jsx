@@ -1280,7 +1280,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* CONTENT */}
     {!activeWs
-      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={()=>setActiveOrg(null)}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={async()=>{setActiveOrg(null);const[{data:wd},{data:od}]=await Promise.all([supabase.from('workspaces').select('*'),supabase.from('organizations').select('*').order('name')]);if(wd)setWorkspaces(wd.filter((w,_,arr)=>{const mem=w;return true;}));if(od)setOrgs(od);}}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
@@ -1297,6 +1297,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div style={{width:42,height:42,borderRadius:'12px',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:'var(--tf-text-mut)'}}>+</div>
             <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
           </div>
+        </div>
         <div style={{marginTop:32}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
             <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>Your Organisations</h2><p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Organisation Master Data · Client Data · Billing · Time Tracking</p></div>
@@ -1529,7 +1530,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,onCreateTaskFromClient})
   const [showImport,setShowImport]=useState(false);
   const [toastMsg,setToastMsg]=useState(null);
   useEffect(()=>{load();},[orgId]);
-  async function load(){setLoading(true);let q=supabase.from('clients').select('*').order('name');if(orgId)q=q.eq('org_id',orgId);const{data,error}=await q;if(!error)setClients(data||[]);setLoading(false);}
+  async function load(){setLoading(true);if(!orgId){setClients([]);setLoading(false);return;}const{data,error}=await supabase.from('clients').select('*').eq('org_id',orgId).order('name');if(!error)setClients(data||[]);setLoading(false);}
   function toast(msg,type){setToastMsg({msg,type:type||'ok'});setTimeout(()=>setToastMsg(null),3000);}
   async function del(id){if(!window.confirm('Delete this client?'))return;const{error}=await supabase.from('clients').delete().eq('id',id);if(!error){setClients(c=>c.filter(x=>x.id!==id));toast('Deleted');}else toast(error.message,'err');}
   function exportCSV(){
@@ -1737,14 +1738,15 @@ function ClientImportModal({orgId,supabase,onClose,onImported}){
   </div>;
 }
 
-function OrgManagementPanel({cu,supabase,allWorkspaces}){
+function OrgManagementPanel({cu,supabase,allWorkspaces:allWsProp,onWorkspacesChanged}){
   const [orgs,setOrgs]=useState([]);
   const [loading,setLoading]=useState(true);
+  const [localWs,setLocalWs]=useState(allWsProp||[]);
   const [showForm,setShowForm]=useState(false);
   const [editOrg,setEditOrg]=useState(null);
   const [toast,setToast]=useState(null);
   useEffect(()=>{load();},[]);
-  async function load(){setLoading(true);const{data}=await supabase.from('organizations').select('*').order('name');if(data){setOrgs(data.map(o=>({...o,workspaces:(allWorkspaces||[]).filter(w=>w.org_id===o.id)})));}setLoading(false);}
+  async function load(){setLoading(true);const{data}=await supabase.from('organizations').select('*').order('name');supabase.from('workspaces').select('*').order('name').then(({data:wd})=>{if(wd)setLocalWs(wd);});if(data){setOrgs(data.map(o=>({...o,workspaces:(allWorkspaces||[]).filter(w=>w.org_id===o.id)})));}setLoading(false);}
   function toast2(msg){setToast(msg);setTimeout(()=>setToast(null),3000);}
   async function assign(wsId,orgId){await supabase.from('workspaces').update({org_id:orgId||null}).eq('id',wsId);load();toast2(orgId?'Workspace assigned':'Workspace unassigned');}
   async function delOrg(org){if(!window.confirm('Delete "'+org.name+'"?'))return;await supabase.from('workspaces').update({org_id:null}).eq('org_id',org.id);await supabase.from('organizations').delete().eq('id',org.id);load();toast2('Deleted');}
@@ -1830,7 +1832,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     {/* Tab Content */}
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
       {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} onCreateTaskFromClient={(client,wt)=>{alert('Task creation from client coming soon: '+wt+' - '+client.name);}}/>}
-      {tab==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {tab==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces} onWorkspacesChanged={async()=>{const{data}=await supabase.from('workspaces').select('*').eq('owner_id',cu.id).order('name');if(data)setAllWsLocal(data);}}/>}
     </div>
   </div>;
 }
