@@ -1244,6 +1244,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       </div>}
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
+      <button onClick={()=>setShowModules(true)} title="Modules" style={{height:28,padding:'0 12px',borderRadius:G.radiusSm,border:'1px solid var(--tf-border)',background:'var(--tf-surface)',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap',flexShrink:0}}><span style={{fontSize:13}}>☰</span>Modules</button>
       {/* User menu */}
       <div ref={userMenuRef} style={{position:'relative',flexShrink:0}}>
         <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'1.5px solid var(--tf-border)',position:'relative'}}>
@@ -1304,7 +1305,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             {v.id==='recurring'&&recT.length>0&&<span style={{fontSize:10,fontWeight:700,color:wsColor,background:`rgba(${wsRgb},0.14)`,borderRadius:'100px',padding:'1px 7px'}}>{recT.length}</span>}
           </button>)}
           <div style={{flex:1}}/>
-          <button onClick={()=>setShowModules(true)} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap',marginLeft:6}}>☰ Modules</button>
           {/* Stacked member avatars */}
           <div style={{display:'flex',alignItems:'center',marginRight:8,cursor:'pointer'}} onClick={()=>setShowMembers(true)} title="Manage Members">
             {wsMembers.slice(0,5).map((m,i)=><div key={m.id} style={{marginLeft:i?-7:0,zIndex:wsMembers.length-i}}><Avatar user={enrich(m)} size={24} ring={i===0?wsColor:undefined}/></div>)}
