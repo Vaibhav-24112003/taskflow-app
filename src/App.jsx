@@ -1280,7 +1280,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* CONTENT */}
     {!activeWs
-      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={async()=>{setActiveOrg(null);const[{data:wd},{data:od}]=await Promise.all([supabase.from('workspaces').select('*'),supabase.from('organizations').select('*').order('name')]);if(wd)setWorkspaces(wd.filter((w,_,arr)=>{const mem=w;return true;}));if(od)setOrgs(od);}}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={async()=>{setActiveOrg(null);const[{data:wd},{data:od}]=await Promise.all([supabase.from('workspaces').select('*'),supabase.from('organizations').select('*').order('name')]);if(wd)setWorkspaces(wd);if(od)setOrgs(od);}}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
