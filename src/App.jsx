@@ -795,7 +795,6 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       </div>}
     </div>
     <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
-      <ModuleSidebar open={showModules} onClose={()=>setShowModules(false)} activeModule={activeModule} onSelect={(m)=>{setActiveModule(m);setShowModules(false);}}/>
   </>
 }
 
@@ -1053,9 +1052,9 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 }
 
 function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
-  const [showModules,setShowModules]=React.useState(false)
-  const [activeModule,setActiveModule]=React.useState(null)
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
+  const [showModules,setShowModules]=useState(false)
+  const [activeModule,setActiveModule]=useState(null)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1304,7 +1303,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <span>{v.icon}</span>{v.label}
             {v.id==='recurring'&&recT.length>0&&<span style={{fontSize:10,fontWeight:700,color:wsColor,background:`rgba(${wsRgb},0.14)`,borderRadius:'100px',padding:'1px 7px'}}>{recT.length}</span>}
           </button>)}
-          <button onClick={()=>setShowModules(true)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,padding:'11px 10px',display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}><span style={{fontSize:14}}>☰</span> Modules</button><div style={{flex:1}}/>
+          <div style={{flex:1}}/>
+          <button onClick={()=>setShowModules(true)} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap',marginLeft:6}}>☰ Modules</button>
           {/* Stacked member avatars */}
           <div style={{display:'flex',alignItems:'center',marginRight:8,cursor:'pointer'}} onClick={()=>setShowMembers(true)} title="Manage Members">
             {wsMembers.slice(0,5).map((m,i)=><div key={m.id} style={{marginLeft:i?-7:0,zIndex:wsMembers.length-i}}><Avatar user={enrich(m)} size={24} ring={i===0?wsColor:undefined}/></div>)}
@@ -1352,8 +1352,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
 
           {/* ALL TASKS */}
-          {activeModule==='clients'&&<ClientsModule cu={cu} orgId={ws?.org_id} supabase={supabase} allWorkspaces={allWs} onCreateTask={(client,workType)=>{setActiveModule(null);openNew(null,{title:workType+' - '+(client.display_name||client.name),description:'Client: '+(client.display_name||client.name)});}}/>}
-          {activeModule==='orgs'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWs||[]}/>}
           {view==='list'&&<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
               <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>All Tasks</h2><p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{allT.length} tasks</p></div>
@@ -1437,649 +1435,345 @@ class ErrorBoundary extends React.Component{
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MODULE SYSTEM — Sidebar + Client Master Data + Org Management
+// MODULE SYSTEM
 // ══════════════════════════════════════════════════════════════════
 
 const MODULE_TREE=[
-  {id:'org_master',label:'Organisation Master',icon:'🏢',open:true,children:[
-    {id:'clients',   label:'Client Master Data', icon:'📋', available:true},
-    {id:'orgs',      label:'Organisations',       icon:'🏛',  available:true},
-    {id:'members',   label:'Members & Invites',   icon:'👥',  available:false},
+  {id:'org_master',label:'Organisation Master',children:[
+    {id:'clients',   label:'📋 Client Master Data', available:true},
+    {id:'orgs',      label:'🏛 Organisations',       available:true},
+    {id:'members',   label:'👥 Members & Invites',   available:false},
   ]},
-  {id:'workspaces_mgmt',label:'Workspace Management',icon:'🗂',open:false,children:[
-    {id:'org_ws',    label:'Org Workspaces',      icon:'🏗',  available:false},
-    {id:'personal_ws',label:'Personal Workspaces',icon:'👤',  available:false},
+  {id:'ws_mgmt',label:'Workspace Management',children:[
+    {id:'org_ws',    label:'🏗 Org Workspaces',      available:false},
+    {id:'personal',  label:'👤 Personal Workspaces', available:false},
   ]},
-  {id:'billing_mod',label:'Billing & Invoices',icon:'💰',open:false,children:[
-    {id:'invoices',  label:'Invoices',             icon:'🧾',  available:false},
-    {id:'payments',  label:'Payments Received',   icon:'💳',  available:false},
+  {id:'billing',label:'Billing & Invoices',children:[
+    {id:'invoices',  label:'🧾 Invoices',             available:false},
+    {id:'payments',  label:'💳 Payments',             available:false},
   ]},
-  {id:'time_mod',label:'Time Tracking',icon:'⏱',open:false,children:[
-    {id:'timelog',   label:'Time Entries',         icon:'🕐',  available:false},
-    {id:'timereport',label:'Reports',              icon:'📊',  available:false},
+  {id:'timetrack',label:'Time Tracking',children:[
+    {id:'timelog',   label:'🕐 Time Entries',         available:false},
+    {id:'timereport',label:'📊 Reports',              available:false},
   ]},
 ];
 
 function ModuleSidebar({open,onClose,activeModule,onSelect}){
-  const [expanded,setExpanded]=React.useState(
-    MODULE_TREE.reduce(function(acc,g){acc[g.id]=g.open;return acc;},{})
-  );
-  function toggle(id){setExpanded(function(e){return Object.assign({},e,{[id]:!e[id]});});}
-
-  return React.createElement(React.Fragment,null,
-    open&&React.createElement('div',{
-      onClick:onClose,
-      style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:900,backdropFilter:'blur(2px)'}
-    }),
-    React.createElement('div',{style:{
-      position:'fixed',top:0,left:0,bottom:0,width:256,
-      background:'var(--tf-panel)',borderRight:'1px solid var(--tf-border)',
-      zIndex:901,display:'flex',flexDirection:'column',
-      transform:open?'translateX(0)':'translateX(-100%)',
-      transition:'transform 0.2s cubic-bezier(0.4,0,0.2,1)',
-      boxShadow:open?'6px 0 32px rgba(0,0,0,0.4)':'none',
-    }},
-      React.createElement('div',{style:{
-        display:'flex',alignItems:'center',justifyContent:'space-between',
-        padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)',
-      }},
-        React.createElement('div',null,
-          React.createElement('div',{style:{fontSize:13,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}},'✦ Modules'),
-          React.createElement('div',{style:{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}},'Select a module to open')
-        ),
-        React.createElement('button',{onClick:onClose,style:{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1,padding:4}},'×')
-      ),
-      React.createElement('div',{style:{flex:1,overflowY:'auto',padding:'8px 6px'}},
-        MODULE_TREE.map(function(group){
-          return React.createElement('div',{key:group.id,style:{marginBottom:2}},
-            React.createElement('button',{
-              onClick:function(){toggle(group.id);},
-              style:{display:'flex',alignItems:'center',gap:8,width:'100%',background:'none',border:'none',
-                cursor:'pointer',padding:'7px 10px',borderRadius:8,color:'var(--tf-text)',
-                fontSize:12,fontWeight:700,textAlign:'left'}
-            },
-              React.createElement('span',{style:{fontSize:15}},group.icon),
-              React.createElement('span',{style:{flex:1}},group.label),
-              React.createElement('span',{style:{
-                fontSize:9,color:'var(--tf-text-sub)',display:'inline-block',
-                transform:expanded[group.id]?'rotate(90deg)':'rotate(0deg)',transition:'transform 0.15s'
-              }},'▶')
-            ),
-            expanded[group.id]&&React.createElement('div',{style:{marginLeft:10,marginTop:1}},
-              group.children.map(function(item){
-                var isActive=activeModule===item.id;
-                return React.createElement('button',{
-                  key:item.id,
-                  onClick:function(){if(item.available)onSelect(item.id);},
-                  disabled:!item.available,
-                  style:{display:'flex',alignItems:'center',gap:8,width:'100%',
-                    background:isActive?'rgba(107,140,173,0.15)':'none',
-                    border:'none',cursor:item.available?'pointer':'default',
-                    padding:'6px 10px',borderRadius:7,marginBottom:1,
-                    color:!item.available?'var(--tf-text-sub)':isActive?'#6b8cad':'var(--tf-text)',
-                    fontSize:12,fontWeight:isActive?700:500,textAlign:'left',
-                    opacity:item.available?1:0.45,
-                    borderLeft:isActive?'2px solid #6b8cad':'2px solid transparent'}
-                },
-                  React.createElement('span',{style:{fontSize:13}},item.icon),
-                  React.createElement('span',{style:{flex:1}},item.label),
-                  !item.available&&React.createElement('span',{style:{
-                    fontSize:9,fontWeight:700,color:'#f59e0b',
-                    background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',
-                    borderRadius:4,padding:'1px 5px'
-                  }},'SOON')
-                );
-              })
-            )
-          );
-        })
-      ),
-      React.createElement('div',{style:{padding:'10px 14px',borderTop:'1px solid var(--tf-border)',fontSize:11,color:'var(--tf-text-sub)'}},
-        'Billing, Time Tracking coming soon'
-      )
-    )
-  );
+  const [exp,setExp]=useState({'org_master':true,'ws_mgmt':false,'billing':false,'timetrack':false});
+  const tog=id=>setExp(e=>({...e,[id]:!e[id]}));
+  return<>{open&&<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:900}}/>}
+  <div style={{position:'fixed',top:0,left:0,bottom:0,width:252,background:'var(--tf-panel)',borderRight:'1px solid var(--tf-border)',zIndex:901,display:'flex',flexDirection:'column',transform:open?'translateX(0)':'translateX(-100%)',transition:'transform 0.2s ease',boxShadow:open?'6px 0 32px rgba(0,0,0,0.35)':'none'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+      <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>✦ Modules</div>
+      <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
+    </div>
+    <div style={{flex:1,overflowY:'auto',padding:'8px 6px'}}>
+      {MODULE_TREE.map(g=><div key={g.id} style={{marginBottom:2}}>
+        <button onClick={()=>tog(g.id)} style={{display:'flex',alignItems:'center',gap:8,width:'100%',background:'none',border:'none',cursor:'pointer',padding:'7px 10px',borderRadius:8,color:'var(--tf-text)',fontSize:12,fontWeight:700,textAlign:'left'}}>
+          <span style={{flex:1}}>{g.label}</span>
+          <span style={{fontSize:9,color:'var(--tf-text-sub)',display:'inline-block',transform:exp[g.id]?'rotate(90deg)':'none',transition:'transform 0.15s'}}>▶</span>
+        </button>
+        {exp[g.id]&&<div style={{marginLeft:10,marginTop:1}}>
+          {g.children.map(item=>{
+            const isA=activeModule===item.id;
+            return<button key={item.id} onClick={()=>{if(item.available){onSelect(item.id);onClose();}}} disabled={!item.available}
+              style={{display:'flex',alignItems:'center',gap:8,width:'100%',background:isA?'rgba(107,140,173,0.15)':'none',border:'none',cursor:item.available?'pointer':'default',padding:'6px 10px',borderRadius:7,marginBottom:1,color:!item.available?'var(--tf-text-sub)':isA?'#6b8cad':'var(--tf-text)',fontSize:12,fontWeight:isA?700:500,textAlign:'left',opacity:item.available?1:0.45,borderLeft:isA?'2px solid #6b8cad':'2px solid transparent'}}>
+              <span style={{flex:1}}>{item.label}</span>
+              {!item.available&&<span style={{fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:4,padding:'1px 5px'}}>SOON</span>}
+            </button>;
+          })}
+        </div>}
+      </div>)}
+    </div>
+    <div style={{padding:'10px 14px',borderTop:'1px solid var(--tf-border)',fontSize:11,color:'var(--tf-text-sub)'}}>Billing & Time Tracking coming soon</div>
+  </div></>;
 }
 
 const CLIENT_STATUSES=['active','inactive','prospect'];
 const CLIENT_TYPES=['business','individual'];
-const DEFAULT_CF=[{key:'file_no',label:'File No.',type:'text'},{key:'engagement_type',label:'Engagement Type',type:'text'}];
 const WORK_TYPES=['ITR','GST/GSTR','TDS','Accounts','Audit','MIS','Payroll','Other'];
+const DEF_CF=[{key:'file_no',label:'File No.',type:'text'},{key:'engagement_type',label:'Engagement Type',type:'text'}];
 
-function ClientsModule({cu,orgId,supabase,allWorkspaces,onCreateTask}){
-  const [clients,setClients]=React.useState([]);
-  const [loading,setLoading]=React.useState(true);
-  const [search,setSearch]=React.useState('');
-  const [filterStatus,setFilterStatus]=React.useState('all');
-  const [showForm,setShowForm]=React.useState(false);
-  const [editClient,setEditClient]=React.useState(null);
-  const [showImport,setShowImport]=React.useState(false);
-  const [toast,setToast]=React.useState(null);
-
-  React.useEffect(function(){load();},[orgId]);
-
-  async function load(){
-    setLoading(true);
-    var q=supabase.from('clients').select('*').order('name');
-    if(orgId) q=q.eq('org_id',orgId);
-    var {data,error}=await q;
-    if(!error) setClients(data||[]);
-    setLoading(false);
-  }
-
-  function toast2(msg,type){setToast({msg,type:type||'success'});setTimeout(function(){setToast(null);},3000);}
-
-  async function del(id){
-    if(!window.confirm('Delete this client?')) return;
-    var {error}=await supabase.from('clients').delete().eq('id',id);
-    if(!error){setClients(function(c){return c.filter(function(x){return x.id!==id;});});toast2('Deleted');}
-    else toast2(error.message,'error');
-  }
-
+function ClientsModule({cu,orgId,supabase,allWorkspaces,onCreateTaskFromClient}){
+  const [clients,setClients]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [search,setSearch]=useState('');
+  const [filterStatus,setFilterStatus]=useState('all');
+  const [showForm,setShowForm]=useState(false);
+  const [editClient,setEditClient]=useState(null);
+  const [showImport,setShowImport]=useState(false);
+  const [toastMsg,setToastMsg]=useState(null);
+  useEffect(()=>{load();},[orgId]);
+  async function load(){setLoading(true);let q=supabase.from('clients').select('*').order('name');if(orgId)q=q.eq('org_id',orgId);const{data,error}=await q;if(!error)setClients(data||[]);setLoading(false);}
+  function toast(msg,type){setToastMsg({msg,type:type||'ok'});setTimeout(()=>setToastMsg(null),3000);}
+  async function del(id){if(!window.confirm('Delete this client?'))return;const{error}=await supabase.from('clients').delete().eq('id',id);if(!error){setClients(c=>c.filter(x=>x.id!==id));toast('Deleted');}else toast(error.message,'err');}
   function exportCSV(){
-    var cols=['name','display_name','client_type','email','phone','pan','gstin','tan','city','state','status','notes'];
-    var customKeys=new Set();
-    clients.forEach(function(c){Object.keys(c.custom_fields||{}).forEach(function(k){customKeys.add(k);});});
-    var allCols=cols.concat(Array.from(customKeys));
-    var rows=clients.map(function(c){
-      var cf=c.custom_fields||{};
-      return allCols.map(function(col){
-        var v=col in cf?cf[col]:c[col];
-        var s=v==null?'':String(v);
-        return s.includes(',')||s.includes('"')?'"'+s.replace(/"/g,'""')+'"':s;
-      }).join(',');
-    });
-    var csv=[allCols.join(',')].concat(rows).join('\n');
-    var url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-    var a=document.createElement('a');a.href=url;a.download='clients.csv';a.click();
-    URL.revokeObjectURL(url);
-    toast2('Exported '+clients.length+' clients');
+    const cols=['name','display_name','client_type','email','phone','pan','gstin','tan','city','state','status','notes'];
+    const cks=new Set();clients.forEach(c=>Object.keys(c.custom_fields||{}).forEach(k=>cks.add(k)));
+    const allC=[...cols,...cks];
+    const rows=clients.map(c=>{const cf=c.custom_fields||{};return allC.map(col=>{const v=col in cf?cf[col]:c[col];const s=v==null?'':String(v);return s.includes(',')||s.includes('"')?'"'+s.replace(/"/g,'""')+'"':s;}).join(',');});
+    const csv=[allC.join(','),...rows].join('\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    const a=document.createElement('a');a.href=url;a.download='clients.csv';a.click();URL.revokeObjectURL(url);
+    toast('Exported '+clients.length+' clients');
   }
-
-  var filtered=clients.filter(function(c){
-    var q=search.toLowerCase();
-    var ms=!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q)||(c.gstin||'').toLowerCase().includes(q);
-    var mf=filterStatus==='all'||c.status===filterStatus;
-    return ms&&mf;
-  });
-
-  var SC={'active':'#22c55e','inactive':'#94a3b8','prospect':'#f59e0b'};
-  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
-
-  return React.createElement('div',{style:{padding:'0 0 40px',maxWidth:1100,margin:'0 auto'}},
-    React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}},
-      React.createElement('div',null,
-        React.createElement('h2',{style:{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}},'Client Master Data'),
-        React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}},clients.length+' clients · '+clients.filter(function(c){return c.status==='active';}).length+' active')
-      ),
-      React.createElement('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
-        React.createElement('button',{onClick:function(){setShowImport(true);},style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}},'\u2B06 Import CSV'),
-        React.createElement('button',{onClick:exportCSV,style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}},'\u2B07 Export CSV'),
-        React.createElement('button',{onClick:function(){setEditClient(null);setShowForm(true);},style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}},'\u002B New Client')
-      )
-    ),
-    React.createElement('div',{style:{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}},
-      React.createElement('input',{value:search,onChange:function(e){setSearch(e.target.value);},placeholder:'Search name, email, PAN, GSTIN...',style:Object.assign({},INP,{flex:1,minWidth:200,width:'auto'})}),
-      React.createElement('select',{value:filterStatus,onChange:function(e){setFilterStatus(e.target.value);},style:Object.assign({},INP,{cursor:'pointer'})},
-        React.createElement('option',{value:'all'},'All Status'),
-        CLIENT_STATUSES.map(function(s){return React.createElement('option',{key:s,value:s},s.charAt(0).toUpperCase()+s.slice(1));})
-      )
-    ),
-    loading?React.createElement('div',{style:{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}},'Loading...'):
-    filtered.length===0?React.createElement('div',{style:{textAlign:'center',padding:48,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)'}},
-      clients.length===0?React.createElement('span',null,'No clients yet. ',React.createElement('button',{onClick:function(){setEditClient(null);setShowForm(true);},style:{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontWeight:600}},'Add first client \u2192')):'No matches.'
-    ):
-    React.createElement('div',{style:{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'hidden'}},
-      React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}},
-        React.createElement('thead',null,
-          React.createElement('tr',{style:{background:'rgba(107,140,173,0.08)'}},
-            ['Client','Type','Contact','Tax IDs','Work Types','Status','Actions'].map(function(h){
-              return React.createElement('th',{key:h,style:{padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}},h);
-            })
-          )
-        ),
-        React.createElement('tbody',null,
-          filtered.map(function(c,i){
-            var cf=c.custom_fields||{};
-            var wts=(cf.work_types||'').split(',').filter(Boolean);
-            return React.createElement('tr',{key:c.id,style:{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(107,140,173,0.02)':'transparent'}},
-              React.createElement('td',{style:{padding:'9px 12px'}},
-                React.createElement('div',{style:{fontWeight:600,color:'var(--tf-text)',fontSize:14}},c.name),
-                c.display_name&&c.display_name!==c.name&&React.createElement('div',{style:{fontSize:11,color:'var(--tf-text-sub)'}},c.display_name)
-              ),
-              React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}},c.client_type),
-              React.createElement('td',{style:{padding:'9px 12px'}},
-                c.email&&React.createElement('div',{style:{fontSize:12}},c.email),
-                c.phone&&React.createElement('div',{style:{fontSize:11,color:'var(--tf-text-sub)'}},c.phone)
-              ),
-              React.createElement('td',{style:{padding:'9px 12px'}},
-                c.pan&&React.createElement('div',{style:{fontSize:11,fontFamily:'monospace',color:'var(--tf-text)'}},c.pan),
-                c.gstin&&React.createElement('div',{style:{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}},c.gstin)
-              ),
-              React.createElement('td',{style:{padding:'9px 12px'}},
-                React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
-                  wts.map(function(wt){
-                    return React.createElement('span',{key:wt,
-                      onClick:function(e){e.stopPropagation();if(onCreateTask)onCreateTask(c,wt);},
-                      title:'Create task card for '+wt,
-                      style:{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px',cursor:'pointer'}
-                    },wt+' +');
-                  }),
-                  wts.length===0&&React.createElement('span',{style:{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}},'—')
-                )
-              ),
-              React.createElement('td',{style:{padding:'9px 12px'}},
-                React.createElement('span',{style:{background:SC[c.status]+'20',color:SC[c.status],border:'1px solid '+SC[c.status]+'40',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:600,textTransform:'capitalize'}},c.status)
-              ),
-              React.createElement('td',{style:{padding:'9px 12px'}},
-                React.createElement('div',{style:{display:'flex',gap:5}},
-                  React.createElement('button',{onClick:function(){setEditClient(c);setShowForm(true);},style:{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}},'Edit'),
-                  React.createElement('button',{onClick:function(){del(c.id);},style:{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}},'Del')
-                )
-              )
-            );
-          })
-        )
-      )
-    ),
-    toast&&React.createElement('div',{style:{position:'fixed',bottom:24,right:24,background:toast.type==='error'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}},toast.msg),
-    showForm&&React.createElement(ClientForm,{client:editClient,orgId:orgId,supabase:supabase,onClose:function(){setShowForm(false);},onSaved:function(){load();setShowForm(false);toast2(editClient?'Updated':'Added');}}),
-    showImport&&React.createElement(ClientImport,{orgId:orgId,supabase:supabase,onClose:function(){setShowImport(false);},onImported:function(){load();setShowImport(false);toast2('Import complete');}})
-  );
+  const filtered=clients.filter(c=>{const q=search.toLowerCase();return(!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q))&&(filterStatus==='all'||c.status===filterStatus);});
+  const SC={active:'#22c55e',inactive:'#94a3b8',prospect:'#f59e0b'};
+  const INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
+  return<div style={{padding:'0 0 40px',maxWidth:1100,margin:'0 auto'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master Data</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(c=>c.status==='active').length} active</div></div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button onClick={()=>setShowImport(true)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬆ Import</button>
+        <button onClick={exportCSV} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬇ Export</button>
+        <button onClick={()=>{setEditClient(null);setShowForm(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ New Client</button>
+      </div>
+    </div>
+    <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, PAN, GSTIN..." style={{...INP,flex:1,minWidth:200,width:'auto'}}/>
+      <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{...INP,cursor:'pointer'}}>
+        <option value="all">All Status</option>{CLIENT_STATUSES.map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+      </select>
+    </div>
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:filtered.length===0?
+      <div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)'}}>
+        {clients.length===0?<>No clients yet. <button onClick={()=>{setEditClient(null);setShowForm(true);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontWeight:600}}>Add first →</button></>:'No matches.'}
+      </div>:
+      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:'rgba(107,140,173,0.08)'}}>
+            {['Client','Type','Contact','Tax IDs','Work Types','Status','Actions'].map(h=><th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {filtered.map((c,i)=>{
+              const cf=c.custom_fields||{};
+              const wts=(cf.work_types||'').split(',').filter(Boolean);
+              return<tr key={c.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(107,140,173,0.02)':'transparent'}}>
+                <td style={{padding:'9px 12px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:14}}>{c.name}</div>{c.display_name&&c.display_name!==c.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.display_name}</div>}</td>
+                <td style={{padding:'9px 12px',fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{c.client_type}</td>
+                <td style={{padding:'9px 12px'}}>{c.email&&<div style={{fontSize:12}}>{c.email}</div>}{c.phone&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.phone}</div>}</td>
+                <td style={{padding:'9px 12px'}}>{c.pan&&<div style={{fontSize:11,fontFamily:'monospace'}}>{c.pan}</div>}{c.gstin&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>}</td>
+                <td style={{padding:'9px 12px'}}>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                    {wts.map(wt=><span key={wt} onClick={e=>{e.stopPropagation();if(onCreateTaskFromClient)onCreateTaskFromClient(c,wt);}} title={'Create '+wt+' task'} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px',cursor:'pointer'}}>{wt} +</span>)}
+                    {wts.length===0&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>—</span>}
+                  </div>
+                </td>
+                <td style={{padding:'9px 12px'}}><span style={{background:SC[c.status]+'20',color:SC[c.status],border:'1px solid '+SC[c.status]+'40',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:600,textTransform:'capitalize'}}>{c.status}</span></td>
+                <td style={{padding:'9px 12px'}}>
+                  <div style={{display:'flex',gap:5}}>
+                    <button onClick={()=>{setEditClient(c);setShowForm(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
+                    <button onClick={()=>del(c.id)} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Del</button>
+                  </div>
+                </td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>
+    }
+    {toastMsg&&<div style={{position:'fixed',bottom:24,right:24,background:toastMsg.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toastMsg.msg}</div>}
+    {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} onClose={()=>setShowForm(false)} onSaved={()=>{load();setShowForm(false);toast(editClient?'Updated':'Added');}}/>}
+    {showImport&&<ClientImportModal orgId={orgId} supabase={supabase} onClose={()=>setShowImport(false)} onImported={()=>{load();setShowImport(false);toast('Import complete');}}/>}
+  </div>;
 }
 
 function ClientForm({client,orgId,supabase,onClose,onSaved}){
   const isEdit=!!client;
-  const [tab,setTab]=React.useState('basic');
-  const [saving,setSaving]=React.useState(false);
-  const [err,setErr]=React.useState({});
-  const [name,setName]=React.useState(client?.name||'');
-  const [dispName,setDispName]=React.useState(client?.display_name||'');
-  const [type,setType]=React.useState(client?.client_type||'business');
-  const [email,setEmail]=React.useState(client?.email||'');
-  const [phone,setPhone]=React.useState(client?.phone||'');
-  const [address,setAddress]=React.useState(client?.address||'');
-  const [city,setCity]=React.useState(client?.city||'');
-  const [state,setState]=React.useState(client?.state||'');
-  const [pin,setPin]=React.useState(client?.pincode||'');
-  const [pan,setPan]=React.useState(client?.pan||'');
-  const [gstin,setGstin]=React.useState(client?.gstin||'');
-  const [tan,setTan]=React.useState(client?.tan||'');
-  const [status,setStatus]=React.useState(client?.status||'active');
-  const [notes,setNotes]=React.useState(client?.notes||'');
-  const [selWT,setSelWT]=React.useState(function(){
-    var cf=client?.custom_fields||{};
-    return (cf.work_types||'').split(',').filter(Boolean);
-  });
-  const [customFields,setCustomFields]=React.useState(function(){
-    var ex=client?.custom_fields||{};
-    var def=DEFAULT_CF.map(function(f){return Object.assign({},f,{value:ex[f.key]||''}); });
-    var extra=Object.keys(ex).filter(function(k){return k!=='work_types'&&!DEFAULT_CF.find(function(f){return f.key===k;});}).map(function(k){return {key:k,label:k.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}),type:'text',value:String(ex[k])};});
-    return def.concat(extra);
-  });
-
-  function toggleWT(wt){setSelWT(function(p){return p.includes(wt)?p.filter(function(x){return x!==wt;}):p.concat([wt]);});}
-  function addCF(){setCustomFields(function(f){return f.concat([{key:'f_'+Date.now(),label:'New Field',type:'text',value:''}]);});}
-  function remCF(i){setCustomFields(function(f){return f.filter(function(_,j){return j!==i;});});}
-  function updCF(i,p,v){setCustomFields(function(f){return f.map(function(cf,j){return j===i?Object.assign({},cf,{[p]:v}):cf;});});}
-
+  const [tab,setTab]=useState('basic');
+  const [saving,setSaving]=useState(false);
+  const [errs,setErrs]=useState({});
+  const [name,setName]=useState(client?.name||'');
+  const [dispName,setDispName]=useState(client?.display_name||'');
+  const [type,setType]=useState(client?.client_type||'business');
+  const [email,setEmail]=useState(client?.email||'');
+  const [phone,setPhone]=useState(client?.phone||'');
+  const [address,setAddress]=useState(client?.address||'');
+  const [city,setCity]=useState(client?.city||'');
+  const [state,setState]=useState(client?.state||'');
+  const [pin,setPin]=useState(client?.pincode||'');
+  const [pan,setPan]=useState(client?.pan||'');
+  const [gstin,setGstin]=useState(client?.gstin||'');
+  const [tan,setTan]=useState(client?.tan||'');
+  const [status,setStatus]=useState(client?.status||'active');
+  const [notes,setNotes]=useState(client?.notes||'');
+  const [selWT,setSelWT]=useState(()=>(client?.custom_fields?.work_types||'').split(',').filter(Boolean));
+  const [cfs,setCfs]=useState(()=>{const ex=client?.custom_fields||{};const d=DEF_CF.map(f=>({...f,value:ex[f.key]||''}));const e2=Object.keys(ex).filter(k=>k!=='work_types'&&!DEF_CF.find(f=>f.key===k)).map(k=>({key:k,label:k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()),type:'text',value:String(ex[k])}));return[...d,...e2];});
+  const togWT=wt=>setSelWT(p=>p.includes(wt)?p.filter(x=>x!==wt):[...p,wt]);
+  const addCF=()=>setCfs(f=>[...f,{key:'f_'+Date.now(),label:'New Field',type:'text',value:''}]);
+  const remCF=i=>setCfs(f=>f.filter((_,j)=>j!==i));
+  const updCF=(i,p,v)=>setCfs(f=>f.map((cf,j)=>j===i?{...cf,[p]:v}:cf));
   async function save(){
-    if(!name.trim()){setErr({name:'Required'});return;}
+    if(!name.trim()){setErrs({name:'Required'});return;}
     setSaving(true);
-    var cf={work_types:selWT.join(',')};
-    customFields.forEach(function(f){if(f.key&&f.value!=='')cf[f.key]=f.value;});
-    var user=(await supabase.auth.getUser()).data.user;
-    var payload={name:name.trim(),display_name:dispName.trim()||null,client_type:type,email:email.trim()||null,phone:phone.trim()||null,address:address.trim()||null,city:city.trim()||null,state:state.trim()||null,pincode:pin.trim()||null,pan:pan.trim().toUpperCase()||null,gstin:gstin.trim().toUpperCase()||null,tan:tan.trim().toUpperCase()||null,status,notes:notes.trim()||null,custom_fields:cf};
-    if(orgId) payload.org_id=orgId;
-    var error;
-    if(isEdit){({error}=await supabase.from('clients').update(payload).eq('id',client.id));}
-    else{payload.created_by=user?.id;({error}=await supabase.from('clients').insert(payload));}
+    const cf={work_types:selWT.join(',')};
+    cfs.forEach(f=>{if(f.key&&f.value!=='')cf[f.key]=f.value;});
+    const user=(await supabase.auth.getUser()).data.user;
+    const p={name:name.trim(),display_name:dispName.trim()||null,client_type:type,email:email.trim()||null,phone:phone.trim()||null,address:address.trim()||null,city:city.trim()||null,state:state.trim()||null,pincode:pin.trim()||null,pan:pan.trim().toUpperCase()||null,gstin:gstin.trim().toUpperCase()||null,tan:tan.trim().toUpperCase()||null,status,notes:notes.trim()||null,custom_fields:cf};
+    if(orgId)p.org_id=orgId;
+    let error;
+    if(isEdit){({error}=await supabase.from('clients').update(p).eq('id',client.id));}
+    else{p.created_by=user?.id;({error}=await supabase.from('clients').insert(p));}
     setSaving(false);
-    if(!error)onSaved();
-    else setErr({save:error.message});
+    if(!error)onSaved();else setErrs({save:error.message});
   }
-
-  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
-  var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
-  var TABS=['basic','tax','worktype','custom','notes'];
-  var TLBL={'basic':'Basic','tax':'Tax IDs','worktype':'Work Types','custom':'Custom Fields','notes':'Notes'};
-
-  return React.createElement('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},onClick:function(e){if(e.target===e.currentTarget)onClose();}},
-    React.createElement('div',{style:{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:600,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}},
-      React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid var(--tf-border)'}},
-        React.createElement('h3',{style:{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}},isEdit?'Edit Client':'New Client'),
-        React.createElement('button',{onClick:onClose,style:{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}},'×')
-      ),
-      React.createElement('div',{style:{display:'flex',gap:2,padding:'8px 20px 0',borderBottom:'1px solid var(--tf-border)'}},
-        TABS.map(function(t){return React.createElement('button',{key:t,onClick:function(){setTab(t);},style:{background:'none',border:'none',padding:'5px 10px',cursor:'pointer',fontSize:12,fontWeight:tab===t?700:500,color:tab===t?'#6b8cad':'var(--tf-text-sub)',borderBottom:tab===t?'2px solid #6b8cad':'2px solid transparent',marginBottom:-1}},TLBL[t]);})
-      ),
-      React.createElement('div',{style:{padding:'16px 20px',overflowY:'auto',flex:1}},
-        tab==='basic'&&React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px'}},
-          React.createElement('div',{style:{gridColumn:'1/-1',marginBottom:12}},React.createElement('label',{style:LBL},'Name *'),React.createElement('input',{value:name,onChange:function(e){setName(e.target.value);},style:Object.assign({},INP,{border:err.name?'1px solid #ef4444':INP.border}),placeholder:'Full legal name'}),err.name&&React.createElement('div',{style:{color:'#ef4444',fontSize:11,marginTop:2}},err.name)),
-          React.createElement('div',{style:{marginBottom:12}},React.createElement('label',{style:LBL},'Display Name'),React.createElement('input',{value:dispName,onChange:function(e){setDispName(e.target.value);},style:INP,placeholder:'Trade/short name'})),
-          React.createElement('div',{style:{marginBottom:12}},React.createElement('label',{style:LBL},'Type'),React.createElement('select',{value:type,onChange:function(e){setType(e.target.value);},style:Object.assign({},INP,{cursor:'pointer'})},CLIENT_TYPES.map(function(t){return React.createElement('option',{key:t,value:t},t.charAt(0).toUpperCase()+t.slice(1));}))),
-          React.createElement('div',{style:{marginBottom:12}},React.createElement('label',{style:LBL},'Email'),React.createElement('input',{value:email,onChange:function(e){setEmail(e.target.value);},style:INP,type:'email'})),
-          React.createElement('div',{style:{marginBottom:12}},React.createElement('label',{style:LBL},'Phone'),React.createElement('input',{value:phone,onChange:function(e){setPhone(e.target.value);},style:INP})),
-          React.createElement('div',{style:{gridColumn:'1/-1',marginBottom:12}},React.createElement('label',{style:LBL},'Address'),React.createElement('input',{value:address,onChange:function(e){setAddress(e.target.value);},style:INP})),
-          React.createElement('div',{style:{marginBottom:12}},React.createElement('label',{style:LBL},'City'),React.createElement('input',{value:city,onChange:function(e){setCity(e.target.value);},style:INP})),
-          React.createElement('div',{style:{marginBottom:12}},React.createElement('label',{style:LBL},'State'),React.createElement('input',{value:state,onChange:function(e){setState(e.target.value);},style:INP})),
-          React.createElement('div',{style:{gridColumn:'1/-1',marginBottom:12}},React.createElement('label',{style:LBL},'Status'),React.createElement('div',{style:{display:'flex',gap:6}},CLIENT_STATUSES.map(function(s){return React.createElement('button',{key:s,onClick:function(){setStatus(s);},style:{flex:1,padding:'6px',borderRadius:8,border:'1px solid',borderColor:status===s?'#6b8cad':'var(--tf-border)',background:status===s?'rgba(107,140,173,0.12)':'var(--tf-surface)',color:status===s?'#6b8cad':'var(--tf-text-sub)',fontWeight:status===s?700:500,cursor:'pointer',fontSize:12,textTransform:'capitalize'}},s);})))
-        ),
-        tab==='tax'&&React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px'}},
-          [['PAN',pan,setPan,'ABCDE1234F'],['GSTIN',gstin,setGstin,'22ABCDE1234F1Z5'],['TAN',tan,setTan,'ABCD12345E'],['Pincode',pin,setPin,'400001']].map(function(item){
-            return React.createElement('div',{key:item[0],style:{marginBottom:14}},React.createElement('label',{style:LBL},item[0]),React.createElement('input',{value:item[1],onChange:function(e){item[2](e.target.value.toUpperCase());},style:Object.assign({},INP,{fontFamily:'monospace'}),placeholder:item[3]}));
-          })
-        ),
-        tab==='worktype'&&React.createElement('div',null,
-          React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',marginBottom:14}},'Select the work types applicable for this client. You can create task cards directly from these.'),
-          React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
-            WORK_TYPES.map(function(wt){
-              var sel=selWT.includes(wt);
-              return React.createElement('button',{key:wt,onClick:function(){toggleWT(wt);},style:{padding:'7px 14px',borderRadius:8,border:'1px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'rgba(107,140,173,0.15)':'var(--tf-surface)',color:sel?'#6b8cad':'var(--tf-text-sub)',fontWeight:sel?700:500,cursor:'pointer',fontSize:13}},wt);
-            })
-          ),
-          React.createElement('div',{style:{marginTop:16,fontSize:12,color:'var(--tf-text-sub)'}},'Selected: '+(selWT.length?selWT.join(', '):'None'))
-        ),
-        tab==='custom'&&React.createElement('div',null,
-          React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}},
-            React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)'}},'Add any extra fields'),
-            React.createElement('button',{onClick:addCF,style:{background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}},'\u002B Add Field')
-          ),
-          customFields.length===0?React.createElement('div',{style:{textAlign:'center',padding:24,color:'var(--tf-text-sub)',border:'1px dashed var(--tf-border)',borderRadius:8}},'No custom fields. Click \u201C+ Add Field\u201D.'):
-          React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}},
-            customFields.map(function(cf,i){
-              return React.createElement('div',{key:i,style:{display:'flex',gap:7,alignItems:'center',background:'var(--tf-surface)',borderRadius:9,padding:'9px 11px',border:'1px solid var(--tf-border)'}},
-                React.createElement('div',{style:{flex:'0 0 130px'}},
-                  React.createElement('div',{style:{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2,fontWeight:600}},'LABEL'),
-                  React.createElement('input',{value:cf.label,onChange:function(e){updCF(i,'label',e.target.value);},style:Object.assign({},INP,{padding:'4px 7px',fontSize:12})})
-                ),
-                React.createElement('div',{style:{flex:'0 0 80px'}},
-                  React.createElement('div',{style:{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2,fontWeight:600}},'TYPE'),
-                  React.createElement('select',{value:cf.type,onChange:function(e){updCF(i,'type',e.target.value);},style:Object.assign({},INP,{padding:'4px 7px',fontSize:12,cursor:'pointer'})},
-                    ['text','number','date','boolean'].map(function(t){return React.createElement('option',{key:t,value:t},t);})
-                  )
-                ),
-                React.createElement('div',{style:{flex:1}},
-                  React.createElement('div',{style:{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2,fontWeight:600}},'VALUE'),
-                  React.createElement('input',{value:cf.value,onChange:function(e){updCF(i,'value',e.target.value);},type:cf.type==='number'?'number':cf.type==='date'?'date':'text',style:Object.assign({},INP,{padding:'4px 7px',fontSize:12})})
-                ),
-                React.createElement('button',{onClick:function(){remCF(i);},style:{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 9px',color:'#ef4444',cursor:'pointer',fontSize:15,lineHeight:1}},'×')
-              );
-            })
-          )
-        ),
-        tab==='notes'&&React.createElement('div',null,
-          React.createElement('label',{style:LBL},'Notes'),
-          React.createElement('textarea',{value:notes,onChange:function(e){setNotes(e.target.value);},rows:7,style:Object.assign({},INP,{resize:'vertical'}),placeholder:'Any notes about this client...'})
-        ),
-        err.save&&React.createElement('div',{style:{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}},err.save)
-      ),
-      React.createElement('div',{style:{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}},
-        React.createElement('button',{onClick:onClose,style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}},'Cancel'),
-        React.createElement('button',{onClick:save,disabled:saving,style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}},saving?'Saving...':isEdit?'Save Changes':'Add Client')
-      )
-    )
-  );
+  const INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+  const LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
+  const TABS=['basic','tax','worktype','custom','notes'];
+  const TL={basic:'Basic',tax:'Tax IDs',worktype:'Work Types',custom:'Custom Fields',notes:'Notes'};
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:600,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid var(--tf-border)'}}>
+        <h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>{isEdit?'Edit Client':'New Client'}</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>
+      </div>
+      <div style={{display:'flex',gap:2,padding:'8px 20px 0',borderBottom:'1px solid var(--tf-border)'}}>
+        {TABS.map(t=><button key={t} onClick={()=>setTab(t)} style={{background:'none',border:'none',padding:'5px 10px',cursor:'pointer',fontSize:12,fontWeight:tab===t?700:500,color:tab===t?'#6b8cad':'var(--tf-text-sub)',borderBottom:tab===t?'2px solid #6b8cad':'2px solid transparent',marginBottom:-1}}>{TL[t]}</button>)}
+      </div>
+      <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
+        {tab==='basic'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px'}}>
+          <div style={{gridColumn:'1/-1',marginBottom:12}}><label style={LBL}>Name *</label><input value={name} onChange={e=>setName(e.target.value)} style={{...INP,border:errs.name?'1px solid #ef4444':INP.border}} placeholder="Full legal name"/>{errs.name&&<div style={{color:'#ef4444',fontSize:11,marginTop:2}}>{errs.name}</div>}</div>
+          <div style={{marginBottom:12}}><label style={LBL}>Display Name</label><input value={dispName} onChange={e=>setDispName(e.target.value)} style={INP}/></div>
+          <div style={{marginBottom:12}}><label style={LBL}>Type</label><select value={type} onChange={e=>setType(e.target.value)} style={{...INP,cursor:'pointer'}}>{CLIENT_TYPES.map(t=><option key={t} value={t}>{t.charAt(0).toUpperCase()+t.slice(1)}</option>)}</select></div>
+          <div style={{marginBottom:12}}><label style={LBL}>Email</label><input value={email} onChange={e=>setEmail(e.target.value)} style={INP} type="email"/></div>
+          <div style={{marginBottom:12}}><label style={LBL}>Phone</label><input value={phone} onChange={e=>setPhone(e.target.value)} style={INP}/></div>
+          <div style={{gridColumn:'1/-1',marginBottom:12}}><label style={LBL}>Address</label><input value={address} onChange={e=>setAddress(e.target.value)} style={INP}/></div>
+          <div style={{marginBottom:12}}><label style={LBL}>City</label><input value={city} onChange={e=>setCity(e.target.value)} style={INP}/></div>
+          <div style={{marginBottom:12}}><label style={LBL}>State</label><input value={state} onChange={e=>setState(e.target.value)} style={INP}/></div>
+          <div style={{gridColumn:'1/-1',marginBottom:12}}><label style={LBL}>Status</label><div style={{display:'flex',gap:6}}>{CLIENT_STATUSES.map(s=><button key={s} onClick={()=>setStatus(s)} style={{flex:1,padding:'6px',borderRadius:8,border:'1px solid',borderColor:status===s?'#6b8cad':'var(--tf-border)',background:status===s?'rgba(107,140,173,0.12)':'var(--tf-surface)',color:status===s?'#6b8cad':'var(--tf-text-sub)',fontWeight:status===s?700:500,cursor:'pointer',fontSize:12,textTransform:'capitalize'}}>{s}</button>)}</div></div>
+        </div>}
+        {tab==='tax'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px'}}>
+          {[['PAN',pan,setPan,'ABCDE1234F'],['GSTIN',gstin,setGstin,'22ABCDE1234F1Z5'],['TAN',tan,setTan,'ABCD12345E'],['Pincode',pin,setPin,'400001']].map(([lbl,val,set,ph])=><div key={lbl} style={{marginBottom:14}}><label style={LBL}>{lbl}</label><input value={val} onChange={e=>set(e.target.value.toUpperCase())} style={{...INP,fontFamily:'monospace'}} placeholder={ph}/></div>)}
+        </div>}
+        {tab==='worktype'&&<div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:14}}>Select work types. Click any work type badge in the client list to create a task card (e.g. "ITR - XYZ Co.")</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {WORK_TYPES.map(wt=>{const sel=selWT.includes(wt);return<button key={wt} onClick={()=>togWT(wt)} style={{padding:'7px 14px',borderRadius:8,border:'1px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'rgba(107,140,173,0.15)':'var(--tf-surface)',color:sel?'#6b8cad':'var(--tf-text-sub)',fontWeight:sel?700:500,cursor:'pointer',fontSize:13}}>{wt}</button>;})}
+          </div>
+          <div style={{marginTop:14,fontSize:12,color:'var(--tf-text-sub)'}}>Selected: {selWT.length?selWT.join(', '):'None'}</div>
+        </div>}
+        {tab==='custom'&&<div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+            <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Add any extra fields for this client</div>
+            <button onClick={addCF} style={{background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Field</button>
+          </div>
+          {cfs.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',border:'1px dashed var(--tf-border)',borderRadius:8}}>No custom fields yet.</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {cfs.map((cf,i)=><div key={i} style={{display:'flex',gap:7,alignItems:'center',background:'var(--tf-surface)',borderRadius:9,padding:'9px 11px',border:'1px solid var(--tf-border)'}}>
+              <div style={{flex:'0 0 130px'}}><div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2,fontWeight:600}}>LABEL</div><input value={cf.label} onChange={e=>updCF(i,'label',e.target.value)} style={{...INP,padding:'4px 7px',fontSize:12}}/></div>
+              <div style={{flex:'0 0 80px'}}><div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2,fontWeight:600}}>TYPE</div><select value={cf.type} onChange={e=>updCF(i,'type',e.target.value)} style={{...INP,padding:'4px 7px',fontSize:12,cursor:'pointer'}}>{'text,number,date,boolean'.split(',').map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+              <div style={{flex:1}}><div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2,fontWeight:600}}>VALUE</div><input value={cf.value} onChange={e=>updCF(i,'value',e.target.value)} type={cf.type==='number'?'number':cf.type==='date'?'date':'text'} style={{...INP,padding:'4px 7px',fontSize:12}}/></div>
+              <button onClick={()=>remCF(i)} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 9px',color:'#ef4444',cursor:'pointer',fontSize:15,lineHeight:1}}>×</button>
+            </div>)}
+          </div>}
+        </div>}
+        {tab==='notes'&&<div><label style={LBL}>Notes</label><textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={7} style={{...INP,resize:'vertical'}} placeholder="Any notes about this client..."/></div>}
+        {errs.save&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}}>{errs.save}</div>}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}}>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+        <button onClick={save} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':isEdit?'Save Changes':'Add Client'}</button>
+      </div>
+    </div>
+  </div>;
 }
 
-function ClientImport({orgId,supabase,onClose,onImported}){
-  const [step,setStep]=React.useState('upload');
-  const [rows,setRows]=React.useState([]);
-  const [cols,setCols]=React.useState([]);
-  const [mapping,setMapping]=React.useState({});
-  const [progress,setProgress]=React.useState(0);
-  const [results,setResults]=React.useState(null);
-  const fileRef=React.useRef();
+function ClientImportModal({orgId,supabase,onClose,onImported}){
+  const [step,setStep]=useState('upload');
+  const [rows,setRows]=useState([]);
+  const [cols,setCols]=useState([]);
+  const [mapping,setMapping]=useState({});
+  const [progress,setProgress]=useState(0);
+  const [results,setResults]=useState(null);
+  const fileRef=useRef();
   const KNOWN=['name','display_name','client_type','email','phone','address','city','state','pincode','pan','gstin','tan','status','notes'];
-
-  function parseRow(row){var cells=[];var cur='';var inQ=false;for(var i=0;i<row.length;i++){var c=row[i];if(c==='"'){if(inQ&&row[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){cells.push(cur);cur='';}else cur+=c;}cells.push(cur);return cells;}
-
-  function handleFile(e){
-    var file=e.target.files[0];if(!file)return;
-    var reader=new FileReader();
-    reader.onload=function(ev){
-      var lines=ev.target.result.split(/\r?\n/).filter(function(l){return l.trim();});
-      if(lines.length<2)return;
-      var headers=parseRow(lines[0]);
-      var data=lines.slice(1).map(function(l){return parseRow(l);});
-      setCols(headers);setRows(data);
-      var am={};
-      headers.forEach(function(h,i){
-        var lower=h.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z_]/g,'');
-        var match=KNOWN.find(function(c){return c===lower||c.includes(lower)||lower.includes(c);});
-        am[i]=match||'__skip__';
-      });
-      setMapping(am);setStep('preview');
-    };
-    reader.readAsText(file);
-  }
-
-  async function importAll(){
-    setStep('importing');
-    var user=(await supabase.auth.getUser()).data.user;
-    var ok=0,fail=0;
-    for(var i=0;i<rows.length;i++){
-      var row=rows[i];
-      var obj={created_by:user?.id,custom_fields:{}};
-      if(orgId) obj.org_id=orgId;
-      cols.forEach(function(col,ci){
-        var t=mapping[ci];if(!t||t==='__skip__')return;
-        var v=row[ci]?.trim()||null;
-        if(KNOWN.includes(t))obj[t]=v;
-        else obj.custom_fields[t]=v;
-      });
-      if(!obj.name){fail++;continue;}
-      var {error}=await supabase.from('clients').insert(obj);
-      if(!error)ok++;else fail++;
-      setProgress(Math.round((i+1)/rows.length*100));
-    }
-    setResults({ok,fail});setStep('done');
-  }
-
-  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'};
-
-  return React.createElement('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},onClick:function(e){if(e.target===e.currentTarget&&step!=='importing')onClose();}},
-    React.createElement('div',{style:{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:640,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}},
-      React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 20px',borderBottom:'1px solid var(--tf-border)'}},
-        React.createElement('h3',{style:{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}},'Import Clients from CSV'),
-        step!=='importing'&&React.createElement('button',{onClick:onClose,style:{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}},'×')
-      ),
-      React.createElement('div',{style:{padding:'16px 20px',overflowY:'auto',flex:1}},
-        step==='upload'&&React.createElement('div',null,
-          React.createElement('div',{style:{background:'rgba(107,140,173,0.06)',border:'1px dashed rgba(107,140,173,0.35)',borderRadius:10,padding:28,textAlign:'center',marginBottom:16}},
-            React.createElement('div',{style:{fontSize:28,marginBottom:10}},'📄'),
-            React.createElement('div',{style:{fontWeight:600,color:'var(--tf-text)',marginBottom:6,fontSize:14}},'Select CSV File'),
-            React.createElement('div',{style:{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}},'Required: name column. Auto-maps: email, phone, pan, gstin, city, state, status'),
-            React.createElement('input',{ref:fileRef,type:'file',accept:'.csv',onChange:handleFile,style:{display:'none'}}),
-            React.createElement('button',{onClick:function(){fileRef.current.click();},style:{background:'#6b8cad',border:'none',borderRadius:7,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}},'Choose File')
-          )
-        ),
-        step==='preview'&&React.createElement('div',null,
-          React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',marginBottom:12}},rows.length+' rows · Map columns:'),
-          React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6,maxHeight:280,overflowY:'auto'}},
-            cols.map(function(col,i){
-              return React.createElement('div',{key:i,style:{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',borderRadius:7,padding:'7px 11px',border:'1px solid var(--tf-border)'}},
-                React.createElement('div',{style:{flex:'0 0 150px',fontSize:13,fontWeight:600,color:'var(--tf-text)'}},col),
-                React.createElement('span',{style:{color:'var(--tf-text-sub)'}},'→'),
-                React.createElement('select',{value:mapping[i]||'__skip__',onChange:function(e){setMapping(function(m){var n=Object.assign({},m);n[i]=e.target.value;return n;});},style:Object.assign({},INP,{flex:1})},
-                  React.createElement('option',{value:'__skip__'},'⊘ Skip'),
-                  React.createElement('optgroup',{label:'Standard'},KNOWN.map(function(c){return React.createElement('option',{key:c,value:c},c);})),
-                  React.createElement('option',{value:col.toLowerCase().replace(/\s+/g,'_')},'Custom: '+col)
-                ),
-                React.createElement('div',{style:{flex:'0 0 100px',fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},rows[0]?.[i]||'—')
-              );
-            })
-          )
-        ),
-        step==='importing'&&React.createElement('div',{style:{textAlign:'center',padding:32}},
-          React.createElement('div',{style:{fontSize:28,marginBottom:14}},'⏳'),
-          React.createElement('div',{style:{fontWeight:600,fontSize:14,color:'var(--tf-text)',marginBottom:12}},'Importing... '+progress+'%'),
-          React.createElement('div',{style:{background:'var(--tf-border)',borderRadius:99,height:7,overflow:'hidden'}},React.createElement('div',{style:{width:progress+'%',height:'100%',background:'#6b8cad',transition:'width 0.3s'}}))
-        ),
-        step==='done'&&results&&React.createElement('div',{style:{textAlign:'center',padding:32}},
-          React.createElement('div',{style:{fontSize:36,marginBottom:12}},'✅'),
-          React.createElement('div',{style:{fontWeight:700,fontSize:17,color:'var(--tf-text)',marginBottom:8}},'Import Complete'),
-          React.createElement('div',{style:{color:'#22c55e',fontWeight:600}},'✓ '+results.ok+' clients imported'),
-          results.fail>0&&React.createElement('div',{style:{color:'#ef4444',fontSize:13,marginTop:4}},'✗ '+results.fail+' failed (missing name?)')
-        )
-      ),
-      React.createElement('div',{style:{display:'flex',justifyContent:'flex-end',gap:9,padding:'12px 20px',borderTop:'1px solid var(--tf-border)'}},
-        step==='upload'&&React.createElement('button',{onClick:onClose,style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}},'Cancel'),
-        step==='preview'&&React.createElement(React.Fragment,null,
-          React.createElement('button',{onClick:function(){setStep('upload');},style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}},'\u2190 Back'),
-          React.createElement('button',{onClick:importAll,style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}},'Import '+rows.length+' Clients')
-        ),
-        step==='done'&&React.createElement('button',{onClick:onImported,style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}},'Done')
-      )
-    )
-  );
+  function parseRow(r){const c=[];let cur='';let q=false;for(let i=0;i<r.length;i++){const ch=r[i];if(ch==='"'){if(q&&r[i+1]==='"'){cur+='"';i++;}else q=!q;}else if(ch===','&&!q){c.push(cur);cur='';}else cur+=ch;}c.push(cur);return c;}
+  function handleFile(e){const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=ev=>{const lines=ev.target.result.split(/\r?\n/).filter(l=>l.trim());if(lines.length<2)return;const h=parseRow(lines[0]);const d=lines.slice(1).map(l=>parseRow(l));setCols(h);setRows(d);const am={};h.forEach((hh,i)=>{const low=hh.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z_]/g,'');const m=KNOWN.find(c=>c===low||c.includes(low)||low.includes(c));am[i]=m||'__skip__';});setMapping(am);setStep('preview');};rd.readAsText(f);}
+  async function importAll(){setStep('importing');const user=(await supabase.auth.getUser()).data.user;let ok=0,fail=0;for(let i=0;i<rows.length;i++){const row=rows[i];const obj={created_by:user?.id,custom_fields:{}};if(orgId)obj.org_id=orgId;cols.forEach((c,ci)=>{const t=mapping[ci];if(!t||t==='__skip__')return;const v=row[ci]?.trim()||null;if(KNOWN.includes(t))obj[t]=v;else obj.custom_fields[t]=v;});if(!obj.name){fail++;continue;}const{error}=await supabase.from('clients').insert(obj);if(!error)ok++;else fail++;setProgress(Math.round((i+1)/rows.length*100));}setResults({ok,fail});setStep('done');}
+  const INP2={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'};
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>{if(e.target===e.currentTarget&&step!=='importing')onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:620,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 20px',borderBottom:'1px solid var(--tf-border)'}}>
+        <h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>Import Clients from CSV</h3>
+        {step!=='importing'&&<button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>}
+      </div>
+      <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
+        {step==='upload'&&<div><div style={{background:'rgba(107,140,173,0.06)',border:'1px dashed rgba(107,140,173,0.35)',borderRadius:10,padding:28,textAlign:'center',marginBottom:16}}><div style={{fontSize:28,marginBottom:10}}>📄</div><div style={{fontWeight:600,color:'var(--tf-text)',marginBottom:6,fontSize:14}}>Select CSV File</div><div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Required: name column. Auto-maps common fields.</div><input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{display:'none'}}/><button onClick={()=>fileRef.current.click()} style={{background:'#6b8cad',border:'none',borderRadius:7,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Choose File</button></div></div>}
+        {step==='preview'&&<div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:12}}>{rows.length} rows detected. Map columns:</div><div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:280,overflowY:'auto'}}>{cols.map((c,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',borderRadius:7,padding:'7px 11px',border:'1px solid var(--tf-border)'}}><div style={{flex:'0 0 150px',fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c}</div><span style={{color:'var(--tf-text-sub)'}}>→</span><select value={mapping[i]||'__skip__'} onChange={e=>setMapping(m=>({...m,[i]:e.target.value}))} style={{...INP2,flex:1}}><option value="__skip__">⊘ Skip</option><optgroup label="Standard">{KNOWN.map(k=><option key={k} value={k}>{k}</option>)}</optgroup><option value={c.toLowerCase().replace(/\s+/g,'_')}>Custom: {c}</option></select><div style={{flex:'0 0 100px',fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rows[0]?.[i]||'—'}</div></div>)}</div></div>}
+        {step==='importing'&&<div style={{textAlign:'center',padding:32}}><div style={{fontSize:28,marginBottom:14}}>⏳</div><div style={{fontWeight:600,fontSize:14,color:'var(--tf-text)',marginBottom:12}}>Importing... {progress}%</div><div style={{background:'var(--tf-border)',borderRadius:99,height:7,overflow:'hidden'}}><div style={{width:progress+'%',height:'100%',background:'#6b8cad',transition:'width 0.3s'}}/></div></div>}
+        {step==='done'&&results&&<div style={{textAlign:'center',padding:32}}><div style={{fontSize:36,marginBottom:12}}>✅</div><div style={{fontWeight:700,fontSize:17,color:'var(--tf-text)',marginBottom:8}}>Import Complete</div><div style={{color:'#22c55e',fontWeight:600}}>✓ {results.ok} clients imported</div>{results.fail>0&&<div style={{color:'#ef4444',fontSize:13,marginTop:4}}>✗ {results.fail} failed</div>}</div>}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'12px 20px',borderTop:'1px solid var(--tf-border)'}}>
+        {step==='upload'&&<button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>}
+        {step==='preview'&&<><button onClick={()=>setStep('upload')} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button><button onClick={importAll} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Import {rows.length} Clients</button></>}
+        {step==='done'&&<button onClick={onImported} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Done</button>}
+      </div>
+    </div>
+  </div>;
 }
 
 function OrgManagementPanel({cu,supabase,allWorkspaces}){
-  const [orgs,setOrgs]=React.useState([]);
-  const [loading,setLoading]=React.useState(true);
-  const [showForm,setShowForm]=React.useState(false);
-  const [editOrg,setEditOrg]=React.useState(null);
-  const [toast,setToast]=React.useState(null);
-
-  React.useEffect(function(){load();},[]);
-
-  async function load(){
-    setLoading(true);
-    var {data}=await supabase.from('organizations').select('*').order('name');
-    if(data){
-      var enriched=data.map(function(o){return Object.assign({},o,{workspaces:(allWorkspaces||[]).filter(function(w){return w.org_id===o.id;})});});
-      setOrgs(enriched);
-    }
-    setLoading(false);
-  }
-
-  function toast2(msg){setToast({msg});setTimeout(function(){setToast(null);},3000);}
-
-  async function assign(wsId,orgId){
-    var {error}=await supabase.from('workspaces').update({org_id:orgId||null}).eq('id',wsId);
-    if(!error){load();toast2(orgId?'Workspace assigned':'Workspace unassigned');}
-  }
-
-  async function delOrg(org){
-    if(!window.confirm('Delete "'+org.name+'"?')) return;
-    await supabase.from('workspaces').update({org_id:null}).eq('org_id',org.id);
-    await supabase.from('organizations').delete().eq('id',org.id);
-    load();toast2('Deleted');
-  }
-
-  var personalWs=(allWorkspaces||[]).filter(function(w){return !w.org_id;});
-
-  return React.createElement('div',{style:{maxWidth:760,margin:'0 auto',padding:'4px 0 40px'}},
-    React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:22}},
-      React.createElement('div',null,
-        React.createElement('h2',{style:{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}},'Organisations'),
-        React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}},'Assign workspaces to organisations to share Client Data & Billing')
-      ),
-      React.createElement('button',{onClick:function(){setEditOrg(null);setShowForm(true);},style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}},'\u002B New Organisation')
-    ),
-    loading?React.createElement('div',{style:{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}},'Loading...'):
-    React.createElement(React.Fragment,null,
-      orgs.length===0&&React.createElement('div',{style:{textAlign:'center',padding:44,border:'1px dashed var(--tf-border)',borderRadius:12}},
-        React.createElement('div',{style:{fontSize:32,marginBottom:10}},'🏢'),
-        React.createElement('div',{style:{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}},'No organisations yet'),
-        React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',marginBottom:18}},'Create an organisation to share Client Data across multiple workspaces.'),
-        React.createElement('button',{onClick:function(){setShowForm(true);},style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}},'Create Organisation')
-      ),
-      orgs.map(function(org){
-        return React.createElement('div',{key:org.id,style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:12}},
-          React.createElement('div',{style:{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}},
-            React.createElement('div',{style:{display:'flex',gap:11,alignItems:'center'}},
-              React.createElement('div',{style:{width:38,height:38,borderRadius:9,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}},org.name.charAt(0).toUpperCase()),
-              React.createElement('div',null,
-                React.createElement('div',{style:{fontWeight:700,fontSize:15,color:'var(--tf-text)'}},org.name),
-                org.description&&React.createElement('div',{style:{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}},org.description),
-                React.createElement('div',{style:{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}},org.workspaces.length+' workspace'+(org.workspaces.length!==1?'s':''))
-              )
-            ),
-            React.createElement('div',{style:{display:'flex',gap:6}},
-              React.createElement('button',{onClick:function(){setEditOrg(org);setShowForm(true);},style:{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'4px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}},'Edit'),
-              React.createElement('button',{onClick:function(){delOrg(org);},style:{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}},'Delete')
-            )
-          ),
-          React.createElement('div',{style:{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}},'Assigned Workspaces'),
-          org.workspaces.length===0?React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',marginBottom:10}},'No workspaces assigned'):
-          React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}},
-            org.workspaces.map(function(w){
-              return React.createElement('div',{key:w.id,style:{display:'flex',alignItems:'center',gap:5,background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.22)',borderRadius:20,padding:'3px 9px 3px 7px'}},
-                React.createElement('div',{style:{width:7,height:7,borderRadius:'50%',background:w.color||'#6b8cad'}}),
-                React.createElement('span',{style:{fontSize:12,fontWeight:600,color:'var(--tf-text)'}},w.name),
-                React.createElement('button',{onClick:function(){assign(w.id,null);},title:'Remove',style:{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,lineHeight:1,paddingLeft:3}},'×')
-              );
-            })
-          ),
-          personalWs.length>0&&React.createElement('div',null,
-            React.createElement('div',{style:{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6}},'Add Workspace'),
-            React.createElement('select',{onChange:function(e){if(e.target.value){assign(e.target.value,org.id);e.target.value='';}},style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 10px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',maxWidth:260}},
-              React.createElement('option',{value:''},'Select personal workspace...'),
-              personalWs.map(function(w){return React.createElement('option',{key:w.id,value:w.id},w.name);})
-            )
-          )
-        );
-      }),
-      React.createElement('div',{style:{background:'var(--tf-surface)',border:'1px dashed rgba(107,140,173,0.3)',borderRadius:12,padding:16}},
-        React.createElement('div',{style:{display:'flex',gap:9,alignItems:'center',marginBottom:10}},
-          React.createElement('span',{style:{fontSize:18}},'👤'),
-          React.createElement('div',null,
-            React.createElement('div',{style:{fontWeight:700,fontSize:14,color:'var(--tf-text)'}},'Personal Workspaces'),
-            React.createElement('div',{style:{fontSize:12,color:'var(--tf-text-sub)'}},'Not linked to any organisation')
-          )
-        ),
-        personalWs.length===0?React.createElement('div',{style:{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic'}},'All workspaces are in organisations'):
-        React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6}},
-          personalWs.map(function(w){
-            return React.createElement('div',{key:w.id,style:{display:'flex',alignItems:'center',gap:5,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.2)',borderRadius:20,padding:'3px 11px 3px 7px'}},
-              React.createElement('div',{style:{width:7,height:7,borderRadius:'50%',background:w.color||'#94a3b8'}}),
-              React.createElement('span',{style:{fontSize:12,color:'var(--tf-text-sub)'}},w.name)
-            );
-          })
-        )
-      )
-    ),
-    showForm&&React.createElement(OrgForm,{org:editOrg,cu:cu,supabase:supabase,onClose:function(){setShowForm(false);},onSaved:function(){load();setShowForm(false);toast2(editOrg?'Updated':'Created');}}),
-    toast&&React.createElement('div',{style:{position:'fixed',bottom:24,right:24,background:'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}},toast.msg)
-  );
+  const [orgs,setOrgs]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [showForm,setShowForm]=useState(false);
+  const [editOrg,setEditOrg]=useState(null);
+  const [toast,setToast]=useState(null);
+  useEffect(()=>{load();},[]);
+  async function load(){setLoading(true);const{data}=await supabase.from('organizations').select('*').order('name');if(data){setOrgs(data.map(o=>({...o,workspaces:(allWorkspaces||[]).filter(w=>w.org_id===o.id)})));}setLoading(false);}
+  function toast2(msg){setToast(msg);setTimeout(()=>setToast(null),3000);}
+  async function assign(wsId,orgId){await supabase.from('workspaces').update({org_id:orgId||null}).eq('id',wsId);load();toast2(orgId?'Workspace assigned':'Workspace unassigned');}
+  async function delOrg(org){if(!window.confirm('Delete "'+org.name+'"?'))return;await supabase.from('workspaces').update({org_id:null}).eq('org_id',org.id);await supabase.from('organizations').delete().eq('id',org.id);load();toast2('Deleted');}
+  const personalWs=(allWorkspaces||[]).filter(w=>!w.org_id);
+  const G_CARD={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:12};
+  return<div style={{maxWidth:760,margin:'0 auto',padding:'4px 0 40px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:22}}>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Organisations</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Assign workspaces to share Client Data & Billing</div></div>
+      <button onClick={()=>{setEditOrg(null);setShowForm(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}}>+ New Organisation</button>
+    </div>
+    {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:<>
+      {orgs.length===0&&<div style={{...G_CARD,textAlign:'center',padding:44,borderStyle:'dashed'}}><div style={{fontSize:32,marginBottom:10}}>🏢</div><div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:18}}>Create an organisation to share Client Data across multiple workspaces.</div><button onClick={()=>setShowForm(true)} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer'}}>Create Organisation</button></div>}
+      {orgs.map(org=><div key={org.id} style={G_CARD}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
+          <div style={{display:'flex',gap:11,alignItems:'center'}}>
+            <div style={{width:38,height:38,borderRadius:9,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
+            <div><div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>{org.name}</div>{org.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}}>{org.description}</div>}<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.workspaces.length} workspace{org.workspaces.length!==1?'s':''}</div></div>
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={()=>{setEditOrg(org);setShowForm(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'4px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
+            <button onClick={()=>delOrg(org)} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Delete</button>
+          </div>
+        </div>
+        <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>Assigned Workspaces</div>
+        {org.workspaces.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',marginBottom:10}}>None assigned yet</div>:
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>{org.workspaces.map(w=><div key={w.id} style={{display:'flex',alignItems:'center',gap:5,background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.22)',borderRadius:20,padding:'3px 9px 3px 7px'}}><div style={{width:7,height:7,borderRadius:'50%',background:w.color||'#6b8cad'}}/><span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{w.name}</span><button onClick={()=>assign(w.id,null)} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,lineHeight:1,paddingLeft:3}}>×</button></div>)}</div>}
+        {personalWs.length>0&&<><div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6}}>Add Workspace</div><select onChange={e=>{if(e.target.value){assign(e.target.value,org.id);e.target.value='';}}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 10px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',maxWidth:260}}><option value="">Select personal workspace...</option>{personalWs.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}</select></>}
+      </div>)}
+      <div style={{...G_CARD,borderStyle:'dashed',borderColor:'rgba(107,140,173,0.3)'}}>
+        <div style={{display:'flex',gap:9,alignItems:'center',marginBottom:10}}><span style={{fontSize:18}}>👤</span><div><div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>Personal Workspaces</div><div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Not linked to any organisation</div></div></div>
+        {personalWs.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic'}}>All workspaces are in organisations</div>:
+        <div style={{display:'flex',flexWrap:'wrap',gap:6}}>{personalWs.map(w=><div key={w.id} style={{display:'flex',alignItems:'center',gap:5,background:'rgba(148,163,184,0.1)',border:'1px solid rgba(148,163,184,0.2)',borderRadius:20,padding:'3px 11px 3px 7px'}}><div style={{width:7,height:7,borderRadius:'50%',background:w.color||'#94a3b8'}}/><span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{w.name}</span></div>)}</div>}
+      </div>
+    </>}
+    {showForm&&<OrgForm org={editOrg} cu={cu} supabase={supabase} onClose={()=>setShowForm(false)} onSaved={()=>{load();setShowForm(false);toast2(editOrg?'Updated':'Created');}}/>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast}</div>}
+  </div>;
 }
 
 function OrgForm({org,cu,supabase,onClose,onSaved}){
-  const [name,setName]=React.useState(org?.name||'');
-  const [desc,setDesc]=React.useState(org?.description||'');
-  const [saving,setSaving]=React.useState(false);
-  const [err,setErr]=React.useState('');
-  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
-  var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
-  async function save(){
-    if(!name.trim()){setErr('Name required');return;}
-    setSaving(true);
-    var slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-')+'_'+Date.now();
-    var error;
-    if(org){({error}=await supabase.from('organizations').update({name:name.trim(),description:desc.trim()||null}).eq('id',org.id));}
-    else{({error}=await supabase.from('organizations').insert({name:name.trim(),slug,description:desc.trim()||null,created_by:cu.id}));}
-    setSaving(false);
-    if(!error)onSaved();else setErr(error.message);
-  }
-  return React.createElement('div',{style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1001,display:'flex',alignItems:'center',justifyContent:'center',padding:16},onClick:function(e){if(e.target===e.currentTarget)onClose();}},
-    React.createElement('div',{style:{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}},
-      React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 18px',borderBottom:'1px solid var(--tf-border)'}},
-        React.createElement('h3',{style:{margin:0,fontSize:15,fontWeight:700,color:'var(--tf-text)'}},org?'Edit Organisation':'New Organisation'),
-        React.createElement('button',{onClick:onClose,style:{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}},'×')
-      ),
-      React.createElement('div',{style:{padding:'16px 18px'}},
-        React.createElement('div',{style:{marginBottom:13}},React.createElement('label',{style:LBL},'Name *'),React.createElement('input',{value:name,onChange:function(e){setName(e.target.value);},style:INP,placeholder:'e.g. Paresh Sarda & Co.',autoFocus:true})),
-        React.createElement('div',{style:{marginBottom:13}},React.createElement('label',{style:LBL},'Description'),React.createElement('input',{value:desc,onChange:function(e){setDesc(e.target.value);},style:INP,placeholder:'Brief description'})),
-        err&&React.createElement('div',{style:{color:'#ef4444',fontSize:12,background:'rgba(239,68,68,0.08)',padding:'7px 11px',borderRadius:7}},err)
-      ),
-      React.createElement('div',{style:{display:'flex',justifyContent:'flex-end',gap:8,padding:'11px 18px',borderTop:'1px solid var(--tf-border)'}},
-        React.createElement('button',{onClick:onClose,style:{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}},'Cancel'),
-        React.createElement('button',{onClick:save,disabled:saving,style:{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}},saving?'Saving...':'Save')
-      )
-    )
-  );
+  const [name,setName]=useState(org?.name||'');
+  const [desc,setDesc]=useState(org?.description||'');
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState('');
+  const INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+  const LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
+  async function save(){if(!name.trim()){setErr('Name required');return;}setSaving(true);const slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-')+'_'+Date.now();let error;if(org){({error}=await supabase.from('organizations').update({name:name.trim(),description:desc.trim()||null}).eq('id',org.id));}else{({error}=await supabase.from('organizations').insert({name:name.trim(),slug,description:desc.trim()||null,created_by:cu.id}));}setSaving(false);if(!error)onSaved();else setErr(error.message);}
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1001,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 18px',borderBottom:'1px solid var(--tf-border)'}}><h3 style={{margin:0,fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{org?'Edit Organisation':'New Organisation'}</h3><button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button></div>
+      <div style={{padding:'16px 18px'}}><div style={{marginBottom:13}}><label style={LBL}>Name *</label><input value={name} onChange={e=>setName(e.target.value)} style={INP} placeholder="e.g. Paresh Sarda & Co." autoFocus/></div><div style={{marginBottom:13}}><label style={LBL}>Description</label><input value={desc} onChange={e=>setDesc(e.target.value)} style={INP}/></div>{err&&<div style={{color:'#ef4444',fontSize:12,background:'rgba(239,68,68,0.08)',padding:'7px 11px',borderRadius:7}}>{err}</div>}</div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'11px 18px',borderTop:'1px solid var(--tf-border)'}}><button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button><button onClick={save} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Save'}</button></div>
+    </div>
+  </div>;
 }
 
 export default function App(){
