@@ -1960,6 +1960,360 @@ function TransferOwnerModal({open,ws,wsMembers,cu,supabase,onClose,onTransferred
   </div>;
 }
 
+
+// ══════════════════════════════════════════════════════════════════
+// WORKSHEETS MODULE
+// ══════════════════════════════════════════════════════════════════
+
+// Default column configs per work type
+var WS_TYPE_CONFIGS = {
+  'GST':      {frequency:'monthly',  cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
+  'GST/GSTR': {frequency:'monthly',  cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
+  'ITR':      {frequency:'yearly',   cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'}]},
+  'TDS':      {frequency:'quarterly',cols:[{key:'data_recv',label:'Data Rcvd'},{key:'q1_done',label:'Q1 Filed'},{key:'q2_done',label:'Q2 Filed'},{key:'q3_done',label:'Q3 Filed'},{key:'q4_done',label:'Q4 Filed'}]},
+  'Accounts': {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'Audit':    {frequency:'yearly',   cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'MIS':      {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'Payroll':  {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Processed'}]},
+  'Other':    {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+};
+
+var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var QUARTERS=['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
+
+function getPeriodLabel(freq, year, month, quarter){
+  if(freq==='monthly')  return MONTHS[(month||1)-1]+' '+year;
+  if(freq==='quarterly'){
+    var q=quarter||1;
+    var y=(q===4)?year-1:year; // Q4 Jan-Mar belongs to prev FY start
+    return 'Q'+q+' FY'+(y)+'-'+(String(y+1).slice(2));
+  }
+  return 'FY '+year+'-'+String(year+1).slice(2);
+}
+
+function getCurrentPeriod(freq){
+  var now=new Date();
+  var y=now.getFullYear(), m=now.getMonth()+1;
+  // Indian FY: Apr-Mar
+  var fy=m>=4?y:y-1;
+  if(freq==='monthly')   return {year:y,month:m,quarter:null};
+  if(freq==='quarterly'){
+    var q=m>=4&&m<=6?1:m>=7&&m<=9?2:m>=10&&m<=12?3:4;
+    return {year:fy,month:null,quarter:q};
+  }
+  return {year:fy,month:null,quarter:null};
+}
+
+function WorksheetsModule({org, supabase, cu, allWorkspaces}){
+  var [clients,setClients]=useState([]);
+  var [activeType,setActiveType]=useState(null);
+  var [worksheet,setWorksheet]=useState(null); // current period worksheet
+  var [rows,setRows]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [periodYear,setPeriodYear]=useState(new Date().getFullYear());
+  var [periodMonth,setPeriodMonth]=useState(new Date().getMonth()+1);
+  var [periodQuarter,setPeriodQuarter]=useState(1);
+  var [showCreateTask,setShowCreateTask]=useState(null); // {row, client}
+  var [saving,setSaving]=useState(false);
+  var [toast,setToast]=useState(null);
+
+  // Get all work types used by clients in this org
+  var [allTypes,setAllTypes]=useState([]);
+
+  useEffect(function(){loadClients();},[org.id]);
+  useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
+
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  async function loadClients(){
+    setLoading(true);
+    var r=await supabase.from('clients').select('*').eq('org_id',org.id).order('name');
+    if(r.data){
+      setClients(r.data);
+      // Collect all work types from clients
+      var types=new Set();
+      r.data.forEach(function(c){
+        var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
+        wts.forEach(function(t){types.add(t.trim());});
+      });
+      var typeArr=Array.from(types).filter(function(t){return WS_TYPE_CONFIGS[t];});
+      setAllTypes(typeArr);
+      if(typeArr.length>0&&!activeType){
+        setActiveType(typeArr[0]);
+        var freq=WS_TYPE_CONFIGS[typeArr[0]]?WS_TYPE_CONFIGS[typeArr[0]].frequency:'monthly';
+        var p=getCurrentPeriod(freq);
+        setPeriodYear(p.year);
+        if(p.month)setPeriodMonth(p.month);
+        if(p.quarter)setPeriodQuarter(p.quarter);
+      }
+    }
+    setLoading(false);
+  }
+
+  async function loadWorksheet(){
+    if(!activeType)return;
+    var cfg=WS_TYPE_CONFIGS[activeType]||{frequency:'monthly',cols:[]};
+    var label=getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter);
+    // Find or create worksheet for this period
+    var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',label).maybeSingle();
+    var ws=rw.data;
+    if(!ws){
+      // Auto-create worksheet
+      var ins=await supabase.from('worksheets').insert({
+        org_id:org.id,work_type:activeType,period_label:label,
+        period_year:periodYear,period_month:cfg.frequency==='monthly'?periodMonth:null,
+        period_quarter:cfg.frequency==='quarterly'?periodQuarter:null,
+        frequency:cfg.frequency,created_by:cu.id
+      }).select().single();
+      ws=ins.data;
+    }
+    setWorksheet(ws);
+    if(ws){
+      // Load rows, auto-create for missing clients
+      var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws.id);
+      var existingRows=rr.data||[];
+      // Get clients for this work type
+      var typeClients=clients.filter(function(c){
+        var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
+        return wts.some(function(t){return t.trim()===activeType;});
+      });
+      // Auto-insert missing rows
+      var existingClientIds=existingRows.map(function(r){return r.client_id;});
+      var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
+      if(missing.length>0){
+        var newRows=missing.map(function(c){return{worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};});
+        var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
+        existingRows=[...existingRows,...(ins2.data||[])];
+      }
+      // Sort by client name
+      var clientMap={};
+      typeClients.forEach(function(c){clientMap[c.id]=c;});
+      existingRows.sort(function(a,b){
+        var na=(clientMap[a.client_id]||{}).name||'';
+        var nb=(clientMap[b.client_id]||{}).name||'';
+        return na.localeCompare(nb);
+      });
+      setRows(existingRows);
+    }
+  }
+
+  async function toggleCell(rowId,key,currentVal){
+    var newVal=!currentVal;
+    await supabase.from('worksheet_rows').update({data:supabase.rpc?undefined:undefined}).eq('id',rowId);
+    // Use jsonb update
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var newData=Object.assign({},row.data||{});
+    newData[key]=newVal;
+    await supabase.from('worksheet_rows').update({data:newData}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:newData}):r;});});
+  }
+
+  async function updateComment(rowId,val){
+    await supabase.from('worksheet_rows').update({comments:val}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{comments:val}):r;});});
+  }
+
+  async function updateStatus(rowId,val){
+    await supabase.from('worksheet_rows').update({status:val}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{status:val}):r;});});
+  }
+
+  var cfg=activeType&&WS_TYPE_CONFIGS[activeType]?WS_TYPE_CONFIGS[activeType]:{frequency:'monthly',cols:[]};
+  var typeClients=clients.filter(function(c){
+    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
+    return wts.some(function(t){return t.trim()===activeType;});
+  });
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+
+  var periodLabel=activeType?getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter):'';
+
+  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+
+  return<div style={{padding:'0 0 60px'}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Worksheets</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {allTypes.length} work types</div>
+      </div>
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    allTypes.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
+      <div style={{fontSize:32,marginBottom:12}}>📋</div>
+      <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No work types assigned</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to Client Master Data → edit each client → Work Types tab to assign work types.</div>
+    </div>:<div>
+      {/* Work type tabs */}
+      <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
+        {allTypes.map(function(t){
+          var active=activeType===t;
+          return<button key={t} onClick={function(){
+            setActiveType(t);
+            var f2=WS_TYPE_CONFIGS[t]?WS_TYPE_CONFIGS[t].frequency:'monthly';
+            var p2=getCurrentPeriod(f2);
+            setPeriodYear(p2.year);
+            if(p2.month)setPeriodMonth(p2.month);
+            if(p2.quarter)setPeriodQuarter(p2.quarter);
+          }} style={{padding:'8px 16px',border:'none',borderBottom:active?'2px solid #6b8cad':'2px solid transparent',background:'none',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>{t}</button>;
+        })}
+      </div>
+
+      {/* Period selector */}
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+        <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>Period:</div>
+        {cfg.frequency==='monthly'&&<>
+          <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+            {MONTHS.map(function(m,i){return<option key={m} value={i+1}>{m}</option>;})}
+          </select>
+        </>}
+        {cfg.frequency==='quarterly'&&<>
+          <select value={periodQuarter} onChange={function(e){setPeriodQuarter(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+            {QUARTERS.map(function(q,i){return<option key={q} value={i+1}>{q}</option>;})}
+          </select>
+        </>}
+        <select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{cfg.frequency==='yearly'?'FY '+y+'-'+String(y+1).slice(2):y}</option>;})}
+        </select>
+        <div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>
+        {/* Summary stats */}
+        {rows.length>0&&<div style={{marginLeft:'auto',display:'flex',gap:12,fontSize:11,color:'var(--tf-text-sub)'}}>
+          {cfg.cols.map(function(col){
+            var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
+            return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}</span>;
+          })}
+        </div>}
+      </div>
+
+      {/* Table */}
+      {typeClients.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
+        No clients have {activeType} as a work type. Add clients in Client Master Data.
+      </div>:
+      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
+          <thead>
+            <tr style={{background:'rgba(107,140,173,0.07)'}}>
+              <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
+              {cfg.cols.map(function(col){return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:80}}>{col.label}</th>;})}
+              <th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>
+              <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>
+              <th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(function(row,ri){
+              var client=clientMap[row.client_id];
+              if(!client)return null;
+              var d=row.data||{};
+              var allDone=cfg.cols.length>0&&cfg.cols.every(function(c){return d[c.key];});
+              return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.02)':'transparent',transition:'background 0.15s'}}>
+                <td style={{padding:'10px 14px'}}>
+                  <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}</div>
+                  {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{client.display_name}</div>}
+                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
+                </td>
+                {cfg.cols.map(function(col){
+                  var val=!!(d[col.key]);
+                  return<td key={col.key} style={{padding:'10px 10px',textAlign:'center'}}>
+                    <div onClick={function(){toggleCell(row.id,col.key,val);}} style={{width:22,height:22,borderRadius:5,border:'2px solid',borderColor:val?'#22c55e':'var(--tf-border)',background:val?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'all 0.15s'}}>
+                      {val&&<span style={{color:'#fff',fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
+                    </div>
+                  </td>;
+                })}
+                <td style={{padding:'10px 10px',textAlign:'center'}}>
+                  <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
+                    style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC_STATUS[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize'}}>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </td>
+                <td style={{padding:'10px 14px'}}>
+                  <input value={row.comments||''} onChange={function(e){var v=e.target.value;setRows(function(p){return p.map(function(r){return r.id===row.id?Object.assign({},r,{comments:v}):r;});});}}
+                    onBlur={function(e){updateComment(row.id,e.target.value);}}
+                    placeholder="Add note..."
+                    style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:12,width:'100%',outline:'none',fontFamily:'inherit',padding:'2px 0'}}/>
+                </td>
+                <td style={{padding:'10px 10px',textAlign:'center'}}>
+                  {row.task_card_id?<span style={{fontSize:11,fontWeight:600,color:'#22c55e',background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.25)',borderRadius:20,padding:'3px 10px'}}>✓ Created</span>:
+                  <button onClick={function(){setShowCreateTask({row,client});}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 10px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>+ Create</button>}
+                </td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+      </div>}
+    </div>}
+
+    {showCreateTask&&<WorksheetTaskModal row={showCreateTask.row} client={showCreateTask.client} workType={activeType} period={periodLabel} allWorkspaces={allWorkspaces} supabase={supabase} cu={cu} orgId={org.id} onClose={function(){setShowCreateTask(null);}} onCreated={function(taskId,wsId){supabase.from('worksheet_rows').update({task_card_id:taskId,task_workspace_id:wsId}).eq('id',showCreateTask.row.id).then(function(){setRows(function(p){return p.map(function(r){return r.id===showCreateTask.row.id?Object.assign({},r,{task_card_id:taskId,task_workspace_id:wsId}):r;});});setShowCreateTask(null);showToast('Task card created!');});}}/>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
+function WorksheetTaskModal({row,client,workType,period,allWorkspaces,supabase,cu,orgId,onClose,onCreated}){
+  var [wsId,setWsId]=useState(allWorkspaces&&allWorkspaces.length>0?allWorkspaces[0].id:'');
+  var [title,setTitle]=useState(workType+' - '+(client.display_name||client.name)+' - '+period);
+  var [saving,setSaving]=useState(false);
+  var [err,setErr]=useState('');
+  var orgWs=(allWorkspaces||[]).filter(function(w){return w.org_id===orgId;});
+  var wsOptions=orgWs.length>0?orgWs:allWorkspaces||[];
+
+  async function create(){
+    if(!wsId){setErr('Select a workspace');return;}
+    if(!title.trim()){setErr('Title required');return;}
+    setSaving(true);
+    // Get first status of selected workspace
+    var wsData=await supabase.from('workspaces').select('custom_statuses,color').eq('id',wsId).single();
+    var statuses=(wsData.data&&wsData.data.custom_statuses)||['Todo'];
+    var r=await supabase.from('tasks').insert({
+      title:title.trim(),
+      workspace_id:wsId,
+      status:statuses[0],
+      priority:'Medium',
+      created_by:cu.id,
+      sort_order:Date.now()
+    }).select().single();
+    setSaving(false);
+    if(r.error){setErr(r.error.message);return;}
+    onCreated(r.data.id,wsId);
+  }
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit',boxSizing:'border-box'};
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:420,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 18px',borderBottom:'1px solid var(--tf-border)'}}>
+        <h3 style={{margin:0,fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>Create Task Card</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 18px'}}>
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:5,display:'block'}}>Task Title</label>
+          <input value={title} onChange={function(e){setTitle(e.target.value);}} style={INP}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:5,display:'block'}}>Workspace</label>
+          {wsOptions.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No workspaces linked to this organisation. Link workspaces in Org Settings.</div>:
+          <select value={wsId} onChange={function(e){setWsId(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+            {wsOptions.map(function(w){return<option key={w.id} value={w.id}>{w.name}</option>;})}
+          </select>}
+        </div>
+        <div style={{background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.15)',borderRadius:8,padding:'9px 12px',fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.7}}>
+          <div><b style={{color:'var(--tf-text)'}}>Client:</b> {client.name}{client.pan?' · PAN: '+client.pan:''}</div>
+          <div><b style={{color:'var(--tf-text)'}}>Work Type:</b> {workType} · <b style={{color:'var(--tf-text)'}}>Period:</b> {period}</div>
+        </div>
+        {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'12px 18px',borderTop:'1px solid var(--tf-border)'}}>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+        <button onClick={create} disabled={saving||wsOptions.length===0} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>
+          {saving?'Creating...':'Create Task'}
+        </button>
+      </div>
+    </div>
+  </div>;
+}
+
 // ── Org Create Modal ───────────────────────────────────────────────
 function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
   var [name,setName]=useState('');
@@ -2007,7 +2361,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
         <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
       </div>
       <div style={{display:'flex',gap:2}}>
-        {[{id:'clients',label:'Client Master Data',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
+        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
           return<button key={t.id} onClick={function(){if(t.avail)setTab(t.id);}} disabled={!t.avail}
             style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.avail?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.avail?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.avail?1:0.5,whiteSpace:'nowrap'}}>
             {t.label}{!t.avail&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
@@ -2017,6 +2371,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     </div>
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
       {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces}/>}
       {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {tab==='settings'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
     </div>
