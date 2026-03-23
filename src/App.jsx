@@ -595,27 +595,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [loading,setLoading]=useState(true);const [toastData,setToastData]=useState(null)
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
   const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
-  const userMenuRef=useRef();const wsMenuRef=useRef();const searchInputRef=useRef(null)
+  const userMenuRef=useRef();const wsMenuRef=useRef()
 
   useEffect(()=>{localStorage.setItem('tf-light',lightMode?'1':'0')},[lightMode])
 
-  useEffect(()=>{
-    const onKeyDown=e=>{
-      if(!activeWs)return
-      const target=e.target
-      const typingTarget=target&&((target.tagName==='INPUT')||(target.tagName==='TEXTAREA')||target.isContentEditable)
-      if(e.key==='/'&&!typingTarget){
-        e.preventDefault()
-        searchInputRef.current?.focus()
-      }
-      if(e.key==='Escape'&&document.activeElement===searchInputRef.current){
-        setSearch('')
-        searchInputRef.current.blur()
-      }
-    }
-    window.addEventListener('keydown',onKeyDown)
-    return()=>window.removeEventListener('keydown',onKeyDown)
-  },[activeWs])
 
   const showToast=useCallback((msg,type='ok')=>{setToastData({msg,type});setTimeout(()=>setToastData(null),4000)},[])
   const activeWs=workspaces.find(w=>w.id===activeWsId)||null
@@ -694,7 +677,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.35)`:G.border}`,background:active?`rgba(${wrgb},0.12)`:'transparent',color:active?ws.color:G.textSub,cursor:'pointer',fontSize:12,fontWeight:active?700:500,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background=G.surface;e.currentTarget.style.color=G.text}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color=G.textSub}}}><span style={{fontSize:13}}>{ws.icon}</span>{ws.name}</button>})}
         <button onClick={()=>setWsForm('new')} style={{width:26,height:26,borderRadius:G.radiusSm,border:`1px dashed ${G.border}`,background:'transparent',color:G.textMut,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6366f1';e.currentTarget.style.color='#6366f1'}} onMouseLeave={e=>{e.currentTarget.style.borderColor=G.border;e.currentTarget.style.color=G.textMut}}>+</button>
       </div>
-      {activeWs&&<input ref={searchInputRef} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search… (/ )" title="Press / to focus search" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'5px 13px',color:G.text,fontSize:12,outline:'none',width:150,fontFamily:G.font,flexShrink:0}}/>}
+      {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:'100px',padding:'5px 13px',color:G.text,fontSize:12,outline:'none',width:150,fontFamily:G.font,flexShrink:0}}/>}
       {activeWs&&<select value={fPriority} onChange={e=>setFPriority(e.target.value)} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:G.radiusSm,padding:'5px 8px',color:G.textSub,fontSize:11,cursor:'pointer',outline:'none',fontFamily:G.font,flexShrink:0}}><option value="">Priority</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select>}
       {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:G.font}}>✕</button>}
       {/* Workspace settings dropdown */}
