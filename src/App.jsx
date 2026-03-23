@@ -554,7 +554,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
       <Avatar user={eu} size={32}/>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:12,fontWeight:700,color:selected?ac:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-        <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</div>
+        
       </div>
       <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:'var(--tf-text-mut)'}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
         {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
@@ -1068,6 +1068,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [fPriority,setFPriority]=useState('');const [search,setSearch]=useState('')
   const [loading,setLoading]=useState(true);const [toastData,setToastData]=useState(null)
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
+  const [showTransferOwner,setShowTransferOwner]=useState(false)
   const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
   const userMenuRef=useRef();const wsMenuRef=useRef()
 
@@ -1204,6 +1205,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
+  const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
   const handleOrgBack=async function(){setActiveOrg(null);var r1=await supabase.from('workspaces').select('*');var r2=await supabase.from('organizations').select('*').order('name');if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
@@ -1242,7 +1244,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             ...(myRole==='owner'||myRole==='admin'?[{label:'Edit workspace',icon:'✏️',action:()=>{setWsForm({...activeWs});setShowWsMenu(false)}},{label:'Manage columns',icon:'⚙',action:()=>{setStatusMgr(true);setShowWsMenu(false)}}]:[]),
             {label:'Members & Invites',icon:'👥',action:()=>{setShowMembers(true);setShowWsMenu(false)}},
             {label:'Import / Export',icon:'📊',action:()=>{setShowImEx(true);setShowWsMenu(false)}},
-            ...(myRole==='owner'?[{label:'Delete workspace',icon:'🗑',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[{label:'Leave workspace',icon:'🚪',action:()=>{if(window.confirm('Leave this workspace?'))leaveWs();setShowWsMenu(false)},danger:true}])
+            ...(myRole==='owner'?[{label:'Transfer Ownership',icon:'🔑',action:()=>{setShowTransferOwner(true);setShowWsMenu(false)}},{label:'Delete workspace',icon:'🗑',action:()=>{setDelWs(activeWs);setShowWsMenu(false)},danger:true}]:[{label:'Leave workspace',icon:'🚪',action:()=>{if(window.confirm('Leave this workspace?'))leaveWs();setShowWsMenu(false)},danger:true}])
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
@@ -1452,6 +1454,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     <StatusManager open={statusMgr} onClose={()=>setStatusMgr(false)} statuses={statuses} wsColor={wsColor} onSave={saveStatuses}/>
     {showImEx&&activeWs&&<ImportExportModal open onClose={()=>setShowImEx(false)} tasks={tasks} wsMembers={wsMembers} statuses={statuses} wsName={activeWs.name} onImport={importTasks}/>}
     {showMembers&&activeWs&&<MembersModal open onClose={()=>setShowMembers(false)} ws={activeWs} wsMembers={wsMembers} cu={cu} myRole={myRole} showToast={showToast}/>}
+      {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name');if(r.data)setOrgs(r.data);}}/> }
   </div>
@@ -1899,6 +1902,64 @@ function OrgMembersPanel({org,cu,supabase}){
     </div>}
 
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
+
+function TransferOwnerModal({open,ws,wsMembers,cu,supabase,onClose,onTransferred}){
+  var [newOwner,setNewOwner]=useState('');
+  var [saving,setSaving]=useState(false);
+  var [err,setErr]=useState('');
+  if(!open)return null;
+  var others=wsMembers.filter(function(m){return m.id!==cu.id;});
+  async function doTransfer(){
+    if(!newOwner){setErr('Select a member');return;}
+    if(!window.confirm('Transfer ownership to this member? You will become an admin.'))return;
+    setSaving(true);
+    var r=await supabase.from('workspaces').update({owner_id:newOwner}).eq('id',ws.id);
+    if(r.error){setErr(r.error.message);setSaving(false);return;}
+    // Update workspace_members roles
+    await supabase.from('workspace_members').update({role:'admin'}).eq('workspace_id',ws.id).eq('user_id',cu.id);
+    await supabase.from('workspace_members').update({role:'owner'}).eq('workspace_id',ws.id).eq('user_id',newOwner);
+    setSaving(false);
+    onTransferred();
+  }
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 18px',borderBottom:'1px solid var(--tf-border)'}}>
+        <h3 style={{margin:0,fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>🔑 Transfer Ownership</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
+      </div>
+      <div style={{padding:'16px 18px'}}>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:14,lineHeight:1.6}}>
+          Transfer ownership of <strong style={{color:'var(--tf-text)'}}>{ws.name}</strong> to another member. You will become an admin.
+        </div>
+        <label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6,display:'block'}}>New Owner</label>
+        <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:220,overflowY:'auto'}}>
+          {others.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No other members in this workspace</div>:
+          others.map(function(m){
+            var sel=newOwner===m.id;
+            return<div key={m.id} onClick={function(){setNewOwner(m.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:9,border:'1px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'rgba(107,140,173,0.1)':'var(--tf-surface)',cursor:'pointer'}}>
+              <div style={{width:30,height:30,borderRadius:'50%',background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700,color:'#fff',flexShrink:0}}>
+                {(m.name||m.email||'?').charAt(0).toUpperCase()}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{m.name||m.email}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{m.role||'member'}</div>
+              </div>
+              {sel&&<span style={{fontSize:14,color:'#6b8cad'}}>✓</span>}
+            </div>;
+          })}
+        </div>
+        {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:10,background:'rgba(239,68,68,0.08)',padding:'7px 10px',borderRadius:7}}>{err}</div>}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'12px 18px',borderTop:'1px solid var(--tf-border)'}}>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+        <button onClick={doTransfer} disabled={saving||!newOwner} style={{background:'#f59e0b',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving||!newOwner?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving||!newOwner?0.5:1}}>
+          {saving?'Transferring...':'Transfer Ownership'}
+        </button>
+      </div>
+    </div>
   </div>;
 }
 
