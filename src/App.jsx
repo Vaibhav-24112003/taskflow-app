@@ -332,8 +332,6 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
         return<div key={m.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:8}}>
           <Avatar user={eu} size={36}/>
           <div style={{flex:1}}>
-            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{m.name||m.email}{isSelf?<span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:6}}>(You)</span>:''}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{m.email}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:10,fontWeight:700,color:rc,background:`${rc}18`,border:`1px solid ${rc}30`,borderRadius:'100px',padding:'2px 9px'}}>{(m.role||'member').toUpperCase()}</span>
@@ -553,7 +551,6 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
     return<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${selected?`rgba(${acRgb},0.55)`:'var(--tf-border)'}`,background:selected?`rgba(${acRgb},0.09)`:'var(--tf-surface)',transition:G.trans,flex:'1 1 180px'}}>
       <Avatar user={eu} size={32}/>
       <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12,fontWeight:700,color:selected?ac:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
         
       </div>
       <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:'var(--tf-text-mut)'}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -1001,7 +998,6 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
         <Avatar user={enrich(selMem)} size={52} ring={wsColor}/>
         <div style={{flex:1,minWidth:160}}>
           <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{selMem.name||selMem.email}</div>
-          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{selMem.email}</div>
           <div style={{fontSize:11,color:'#10b981',marginTop:4,fontWeight:600}}>● Workspace member</div>
         </div>
         {/* Stats */}
@@ -1439,7 +1435,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                   <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Team Workload</div>
                   {(myRole==='owner'||myRole==='admin')&&<button onClick={()=>setShowMembers(true)} style={{background:'none',border:'none',color:'#8fa5be',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>+ Invite</button>}
                 </div>
-                {wsMembers.map(m=>{const a=tasks.filter(t=>getAssignees(t).includes(m.id)&&t.created_by!==m.id).length;const o=tasks.filter(t=>t.created_by===m.id&&!getAssignees(t).some(id=>id!==m.id)).length;return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,marginBottom:12}}><Avatar user={enrich(m)} size={26}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{m.name?.split(' ')[0]||m.email}</div><div style={{display:'flex',gap:8}}><span style={{fontSize:10,color:'#8fa5be'}}>{a} assigned</span><span style={{fontSize:10,color:'var(--tf-text-mut)'}}>·</span><span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{o} own</span></div></div></div>})}
               </div>
             </div>
           </div>}
