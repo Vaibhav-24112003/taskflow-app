@@ -332,6 +332,8 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
         return<div key={m.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,padding:'10px 14px',marginBottom:8}}>
           <Avatar user={eu} size={36}/>
           <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{eu.name||m.email}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{m.email}</div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <span style={{fontSize:10,fontWeight:700,color:rc,background:`${rc}18`,border:`1px solid ${rc}30`,borderRadius:'100px',padding:'2px 9px'}}>{(m.role||'member').toUpperCase()}</span>
@@ -551,7 +553,7 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
     return<div onClick={onClick} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${selected?`rgba(${acRgb},0.55)`:'var(--tf-border)'}`,background:selected?`rgba(${acRgb},0.09)`:'var(--tf-surface)',transition:G.trans,flex:'1 1 180px'}}>
       <Avatar user={eu} size={32}/>
       <div style={{flex:1,minWidth:0}}>
-        
+        <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isSelf?eu.name+' (You)':eu.name||m.email}</div>
       </div>
       <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${selected?ac:'var(--tf-text-mut)'}`,background:selected?ac:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
         {selected&&<span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
