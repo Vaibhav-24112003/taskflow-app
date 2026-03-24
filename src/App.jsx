@@ -1438,6 +1438,31 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                   {(myRole==='owner'||myRole==='admin')&&<button onClick={()=>setShowMembers(true)} style={{background:'none',border:'none',color:'#8fa5be',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:G.font}}>+ Invite</button>}
                 </div>
               </div>
+                  {wsMembers.length===0
+                    ?<div style={{textAlign:'center',padding:'20px 0',color:'var(--tf-text-sub)',fontSize:12}}>No members yet. Invite your team.</div>
+                    :<div style={{display:'flex',flexDirection:'column',gap:10}}>
+                      {wsMembers.map(m=>{
+                        const eu=enrich(m);
+                        const mTasks=allT.filter(t=>getAssignees(t).includes(m.id));
+                        const mDone=mTasks.filter(t=>t.status==='Done'||t.status==='done').length;
+                        const mOvd=mTasks.filter(t=>isOvd(t.due_date)).length;
+                        const pct=mTasks.length?Math.round(mDone/mTasks.length*100):0;
+                        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10}}>
+                          <Avatar user={eu} size={28}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                              <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{eu.name||eu.email}</span>
+                              <span style={{fontSize:11,color:'var(--tf-text-sub)',flexShrink:0,marginLeft:6}}>{mTasks.length} tasks{mOvd>0&&<span style={{color:'#ef4444',marginLeft:4}}> · {mOvd} overdue</span>}</span>
+                            </div>
+                            <div style={{height:4,background:'var(--tf-surface-hov)',borderRadius:2,overflow:'hidden'}}>
+                              <div style={{width:pct+'%',height:'100%',background:pct===100?'#22c55e':wsColor,borderRadius:2,transition:'width 0.3s'}}/>
+                            </div>
+                          </div>
+                          <span style={{fontSize:11,fontWeight:700,color:pct===100?'#22c55e':'var(--tf-text-sub)',flexShrink:0,minWidth:32,textAlign:'right'}}>{pct}%</span>
+                        </div>;
+                      })}
+                    </div>
+                  }
             </div>
           </div>}
 
