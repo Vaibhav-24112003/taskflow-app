@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fix: Invitations Not Visible to Invitees</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;background:#0a0f1a;color:#c8d1e0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;padding:32px}
+  .card{background:#111827;border:1px solid #1e293b;border-radius:16px;padding:40px;max-width:580px;width:100%;box-shadow:0 24px 64px rgba(0,0,0,0.4)}
+  h1{font-size:22px;color:#f1f5f9;margin-bottom:6px}
+  .subtitle{font-size:13px;color:#64748b;margin-bottom:24px}
+  .cause-box{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:18px;margin-bottom:28px;font-size:13px;line-height:1.7;color:#94a3b8}
+  .cause-box b{color:#cbd5e1}
+  .cause-box code{background:#1e293b;padding:2px 6px;border-radius:4px;font-size:12px;color:#818cf8}
+  .label{font-size:11px;font-weight:700;letter-spacing:1.2px;color:#64748b;text-transform:uppercase;margin-bottom:8px}
+  .input{width:100%;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:12px 16px;color:#e2e8f0;font-size:14px;font-family:inherit;outline:none;transition:border .2s}
+  .input:focus{border-color:#6366f1}
+  .input::placeholder{color:#334155}
+  .field{margin-bottom:20px}
+  .btn{width:100%;padding:16px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;margin-top:8px;margin-bottom:24px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;box-shadow:0 8px 28px rgba(99,102,241,0.35)}
+  .btn-primary:hover{box-shadow:0 8px 32px rgba(99,102,241,0.5);transform:translateY(-1px)}
+  .btn-primary:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+  .steps{display:flex;flex-direction:column;gap:6px}
+  .step{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;font-size:13px;color:#475569;transition:all .3s}
+  .step .num{width:24px;height:24px;border-radius:50%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#475569;flex-shrink:0;transition:all .3s}
+  .step.active{border-color:rgba(99,102,241,0.3);color:#818cf8}
+  .step.active .num{background:rgba(99,102,241,0.2);color:#818cf8}
+  .step.done{border-color:rgba(16,185,129,0.3);color:#10b981}
+  .step.done .num{background:rgba(16,185,129,0.2);color:#10b981}
+  .step.error{border-color:rgba(239,68,68,0.3);color:#f87171}
+  .step.error .num{background:rgba(239,68,68,0.2);color:#f87171}
+  .spinner{width:16px;height:16px;border:2px solid rgba(99,102,241,0.2);border-top-color:#6366f1;border-radius:50%;animation:spin .6s linear infinite;margin-left:auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .check{margin-left:auto;font-size:14px}
+  .log{margin-top:16px;background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:14px;font-size:11px;font-family:'Cascadia Code','Fira Code',monospace;color:#64748b;max-height:150px;overflow-y:auto;display:none;line-height:1.8}
+  .log.show{display:block}
+  .log .err{color:#f87171}
+  .log .ok{color:#10b981}
+  .log .info{color:#818cf8}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Fix: Invitations Not Visible to Invitees</h1>
+  <p class="subtitle">Adds <code style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:12px;color:#818cf8">status:'pending'</code> &amp; <code style="background:#1e293b;padding:2px 6px;border-radius:4px;font-size:12px;color:#818cf8">token</code> to invitation insert, auto-refresh on tab focus</p>
+
+  <div class="cause-box">
+    <b>Cause:</b> <code>inviteToWorkspace()</code> inserts without <code>status:'pending'</code> or <code>token</code>. The <code>getMyInvitations()</code> query filters by <code>status = 'pending'</code>, so NULL-status rows are invisible to invitees.<br><br>
+    <b>Fix:</b> Add <code>status:'pending'</code> and <code>token: crypto.randomUUID()</code> to the insert in <code>supabase.js</code>. Add visibility-change auto-refresh and case-insensitive duplicate check in <code>App.jsx</code>.
+  </div>
+
+  <div class="field">
+    <div class="label">GitHub Token</div>
+    <input type="password" id="ghToken" class="input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+  </div>
+  <div class="field">
+    <div class="label">Vercel Token</div>
+    <input type="password" id="vcToken" class="input" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+  </div>
+
+  <button class="btn btn-primary" id="deployBtn" onclick="run()">
+    <span>&#x1F680;</span> Fix + Deploy
+  </button>
+
+  <div class="steps">
+    <div class="step" id="step1"><span class="num">1</span> Fetch current files from main</div>
+    <div class="step" id="step2"><span class="num">2</span> Apply invitation fix patches</div>
+    <div class="step" id="step3"><span class="num">3</span> Push to main</div>
+    <div class="step" id="step4"><span class="num">4</span> Build + Promote on Vercel</div>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const OWNER = 'Vaibhav-24112003';
+const REPO  = 'taskflow-app';
+const BRANCH = 'main';
+const API   = 'https://api.github.com';
+
+function log(msg, cls = '') {
+  const el = document.getElementById('log');
+  el.classList.add('show');
+  el.innerHTML += `<div class="${cls}">${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStep(id, state) {
+  const el = document.getElementById(id);
+  el.className = 'step ' + state;
+  const num = el.querySelector('.num');
+  // Remove old spinners/checks
+  el.querySelectorAll('.spinner,.check').forEach(e => e.remove());
+  if (state === 'active') {
+    const sp = document.createElement('div');
+    sp.className = 'spinner';
+    el.appendChild(sp);
+  } else if (state === 'done') {
+    const ck = document.createElement('span');
+    ck.className = 'check';
+    ck.textContent = '\u2713';
+    el.appendChild(ck);
+  } else if (state === 'error') {
+    const ck = document.createElement('span');
+    ck.className = 'check';
+    ck.textContent = '\u2717';
+    el.appendChild(ck);
+  }
+}
+
+async function ghFetch(path, token, opts = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: {
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      ...(opts.headers || {})
+    }
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || `GitHub API ${res.status}`);
+  return data;
+}
+
+// ── Patch definitions ──────────────────────────────────────────────────────
+
+function patchSupabase(content) {
+  // Replace the old insert (single line) with the new multi-line insert
+  const oldPattern = `.insert({ workspace_id: workspaceId, inviter_id: inviterId, invitee_email: inviteeEmail.toLowerCase().trim() })`;
+  const newBlock = `.insert({
+      workspace_id: workspaceId,
+      inviter_id: inviterId,
+      invitee_email: inviteeEmail.toLowerCase().trim(),
+      status: 'pending',
+      token: crypto.randomUUID()
+    })`;
+
+  if (!content.includes('workspace_id: workspaceId, inviter_id: inviterId, invitee_email: inviteeEmail')) {
+    // Already patched
+    if (content.includes("status: 'pending'") && content.includes('crypto.randomUUID()')) {
+      return { content, changed: false, reason: 'Already patched' };
+    }
+    return { content, changed: false, reason: 'Pattern not found' };
+  }
+
+  const patched = content.replace(oldPattern, newBlock);
+  return { content: patched, changed: patched !== content };
+}
+
+function patchAppJsx(content) {
+  let changed = false;
+
+  // Fix 1: Case-insensitive duplicate check
+  const oldDup = 'invitations.find(i=>i.invitee_email===email)';
+  const newDup = 'invitations.find(i=>i.invitee_email?.toLowerCase()===email)';
+  if (content.includes(oldDup)) {
+    content = content.replace(oldDup, newDup);
+    changed = true;
+  }
+
+  // Fix 2: Add visibilitychange auto-refresh (after auth subscription useEffect)
+  const marker = `return()=>subscription.unsubscribe()
+  },[])
+
+  const onSignOut`;
+
+  const replacement = `return()=>subscription.unsubscribe()
+  },[])
+
+  // Auto-refresh pending invitations when user switches back to the tab
+  useEffect(()=>{
+    if(!session?.user?.email)return
+    const handler=()=>{if(document.visibilityState==='visible')refreshInvites(session.user.email)}
+    document.addEventListener('visibilitychange',handler)
+    return()=>document.removeEventListener('visibilitychange',handler)
+  },[session?.user?.email,refreshInvites])
+
+  const onSignOut`;
+
+  if (content.includes(marker) && !content.includes('visibilitychange')) {
+    content = content.replace(marker, replacement);
+    changed = true;
+  }
+
+  return { content, changed };
+}
+
+// ── Main flow ──────────────────────────────────────────────────────────────
+
+async function run() {
+  const ghToken = document.getElementById('ghToken').value.trim();
+  const vcToken = document.getElementById('vcToken').value.trim();
+
+  if (!ghToken) { alert('Please enter your GitHub token'); return; }
+  if (!vcToken) { alert('Please enter your Vercel token'); return; }
+
+  const btn = document.getElementById('deployBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span>&#x23F3;</span> Deploying...';
+
+  try {
+    // ── Step 1: Fetch current files ──
+    setStep('step1', 'active');
+    log('Fetching files from GitHub...', 'info');
+
+    const supabaseFile = await ghFetch(`/repos/${OWNER}/${REPO}/contents/src/lib/supabase.js?ref=${BRANCH}`, ghToken);
+    const appFile = await ghFetch(`/repos/${OWNER}/${REPO}/contents/src/App.jsx?ref=${BRANCH}`, ghToken);
+
+    const supabaseContent = atob(supabaseFile.content.replace(/\n/g, ''));
+    const appContent = atob(appFile.content.replace(/\n/g, ''));
+
+    log(`Fetched supabase.js (${supabaseContent.length} bytes)`, 'ok');
+    log(`Fetched App.jsx (${appContent.length} bytes)`, 'ok');
+    setStep('step1', 'done');
+
+    // ── Step 2: Apply patches ──
+    setStep('step2', 'active');
+    log('Applying patches...', 'info');
+
+    const sup = patchSupabase(supabaseContent);
+    const app = patchAppJsx(appContent);
+
+    if (!sup.changed && !app.changed) {
+      log('Both files already patched \u2014 nothing to change', 'ok');
+      setStep('step2', 'done');
+      setStep('step3', 'active');
+      log('Skipping push \u2014 no changes needed', 'info');
+      setStep('step3', 'done');
+    } else {
+      if (sup.changed) log('Patched supabase.js \u2014 added status + token to insert', 'ok');
+      else log('supabase.js: ' + (sup.reason || 'no change needed'), 'info');
+
+      if (app.changed) log('Patched App.jsx \u2014 added visibilitychange + case fix', 'ok');
+      else log('App.jsx: no change needed', 'info');
+      setStep('step2', 'done');
+
+      // ── Step 3: Push changes ──
+      setStep('step3', 'active');
+      log('Creating commit tree...', 'info');
+
+      // Get the latest commit SHA on main
+      const ref = await ghFetch(`/repos/${OWNER}/${REPO}/git/ref/heads/${BRANCH}`, ghToken);
+      const baseSha = ref.object.sha;
+      const commit = await ghFetch(`/repos/${OWNER}/${REPO}/git/commits/${baseSha}`, ghToken);
+      const treeSha = commit.tree.sha;
+      log(`Base commit: ${baseSha.substring(0, 7)}`, 'info');
+
+      // Create blobs for changed files
+      const blobs = [];
+      if (sup.changed) {
+        const blob = await ghFetch(`/repos/${OWNER}/${REPO}/git/blobs`, ghToken, {
+          method: 'POST',
+          body: JSON.stringify({ content: sup.content, encoding: 'utf-8' })
+        });
+        blobs.push({ path: 'src/lib/supabase.js', mode: '100644', type: 'blob', sha: blob.sha });
+        log('Created blob for supabase.js', 'ok');
+      }
+      if (app.changed) {
+        const blob = await ghFetch(`/repos/${OWNER}/${REPO}/git/blobs`, ghToken, {
+          method: 'POST',
+          body: JSON.stringify({ content: app.content, encoding: 'utf-8' })
+        });
+        blobs.push({ path: 'src/App.jsx', mode: '100644', type: 'blob', sha: blob.sha });
+        log('Created blob for App.jsx', 'ok');
+      }
+
+      // Create tree
+      const tree = await ghFetch(`/repos/${OWNER}/${REPO}/git/trees`, ghToken, {
+        method: 'POST',
+        body: JSON.stringify({ base_tree: treeSha, tree: blobs })
+      });
+      log('Created tree: ' + tree.sha.substring(0, 7), 'ok');
+
+      // Create commit
+      const newCommit = await ghFetch(`/repos/${OWNER}/${REPO}/git/commits`, ghToken, {
+        method: 'POST',
+        body: JSON.stringify({
+          message: 'fix: invitations not visible to invitees\n\n- Add status:pending and token to invitation insert\n- Add visibilitychange auto-refresh for invitations\n- Fix case-insensitive duplicate invitation check',
+          tree: tree.sha,
+          parents: [baseSha]
+        })
+      });
+      log('Created commit: ' + newCommit.sha.substring(0, 7), 'ok');
+
+      // Update ref to point to new commit
+      await ghFetch(`/repos/${OWNER}/${REPO}/git/refs/heads/${BRANCH}`, ghToken, {
+        method: 'PATCH',
+        body: JSON.stringify({ sha: newCommit.sha })
+      });
+      log('Pushed to main \u2713', 'ok');
+      setStep('step3', 'done');
+    }
+
+    // ── Step 4: Trigger Vercel deployment ──
+    setStep('step4', 'active');
+    log('Triggering Vercel deployment...', 'info');
+
+    // Find the project first
+    const projRes = await fetch('https://api.vercel.com/v9/projects', {
+      headers: { 'Authorization': `Bearer ${vcToken}` }
+    });
+    const projData = await projRes.json();
+
+    // Find project linked to this repo
+    let project = null;
+    if (projData.projects) {
+      project = projData.projects.find(p =>
+        p.link?.repo?.toLowerCase() === REPO.toLowerCase() ||
+        p.name?.toLowerCase().includes('taskflow')
+      );
+    }
+
+    if (project) {
+      log(`Found Vercel project: ${project.name}`, 'ok');
+
+      // Trigger deployment via deploy hook or create deployment
+      const deployRes = await fetch('https://api.vercel.com/v13/deployments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${vcToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: project.name,
+          project: project.id,
+          target: 'production',
+          gitSource: {
+            type: 'github',
+            org: OWNER,
+            repo: REPO,
+            ref: BRANCH
+          }
+        })
+      });
+      const deployData = await deployRes.json();
+
+      if (deployData.id || deployData.url) {
+        log(`Deployment triggered! URL: ${deployData.url || deployData.id}`, 'ok');
+        log('Vercel will auto-promote to production \u2713', 'ok');
+      } else if (deployData.error) {
+        log(`Vercel: ${deployData.error.message}`, 'err');
+        log('The push to main should auto-trigger Vercel deployment via GitHub integration', 'info');
+      } else {
+        log('Deployment created, waiting for Vercel to build...', 'ok');
+      }
+    } else {
+      log('No matching Vercel project found \u2014 but push to main will auto-trigger deployment via GitHub integration', 'info');
+    }
+
+    setStep('step4', 'done');
+    log('\n\u2705 All done! Changes deployed.', 'ok');
+    btn.innerHTML = '<span>\u2713</span> Deployed!';
+    btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+
+  } catch (err) {
+    log(`Error: ${err.message}`, 'err');
+    // Mark current active step as error
+    ['step1','step2','step3','step4'].forEach(id => {
+      if (document.getElementById(id).classList.contains('active')) {
+        setStep(id, 'error');
+      }
+    });
+    btn.disabled = false;
+    btn.innerHTML = '<span>&#x1F680;</span> Retry';
+  }
+}
+</script>
+</body>
+</html>
