@@ -1282,6 +1282,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
+        <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name');if(r.data)setOrgs(r.data);}}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
         <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
@@ -2260,7 +2261,7 @@ function WorksheetTaskModal({row,client,workType,period,allWorkspaces,supabase,c
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
   var orgWs=(allWorkspaces||[]).filter(function(w){return w.org_id===orgId;});
-  var wsOptions=orgWs.length>0?orgWs:allWorkspaces||[];
+  var wsOptions=allWorkspaces||[];
 
   async function create(){
     if(!wsId){setErr('Select a workspace');return;}
@@ -2314,6 +2315,50 @@ function WorksheetTaskModal({row,client,workType,period,allWorkspaces,supabase,c
         </button>
       </div>
     </div>
+  </div>;
+}
+
+
+function OrgInviteBanner({cu,supabase,onAccepted}){
+  var [invites,setInvites]=useState([]);
+  useEffect(function(){
+    if(!cu)return;
+    supabase.from('org_invitations')
+      .select('*, organizations(id,name)')
+      .eq('invitee_email',cu.email.toLowerCase())
+      .eq('status','pending')
+      .then(function(r){if(r.data&&r.data.length)setInvites(r.data);});
+  },[cu&&cu.id]);
+  if(!invites.length)return null;
+  async function accept(inv){
+    // Add to org_members
+    await supabase.from('organization_members').insert({org_id:inv.org_id,user_id:cu.id,role:inv.role||'member',joined_at:new Date().toISOString()});
+    // Mark invitation accepted
+    await supabase.from('org_invitations').update({status:'accepted'}).eq('id',inv.id);
+    setInvites(function(p){return p.filter(function(i){return i.id!==inv.id;});});
+    if(onAccepted)onAccepted();
+  }
+  async function decline(inv){
+    await supabase.from('org_invitations').update({status:'declined'}).eq('id',inv.id);
+    setInvites(function(p){return p.filter(function(i){return i.id!==inv.id;});});
+  }
+  return<div style={{marginBottom:20}}>
+    {invites.map(function(inv){
+      var org=inv.organizations||{};
+      return<div key={inv.id} style={{background:'linear-gradient(135deg,rgba(107,140,173,0.1),rgba(107,140,173,0.06))',border:'1px solid rgba(107,140,173,0.3)',borderRadius:12,padding:'14px 18px',marginBottom:10,display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+        <div style={{width:38,height:38,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff',flexShrink:0}}>
+          {(org.name||'O').charAt(0).toUpperCase()}
+        </div>
+        <div style={{flex:1,minWidth:160}}>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Organisation Invitation</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>You have been invited to join <b style={{color:'var(--tf-text)'}}>{org.name}</b> as <b style={{color:'#6b8cad'}}>{inv.role||'member'}</b></div>
+        </div>
+        <div style={{display:'flex',gap:8,flexShrink:0}}>
+          <button onClick={function(){accept(inv);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>✓ Accept</button>
+          <button onClick={function(){decline(inv);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'7px 14px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Decline</button>
+        </div>
+      </div>;
+    })}
   </div>;
 }
 
