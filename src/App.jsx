@@ -215,7 +215,7 @@ function MembersModal({open,onClose,ws,wsMembers,cu,myRole,showToast}){
     const email=inviteEmail.trim().toLowerCase()
     if(!email||!email.includes('@')){showToast('Enter a valid email','err');return}
     if(wsMembers.find(m=>m.email?.toLowerCase()===email)){showToast('Already a member','warn');return}
-    if(invitations.find(i=>i.invitee_email?.toLowerCase()===email)){showToast('Already invited','warn');return}
+    if(invitations.find(i=>i.invitee_email===email)){showToast('Already invited','warn');return}
     setLoading(true)
     const{data,error}=await inviteToWorkspace(ws.id,cu.id,email)
     if(error){showToast('Failed to invite','err')}else{
@@ -916,14 +916,6 @@ export default function App(){
     })
     return()=>subscription.unsubscribe()
   },[])
-
-  // Auto-refresh pending invitations when user switches back to the tab
-  useEffect(()=>{
-    if(!session?.user?.email)return
-    const handler=()=>{if(document.visibilityState==='visible')refreshInvites(session.user.email)}
-    document.addEventListener('visibilitychange',handler)
-    return()=>document.removeEventListener('visibilitychange',handler)
-  },[session?.user?.email,refreshInvites])
 
   const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
 
