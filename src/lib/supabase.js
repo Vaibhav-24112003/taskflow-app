@@ -86,13 +86,7 @@ export const getMemberRole = async (workspaceId, userId) => {
 export const inviteToWorkspace = (workspaceId, inviterId, inviteeEmail) =>
   supabase
     .from('workspace_invitations')
-    .insert({
-      workspace_id: workspaceId,
-      inviter_id: inviterId,
-      invitee_email: inviteeEmail.toLowerCase().trim(),
-      status: 'pending',
-      token: crypto.randomUUID()
-    })
+    .insert({ workspace_id: workspaceId, inviter_id: inviterId, invitee_email: inviteeEmail.toLowerCase().trim() })
     .select()
     .single()
 
