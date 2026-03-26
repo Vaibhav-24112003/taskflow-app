@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
   getWorkspaceMembers, addMemberToWorkspace, removeMemberFromWorkspace, getMemberRole,
   inviteToWorkspace, getWorkspaceInvitations, getMyInvitations,
   getInvitationByToken, acceptInvitation, acceptInvitationByToken, declineInvitation, cancelInvitation,
-  getTasks, createTask, updateTask, deleteTask, logActivity
+  getTasks, createTask, updateTask, deleteTask, logActivity,
+  getWorkTypeConfigs, getAllWorkTypeConfigs, insertWorkTypeConfig, updateWorkTypeConfig, deleteWorkTypeConfig,
+  getUserWorksheetPrefs, upsertUserWorksheetPref
 } from './lib/supabase.js'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -1508,10 +1510,10 @@ class ErrorBoundary extends React.Component{
 }
 // ── Client Master Data Module ────────────────────────────────────────
 var CLIENT_STATUSES=['active','inactive','prospect'];
-var WORK_TYPES=['ITR','GST/GSTR','TDS','Accounts','Audit','MIS','Payroll','Other'];
+var WORK_TYPES_DEFAULT=['ITR','GST/GSTR','TDS','Accounts','Audit','MIS','Payroll','Other'];
 var DEF_CF=[{key:'file_no',label:'File No.',type:'text'},{key:'engagement_type',label:'Engagement Type',type:'text'}];
 
-function ClientsModule({cu,orgId,supabase,allWorkspaces}){
+function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames}){
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
   var [search,setSearch]=useState('');
@@ -1596,12 +1598,12 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces}){
       </div>
     }
     {toastMsg&&<div style={{position:'fixed',bottom:24,right:24,background:toastMsg.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toastMsg.msg}</div>}
-    {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} onClose={function(){setShowForm(false);}} onSaved={function(){load();setShowForm(false);toast(editClient?'Updated':'Added');}}/>}
+    {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} workTypeNames={workTypeNames} onClose={function(){setShowForm(false);}} onSaved={function(){load();setShowForm(false);toast(editClient?'Updated':'Added');}}/>}
     {showImport&&<ClientImportModal orgId={orgId} supabase={supabase} onClose={function(){setShowImport(false);}} onImported={function(){load();setShowImport(false);toast('Import complete');}}/>}
   </div>;
 }
 
-function ClientForm({client,orgId,supabase,onClose,onSaved}){
+function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames}){
   var isEdit=!!client;
   var [tab,setTab]=useState('basic');
   var [saving,setSaving]=useState(false);
@@ -1663,7 +1665,7 @@ function ClientForm({client,orgId,supabase,onClose,onSaved}){
         {tab==='worktype'&&<div>
           <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:14}}>Select work types applicable for this client.</div>
           <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-            {WORK_TYPES.map(function(wt){var sel=selWT.includes(wt);return<button key={wt} onClick={function(){togWT(wt);}} style={{padding:'7px 14px',borderRadius:8,border:'1px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'rgba(107,140,173,0.15)':'var(--tf-surface)',color:sel?'#6b8cad':'var(--tf-text-sub)',fontWeight:sel?700:500,cursor:'pointer',fontSize:13}}>{wt}</button>;})}
+            {(workTypeNames||WORK_TYPES_DEFAULT).map(function(wt){var sel=selWT.includes(wt);return<button key={wt} onClick={function(){togWT(wt);}} style={{padding:'7px 14px',borderRadius:8,border:'1px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'rgba(107,140,173,0.15)':'var(--tf-surface)',color:sel?'#6b8cad':'var(--tf-text-sub)',fontWeight:sel?700:500,cursor:'pointer',fontSize:13}}>{wt}</button>;})}
           </div>
           <div style={{marginTop:12,fontSize:12,color:'var(--tf-text-sub)'}}>Selected: {selWT.length?selWT.join(', '):'None'}</div>
         </div>}
@@ -1966,11 +1968,216 @@ function TransferOwnerModal({open,ws,wsMembers,cu,supabase,onClose,onTransferred
 
 
 // ══════════════════════════════════════════════════════════════════
+// WORK TYPE CONFIG PANEL
+// ══════════════════════════════════════════════════════════════════
+
+function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
+  var [configs,setConfigs]=useState(workTypeConfigs||[]);
+  var [showForm,setShowForm]=useState(false);
+  var [editConfig,setEditConfig]=useState(null);
+  var [toast,setToast]=useState(null);
+  var [seeding,setSeeding]=useState(false);
+
+  useEffect(function(){setConfigs(workTypeConfigs||[]);},[workTypeConfigs]);
+
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  async function seedDefaults(){
+    setSeeding(true);
+    var entries=Object.entries(DEFAULT_WS_TYPE_CONFIGS);
+    for(var i=0;i<entries.length;i++){
+      var name=entries[i][0];
+      var cfg=entries[i][1];
+      await insertWorkTypeConfig({
+        org_id:org.id, name:name, frequency:cfg.frequency,
+        columns:cfg.cols, due_day:null, due_month:null,
+        is_active:true, sort_order:i
+      });
+    }
+    setSeeding(false);
+    showToast('Default work types created');
+    if(onReload)onReload();
+  }
+
+  async function toggleActive(c){
+    await updateWorkTypeConfig(c.id,{is_active:!c.is_active});
+    showToast(c.is_active?'Deactivated':'Activated');
+    if(onReload)onReload();
+  }
+
+  async function del(c){
+    if(!window.confirm('Delete "'+c.name+'"? This cannot be undone.'))return;
+    await deleteWorkTypeConfig(c.id);
+    showToast('Deleted');
+    if(onReload)onReload();
+  }
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
+  var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
+  var FREQ_LABELS={monthly:'Monthly',quarterly:'Quarterly',yearly:'Yearly',once:'One-time'};
+
+  return<div style={{maxWidth:800,margin:'0 auto',padding:'0 0 40px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Work Type Configuration</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{configs.length} work types configured</div></div>
+      <div style={{display:'flex',gap:8}}>
+        {configs.length===0&&<button onClick={seedDefaults} disabled={seeding} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600,opacity:seeding?.5:1}}>
+          {seeding?'Creating...':'Load Defaults'}
+        </button>}
+        <button onClick={function(){setEditConfig(null);setShowForm(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ New Work Type</button>
+      </div>
+    </div>
+
+    {configs.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
+      <div style={{fontSize:32,marginBottom:12}}>⚙️</div>
+      <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No work types configured</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Click "Load Defaults" to start with standard CA work types, or add your own.</div>
+    </div>:
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {configs.map(function(c){
+        var colCount=(c.columns||[]).length;
+        return<div key={c.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px 18px',opacity:c.is_active?1:0.5}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+            <div style={{flex:1}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{c.name}</span>
+                <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'1px 6px'}}>{FREQ_LABELS[c.frequency]||c.frequency}</span>
+                {!c.is_active&&<span style={{fontSize:10,fontWeight:600,color:'#94a3b8',background:'rgba(148,163,184,0.1)',borderRadius:4,padding:'1px 6px'}}>Inactive</span>}
+              </div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>
+                {colCount} column{colCount!==1?'s':''}
+                {c.due_day&&<span> · Due: day {c.due_day}{c.due_month?' of month '+c.due_month:''}</span>}
+              </div>
+              {colCount>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
+                {(c.columns||[]).map(function(col){return<span key={col.key} style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.06)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 6px'}}>{col.label}</span>;})}
+              </div>}
+            </div>
+            <div style={{display:'flex',gap:5,flexShrink:0}}>
+              <button onClick={function(){setEditConfig(c);setShowForm(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'4px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
+              <button onClick={function(){toggleActive(c);}} style={{background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.2)',borderRadius:6,padding:'4px 10px',color:'#94a3b8',cursor:'pointer',fontSize:12,fontWeight:600}}>{c.is_active?'Disable':'Enable'}</button>
+              <button onClick={function(){del(c);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Del</button>
+            </div>
+          </div>
+        </div>;
+      })}
+    </div>}
+
+    {showForm&&<WorkTypeFormModal config={editConfig} orgId={org.id} onClose={function(){setShowForm(false);}} onSaved={function(){setShowForm(false);showToast(editConfig?'Updated':'Created');if(onReload)onReload();}}/>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
+function WorkTypeFormModal({config,orgId,onClose,onSaved}){
+  var isEdit=!!config;
+  var [name,setName]=useState(config?config.name:'');
+  var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
+  var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
+  var [dueDay,setDueDay]=useState(config?config.due_day||'':'');
+  var [dueMonth,setDueMonth]=useState(config?config.due_month||'':'');
+  var [saving,setSaving]=useState(false);
+  var [err,setErr]=useState('');
+
+  function addCol(){setColumns(function(p){return[...p,{key:'col_'+Date.now(),label:''}];});}
+  function removeCol(idx){setColumns(function(p){return p.filter(function(_,i){return i!==idx;});});}
+  function updateCol(idx,field,val){
+    setColumns(function(p){return p.map(function(c,i){
+      if(i!==idx)return c;
+      var updated=Object.assign({},c);
+      updated[field]=val;
+      if(field==='label')updated.key=val.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'col_'+i;
+      return updated;
+    });});
+  }
+
+  async function save(){
+    if(!name.trim()){setErr('Name required');return;}
+    if(columns.some(function(c){return!c.label.trim();})){setErr('All columns must have a label');return;}
+    setSaving(true);
+    var payload={
+      org_id:orgId, name:name.trim(), frequency:frequency,
+      columns:columns.map(function(c){return{key:c.key,label:c.label.trim()};}),
+      due_day:dueDay?Number(dueDay):null,
+      due_month:dueMonth?Number(dueMonth):null,
+      is_active:config?config.is_active:true,
+      sort_order:config?config.sort_order:99
+    };
+    var result;
+    if(isEdit){
+      result=await updateWorkTypeConfig(config.id,payload);
+    }else{
+      result=await insertWorkTypeConfig(payload);
+    }
+    setSaving(false);
+    if(result.error){setErr(result.error.message);return;}
+    onSaved();
+  }
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+  var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid var(--tf-border)'}}>
+        <h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>{isEdit?'Edit':'New'} Work Type</h3>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>
+      </div>
+      <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
+        <div style={{marginBottom:14}}>
+          <label style={LBL}>Work Type Name *</label>
+          <input value={name} onChange={function(e){setName(e.target.value);}} style={INP} placeholder="e.g. GST, ITR, TDS..." disabled={isEdit}/>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
+          <div>
+            <label style={LBL}>Frequency</label>
+            <select value={frequency} onChange={function(e){setFrequency(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+              <option value="once">One-time</option>
+            </select>
+          </div>
+          <div>
+            <label style={LBL}>Due Day</label>
+            <input type="number" min="1" max="31" value={dueDay} onChange={function(e){setDueDay(e.target.value);}} style={INP} placeholder="e.g. 15"/>
+          </div>
+          <div>
+            <label style={LBL}>Due Month</label>
+            <input type="number" min="1" max="12" value={dueMonth} onChange={function(e){setDueMonth(e.target.value);}} style={INP} placeholder="e.g. 7"/>
+          </div>
+        </div>
+        <div style={{marginBottom:8}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Columns</label>
+            <button onClick={addCol} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Column</button>
+          </div>
+          {columns.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No columns. Add at least one.</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {columns.map(function(col,i){
+              return<div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
+                <input value={col.label} onChange={function(e){updateCol(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder="Column label"/>
+                <div style={{fontSize:10,color:'var(--tf-text-sub)',minWidth:60,fontFamily:'monospace'}}>{col.key}</div>
+                <button onClick={function(){removeCol(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1}}>×</button>
+              </div>;
+            })}
+          </div>}
+        </div>
+        {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}}>{err}</div>}
+      </div>
+      <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}}>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+        <button onClick={save} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?.6:1}}>{saving?'Saving...':isEdit?'Save Changes':'Create'}</button>
+      </div>
+    </div>
+  </div>;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
 // WORKSHEETS MODULE
 // ══════════════════════════════════════════════════════════════════
 
-// Default column configs per work type
-var WS_TYPE_CONFIGS = {
+// Default column configs per work type (used as seed for work_type_configs table)
+var DEFAULT_WS_TYPE_CONFIGS = {
   'GST':      {frequency:'monthly',  cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
   'GST/GSTR': {frequency:'monthly',  cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
   'ITR':      {frequency:'yearly',   cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'}]},
@@ -2008,7 +2215,16 @@ function getCurrentPeriod(freq){
   return {year:fy,month:null,quarter:null};
 }
 
-function WorksheetsModule({org, supabase, cu, allWorkspaces}){
+function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
+  // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
+  var WS_TYPE_CONFIGS=useMemo(function(){
+    if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
+    var m={};
+    workTypeConfigs.forEach(function(c){
+      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month};
+    });
+    return m;
+  },[workTypeConfigs]);
   var [clients,setClients]=useState([]);
   var [activeType,setActiveType]=useState(null);
   var [worksheet,setWorksheet]=useState(null); // current period worksheet
@@ -2021,13 +2237,49 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
   var [saving,setSaving]=useState(false);
   var [toast,setToast]=useState(null);
 
+  // Column show/hide
+  var [hiddenCols,setHiddenCols]=useState([]);
+  var [showColMenu,setShowColMenu]=useState(false);
+  // Filters
+  var [showFilters,setShowFilters]=useState(false);
+  var [filters,setFilters]=useState({});
+  // Filter: client name search
+  var [filterClient,setFilterClient]=useState('');
+
   // Get all work types used by clients in this org
   var [allTypes,setAllTypes]=useState([]);
 
-  useEffect(function(){loadClients();},[org.id]);
+  useEffect(function(){loadClients();loadColPrefs();},[org.id]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
+  // Load column prefs when active type changes
+  useEffect(function(){if(activeType)loadColPrefsForType(activeType);},[activeType]);
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  var [allColPrefs,setAllColPrefs]=useState({});
+  async function loadColPrefs(){
+    var r=await getUserWorksheetPrefs(cu.id,org.id);
+    if(r.data){
+      var m={};
+      r.data.forEach(function(p){m[p.work_type]=p.hidden_columns||[];});
+      setAllColPrefs(m);
+    }
+  }
+  function loadColPrefsForType(wt){setHiddenCols(allColPrefs[wt]||[]);}
+
+  async function saveColPref(wt,hidden){
+    setHiddenCols(hidden);
+    setAllColPrefs(function(p){var n=Object.assign({},p);n[wt]=hidden;return n;});
+    await upsertUserWorksheetPref({user_id:cu.id,org_id:org.id,work_type:wt,hidden_columns:hidden});
+  }
+
+  function toggleColVisibility(colKey){
+    var newHidden=hiddenCols.includes(colKey)?hiddenCols.filter(function(k){return k!==colKey;}):hiddenCols.concat([colKey]);
+    if(activeType)saveColPref(activeType,newHidden);
+  }
+
+  function setFilter(key,val){setFilters(function(p){var n=Object.assign({},p);if(!val||val==='all')delete n[key];else n[key]=val;return n;});}
+  function clearFilters(){setFilters({});setFilterClient('');}
 
   async function loadClients(){
     setLoading(true);
@@ -2085,7 +2337,22 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
       var existingClientIds=existingRows.map(function(r){return r.client_id;});
       var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
       if(missing.length>0){
-        var newRows=missing.map(function(c){return{worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};});
+        // Compute due_date from config
+        var dueDate=null;
+        if(cfg.due_day){
+          if(cfg.frequency==='monthly'&&periodMonth)dueDate=periodYear+'-'+String(periodMonth).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
+          else if(cfg.frequency==='quarterly'&&periodQuarter){
+            var qMonths=[[4,5,6],[7,8,9],[10,11,12],[1,2,3]];
+            var qm=qMonths[periodQuarter-1];
+            var lastM=qm[cfg.due_month?Math.min(cfg.due_month,3)-1:2];
+            var dueY=periodQuarter===4?periodYear+1:periodYear;
+            dueDate=dueY+'-'+String(lastM).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
+          }else if(cfg.frequency==='yearly'){
+            var dm=cfg.due_month||3;
+            dueDate=(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
+          }
+        }
+        var newRows=missing.map(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dueDate)r.due_date=dueDate;return r;});
         var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
         existingRows=[...existingRows,...(ins2.data||[])];
       }
@@ -2103,14 +2370,17 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
 
   async function toggleCell(rowId,key,currentVal){
     var newVal=!currentVal;
-    await supabase.from('worksheet_rows').update({data:supabase.rpc?undefined:undefined}).eq('id',rowId);
-    // Use jsonb update
     var row=rows.find(function(r){return r.id===rowId;});
     if(!row)return;
     var newData=Object.assign({},row.data||{});
     newData[key]=newVal;
-    await supabase.from('worksheet_rows').update({data:newData}).eq('id',rowId);
-    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:newData}):r;});});
+    // Check if all cols are now done → auto-set completed_at
+    var allChecked=cfg.cols.length>0&&cfg.cols.every(function(c){return newData[c.key];});
+    var updates={data:newData};
+    if(allChecked&&!row.completed_at){updates.completed_at=new Date().toISOString();updates.status='completed';}
+    else if(!allChecked&&row.completed_at){updates.completed_at=null;}
+    await supabase.from('worksheet_rows').update(updates).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
   }
 
   async function updateComment(rowId,val){
@@ -2119,8 +2389,11 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
   }
 
   async function updateStatus(rowId,val){
-    await supabase.from('worksheet_rows').update({status:val}).eq('id',rowId);
-    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{status:val}):r;});});
+    var updates={status:val};
+    if(val==='completed'){updates.completed_at=new Date().toISOString();}
+    else{updates.completed_at=null;}
+    await supabase.from('worksheet_rows').update(updates).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
   }
 
   var cfg=activeType&&WS_TYPE_CONFIGS[activeType]?WS_TYPE_CONFIGS[activeType]:{frequency:'monthly',cols:[]};
@@ -2133,6 +2406,35 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
   var periodLabel=activeType?getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter):'';
 
   var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+
+  // Visible columns (exclude hidden)
+  var visibleCols=cfg.cols.filter(function(col){return !hiddenCols.includes(col.key);});
+  // All toggleable columns (dynamic + built-in)
+  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat([{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
+  var showStatus=!hiddenCols.includes('__status');
+  var showComments=!hiddenCols.includes('__comments');
+  var showTaskCard=!hiddenCols.includes('__taskcard');
+
+  // Apply filters to rows
+  var hasActiveFilters=Object.keys(filters).length>0||filterClient;
+  var filteredRows=rows.filter(function(row){
+    var client=clientMap[row.client_id];
+    if(!client)return false;
+    // Client name filter
+    if(filterClient&&!client.name.toLowerCase().includes(filterClient.toLowerCase())&&!(client.display_name||'').toLowerCase().includes(filterClient.toLowerCase()))return false;
+    // Status filter
+    if(filters.__status&&(row.status||'pending')!==filters.__status)return false;
+    // Checkbox column filters
+    var d=row.data||{};
+    var keys=Object.keys(filters);
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i];
+      if(k==='__status')continue;
+      if(filters[k]==='checked'&&!d[k])return false;
+      if(filters[k]==='unchecked'&&d[k])return false;
+    }
+    return true;
+  });
 
   return<div style={{padding:'0 0 60px'}}>
     {/* Header */}
@@ -2160,11 +2462,12 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
             setPeriodYear(p2.year);
             if(p2.month)setPeriodMonth(p2.month);
             if(p2.quarter)setPeriodQuarter(p2.quarter);
+            clearFilters();
           }} style={{padding:'8px 16px',border:'none',borderBottom:active?'2px solid #6b8cad':'2px solid transparent',background:'none',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>{t}</button>;
         })}
       </div>
 
-      {/* Period selector */}
+      {/* Period selector + toolbar */}
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap'}}>
         <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>Period:</div>
         {cfg.frequency==='monthly'&&<>
@@ -2181,32 +2484,80 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
           {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{cfg.frequency==='yearly'?'FY '+y+'-'+String(y+1).slice(2):y}</option>;})}
         </select>
         <div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>
-        {/* Summary stats */}
-        {rows.length>0&&<div style={{marginLeft:'auto',display:'flex',gap:12,fontSize:11,color:'var(--tf-text-sub)'}}>
-          {cfg.cols.map(function(col){
-            var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
-            return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}</span>;
-          })}
-        </div>}
+
+        {/* Columns toggle button */}
+        <div style={{position:'relative',marginLeft:'auto'}}>
+          <button onClick={function(){setShowColMenu(!showColMenu);}} style={{background:showColMenu?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+            ⊞ Columns{hiddenCols.length>0&&<span style={{fontSize:10,color:'#f59e0b'}}>({hiddenCols.length} hidden)</span>}
+          </button>
+          {showColMenu&&<div style={{position:'absolute',top:'100%',right:0,marginTop:4,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'8px 0',minWidth:200,zIndex:100,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
+            <div style={{display:'flex',gap:6,padding:'4px 12px 8px',borderBottom:'1px solid var(--tf-border)'}}>
+              <button onClick={function(){if(activeType)saveColPref(activeType,[]);}} style={{fontSize:11,color:'#6b8cad',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Show All</button>
+              <button onClick={function(){if(activeType)saveColPref(activeType,allToggleCols.map(function(c){return c.key;}));}} style={{fontSize:11,color:'#94a3b8',background:'none',border:'none',cursor:'pointer',fontWeight:600}}>Hide All</button>
+            </div>
+            {allToggleCols.map(function(col){
+              var visible=!hiddenCols.includes(col.key);
+              return<div key={col.key} onClick={function(){toggleColVisibility(col.key);}} style={{padding:'6px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--tf-text)'}}>
+                <div style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:visible?'#6b8cad':'var(--tf-border)',background:visible?'#6b8cad':'transparent',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {visible&&<span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span>}
+                </div>
+                {col.label}
+              </div>;
+            })}
+          </div>}
+        </div>
+
+        {/* Filter toggle button */}
+        <button onClick={function(){setShowFilters(!showFilters);}} style={{background:showFilters||hasActiveFilters?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:hasActiveFilters?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+          ▽ Filter{hasActiveFilters&&<span style={{fontSize:10,color:'#f59e0b'}}>Active</span>}
+        </button>
       </div>
+
+      {/* Filter bar */}
+      {showFilters&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap',padding:'10px 14px',background:'rgba(107,140,173,0.04)',border:'1px solid var(--tf-border)',borderRadius:10}}>
+        <input value={filterClient} onChange={function(e){setFilterClient(e.target.value);}} placeholder="Search client..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',width:140}}/>
+        <select value={filters.__status||'all'} onChange={function(e){setFilter('__status',e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          <option value="all">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+        {cfg.cols.map(function(col){
+          return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+            <option value="all">{col.label}: All</option>
+            <option value="checked">{col.label}: Done</option>
+            <option value="unchecked">{col.label}: Not Done</option>
+          </select>;
+        })}
+        {hasActiveFilters&&<button onClick={clearFilters} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:7,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Clear</button>}
+        {hasActiveFilters&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing {filteredRows.length} of {rows.length}</span>}
+      </div>}
+
+      {/* Summary stats */}
+      {rows.length>0&&<div style={{display:'flex',gap:12,marginBottom:12,fontSize:11,color:'var(--tf-text-sub)'}}>
+        {cfg.cols.map(function(col){
+          var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
+          return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}</span>;
+        })}
+      </div>}
 
       {/* Table */}
       {typeClients.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
         No clients have {activeType} as a work type. Add clients in Client Master Data.
       </div>:
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}}>
-        <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
               <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
-              {cfg.cols.map(function(col){return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:80}}>{col.label}</th>;})}
-              <th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>
-              <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>
-              <th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>
+              {visibleCols.map(function(col){return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:80}}>{col.label}</th>;})}
+              {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>}
+              {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
+              {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
             </tr>
           </thead>
           <tbody>
-            {rows.map(function(row,ri){
+            {filteredRows.map(function(row,ri){
               var client=clientMap[row.client_id];
               if(!client)return null;
               var d=row.data||{};
@@ -2217,7 +2568,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
                   {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{client.display_name}</div>}
                   {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
                 </td>
-                {cfg.cols.map(function(col){
+                {visibleCols.map(function(col){
                   var val=!!(d[col.key]);
                   return<td key={col.key} style={{padding:'10px 10px',textAlign:'center'}}>
                     <div onClick={function(){toggleCell(row.id,col.key,val);}} style={{width:22,height:22,borderRadius:5,border:'2px solid',borderColor:val?'#22c55e':'var(--tf-border)',background:val?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'all 0.15s'}}>
@@ -2225,24 +2576,24 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
                     </div>
                   </td>;
                 })}
-                <td style={{padding:'10px 10px',textAlign:'center'}}>
+                {showStatus&&<td style={{padding:'10px 10px',textAlign:'center'}}>
                   <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
                     style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC_STATUS[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize'}}>
                     <option value="pending">Pending</option>
                     <option value="in_progress">In Progress</option>
                     <option value="completed">Completed</option>
                   </select>
-                </td>
-                <td style={{padding:'10px 14px'}}>
+                </td>}
+                {showComments&&<td style={{padding:'10px 14px'}}>
                   <input value={row.comments||''} onChange={function(e){var v=e.target.value;setRows(function(p){return p.map(function(r){return r.id===row.id?Object.assign({},r,{comments:v}):r;});});}}
                     onBlur={function(e){updateComment(row.id,e.target.value);}}
                     placeholder="Add note..."
                     style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:12,width:'100%',outline:'none',fontFamily:'inherit',padding:'2px 0'}}/>
-                </td>
-                <td style={{padding:'10px 10px',textAlign:'center'}}>
+                </td>}
+                {showTaskCard&&<td style={{padding:'10px 10px',textAlign:'center'}}>
                   {row.task_card_id?<span style={{fontSize:11,fontWeight:600,color:'#22c55e',background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.25)',borderRadius:20,padding:'3px 10px'}}>✓ Created</span>:
                   <button onClick={function(){setShowCreateTask({row,client});}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 10px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>+ Create</button>}
-                </td>
+                </td>}
               </tr>;
             })}
           </tbody>
@@ -2397,10 +2748,229 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
   </div>;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ANALYTICS DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+
+function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
+  var [loading,setLoading]=useState(true);
+  var [clients,setClients]=useState([]);
+  var [worksheets,setWorksheets]=useState([]);
+  var [allRows,setAllRows]=useState([]);
+  var [selectedYear,setSelectedYear]=useState(function(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;});
+  var [drillType,setDrillType]=useState(null);
+  var [drillFilter,setDrillFilter]=useState('all'); // all, pending, completed, overdue, early, ontime, late
+
+  // Build config lookup
+  var configMap=useMemo(function(){
+    if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
+    var m={};
+    workTypeConfigs.forEach(function(c){
+      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month};
+    });
+    return m;
+  },[workTypeConfigs]);
+
+  useEffect(function(){loadData();},[org.id,selectedYear]);
+
+  async function loadData(){
+    setLoading(true);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name');
+    var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).eq('period_year',selectedYear);
+    var clientData=rc.data||[];
+    var wsData=rw.data||[];
+    setClients(clientData);
+    setWorksheets(wsData);
+    if(wsData.length>0){
+      var wsIds=wsData.map(function(w){return w.id;});
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,data,due_date,completed_at').in('worksheet_id',wsIds);
+      setAllRows(rr.data||[]);
+    }else{setAllRows([]);}
+    setLoading(false);
+  }
+
+  var clientMap={};
+  clients.forEach(function(c){clientMap[c.id]=c;});
+
+  // Group worksheets by work_type
+  var wsGrouped={};
+  worksheets.forEach(function(ws){
+    if(!wsGrouped[ws.work_type])wsGrouped[ws.work_type]=[];
+    wsGrouped[ws.work_type].push(ws);
+  });
+
+  // Compute stats per work type
+  var today=new Date();today.setHours(0,0,0,0);
+  var workTypeStats=Object.keys(wsGrouped).map(function(wt){
+    var wsIds=wsGrouped[wt].map(function(w){return w.id;});
+    var wtRows=allRows.filter(function(r){return wsIds.includes(r.worksheet_id);});
+    var total=wtRows.length;
+    var completed=wtRows.filter(function(r){return r.status==='completed';}).length;
+    var pending=wtRows.filter(function(r){return r.status!=='completed';}).length;
+    var overdue=wtRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;}).length;
+    // Timing analysis for completed
+    var early=0,ontime=0,late=0;
+    wtRows.forEach(function(r){
+      if(r.status==='completed'&&r.completed_at&&r.due_date){
+        var comp=new Date(r.completed_at);comp.setHours(0,0,0,0);
+        var due=new Date(r.due_date);due.setHours(0,0,0,0);
+        if(comp<due)early++;
+        else if(comp.getTime()===due.getTime())ontime++;
+        else late++;
+      }
+    });
+    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,early:early,ontime:ontime,late:late,rows:wtRows,wsIds:wsIds};
+  });
+
+  // Drill-down data
+  var drillData=null;
+  if(drillType){
+    var stat=workTypeStats.find(function(s){return s.wt===drillType;});
+    if(stat){
+      var drillRows=stat.rows;
+      if(drillFilter==='pending')drillRows=drillRows.filter(function(r){return r.status!=='completed';});
+      else if(drillFilter==='completed')drillRows=drillRows.filter(function(r){return r.status==='completed';});
+      else if(drillFilter==='overdue')drillRows=drillRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;});
+      else if(drillFilter==='early')drillRows=drillRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2<new Date(r.due_date);});
+      else if(drillFilter==='ontime')drillRows=drillRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
+      else if(drillFilter==='late')drillRows=drillRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2>new Date(r.due_date);});
+      drillData={stat:stat,rows:drillRows};
+    }
+  }
+
+  function daysDiff(d1,d2){return Math.round((new Date(d1)-new Date(d2))/(1000*60*60*24));}
+
+  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Analytics Dashboard</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Work type performance for FY {selectedYear}-{String(selectedYear+1).slice(2)}</div>
+      </div>
+      <select value={selectedYear} onChange={function(e){setSelectedYear(Number(e.target.value));setDrillType(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+        {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>FY {y}-{String(y+1).slice(2)}</option>;})}
+      </select>
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading analytics...</div>:
+    workTypeStats.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
+      <div style={{fontSize:32,marginBottom:12}}>📊</div>
+      <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No worksheet data</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Create worksheets in the Worksheets tab to see analytics here.</div>
+    </div>:<>
+      {/* Summary Cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12,marginBottom:24}}>
+        {workTypeStats.map(function(s){
+          var pct=s.total>0?Math.round(s.completed/s.total*100):0;
+          var isActive=drillType===s.wt;
+          return<div key={s.wt} onClick={function(){setDrillType(isActive?null:s.wt);setDrillFilter('all');}}
+            style={{background:isActive?'rgba(107,140,173,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:isActive?'#6b8cad':'var(--tf-border)',borderRadius:12,padding:'16px 18px',cursor:'pointer',transition:'all 0.15s'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{s.wt}</span>
+              <span style={{fontSize:20,fontWeight:800,color:pct===100?'#22c55e':pct>50?'#6b8cad':'#94a3b8'}}>{pct}%</span>
+            </div>
+            {/* Progress bar */}
+            <div style={{background:'var(--tf-border)',borderRadius:99,height:6,marginBottom:10,overflow:'hidden'}}>
+              <div style={{width:pct+'%',height:'100%',background:pct===100?'#22c55e':'#6b8cad',transition:'width 0.3s',borderRadius:99}}/>
+            </div>
+            <div style={{display:'flex',gap:12,fontSize:11}}>
+              <span style={{color:'#22c55e'}}><b>{s.completed}</b> done</span>
+              <span style={{color:'#94a3b8'}}><b>{s.pending}</b> pending</span>
+              {s.overdue>0&&<span style={{color:'#ef4444'}}><b>{s.overdue}</b> overdue</span>}
+            </div>
+            {(s.early>0||s.ontime>0||s.late>0)&&<div style={{display:'flex',gap:10,fontSize:10,marginTop:6,color:'var(--tf-text-sub)'}}>
+              {s.early>0&&<span style={{color:'#22c55e'}}>{s.early} early</span>}
+              {s.ontime>0&&<span style={{color:'#6b8cad'}}>{s.ontime} on-time</span>}
+              {s.late>0&&<span style={{color:'#ef4444'}}>{s.late} late</span>}
+            </div>}
+          </div>;
+        })}
+      </div>
+
+      {/* Drill-down */}
+      {drillData&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+        <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+          <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>{drillType} — Detail</div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+            {[{id:'all',label:'All',count:drillData.stat.total},{id:'pending',label:'Pending',count:drillData.stat.pending},{id:'completed',label:'Completed',count:drillData.stat.completed},{id:'overdue',label:'Overdue',count:drillData.stat.overdue},{id:'early',label:'Early',count:drillData.stat.early},{id:'ontime',label:'On-time',count:drillData.stat.ontime},{id:'late',label:'Late',count:drillData.stat.late}].filter(function(f){return f.id==='all'||f.count>0;}).map(function(f){
+              var active=drillFilter===f.id;
+              return<button key={f.id} onClick={function(){setDrillFilter(f.id);}}
+                style={{padding:'4px 10px',borderRadius:20,border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',background:active?'rgba(107,140,173,0.12)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',fontSize:11,fontWeight:active?700:500,cursor:'pointer'}}>
+                {f.label} ({f.count})
+              </button>;
+            })}
+          </div>
+        </div>
+        {drillData.rows.length===0?<div style={{padding:'24px 18px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No matching records</div>:
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead>
+            <tr style={{background:'rgba(107,140,173,0.04)'}}>
+              <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
+              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
+              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Due Date</th>
+              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Completed</th>
+              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Timing</th>
+            </tr>
+          </thead>
+          <tbody>
+            {drillData.rows.map(function(row,ri){
+              var client=clientMap[row.client_id];
+              if(!client)return null;
+              var isCompleted=row.status==='completed';
+              var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
+              var timing='';
+              var timingColor='var(--tf-text-sub)';
+              if(isCompleted&&row.completed_at&&row.due_date){
+                var diff=daysDiff(row.completed_at,row.due_date);
+                if(diff<0){timing=Math.abs(diff)+' days early';timingColor='#22c55e';}
+                else if(diff===0){timing='On time';timingColor='#6b8cad';}
+                else{timing=diff+' days late';timingColor='#ef4444';}
+              }else if(isOverdue){
+                timing=Math.abs(daysDiff(today,row.due_date))+' days overdue';
+                timingColor='#ef4444';
+              }
+              return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
+                <td style={{padding:'9px 14px'}}>
+                  <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}</div>
+                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
+                </td>
+                <td style={{padding:'9px 10px',textAlign:'center'}}>
+                  <span style={{fontSize:11,fontWeight:700,color:SC_STATUS[row.status||'pending'],textTransform:'capitalize'}}>{(row.status||'pending').replace('_',' ')}</span>
+                </td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>
+                  {row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}
+                </td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>
+                  {row.completed_at?new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}
+                </td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:600,color:timingColor}}>
+                  {timing||'—'}
+                </td>
+              </tr>;
+            })}
+          </tbody>
+        </table>}
+      </div>}
+    </>}
+  </div>;
+}
+
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   const [tab,setTab]=useState('clients');
+  const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
+
+  // Load work type configs for this org
+  useEffect(function(){loadWTC();},[org.id]);
+  async function loadWTC(){
+    var r=await getAllWorkTypeConfigs(org.id);
+    setWorkTypeConfigs(r.data||[]);
+  }
+  var activeConfigs=workTypeConfigs.filter(function(c){return c.is_active;});
+  var workTypeNames=activeConfigs.map(function(c){return c.name;});
+
   return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
     <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
       <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:16,paddingBottom:12}}>
@@ -2408,8 +2978,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
         <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
         <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
       </div>
-      <div style={{display:'flex',gap:2}}>
-        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
+      <div style={{display:'flex',gap:2,overflowX:'auto'}}>
+        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'analytics',label:'Analytics',avail:true},{id:'worktypes',label:'Work Types',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
           return<button key={t.id} onClick={function(){if(t.avail)setTab(t.id);}} disabled={!t.avail}
             style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.avail?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.avail?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.avail?1:0.5,whiteSpace:'nowrap'}}>
             {t.label}{!t.avail&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
@@ -2418,8 +2988,10 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       </div>
     </div>
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
-      {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces}/>}
-      {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces}/>}
+      {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined}/>}
+      {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs}/>}
+      {tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {tab==='settings'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
     </div>
