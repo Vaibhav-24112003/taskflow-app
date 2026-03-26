@@ -20,10 +20,10 @@ export const upsertProfile = (profile) =>
   supabase.from('profiles').upsert(profile, { onConflict: 'id' })
 
 export const getProfile = (userId) =>
-  supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+  supabase.from('profiles').select('id,name,email,avatar_url').eq('id', userId).maybeSingle()
 
 export const getAllProfiles = () =>
-  supabase.from('profiles').select('*').order('name')
+  supabase.from('profiles').select('id,name,email,avatar_url').order('name')
 
 // ── Workspaces ─────────────────────────────────────────────────────────────
 export const getMyWorkspaces = async (userId) => {
@@ -35,7 +35,7 @@ export const getMyWorkspaces = async (userId) => {
   const ids = memberRows.map(r => r.workspace_id)
   return supabase
     .from('workspaces')
-    .select('*')
+    .select('id,name,description,color,icon,custom_statuses,owner_id,created_at')
     .in('id', ids)
     .order('created_at', { ascending: true })
 }
@@ -53,7 +53,7 @@ export const deleteWorkspace = (id) =>
 export const getWorkspaceMembers = (workspaceId) =>
   supabase
     .from('workspace_members')
-    .select('role, profiles(*)')
+    .select('role, profiles(id,name,email,avatar_url)')
     .eq('workspace_id', workspaceId)
     .then(({ data, error }) => ({
       data: data?.map(r => ({ ...r.profiles, role: r.role })) || [],
@@ -93,14 +93,14 @@ export const inviteToWorkspace = (workspaceId, inviterId, inviteeEmail) =>
 export const getWorkspaceInvitations = (workspaceId) =>
   supabase
     .from('workspace_invitations')
-    .select('*, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color)')
+    .select('id,workspace_id,inviter_id,invitee_email,status,token,created_at, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color)')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
 
 export const getMyInvitations = (email) =>
   supabase
     .from('workspace_invitations')
-    .select('*, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color,description)')
+    .select('id,workspace_id,invitee_email,status,created_at, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color,description)')
     .eq('invitee_email', email.toLowerCase())
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -108,7 +108,7 @@ export const getMyInvitations = (email) =>
 export const getInvitationByToken = (token) =>
   supabase
     .from('workspace_invitations')
-    .select('*, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color,description)')
+    .select('id,workspace_id,invitee_email,status,token, inviter:profiles!inviter_id(name,email,avatar_url), workspace:workspaces!workspace_id(name,icon,color,description)')
     .eq('token', token)
     .maybeSingle()
 
@@ -147,7 +147,7 @@ export const cancelInvitation = (invitationId) =>
 export const getTasks = (workspaceId) =>
   supabase
     .from('tasks')
-    .select('*')
+    .select('id,title,description,status,priority,due_date,assigned_to,assignees,delegator_id,created_by,workspace_id,project,tags,checklist,recurrence_type,recurrence_interval,created_at,updated_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
 

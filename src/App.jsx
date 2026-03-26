@@ -1081,8 +1081,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
+  const loadOrgs=useCallback(async()=>{var r=await supabase.from('organizations').select('id,name,created_by').order('name');if(r.data)setOrgs(r.data);},[])
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
-      supabase.from('organizations').select('*').order('name').then(function(r){if(r.data)setOrgs(r.data);});
+      loadOrgs();
   useEffect(()=>{loadWS()},[cu.id])
 
   useEffect(()=>{
@@ -1203,9 +1204,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
-  const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);var r1=await supabase.from('workspaces').select('*');var r2=await supabase.from('organizations').select('*').order('name');if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);await loadWS();await loadOrgs();};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
@@ -1282,7 +1282,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
-        <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name');if(r.data)setOrgs(r.data);}}/>
+        <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={loadOrgs}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
         <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
@@ -1484,7 +1484,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {showMembers&&activeWs&&<MembersModal open onClose={()=>setShowMembers(false)} ws={activeWs} wsMembers={wsMembers} cu={cu} myRole={myRole} showToast={showToast}/>}
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
-      {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name');if(r.data)setOrgs(r.data);}}/> }
+      {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);await loadOrgs();}}/> }
   </div>
 }
 
@@ -1524,7 +1524,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces}){
   async function load(){
     setLoading(true);
     if(!orgId){setClients([]);setLoading(false);return;}
-    var r=await supabase.from('clients').select('*').eq('org_id',orgId).order('name');
+    var r=await supabase.from('clients').select('id,name,email,phone,org_id,created_at').eq('org_id',orgId).order('name');
     if(!r.error)setClients(r.data||[]);
     setLoading(false);
   }
@@ -1719,8 +1719,8 @@ function OrgManagementPanel({cu,supabase,allWorkspaces}){
   useEffect(function(){load();},[]);
   async function load(){
     setLoading(true);
-    var r=await supabase.from('organizations').select('*').order('name');
-    var rw=await supabase.from('workspaces').select('*').order('name');
+    var r=await supabase.from('organizations').select('id,name,created_by').order('name');
+    var rw=await supabase.from('workspaces').select('id,name,color,icon,description').order('name');
     if(r.data)setOrgs(r.data);
     if(rw.data)setLocalWs(rw.data);
     setLoading(false);
@@ -1806,7 +1806,7 @@ function OrgMembersPanel({org,cu,supabase}){
       enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});
     }
     setMembers(enriched);
-    var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending');
+    var ri=await supabase.from('org_invitations').select('id,invitee_email,role,status,created_at').eq('org_id',org.id).eq('status','pending');
     setInvites(ri.data||[]);
     setLoading(false);
   }
@@ -2031,7 +2031,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
 
   async function loadClients(){
     setLoading(true);
-    var r=await supabase.from('clients').select('*').eq('org_id',org.id).order('name');
+    var r=await supabase.from('clients').select('id,name,email,phone,org_id,created_at').eq('org_id',org.id).order('name');
     if(r.data){
       setClients(r.data);
       // Collect all work types from clients
@@ -2059,7 +2059,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
     var cfg=WS_TYPE_CONFIGS[activeType]||{frequency:'monthly',cols:[]};
     var label=getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter);
     // Find or create worksheet for this period
-    var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',label).maybeSingle();
+    var rw=await supabase.from('worksheets').select('id,org_id,work_type,period_label,created_at').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',label).maybeSingle();
     var ws=rw.data;
     if(!ws){
       // Auto-create worksheet
@@ -2074,7 +2074,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces}){
     setWorksheet(ws);
     if(ws){
       // Load rows, auto-create for missing clients
-      var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws.id);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,data,created_at').eq('worksheet_id',ws.id);
       var existingRows=rr.data||[];
       // Get clients for this work type
       var typeClients=clients.filter(function(c){
@@ -2325,7 +2325,7 @@ function OrgInviteBanner({cu,supabase,onAccepted}){
     if(!cu)return;
     // First fetch invitations without join (avoids RLS issues on organizations table)
     supabase.from('org_invitations')
-      .select('*')
+      .select('id,org_id,invitee_email,role,status')
       .eq('invitee_email',cu.email.toLowerCase())
       .eq('status','pending')
       .then(async function(r){
