@@ -2956,6 +2956,241 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   </div>;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// CALENDAR VIEW
+// ══════════════════════════════════════════════════════════════════
+
+function CalendarView({org,supabase,cu,workTypeConfigs}){
+  var [calYear,setCalYear]=useState(new Date().getFullYear());
+  var [calMonth,setCalMonth]=useState(new Date().getMonth()); // 0-indexed
+  var [rows,setRows]=useState([]);
+  var [worksheets,setWorksheets]=useState([]);
+  var [clients,setClients]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [selectedDay,setSelectedDay]=useState(null); // day number or null
+
+  var today=new Date();today.setHours(0,0,0,0);
+  var isCurrentMonth=calYear===today.getFullYear()&&calMonth===today.getMonth();
+
+  useEffect(function(){loadCalData();},[org.id,calYear,calMonth]);
+
+  async function loadCalData(){
+    setLoading(true);
+    // Date range for visible month
+    var start=new Date(calYear,calMonth,1);
+    var end=new Date(calYear,calMonth+1,0);
+    var startStr=start.toISOString().slice(0,10);
+    var endStr=end.toISOString().slice(0,10);
+
+    var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id);
+    setClients(rc.data||[]);
+
+    var rr=await supabase.from('worksheet_rows')
+      .select('id,worksheet_id,client_id,status,due_date,completed_at,data')
+      .eq('org_id',org.id)
+      .gte('due_date',startStr)
+      .lte('due_date',endStr);
+    var rowData=rr.data||[];
+    setRows(rowData);
+
+    if(rowData.length>0){
+      var wsIds=[...new Set(rowData.map(function(r){return r.worksheet_id;}))];
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds);
+      setWorksheets(rw.data||[]);
+    }else{setWorksheets([]);}
+    setLoading(false);
+  }
+
+  var clientMap={};
+  clients.forEach(function(c){clientMap[c.id]=c;});
+  var wsMap={};
+  worksheets.forEach(function(w){wsMap[w.id]=w;});
+
+  // Build calendar grid
+  var firstDay=new Date(calYear,calMonth,1);
+  var lastDay=new Date(calYear,calMonth+1,0);
+  var daysInMonth=lastDay.getDate();
+  var startWeekday=(firstDay.getDay()+6)%7; // Mon=0
+  var weeks=[];
+  var dayNum=1-startWeekday;
+  for(var w=0;w<6;w++){
+    var week=[];
+    for(var d=0;d<7;d++){
+      if(dayNum>=1&&dayNum<=daysInMonth)week.push(dayNum);
+      else week.push(null);
+      dayNum++;
+    }
+    if(week.every(function(x){return x===null;}))break;
+    weeks.push(week);
+  }
+
+  // Group rows by day
+  var dayRows={};
+  rows.forEach(function(r){
+    if(!r.due_date)return;
+    var d=new Date(r.due_date).getDate();
+    if(!dayRows[d])dayRows[d]=[];
+    dayRows[d].push(r);
+  });
+
+  function prevMonth(){
+    if(calMonth===0){setCalYear(calYear-1);setCalMonth(11);}
+    else setCalMonth(calMonth-1);
+    setSelectedDay(null);
+  }
+  function nextMonth(){
+    if(calMonth===11){setCalYear(calYear+1);setCalMonth(0);}
+    else setCalMonth(calMonth+1);
+    setSelectedDay(null);
+  }
+  function goToday(){
+    setCalYear(today.getFullYear());setCalMonth(today.getMonth());setSelectedDay(null);
+  }
+
+  var MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DAY_HEADERS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+
+  // Detail panel data
+  var detailRows=selectedDay&&dayRows[selectedDay]?dayRows[selectedDay]:[];
+  // Group by worktype
+  var detailGrouped={};
+  detailRows.forEach(function(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws?ws.work_type:'Unknown';
+    if(!detailGrouped[wt])detailGrouped[wt]=[];
+    detailGrouped[wt].push(r);
+  });
+
+  async function quickUpdateStatus(rowId,newStatus){
+    var updates={status:newStatus};
+    if(newStatus==='completed'){updates.completed_at=new Date().toISOString();}
+    else{updates.completed_at=null;}
+    await supabase.from('worksheet_rows').update(updates).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
+  }
+
+  return<div style={{padding:'0 0 60px'}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Calendar</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Due dates and workload overview</div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <button onClick={prevMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>‹</button>
+        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',minWidth:160,textAlign:'center'}}>{MONTH_NAMES[calMonth]} {calYear}</div>
+        <button onClick={nextMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>›</button>
+        {!isCurrentMonth&&<button onClick={goToday} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Today</button>}
+      </div>
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading calendar...</div>:
+    <div style={{display:'flex',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
+      {/* Calendar Grid */}
+      <div style={{flex:'1 1 500px',minWidth:320}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:'var(--tf-border)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+          {/* Day headers */}
+          {DAY_HEADERS.map(function(dh){
+            return<div key={dh} style={{padding:'8px 4px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',background:'var(--tf-surface)'}}>
+              {dh}
+            </div>;
+          })}
+          {/* Day cells */}
+          {weeks.map(function(week,wi){
+            return week.map(function(day,di){
+              if(day===null)return<div key={wi+'-'+di} style={{background:'var(--tf-bg)',minHeight:80}}/>;
+              var isToday=isCurrentMonth&&day===today.getDate();
+              var isSelected=selectedDay===day;
+              var dRows=dayRows[day]||[];
+              var count=dRows.length;
+              var completedCount=dRows.filter(function(r){return r.status==='completed';}).length;
+              var overdueCount=dRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;}).length;
+              var pendingCount=count-completedCount;
+              // Heatmap intensity
+              var intensity=Math.min(count/10,1);
+              var bgColor='var(--tf-bg)';
+              if(count>0){
+                if(overdueCount>0)bgColor='rgba(239,68,68,'+(.04+intensity*.08)+')';
+                else if(completedCount===count)bgColor='rgba(34,197,94,'+(.04+intensity*.06)+')';
+                else bgColor='rgba(107,140,173,'+(.03+intensity*.07)+')';
+              }
+              return<div key={wi+'-'+di} onClick={function(){setSelectedDay(isSelected?null:day);}}
+                style={{background:bgColor,minHeight:80,padding:'4px 6px',cursor:'pointer',position:'relative',border:isSelected?'2px solid #6b8cad':isToday?'2px solid rgba(107,140,173,0.5)':'2px solid transparent',transition:'all 0.12s'}}>
+                <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?'#6b8cad':'var(--tf-text)',marginBottom:2}}>
+                  {day}
+                </div>
+                {count>0&&<div style={{display:'flex',flexDirection:'column',gap:2}}>
+                  {count<=3?dRows.slice(0,3).map(function(r,idx){
+                    var client=clientMap[r.client_id];
+                    var color=r.status==='completed'?'#22c55e':overdueCount>0&&r.status!=='completed'?'#ef4444':'#6b8cad';
+                    return<div key={idx} style={{fontSize:9,color:color,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3}}>
+                      {client?client.name.split(' ')[0]:'?'}
+                    </div>;
+                  }):
+                  <div style={{display:'flex',flexDirection:'column',gap:1}}>
+                    <div style={{fontSize:10,fontWeight:700,color:overdueCount>0?'#ef4444':'#6b8cad'}}>{count} due</div>
+                    <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                      {completedCount>0&&<span style={{width:6,height:6,borderRadius:'50%',background:'#22c55e',display:'inline-block'}}/>}
+                      {pendingCount>0&&<span style={{width:6,height:6,borderRadius:'50%',background:overdueCount>0?'#ef4444':'#94a3b8',display:'inline-block'}}/>}
+                    </div>
+                  </div>}
+                </div>}
+              </div>;
+            });
+          })}
+        </div>
+
+        {/* Legend */}
+        <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,color:'var(--tf-text-sub)'}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:3,background:'rgba(34,197,94,0.15)',border:'1px solid rgba(34,197,94,0.3)'}}/> All done</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:3,background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.3)'}}/> Pending</span>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:3,background:'rgba(239,68,68,0.12)',border:'1px solid rgba(239,68,68,0.3)'}}/> Overdue</span>
+        </div>
+      </div>
+
+      {/* Day Detail Panel */}
+      {selectedDay!==null&&<div style={{flex:'0 0 320px',minWidth:280,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'calc(100vh - 240px)',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{selectedDay} {MONTH_NAMES[calMonth]} {calYear}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{detailRows.length} item{detailRows.length!==1?'s':''} due</div>
+          </div>
+          <button onClick={function(){setSelectedDay(null);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+        </div>
+        <div style={{overflowY:'auto',flex:1,padding:'0 0 8px'}}>
+          {detailRows.length===0?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No items due on this day</div>:
+          Object.keys(detailGrouped).map(function(wt){
+            return<div key={wt}>
+              <div style={{padding:'10px 16px 4px',fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:.05}}>{wt}</div>
+              {detailGrouped[wt].map(function(row){
+                var client=clientMap[row.client_id];
+                if(!client)return null;
+                var isCompleted=row.status==='completed';
+                var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
+                return<div key={row.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+                    {client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
+                    {isCompleted&&row.completed_at&&<div style={{fontSize:9,color:'#22c55e',marginTop:1}}>Done {new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>}
+                    {isOverdue&&<div style={{fontSize:9,color:'#ef4444',fontWeight:600,marginTop:1}}>Overdue</div>}
+                  </div>
+                  <select value={row.status||'pending'} onChange={function(e){quickUpdateStatus(row.id,e.target.value);}}
+                    style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'2px 6px',color:SC_STATUS[row.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>;
+              })}
+            </div>;
+          })}
+        </div>
+      </div>}
+    </div>}
+  </div>;
+}
+
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   const [tab,setTab]=useState('clients');
@@ -2979,7 +3214,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
         <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
       </div>
       <div style={{display:'flex',gap:2,overflowX:'auto'}}>
-        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'analytics',label:'Analytics',avail:true},{id:'worktypes',label:'Work Types',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
+        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'analytics',label:'Analytics',avail:true},{id:'calendar',label:'Calendar',avail:true},{id:'worktypes',label:'Work Types',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
           return<button key={t.id} onClick={function(){if(t.avail)setTab(t.id);}} disabled={!t.avail}
             style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.avail?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.avail?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.avail?1:0.5,whiteSpace:'nowrap'}}>
             {t.label}{!t.avail&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
@@ -2991,6 +3226,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined}/>}
       {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs}/>}
       {tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {tab==='calendar'&&<CalendarView org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {tab==='settings'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
