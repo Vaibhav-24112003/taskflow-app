@@ -2323,11 +2323,23 @@ function OrgInviteBanner({cu,supabase,onAccepted}){
   var [invites,setInvites]=useState([]);
   useEffect(function(){
     if(!cu)return;
+    // First fetch invitations without join (avoids RLS issues on organizations table)
     supabase.from('org_invitations')
-      .select('*, organizations(id,name)')
+      .select('*')
       .eq('invitee_email',cu.email.toLowerCase())
       .eq('status','pending')
-      .then(function(r){if(r.data&&r.data.length)setInvites(r.data);});
+      .then(async function(r){
+        if(r.error)console.error('OrgInviteBanner fetch error:',r.error);
+        if(!r.data||!r.data.length)return;
+        // Fetch org names separately for each invitation
+        var orgIds=[...new Set(r.data.map(function(i){return i.org_id;}))];
+        var orgMap={};
+        for(var oid of orgIds){
+          var or2=await supabase.from('organizations').select('id,name').eq('id',oid).maybeSingle();
+          if(or2.data)orgMap[oid]=or2.data;
+        }
+        setInvites(r.data.map(function(inv){return Object.assign({},inv,{organizations:orgMap[inv.org_id]||null});}));
+      });
   },[cu&&cu.id]);
   if(!invites.length)return null;
   async function accept(inv){
