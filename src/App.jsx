@@ -878,6 +878,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 export default function App(){
   const [session,setSession]=useState(null)
   const [loading,setLoading]=useState(true)
+  const [error,setError]=useState(null)
   const [pendingInvites,setPendingInvites]=useState([])
   const [inviteToken,setInviteToken]=useState(null)
   const initRef=useRef(false);const authIdRef=useRef(null)
@@ -897,17 +898,16 @@ export default function App(){
       }
       // Load pending invitations for this user
       await refreshInvites(user.email)
-    }catch(e){console.error(e)}finally{setLoading(false);initRef.current=true}
+    }catch(e){console.error(e);setError(e.message||'Auth error')}finally{setLoading(false);initRef.current=true}
   }
 
   const refreshInvites=useCallback(async(email)=>{
     const em=email||session?.user?.email;if(!em)return
-    const{data}=await getMyInvitations(em)
-    setPendingInvites(data||[])
+    try{const{data}=await getMyInvitations(em);setPendingInvites(data||[])}catch(e){console.error(e)}
   },[session?.user?.email])
 
   useEffect(()=>{
-    supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session)handleAuth(session.user);else{setLoading(false);initRef.current=true}})
+    supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session)handleAuth(session.user);else{setLoading(false);initRef.current=true}}).catch(e=>{console.error('Session error:',e);setError(e.message||'Failed to connect');setLoading(false)})
     const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
       setSession(session)
       if(!session){authIdRef.current=null;setLoading(false);initRef.current=true;return}
@@ -927,6 +927,7 @@ export default function App(){
 
   const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
 
+  if(error)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center',maxWidth:400,padding:24}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#ef4444,#f87171)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 14px',boxShadow:'0 8px 28px rgba(239,68,68,0.4)'}}>!</div><div style={{fontSize:16,fontWeight:700,color:G.text,marginBottom:8}}>Connection Error</div><div style={{fontSize:13,color:G.textSub,lineHeight:1.5}}>{error}</div><button onClick={()=>window.location.reload()} style={{marginTop:16,padding:'8px 20px',borderRadius:G.radiusSm,border:`1px solid ${G.border}`,background:G.surface,color:G.text,cursor:'pointer',fontSize:13,fontFamily:G.font}}>Retry</button></div></div>
   if(loading)return<div style={{minHeight:'100vh',background:G.bg,display:'flex',alignItems:'center',justifyContent:'center',color:G.textSub,fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:48,height:48,borderRadius:'14px',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,margin:'0 auto 14px',boxShadow:'0 8px 28px rgba(99,102,241,0.4)'}}>✦</div><div>Loading…</div></div></div>
   if(!session)return<AuthScreen inviteToken={inviteToken}/>
   return<TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/>
