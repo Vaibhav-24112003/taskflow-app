@@ -1081,7 +1081,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
-  const loadOrgs=useCallback(async()=>{var r=await supabase.from('organizations').select('id,name,created_by').order('name');if(r.data)setOrgs(r.data);},[])
+  const loadOrgs=useCallback(async()=>{var r=await supabase.from('organizations').select('id,name,slug,description,created_by').order('name');if(r.error)console.error('loadOrgs error:',r.error);if(r.data)setOrgs(r.data);},[])
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
       loadOrgs();
   useEffect(()=>{loadWS()},[cu.id])
@@ -1719,7 +1719,7 @@ function OrgManagementPanel({cu,supabase,allWorkspaces}){
   useEffect(function(){load();},[]);
   async function load(){
     setLoading(true);
-    var r=await supabase.from('organizations').select('id,name,created_by').order('name');
+    var r=await supabase.from('organizations').select('id,name,slug,description,created_by').order('name');
     var rw=await supabase.from('workspaces').select('id,name,color,icon,description').order('name');
     if(r.data)setOrgs(r.data);
     if(rw.data)setLocalWs(rw.data);
