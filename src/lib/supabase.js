@@ -163,3 +163,26 @@ export const deleteTask = (id) =>
 // ── Activity Log ───────────────────────────────────────────────────────────
 export const logActivity = (taskId, userId, action) =>
   supabase.from('task_activity').insert({ task_id: taskId, user_id: userId, action })
+
+// ── Work Type Configs ─────────────────────────────────────────────────────
+export const getWorkTypeConfigs = (orgId) =>
+  supabase.from('work_type_configs').select('*').eq('org_id', orgId).eq('is_active', true).order('sort_order')
+
+export const getAllWorkTypeConfigs = (orgId) =>
+  supabase.from('work_type_configs').select('*').eq('org_id', orgId).order('sort_order')
+
+export const insertWorkTypeConfig = (config) =>
+  supabase.from('work_type_configs').insert(config).select().single()
+
+export const updateWorkTypeConfig = (id, updates) =>
+  supabase.from('work_type_configs').update(updates).eq('id', id)
+
+export const deleteWorkTypeConfig = (id) =>
+  supabase.from('work_type_configs').delete().eq('id', id)
+
+// ── User Worksheet Preferences ────────────────────────────────────────────
+export const getUserWorksheetPrefs = (userId, orgId) =>
+  supabase.from('user_worksheet_prefs').select('*').eq('user_id', userId).eq('org_id', orgId)
+
+export const upsertUserWorksheetPref = (pref) =>
+  supabase.from('user_worksheet_prefs').upsert(pref, { onConflict: 'user_id,org_id,work_type' }).select().single()
