@@ -1817,7 +1817,7 @@ function OrgMembersPanel({org,cu,supabase}){
   async function inviteMember(){
     if(!email.trim()||!email.includes('@')){setErr('Enter a valid email');return;}
     setSending(true);setErr('');
-    var res=await supabase.from('org_invitations').insert({org_id:org.id,inviter_id:cu.id,invitee_email:email.trim().toLowerCase(),role:role});
+    var res=await supabase.from('org_invitations').insert({org_id:org.id,inviter_id:cu.id,invitee_email:email.trim().toLowerCase(),role:role,status:'pending'});
     setSending(false);
     if(res.error){setErr(res.error.message);return;}
     setEmail('');loadAll();showToast('Invitation sent to '+email.trim());
