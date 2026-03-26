@@ -1,13 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Fallback to hardcoded values if env vars are missing (prevents blank white screen)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://vorxrjekbokqkigfabhr.supabase.co'
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvcnhyamVrYm9rcWtpZ2ZhYmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NDkyNDEsImV4cCI6MjA4NzQyNTI0MX0.tJIIJZ1tJU_7nDsgYzlMfy2G2UWwDyMmf1f61clsEFM'
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.error('Missing Supabase environment variables: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set')
-}
-
-export const supabase = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_ANON_KEY || 'placeholder')
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const signInWithGoogle = () =>
@@ -89,13 +86,7 @@ export const getMemberRole = async (workspaceId, userId) => {
 export const inviteToWorkspace = (workspaceId, inviterId, inviteeEmail) =>
   supabase
     .from('workspace_invitations')
-    .insert({
-      workspace_id: workspaceId,
-      inviter_id: inviterId,
-      invitee_email: inviteeEmail.toLowerCase().trim(),
-      status: 'pending',
-      token: crypto.randomUUID()
-    })
+    .insert({ workspace_id: workspaceId, inviter_id: inviterId, invitee_email: inviteeEmail.toLowerCase().trim() })
     .select()
     .single()
 
@@ -121,15 +112,24 @@ export const getInvitationByToken = (token) =>
     .eq('token', token)
     .maybeSingle()
 
+// Use server-side SECURITY DEFINER function to bypass RLS race conditions
 export const acceptInvitation = async (invitationId, inviteeEmail, workspaceId, userId) => {
-  // Add to workspace first
+  // Primary: use server-side function (bypasses RLS entirely)
+  const { data, error } = await supabase.rpc('accept_workspace_invitation', {
+    p_invitation_id: invitationId
+  })
+  if (!error && data?.success) return { data, error: null }
+
+  // Fallback: direct insert (works if email already in profile)
   await addMemberToWorkspace(workspaceId, userId, 'member')
-  // Then mark accepted
   return supabase
     .from('workspace_invitations')
     .update({ status: 'accepted' })
     .eq('id', invitationId)
 }
+
+export const acceptInvitationByToken = async (token) =>
+  supabase.rpc('accept_invitation_by_token', { p_token: token })
 
 export const declineInvitation = (invitationId) =>
   supabase
