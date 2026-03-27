@@ -1338,6 +1338,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           }
         </div>
 
+        {/* CALENDAR - Due Dates */}
+        {orgs.length>0&&<div style={{marginTop:40,paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
+          <CalendarView orgs={orgs} supabase={supabase} cu={cu}/>
+        </div>}
+
       </div>
       :<div style={{flex:1,display:'flex',flexDirection:'column',position:'relative',zIndex:1,minHeight:0}}>
         {/* Invite banner inside workspace too */}
@@ -1513,7 +1518,7 @@ var CLIENT_STATUSES=['active','inactive','prospect'];
 var WORK_TYPES_DEFAULT=['ITR','GST/GSTR','TDS','Accounts','Audit','MIS','Payroll','Other'];
 var DEF_CF=[{key:'file_no',label:'File No.',type:'text'},{key:'engagement_type',label:'Engagement Type',type:'text'}];
 
-function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames}){
+function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeConfigs}){
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
   var [search,setSearch]=useState('');
@@ -1598,12 +1603,12 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames}){
       </div>
     }
     {toastMsg&&<div style={{position:'fixed',bottom:24,right:24,background:toastMsg.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toastMsg.msg}</div>}
-    {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} workTypeNames={workTypeNames} onClose={function(){setShowForm(false);}} onSaved={function(){load();setShowForm(false);toast(editClient?'Updated':'Added');}}/>}
+    {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} workTypeNames={workTypeNames} workTypeConfigs={workTypeConfigs} onClose={function(){setShowForm(false);}} onSaved={function(){load();setShowForm(false);toast(editClient?'Updated':'Added');}}/>}
     {showImport&&<ClientImportModal orgId={orgId} supabase={supabase} onClose={function(){setShowImport(false);}} onImported={function(){load();setShowImport(false);toast('Import complete');}}/>}
   </div>;
 }
 
-function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames}){
+function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames,workTypeConfigs}){
   var isEdit=!!client;
   var [tab,setTab]=useState('basic');
   var [saving,setSaving]=useState(false);
@@ -1620,12 +1625,17 @@ function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames}){
   var [status,setStatus]=useState(client?client.status:'active');
   var [notes,setNotes]=useState(client?client.notes||'':'');
   var [selWT,setSelWT]=useState(function(){return((client&&client.custom_fields&&client.custom_fields.work_types)||'').split(',').filter(Boolean);});
+  var [cfValues,setCfValues]=useState(function(){var cf=client&&client.custom_fields||{};var v={};Object.keys(cf).forEach(function(k){if(k!=='work_types')v[k]=cf[k];});return v;});
   var togWT=function(wt){setSelWT(function(p){return p.includes(wt)?p.filter(function(x){return x!==wt;}):[...p,wt];});};
+  function setCfVal(key,val){setCfValues(function(p){var n=Object.assign({},p);n[key]=val;return n;});}
+  // Build a lookup of worktype configs by name
+  var wtcMap={};
+  (workTypeConfigs||[]).forEach(function(c){wtcMap[c.name]=c;});
   async function save(){
     if(!name.trim()){setErrs({name:'Required'});return;}
     setSaving(true);
     var user=(await supabase.auth.getUser()).data.user;
-    var cf={work_types:selWT.join(',')};
+    var cf=Object.assign({},cfValues,{work_types:selWT.join(',')});
     var p={name:name.trim(),display_name:dispName.trim()||null,client_type:type,email:email.trim()||null,phone:phone.trim()||null,city:city.trim()||null,state:state.trim()||null,pan:pan.trim().toUpperCase()||null,gstin:gstin.trim().toUpperCase()||null,status,notes:notes.trim()||null,custom_fields:cf};
     if(orgId)p.org_id=orgId;
     var err;
@@ -1668,6 +1678,28 @@ function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames}){
             {(workTypeNames||WORK_TYPES_DEFAULT).map(function(wt){var sel=selWT.includes(wt);return<button key={wt} onClick={function(){togWT(wt);}} style={{padding:'7px 14px',borderRadius:8,border:'1px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'rgba(107,140,173,0.15)':'var(--tf-surface)',color:sel?'#6b8cad':'var(--tf-text-sub)',fontWeight:sel?700:500,cursor:'pointer',fontSize:13}}>{wt}</button>;})}
           </div>
           <div style={{marginTop:12,fontSize:12,color:'var(--tf-text-sub)'}}>Selected: {selWT.length?selWT.join(', '):'None'}</div>
+          {/* Custom client fields for selected worktypes */}
+          {selWT.map(function(wt){
+            var wtc=wtcMap[wt];
+            if(!wtc||!(wtc.client_fields||[]).length)return null;
+            return<div key={wt} style={{marginTop:16,padding:'12px 14px',background:'rgba(107,140,173,0.04)',border:'1px solid var(--tf-border)',borderRadius:10}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#6b8cad',marginBottom:8}}>{wt} Fields</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 12px'}}>
+                {(wtc.client_fields||[]).map(function(f){
+                  var fieldKey=wt.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'_'+f.key;
+                  var val=cfValues[fieldKey]||'';
+                  return<div key={fieldKey}>
+                    <label style={LBL}>{f.label}</label>
+                    {f.type==='select'?<select value={val} onChange={function(e){setCfVal(fieldKey,e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+                      <option value="">— Select —</option>
+                      {(f.options||'').split(',').filter(Boolean).map(function(opt){return<option key={opt.trim()} value={opt.trim()}>{opt.trim()}</option>;})}
+                    </select>:
+                    <input type={f.type==='number'?'number':f.type==='date'?'date':'text'} value={val} onChange={function(e){setCfVal(fieldKey,e.target.value);}} style={INP} placeholder={f.label}/>}
+                  </div>;
+                })}
+              </div>
+            </div>;
+          })}
         </div>}
         {tab==='notes'&&<div><label style={LBL}>Notes</label><textarea value={notes} onChange={function(e){setNotes(e.target.value);}} rows={7} style={Object.assign({},INP,{resize:'vertical'})} placeholder="Any notes about this client..."/></div>}
         {errs.save&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}}>{errs.save}</div>}
@@ -1982,6 +2014,15 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
+  async function clearAll(){
+    if(!window.confirm('Delete ALL work type configs? This cannot be undone.'))return;
+    setSeeding(true);
+    for(var i=0;i<configs.length;i++){await deleteWorkTypeConfig(configs[i].id);}
+    setSeeding(false);
+    showToast('All work types deleted');
+    if(onReload)onReload();
+  }
+
   async function seedDefaults(){
     setSeeding(true);
     var entries=Object.entries(DEFAULT_WS_TYPE_CONFIGS);
@@ -2024,6 +2065,9 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
         {configs.length===0&&<button onClick={seedDefaults} disabled={seeding} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600,opacity:seeding?.5:1}}>
           {seeding?'Creating...':'Load Defaults'}
         </button>}
+        {configs.length>0&&<button onClick={clearAll} disabled={seeding} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'7px 14px',color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:600,opacity:seeding?.5:1}}>
+          {seeding?'Clearing...':'Clear All'}
+        </button>}
         <button onClick={function(){setEditConfig(null);setShowForm(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ New Work Type</button>
       </div>
     </div>
@@ -2046,7 +2090,9 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
               </div>
               <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>
                 {colCount} column{colCount!==1?'s':''}
-                {c.due_day&&<span> · Due: day {c.due_day}{c.due_month?' of month '+c.due_month:''}</span>}
+                {(c.due_dates||[]).length>0&&<span> · Due: {(c.due_dates||[]).map(function(d){return(d.label||'Due')+' '+d.day+(d.month?'/'+d.month:'');}).join(', ')}</span>}
+                {!(c.due_dates||[]).length&&c.due_day&&<span> · Due: day {c.due_day}{c.due_month?' of month '+c.due_month:''}</span>}
+                {(c.client_fields||[]).length>0&&<span> · {(c.client_fields||[]).length} client field{(c.client_fields||[]).length!==1?'s':''}</span>}
               </div>
               {colCount>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
                 {(c.columns||[]).map(function(col){return<span key={col.key} style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.06)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 6px'}}>{col.label}</span>;})}
@@ -2069,11 +2115,12 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
 
 function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var isEdit=!!config;
+  var [tab,setTab]=useState('basic');
   var [name,setName]=useState(config?config.name:'');
   var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
-  var [dueDay,setDueDay]=useState(config?config.due_day||'':'');
-  var [dueMonth,setDueMonth]=useState(config?config.due_month||'':'');
+  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates:config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||''}]:[]);
+  var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
@@ -2089,24 +2136,39 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     });});
   }
 
+  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:''}];});}
+  function removeDueDate(idx){setDueDates(function(p){return p.filter(function(_,i){return i!==idx;});});}
+  function updateDueDate(idx,field,val){setDueDates(function(p){return p.map(function(d,i){if(i!==idx)return d;var u=Object.assign({},d);u[field]=val;return u;});});}
+
+  function addClientField(){setClientFields(function(p){return[...p,{key:'field_'+Date.now(),label:'',type:'text',options:''}];});}
+  function removeClientField(idx){setClientFields(function(p){return p.filter(function(_,i){return i!==idx;});});}
+  function updateClientField(idx,field,val){
+    setClientFields(function(p){return p.map(function(f,i){
+      if(i!==idx)return f;
+      var u=Object.assign({},f);u[field]=val;
+      if(field==='label')u.key=val.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'field_'+i;
+      return u;
+    });});
+  }
+
   async function save(){
     if(!name.trim()){setErr('Name required');return;}
     if(columns.some(function(c){return!c.label.trim();})){setErr('All columns must have a label');return;}
     setSaving(true);
+    var firstDue=dueDates.length>0?dueDates[0]:null;
     var payload={
       org_id:orgId, name:name.trim(), frequency:frequency,
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim()};}),
-      due_day:dueDay?Number(dueDay):null,
-      due_month:dueMonth?Number(dueMonth):null,
+      due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
+      due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
+      due_dates:dueDates.filter(function(d){return d.day;}).map(function(d){return{label:d.label||'Due',day:Number(d.day),month:d.month?Number(d.month):null};}),
+      client_fields:clientFields.filter(function(f){return f.label.trim();}).map(function(f){return{key:f.key,label:f.label.trim(),type:f.type,options:f.options||''};}),
       is_active:config?config.is_active:true,
       sort_order:config?config.sort_order:99
     };
     var result;
-    if(isEdit){
-      result=await updateWorkTypeConfig(config.id,payload);
-    }else{
-      result=await insertWorkTypeConfig(payload);
-    }
+    if(isEdit){result=await updateWorkTypeConfig(config.id,payload);}
+    else{result=await insertWorkTypeConfig(payload);}
     setSaving(false);
     if(result.error){setErr(result.error.message);return;}
     onSaved();
@@ -2114,20 +2176,24 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
+  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'}];
 
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-    <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:520,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:560,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid var(--tf-border)'}}>
         <h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>{isEdit?'Edit':'New'} Work Type</h3>
         <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>
       </div>
+      <div style={{display:'flex',gap:2,padding:'8px 20px 0',borderBottom:'1px solid var(--tf-border)'}}>
+        {TABS.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);}} style={{background:'none',border:'none',padding:'5px 10px',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500,color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',marginBottom:-1}}>{t.label}</button>;})}
+      </div>
       <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
-        <div style={{marginBottom:14}}>
-          <label style={LBL}>Work Type Name *</label>
-          <input value={name} onChange={function(e){setName(e.target.value);}} style={INP} placeholder="e.g. GST, ITR, TDS..." disabled={isEdit}/>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
-          <div>
+        {tab==='basic'&&<div>
+          <div style={{marginBottom:14}}>
+            <label style={LBL}>Work Type Name *</label>
+            <input value={name} onChange={function(e){setName(e.target.value);}} style={INP} placeholder="e.g. GST, ITR, TDS..." disabled={isEdit}/>
+          </div>
+          <div style={{marginBottom:14}}>
             <label style={LBL}>Frequency</label>
             <select value={frequency} onChange={function(e){setFrequency(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
               <option value="monthly">Monthly</option>
@@ -2136,20 +2202,14 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               <option value="once">One-time</option>
             </select>
           </div>
-          <div>
-            <label style={LBL}>Due Day</label>
-            <input type="number" min="1" max="31" value={dueDay} onChange={function(e){setDueDay(e.target.value);}} style={INP} placeholder="e.g. 15"/>
-          </div>
-          <div>
-            <label style={LBL}>Due Month</label>
-            <input type="number" min="1" max="12" value={dueMonth} onChange={function(e){setDueMonth(e.target.value);}} style={INP} placeholder="e.g. 7"/>
-          </div>
-        </div>
-        <div style={{marginBottom:8}}>
+        </div>}
+
+        {tab==='columns'&&<div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-            <label style={Object.assign({},LBL,{marginBottom:0})}>Columns</label>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Worksheet Columns</label>
             <button onClick={addCol} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Column</button>
           </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Columns that appear as checkboxes in the worksheet for this work type.</div>
           {columns.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No columns. Add at least one.</div>:
           <div style={{display:'flex',flexDirection:'column',gap:6}}>
             {columns.map(function(col,i){
@@ -2160,7 +2220,59 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               </div>;
             })}
           </div>}
-        </div>
+        </div>}
+
+        {tab==='duedates'&&<div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Due Dates</label>
+            <button onClick={addDueDate} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Due Date</button>
+          </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Define one or more due dates per period. E.g. GSTR1 due 11th, GSTR3B due 20th.</div>
+          {dueDates.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No due dates configured.</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {dueDates.map(function(dd,i){
+              return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px'}}>
+                <input value={dd.label} onChange={function(e){updateDueDate(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder="Label (e.g. GSTR1 Due)"/>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
+                  <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="15"/>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
+                  <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
+                </div>
+                <button onClick={function(){removeDueDate(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
+              </div>;
+            })}
+          </div>}
+        </div>}
+
+        {tab==='clientfields'&&<div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Client Fields</label>
+            <button onClick={addClientField} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Field</button>
+          </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Extra fields that appear in the Client form when this work type is selected.</div>
+          {clientFields.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No extra client fields.</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {clientFields.map(function(f,i){
+              return<div key={i} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:f.type==='select'?6:0}}>
+                  <input value={f.label} onChange={function(e){updateClientField(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder="Field label"/>
+                  <select value={f.type} onChange={function(e){updateClientField(i,'type',e.target.value);}} style={Object.assign({},INP,{width:90,cursor:'pointer'})}>
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                    <option value="date">Date</option>
+                    <option value="select">Select</option>
+                  </select>
+                  <button onClick={function(){removeClientField(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
+                </div>
+                {f.type==='select'&&<input value={f.options||''} onChange={function(e){updateClientField(i,'options',e.target.value);}} style={Object.assign({},INP,{marginTop:4})} placeholder="Options (comma-separated, e.g. Monthly,Quarterly,Yearly)"/>}
+              </div>;
+            })}
+          </div>}
+        </div>}
+
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}}>{err}</div>}
       </div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}}>
@@ -2960,7 +3072,9 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 // CALENDAR VIEW
 // ══════════════════════════════════════════════════════════════════
 
-function CalendarView({org,supabase,cu,workTypeConfigs}){
+function CalendarView({orgs,supabase,cu}){
+  var orgIds=(orgs||[]).map(function(o){return o.id;});
+  var orgMap={};(orgs||[]).forEach(function(o){orgMap[o.id]=o;});
   var [calYear,setCalYear]=useState(new Date().getFullYear());
   var [calMonth,setCalMonth]=useState(new Date().getMonth()); // 0-indexed
   var [rows,setRows]=useState([]);
@@ -2972,7 +3086,7 @@ function CalendarView({org,supabase,cu,workTypeConfigs}){
   var today=new Date();today.setHours(0,0,0,0);
   var isCurrentMonth=calYear===today.getFullYear()&&calMonth===today.getMonth();
 
-  useEffect(function(){loadCalData();},[org.id,calYear,calMonth]);
+  useEffect(function(){if(orgIds.length>0)loadCalData();},[orgIds.join(','),calYear,calMonth]);
 
   async function loadCalData(){
     setLoading(true);
@@ -2982,12 +3096,12 @@ function CalendarView({org,supabase,cu,workTypeConfigs}){
     var startStr=start.toISOString().slice(0,10);
     var endStr=end.toISOString().slice(0,10);
 
-    var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,org_id').in('org_id',orgIds);
     setClients(rc.data||[]);
 
     var rr=await supabase.from('worksheet_rows')
-      .select('id,worksheet_id,client_id,status,due_date,completed_at,data')
-      .eq('org_id',org.id)
+      .select('id,worksheet_id,client_id,org_id,status,due_date,completed_at,data')
+      .in('org_id',orgIds)
       .gte('due_date',startStr)
       .lte('due_date',endStr);
     var rowData=rr.data||[];
@@ -3214,7 +3328,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
         <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
       </div>
       <div style={{display:'flex',gap:2,overflowX:'auto'}}>
-        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'analytics',label:'Analytics',avail:true},{id:'calendar',label:'Calendar',avail:true},{id:'worktypes',label:'Work Types',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
+        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'analytics',label:'Analytics',avail:true},{id:'worktypes',label:'Work Types',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
           return<button key={t.id} onClick={function(){if(t.avail)setTab(t.id);}} disabled={!t.avail}
             style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.avail?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.avail?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.avail?1:0.5,whiteSpace:'nowrap'}}>
             {t.label}{!t.avail&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
@@ -3223,10 +3337,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       </div>
     </div>
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
-      {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined}/>}
+      {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs}/>}
       {tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {tab==='calendar'&&<CalendarView org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {tab==='settings'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
