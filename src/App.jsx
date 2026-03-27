@@ -2124,7 +2124,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
-  function addCol(){setColumns(function(p){return[...p,{key:'col_'+Date.now(),label:''}];});}
+  function addCol(){setColumns(function(p){return[...p,{key:'col_'+Date.now(),label:'',type:'checkbox',options:''}];});}
   function removeCol(idx){setColumns(function(p){return p.filter(function(_,i){return i!==idx;});});}
   function updateCol(idx,field,val){
     setColumns(function(p){return p.map(function(c,i){
@@ -2158,7 +2158,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     var firstDue=dueDates.length>0?dueDates[0]:null;
     var payload={
       org_id:orgId, name:name.trim(), frequency:frequency,
-      columns:columns.map(function(c){return{key:c.key,label:c.label.trim()};}),
+      columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
       due_dates:dueDates.filter(function(d){return d.day;}).map(function(d){return{label:d.label||'Due',day:Number(d.day),month:d.month?Number(d.month):null};}),
@@ -2209,14 +2209,23 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
             <label style={Object.assign({},LBL,{marginBottom:0})}>Worksheet Columns</label>
             <button onClick={addCol} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Column</button>
           </div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Columns that appear as checkboxes in the worksheet for this work type.</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Define columns for the worksheet. Each column can be a checkbox, text, date, time, or dropdown.</div>
           {columns.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No columns. Add at least one.</div>:
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {columns.map(function(col,i){
-              return<div key={i} style={{display:'flex',alignItems:'center',gap:8}}>
-                <input value={col.label} onChange={function(e){updateCol(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder="Column label"/>
-                <div style={{fontSize:10,color:'var(--tf-text-sub)',minWidth:60,fontFamily:'monospace'}}>{col.key}</div>
-                <button onClick={function(){removeCol(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1}}>×</button>
+              return<div key={i} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <input value={col.label} onChange={function(e){updateCol(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder="Column label"/>
+                  <select value={col.type||'checkbox'} onChange={function(e){updateCol(i,'type',e.target.value);}} style={Object.assign({},INP,{width:100,cursor:'pointer'})}>
+                    <option value="checkbox">Checkbox</option>
+                    <option value="text">Text</option>
+                    <option value="date">Date</option>
+                    <option value="time">Time</option>
+                    <option value="select">Select</option>
+                  </select>
+                  <button onClick={function(){removeCol(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
+                </div>
+                {col.type==='select'&&<input value={col.options||''} onChange={function(e){updateCol(i,'options',e.target.value);}} style={Object.assign({},INP,{marginTop:6})} placeholder="Options (comma-separated, e.g. Yes,No,Partial)"/>}
               </div>;
             })}
           </div>}
@@ -2486,13 +2495,23 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     if(!row)return;
     var newData=Object.assign({},row.data||{});
     newData[key]=newVal;
-    // Check if all cols are now done → auto-set completed_at
-    var allChecked=cfg.cols.length>0&&cfg.cols.every(function(c){return newData[c.key];});
+    // Check if all checkbox cols are now done → auto-set completed_at
+    var checkboxCols=cfg.cols.filter(function(c){return !c.type||c.type==='checkbox';});
+    var allChecked=checkboxCols.length>0&&checkboxCols.every(function(c){return newData[c.key];});
     var updates={data:newData};
     if(allChecked&&!row.completed_at){updates.completed_at=new Date().toISOString();updates.status='completed';}
     else if(!allChecked&&row.completed_at){updates.completed_at=null;}
     await supabase.from('worksheet_rows').update(updates).eq('id',rowId);
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
+  }
+
+  async function updateCellData(rowId,key,val){
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var newData=Object.assign({},row.data||{});
+    newData[key]=val;
+    await supabase.from('worksheet_rows').update({data:newData}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:newData}):r;});});
   }
 
   async function updateComment(rowId,val){
@@ -2536,14 +2555,26 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     if(filterClient&&!client.name.toLowerCase().includes(filterClient.toLowerCase())&&!(client.display_name||'').toLowerCase().includes(filterClient.toLowerCase()))return false;
     // Status filter
     if(filters.__status&&(row.status||'pending')!==filters.__status)return false;
-    // Checkbox column filters
+    // Column filters
     var d=row.data||{};
     var keys=Object.keys(filters);
     for(var i=0;i<keys.length;i++){
       var k=keys[i];
       if(k==='__status')continue;
-      if(filters[k]==='checked'&&!d[k])return false;
-      if(filters[k]==='unchecked'&&d[k])return false;
+      var fv=filters[k];
+      var colDef=cfg.cols.find(function(c){return c.key===k;});
+      var ct=colDef&&colDef.type||'checkbox';
+      if(ct==='checkbox'){
+        if(fv==='checked'&&!d[k])return false;
+        if(fv==='unchecked'&&d[k])return false;
+      }else if(ct==='select'){
+        if(fv==='__filled'&&!d[k])return false;
+        if(fv==='__empty'&&d[k])return false;
+        if(fv&&fv!=='__filled'&&fv!=='__empty'&&d[k]!==fv)return false;
+      }else{
+        if(fv==='__filled'&&!d[k])return false;
+        if(fv==='__empty'&&d[k])return false;
+      }
     }
     return true;
   });
@@ -2635,10 +2666,27 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           <option value="completed">Completed</option>
         </select>
         {cfg.cols.map(function(col){
+          var ct=col.type||'checkbox';
+          if(ct==='checkbox'){
+            return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+              <option value="all">{col.label}: All</option>
+              <option value="checked">{col.label}: Done</option>
+              <option value="unchecked">{col.label}: Not Done</option>
+            </select>;
+          }
+          if(ct==='select'){
+            var opts=(col.options||'').split(',').map(function(o){return o.trim();}).filter(Boolean);
+            return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+              <option value="all">{col.label}: All</option>
+              <option value="__filled">Has Value</option>
+              <option value="__empty">Empty</option>
+              {opts.map(function(o){return<option key={o} value={o}>{o}</option>;})}
+            </select>;
+          }
           return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
             <option value="all">{col.label}: All</option>
-            <option value="checked">{col.label}: Done</option>
-            <option value="unchecked">{col.label}: Not Done</option>
+            <option value="__filled">Has Value</option>
+            <option value="__empty">Empty</option>
           </select>;
         })}
         {hasActiveFilters&&<button onClick={clearFilters} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:7,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Clear</button>}
@@ -2646,10 +2694,15 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       </div>}
 
       {/* Summary stats */}
-      {rows.length>0&&<div style={{display:'flex',gap:12,marginBottom:12,fontSize:11,color:'var(--tf-text-sub)'}}>
+      {rows.length>0&&<div style={{display:'flex',gap:12,marginBottom:12,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
         {cfg.cols.map(function(col){
-          var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
-          return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}</span>;
+          var ct=col.type||'checkbox';
+          if(ct==='checkbox'){
+            var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
+            return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}</span>;
+          }
+          var filled=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
+          return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{filled}/{rows.length}</b> {col.label} filled</span>;
         })}
       </div>}
 
@@ -2662,7 +2715,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           <thead>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
               <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
-              {visibleCols.map(function(col){return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:80}}>{col.label}</th>;})}
+              {visibleCols.map(function(col){var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw}}>{col.label}</th>;})}
               {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>}
               {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
               {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
@@ -2673,7 +2726,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
               var client=clientMap[row.client_id];
               if(!client)return null;
               var d=row.data||{};
-              var allDone=cfg.cols.length>0&&cfg.cols.every(function(c){return d[c.key];});
+              var checkboxCols=cfg.cols.filter(function(c){return !c.type||c.type==='checkbox';});
+              var allDone=checkboxCols.length>0&&checkboxCols.every(function(c){return d[c.key];});
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.02)':'transparent',transition:'background 0.15s'}}>
                 <td style={{padding:'10px 14px'}}>
                   <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}</div>
@@ -2681,11 +2735,46 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
                   {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
                 </td>
                 {visibleCols.map(function(col){
-                  var val=!!(d[col.key]);
-                  return<td key={col.key} style={{padding:'10px 10px',textAlign:'center'}}>
-                    <div onClick={function(){toggleCell(row.id,col.key,val);}} style={{width:22,height:22,borderRadius:5,border:'2px solid',borderColor:val?'#22c55e':'var(--tf-border)',background:val?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'all 0.15s'}}>
-                      {val&&<span style={{color:'#fff',fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
-                    </div>
+                  var colType=col.type||'checkbox';
+                  if(colType==='checkbox'){
+                    var val=!!(d[col.key]);
+                    return<td key={col.key} style={{padding:'10px 10px',textAlign:'center'}}>
+                      <div onClick={function(){toggleCell(row.id,col.key,val);}} style={{width:22,height:22,borderRadius:5,border:'2px solid',borderColor:val?'#22c55e':'var(--tf-border)',background:val?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'all 0.15s'}}>
+                        {val&&<span style={{color:'#fff',fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
+                      </div>
+                    </td>;
+                  }
+                  if(colType==='text'){
+                    return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
+                      <input defaultValue={d[col.key]||''} onBlur={function(e){if(e.target.value!==(d[col.key]||''))updateCellData(row.id,col.key,e.target.value);}}
+                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:12,width:'100%',minWidth:60,outline:'none',fontFamily:'inherit',padding:'4px 6px',textAlign:'center'}}/>
+                    </td>;
+                  }
+                  if(colType==='date'){
+                    return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
+                      <input type="date" defaultValue={d[col.key]||''} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}}
+                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer'}}/>
+                    </td>;
+                  }
+                  if(colType==='time'){
+                    return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
+                      <input type="time" defaultValue={d[col.key]||''} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}}
+                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer'}}/>
+                    </td>;
+                  }
+                  if(colType==='select'){
+                    var opts=(col.options||'').split(',').map(function(o){return o.trim();}).filter(Boolean);
+                    return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
+                      <select value={d[col.key]||''} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}}
+                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer',maxWidth:120}}>
+                        <option value="">—</option>
+                        {opts.map(function(o){return<option key={o} value={o}>{o}</option>;})}
+                      </select>
+                    </td>;
+                  }
+                  return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
+                    <input defaultValue={d[col.key]||''} onBlur={function(e){if(e.target.value!==(d[col.key]||''))updateCellData(row.id,col.key,e.target.value);}}
+                      style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:12,width:'100%',minWidth:60,outline:'none',fontFamily:'inherit',padding:'4px 6px',textAlign:'center'}}/>
                   </td>;
                 })}
                 {showStatus&&<td style={{padding:'10px 10px',textAlign:'center'}}>
