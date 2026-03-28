@@ -1610,7 +1610,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
     }
     {toastMsg&&<div style={{position:'fixed',bottom:24,right:24,background:toastMsg.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toastMsg.msg}</div>}
     {showForm&&<ClientForm client={editClient} orgId={orgId} supabase={supabase} workTypeNames={workTypeNames} workTypeConfigs={workTypeConfigs} onClose={function(){setShowForm(false);}} onSaved={function(){load();setShowForm(false);toast(editClient?'Updated':'Added');}}/>}
-    {showImport&&<ClientImportModal orgId={orgId} supabase={supabase} onClose={function(){setShowImport(false);}} onImported={function(){load();setShowImport(false);toast('Import complete');}}/>}
+    {showImport&&<ClientImportModal orgId={orgId} supabase={supabase} workTypeConfigs={workTypeConfigs} onClose={function(){setShowImport(false);}} onImported={function(){load();setShowImport(false);toast('Import complete');}}/>}
   </div>;
 }
 
@@ -1718,7 +1718,7 @@ function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames,workTyp
   </div>;
 }
 
-function ClientImportModal({orgId,supabase,onClose,onImported}){
+function ClientImportModal({orgId,supabase,onClose,onImported,workTypeConfigs}){
   var [step,setStep]=useState('upload');
   var [rows,setRows]=useState([]);
   var [cols,setCols]=useState([]);
@@ -1726,13 +1726,37 @@ function ClientImportModal({orgId,supabase,onClose,onImported}){
   var [progress,setProgress]=useState(0);
   var [results,setResults]=useState(null);
   var fileRef=useRef();
-  var KNOWN=['name','display_name','client_type','email','phone','city','state','pan','gstin','status','notes','work_types'];
-  var DB_COLS=['name','display_name','client_type','email','phone','city','state','pan','gstin','status','notes'];
+  // Build worktype custom field keys from configs
+  var wtFields=[];
+  (workTypeConfigs||[]).forEach(function(wtc){
+    (wtc.client_fields||[]).forEach(function(f){
+      var key=wtc.name.toLowerCase().replace(/[^a-z0-9]+/g,'_')+'_'+f.key;
+      wtFields.push({key:key,label:wtc.name+' - '+f.label});
+    });
+  });
+  var BASE_COLS=['name','display_name','client_type','email','phone','city','state','pan','gstin','status','notes'];
+  var DB_COLS=BASE_COLS.slice();
+  var wtFieldKeys=wtFields.map(function(f){return f.key;});
+  var KNOWN=BASE_COLS.concat(['work_types']).concat(wtFieldKeys);
+  // Labels for mapping dropdown
+  var knownLabels={};
+  BASE_COLS.forEach(function(k){knownLabels[k]=k;});
+  knownLabels.work_types='work_types';
+  wtFields.forEach(function(f){knownLabels[f.key]=f.label;});
   function parseRow(r){var c=[];var cur='';var q=false;for(var i=0;i<r.length;i++){var ch=r[i];if(ch==='"'){if(q&&r[i+1]==='"'){cur+='"';i++;}else q=!q;}else if(ch===','&&!q){c.push(cur);cur='';}else cur+=ch;}c.push(cur);return c;}
   function downloadTemplate(){
-    var hdr='name,display_name,client_type,email,phone,city,state,pan,gstin,status,notes,work_types';
-    var sample='"ABC Corp","ABC","business","abc@email.com","9876543210","Mumbai","Maharashtra","ABCDE1234F","22ABCDE1234F1Z5","active","Sample client","GST Returns,TDS Returns"';
-    var csv=hdr+'\n'+sample;
+    var allHdrs=BASE_COLS.concat(['work_types']).concat(wtFieldKeys);
+    var hdr=allHdrs.join(',');
+    var sampleVals=BASE_COLS.map(function(k){
+      if(k==='name')return'"ABC Corp"';if(k==='display_name')return'"ABC"';if(k==='client_type')return'"business"';
+      if(k==='email')return'"abc@email.com"';if(k==='phone')return'"9876543210"';if(k==='city')return'"Mumbai"';
+      if(k==='state')return'"Maharashtra"';if(k==='pan')return'"ABCDE1234F"';if(k==='gstin')return'"22ABCDE1234F1Z5"';
+      if(k==='status')return'"active"';if(k==='notes')return'"Sample client"';return'""';
+    });
+    var wtNames=(workTypeConfigs||[]).map(function(w){return w.name;}).join(',');
+    sampleVals.push('"'+wtNames+'"');
+    wtFieldKeys.forEach(function(){sampleVals.push('""');});
+    var csv=hdr+'\n'+sampleVals.join(',');
     var url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
     var a=document.createElement('a');a.href=url;a.download='client_import_template.csv';a.click();URL.revokeObjectURL(url);
   }
@@ -1741,15 +1765,15 @@ function ClientImportModal({orgId,supabase,onClose,onImported}){
     var allObjs=[];
     for(var i=0;i<rows.length;i++){var row=rows[i];var obj={custom_fields:{}};if(orgId)obj.org_id=orgId;if(user)obj.created_by=user.id;cols.forEach(function(co,ci){var t=mapping[ci];if(!t||t==='__skip__')return;var v=row[ci]?row[ci].trim():null;if(t==='work_types'){obj.custom_fields.work_types=v||'';}else if(t==='__custom__'){var cfk=co.toLowerCase().replace(/[^a-z0-9]+/g,'_');obj.custom_fields[cfk]=v;}else if(DB_COLS.indexOf(t)!==-1){obj[t]=v;}else{obj.custom_fields[t]=v;}});if(!obj.name){fail++;continue;}if(!obj.status)obj.status='active';if(!obj.client_type)obj.client_type='business';allObjs.push(obj);}
     var batchSize=50;
-    for(var b=0;b<allObjs.length;b+=batchSize){var batch=allObjs.slice(b,b+batchSize);var r=await supabase.from('clients').insert(batch);if(!r.error){ok+=batch.length;}else{console.warn('Batch insert failed:',r.error.message,'— retrying individually');for(var j=0;j<batch.length;j++){var r2=await supabase.from('clients').insert(batch[j]);if(!r2.error)ok++;else{fail++;console.warn('Row failed:',batch[j].name,r2.error.message);}}}setProgress(Math.round(Math.min(b+batchSize,allObjs.length)/allObjs.length*100));}
+    for(var b=0;b<allObjs.length;b+=batchSize){var batch=allObjs.slice(b,b+batchSize);var r=await supabase.from('clients').insert(batch);if(!r.error){ok+=batch.length;}else{console.warn('Batch failed:',r.error.message,'— retrying individually');for(var j=0;j<batch.length;j++){var r2=await supabase.from('clients').insert(batch[j]);if(!r2.error)ok++;else{fail++;console.warn('Row failed:',batch[j].name,r2.error.message);}}}setProgress(Math.round(Math.min(b+batchSize,allObjs.length)/allObjs.length*100));}
     setResults({ok,fail,errMsg:fail>0?'Check browser console (F12) for details':null});setStep('done');}
   var INP2={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'};
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget&&step!=='importing')onClose();}}>
     <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:580,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 20px',borderBottom:'1px solid var(--tf-border)'}}><h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>Import Clients from CSV</h3>{step!=='importing'&&<button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>}</div>
       <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
-        {step==='upload'&&<div><div style={{background:'rgba(107,140,173,0.06)',border:'1px dashed rgba(107,140,173,0.35)',borderRadius:10,padding:28,textAlign:'center',marginBottom:16}}><div style={{fontSize:28,marginBottom:10}}>📄</div><div style={{fontWeight:600,color:'var(--tf-text)',marginBottom:6}}>Select CSV File</div><div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Required: name column. All fields auto-mapped including city, state, notes, work types.</div><input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{display:'none'}}/><div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}><button onClick={function(){fileRef.current.click();}} style={{background:'#6b8cad',border:'none',borderRadius:7,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Choose File</button><button onClick={downloadTemplate} style={{background:'transparent',border:'1px solid rgba(107,140,173,0.4)',borderRadius:7,padding:'8px 16px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Download Template CSV</button></div></div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'var(--tf-text-sub)'}}><div style={{fontWeight:700,marginBottom:4,color:'var(--tf-text)'}}>Supported Columns</div>name, display_name, client_type, email, phone, city, state, pan, gstin, status, notes, work_types (comma-separated). Extra columns are saved as custom fields.</div></div>}
-        {step==='preview'&&<div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:12}}>{rows.length} rows. Map columns:</div><div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:260,overflowY:'auto'}}>{cols.map(function(co,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',borderRadius:7,padding:'7px 10px',border:'1px solid var(--tf-border)'}}><div style={{flex:'0 0 140px',fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{co}</div><span style={{color:'var(--tf-text-sub)'}}>→</span><select value={mapping[i]||'__skip__'} onChange={function(e){var v=e.target.value;var idx=i;setMapping(function(m){var n=Object.assign({},m);n[idx]=v;return n;});}} style={Object.assign({},INP2,{flex:1})}><option value="__skip__">⊘ Skip</option>{KNOWN.map(function(k){return<option key={k} value={k}>{k}</option>;})}<option value="__custom__">Custom Field</option></select><div style={{flex:'0 0 80px',fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rows[0]&&rows[0][i]||'—'}</div></div>;})} </div></div>}
+        {step==='upload'&&<div><div style={{background:'rgba(107,140,173,0.06)',border:'1px dashed rgba(107,140,173,0.35)',borderRadius:10,padding:28,textAlign:'center',marginBottom:16}}><div style={{fontSize:28,marginBottom:10}}>📄</div><div style={{fontWeight:600,color:'var(--tf-text)',marginBottom:6}}>Select CSV File</div><div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Required: name column. All fields auto-mapped including city, state, notes, work types.</div><input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{display:'none'}}/><div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}><button onClick={function(){fileRef.current.click();}} style={{background:'#6b8cad',border:'none',borderRadius:7,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Choose File</button><button onClick={downloadTemplate} style={{background:'transparent',border:'1px solid rgba(107,140,173,0.4)',borderRadius:7,padding:'8px 16px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Download Template CSV</button></div></div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'var(--tf-text-sub)'}}><div style={{fontWeight:700,marginBottom:4,color:'var(--tf-text)'}}>Supported Columns</div>name, display_name, client_type, email, phone, city, state, pan, gstin, status, notes, work_types (comma-separated){wtFields.length>0&&<span>, <b>Work Type Fields:</b> {wtFields.map(function(f){return f.label;}).join(', ')}</span>}. Extra columns saved as custom fields.</div></div>}
+        {step==='preview'&&<div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:12}}>{rows.length} rows. Map columns:</div><div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:260,overflowY:'auto'}}>{cols.map(function(co,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',borderRadius:7,padding:'7px 10px',border:'1px solid var(--tf-border)'}}><div style={{flex:'0 0 140px',fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{co}</div><span style={{color:'var(--tf-text-sub)'}}>→</span><select value={mapping[i]||'__skip__'} onChange={function(e){var v=e.target.value;var idx=i;setMapping(function(m){var n=Object.assign({},m);n[idx]=v;return n;});}} style={Object.assign({},INP2,{flex:1})}><option value="__skip__">⊘ Skip</option>{BASE_COLS.map(function(k){return<option key={k} value={k}>{k}</option>;})}<option value="work_types">work_types</option>{wtFields.length>0&&<optgroup label="Work Type Fields">{wtFields.map(function(f){return<option key={f.key} value={f.key}>{f.label}</option>;})}</optgroup>}<option value="__custom__">Custom Field</option></select><div style={{flex:'0 0 80px',fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rows[0]&&rows[0][i]||'—'}</div></div>;})} </div></div>}
         {step==='importing'&&<div style={{textAlign:'center',padding:28}}><div style={{fontSize:24,marginBottom:12}}>⏳</div><div style={{fontWeight:600,fontSize:14,color:'var(--tf-text)',marginBottom:10}}>Importing... {progress}%</div><div style={{background:'var(--tf-border)',borderRadius:99,height:6,overflow:'hidden'}}><div style={{width:progress+'%',height:'100%',background:'#6b8cad',transition:'width 0.3s'}}/></div></div>}
         {step==='done'&&results&&<div style={{textAlign:'center',padding:28}}><div style={{fontSize:32,marginBottom:10}}>✅</div><div style={{fontWeight:700,fontSize:16,color:'var(--tf-text)',marginBottom:6}}>Import Complete</div><div style={{color:'#22c55e',fontWeight:600}}>✓ {results.ok} clients imported</div>{results.fail>0&&<div style={{color:'#ef4444',fontSize:13,marginTop:4}}>✗ {results.fail} failed</div>}{results.errMsg&&<div style={{color:'var(--tf-text-sub)',fontSize:11,marginTop:8}}>{results.errMsg}</div>}</div>}
       </div>
