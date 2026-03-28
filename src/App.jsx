@@ -1083,9 +1083,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
-  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
-      supabase.from('organizations').select('*').order('name').limit(100).then(function(r){if(r.data)setOrgs(r.data);});
-  useEffect(()=>{loadWS()},[cu.id])
+  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
+  useEffect(()=>{
+    loadWS();
+    supabase.from('organizations').select('*').order('name').limit(100).then(function(r){if(r.data)setOrgs(r.data);});
+  },[cu.id])
 
   useEffect(()=>{
     if(!activeWsId)return
@@ -2910,14 +2912,16 @@ function WorksheetTaskModal({row,client,workType,period,allWorkspaces,supabase,c
 
 function OrgInviteBanner({cu,supabase,onAccepted}){
   var [invites,setInvites]=useState([]);
+  var cuId=cu?cu.id:null;
   useEffect(function(){
     if(!cu)return;
     supabase.from('org_invitations')
       .select('*, organizations(id,name)')
       .eq('invitee_email',cu.email.toLowerCase())
       .eq('status','pending')
+      .limit(50)
       .then(function(r){if(r.data&&r.data.length)setInvites(r.data);});
-  },[cu&&cu.id]);
+  },[cuId]);
   if(!invites.length)return null;
   async function accept(inv){
     // Add to org_members
@@ -3021,7 +3025,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     setWorksheets(wsData);
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,data,due_date,completed_at').in('worksheet_id',wsIds).limit(2000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,completed_at').in('worksheet_id',wsIds).limit(2000);
       setAllRows(rr.data||[]);
     }else{setAllRows([]);}
     setLoading(false);
@@ -3199,7 +3203,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 // ══════════════════════════════════════════════════════════════════
 
 function CalendarView({orgs,supabase,cu}){
-  var orgIds=(orgs||[]).map(function(o){return o.id;});
+  var orgIds=useMemo(function(){return(orgs||[]).map(function(o){return o.id;});},[orgs]);
+  var orgIdKey=orgIds.join(',');
   var orgMap={};(orgs||[]).forEach(function(o){orgMap[o.id]=o;});
   var [calYear,setCalYear]=useState(new Date().getFullYear());
   var [calMonth,setCalMonth]=useState(new Date().getMonth()); // 0-indexed
@@ -3212,7 +3217,7 @@ function CalendarView({orgs,supabase,cu}){
   var today=new Date();today.setHours(0,0,0,0);
   var isCurrentMonth=calYear===today.getFullYear()&&calMonth===today.getMonth();
 
-  useEffect(function(){if(orgIds.length>0)loadCalData();},[orgIds.join(','),calYear,calMonth]);
+  useEffect(function(){if(orgIds.length>0)loadCalData();},[orgIdKey,calYear,calMonth]);
 
   async function loadCalData(){
     setLoading(true);
@@ -3226,10 +3231,11 @@ function CalendarView({orgs,supabase,cu}){
     setClients(rc.data||[]);
 
     var rr=await supabase.from('worksheet_rows')
-      .select('id,worksheet_id,client_id,org_id,status,due_date,completed_at,data')
+      .select('id,worksheet_id,client_id,org_id,status,due_date,completed_at')
       .in('org_id',orgIds)
       .gte('due_date',startStr)
-      .lte('due_date',endStr);
+      .lte('due_date',endStr)
+      .limit(2000);
     var rowData=rr.data||[];
     setRows(rowData);
 
