@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Fallback to hardcoded values if env vars are missing (prevents blank white screen)
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://vorxrjekbokqkigfabhr.supabase.co'
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZvcnhyamVrYm9rcWtpZ2ZhYmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NDkyNDEsImV4cCI6MjA4NzQyNTI0MX0.tJIIJZ1tJU_7nDsgYzlMfy2G2UWwDyMmf1f61clsEFM'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -23,7 +25,7 @@ export const getProfile = (userId) =>
   supabase.from('profiles').select('id,name,email,avatar_url').eq('id', userId).maybeSingle()
 
 export const getAllProfiles = () =>
-  supabase.from('profiles').select('id,name,email,avatar_url').order('name')
+  supabase.from('profiles').select('id,name,email,avatar_url').order('name').limit(500)
 
 // ── Workspaces ─────────────────────────────────────────────────────────────
 export const getMyWorkspaces = async (userId) => {
@@ -150,6 +152,7 @@ export const getTasks = (workspaceId) =>
     .select('id,title,description,status,priority,due_date,assigned_to,assignees,delegator_id,created_by,workspace_id,project,tags,checklist,recurrence_type,recurrence_interval,created_at,updated_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
+    .limit(1000)
 
 export const createTask = (task) =>
   supabase.from('tasks').insert(task).select().single()
