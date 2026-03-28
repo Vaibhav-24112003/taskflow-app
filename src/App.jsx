@@ -1084,7 +1084,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id,activeWsId])
-      supabase.from('organizations').select('*').order('name').then(function(r){if(r.data)setOrgs(r.data);});
+      supabase.from('organizations').select('*').order('name').limit(100).then(function(r){if(r.data)setOrgs(r.data);});
   useEffect(()=>{loadWS()},[cu.id])
 
   useEffect(()=>{
@@ -1207,7 +1207,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);var r1=await supabase.from('workspaces').select('*');var r2=await supabase.from('organizations').select('*').order('name');if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
@@ -1284,7 +1284,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
-        <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name');if(r.data)setOrgs(r.data);}}/>
+        <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
         <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
         <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
@@ -1491,7 +1491,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {showMembers&&activeWs&&<MembersModal open onClose={()=>setShowMembers(false)} ws={activeWs} wsMembers={wsMembers} cu={cu} myRole={myRole} showToast={showToast}/>}
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
-      {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name');if(r.data)setOrgs(r.data);}}/> }
+      {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
   </div>
 }
 
@@ -1531,7 +1531,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
   async function load(){
     setLoading(true);
     if(!orgId){setClients([]);setLoading(false);return;}
-    var r=await supabase.from('clients').select('*').eq('org_id',orgId).order('name');
+    var r=await supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500);
     if(!r.error)setClients(r.data||[]);
     setLoading(false);
   }
@@ -1737,7 +1737,12 @@ function ClientImportModal({orgId,supabase,onClose,onImported}){
     var a=document.createElement('a');a.href=url;a.download='client_import_template.csv';a.click();URL.revokeObjectURL(url);
   }
   function handleFile(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(ev){var lines=ev.target.result.split(/\r?\n/).filter(function(l){return l.trim();});if(lines.length<2)return;var h=parseRow(lines[0]);var d=lines.slice(1).map(function(l){return parseRow(l);});setCols(h);setRows(d);var am={};h.forEach(function(hh,i){var low=hh.toLowerCase().replace(/[ -]/g,'_');var m=KNOWN.find(function(c){return c===low||c.replace(/_/g,'').includes(low.replace(/_/g,''))||low.replace(/_/g,'').includes(c.replace(/_/g,''));});am[i]=m||'__custom__';});setMapping(am);setStep('preview');};rd.readAsText(f);}
-  async function importAll(){setStep('importing');var user=(await supabase.auth.getUser()).data.user;var ok=0,fail=0;for(var i=0;i<rows.length;i++){var row=rows[i];var obj={custom_fields:{}};if(orgId)obj.org_id=orgId;if(user)obj.created_by=user.id;cols.forEach(function(co,ci){var t=mapping[ci];if(!t||t==='__skip__')return;var v=row[ci]?row[ci].trim():null;if(t==='work_types'){obj.custom_fields.work_types=v||'';}else if(t==='__custom__'){var cfk=co.toLowerCase().replace(/[^a-z0-9]+/g,'_');obj.custom_fields[cfk]=v;}else if(DB_COLS.indexOf(t)!==-1){obj[t]=v;}else{obj.custom_fields[t]=v;}});if(!obj.name){fail++;continue;}if(!obj.status)obj.status='active';if(!obj.client_type)obj.client_type='business';var r=await supabase.from('clients').insert(obj);if(!r.error)ok++;else fail++;setProgress(Math.round((i+1)/rows.length*100));}setResults({ok,fail});setStep('done');}
+  async function importAll(){setStep('importing');var user=(await supabase.auth.getUser()).data.user;var ok=0,fail=0;
+    var allObjs=[];
+    for(var i=0;i<rows.length;i++){var row=rows[i];var obj={custom_fields:{}};if(orgId)obj.org_id=orgId;if(user)obj.created_by=user.id;cols.forEach(function(co,ci){var t=mapping[ci];if(!t||t==='__skip__')return;var v=row[ci]?row[ci].trim():null;if(t==='work_types'){obj.custom_fields.work_types=v||'';}else if(t==='__custom__'){var cfk=co.toLowerCase().replace(/[^a-z0-9]+/g,'_');obj.custom_fields[cfk]=v;}else if(DB_COLS.indexOf(t)!==-1){obj[t]=v;}else{obj.custom_fields[t]=v;}});if(!obj.name){fail++;continue;}if(!obj.status)obj.status='active';if(!obj.client_type)obj.client_type='business';allObjs.push(obj);}
+    var batchSize=50;
+    for(var b=0;b<allObjs.length;b+=batchSize){var batch=allObjs.slice(b,b+batchSize);var r=await supabase.from('clients').insert(batch);if(!r.error)ok+=batch.length;else fail+=batch.length;setProgress(Math.round(Math.min(b+batchSize,allObjs.length)/allObjs.length*100));}
+    setResults({ok,fail});setStep('done');}
   var INP2={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'};
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget&&step!=='importing')onClose();}}>
     <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:580,maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
@@ -1767,8 +1772,8 @@ function OrgManagementPanel({cu,supabase,allWorkspaces}){
   useEffect(function(){load();},[]);
   async function load(){
     setLoading(true);
-    var r=await supabase.from('organizations').select('*').order('name');
-    var rw=await supabase.from('workspaces').select('*').order('name');
+    var r=await supabase.from('organizations').select('*').order('name').limit(100);
+    var rw=await supabase.from('workspaces').select('*').order('name').limit(200);
     if(r.data)setOrgs(r.data);
     if(rw.data)setLocalWs(rw.data);
     setLoading(false);
@@ -1843,18 +1848,18 @@ function OrgMembersPanel({org,cu,supabase}){
   useEffect(function(){loadAll();},[ org.id]);
   async function loadAll(){
     setLoading(true);
-    var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id);
+    var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);
     var mlist=rm.data||[];
     var enriched=mlist;
     if(mlist.length>0){
       var ids=mlist.map(function(m){return m.user_id;});
-      var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids);
+      var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);
       var profMap={};
       (rp.data||[]).forEach(function(p){profMap[p.id]=p;});
       enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});
     }
     setMembers(enriched);
-    var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending');
+    var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);
     setInvites(ri.data||[]);
     setLoading(false);
   }
@@ -2031,7 +2036,8 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
   async function clearAll(){
     if(!window.confirm('Delete ALL work type configs? This cannot be undone.'))return;
     setSeeding(true);
-    for(var i=0;i<configs.length;i++){await deleteWorkTypeConfig(configs[i].id);}
+    var ids=configs.map(function(c){return c.id;});
+    await supabase.from('work_type_configs').delete().in('id',ids);
     setSeeding(false);
     showToast('All work types deleted');
     if(onReload)onReload();
@@ -2040,15 +2046,8 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
   async function seedDefaults(){
     setSeeding(true);
     var entries=Object.entries(DEFAULT_WS_TYPE_CONFIGS);
-    for(var i=0;i<entries.length;i++){
-      var name=entries[i][0];
-      var cfg=entries[i][1];
-      await insertWorkTypeConfig({
-        org_id:org.id, name:name, frequency:cfg.frequency,
-        columns:cfg.cols, due_day:null, due_month:null,
-        is_active:true, sort_order:i
-      });
-    }
+    var batch=entries.map(function(e,i){return{org_id:org.id,name:e[0],frequency:e[1].frequency,columns:e[1].cols,due_day:null,due_month:null,is_active:true,sort_order:i};});
+    await supabase.from('work_type_configs').insert(batch);
     setSeeding(false);
     showToast('Default work types created');
     if(onReload)onReload();
@@ -2418,7 +2417,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
   async function loadClients(){
     setLoading(true);
-    var r=await supabase.from('clients').select('*').eq('org_id',org.id).order('name');
+    var r=await supabase.from('clients').select('*').eq('org_id',org.id).order('name').limit(500);
     if(r.data){
       setClients(r.data);
       // Collect all work types from clients
@@ -2461,7 +2460,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     setWorksheet(ws);
     if(ws){
       // Load rows, auto-create for missing clients
-      var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws.id);
+      var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws.id).limit(2000);
       var existingRows=rr.data||[];
       // Get clients for this work type
       var typeClients=clients.filter(function(c){
@@ -2990,15 +2989,15 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 
   async function loadData(){
     setLoading(true);
-    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name');
-    var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).eq('period_year',selectedYear);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
+    var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).eq('period_year',selectedYear).limit(500);
     var clientData=rc.data||[];
     var wsData=rw.data||[];
     setClients(clientData);
     setWorksheets(wsData);
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,data,due_date,completed_at').in('worksheet_id',wsIds);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,data,due_date,completed_at').in('worksheet_id',wsIds).limit(2000);
       setAllRows(rr.data||[]);
     }else{setAllRows([]);}
     setLoading(false);
@@ -3199,7 +3198,7 @@ function CalendarView({orgs,supabase,cu}){
     var startStr=start.toISOString().slice(0,10);
     var endStr=end.toISOString().slice(0,10);
 
-    var rc=await supabase.from('clients').select('id,name,display_name,pan,org_id').in('org_id',orgIds);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,org_id').in('org_id',orgIds).limit(2000);
     setClients(rc.data||[]);
 
     var rr=await supabase.from('worksheet_rows')
@@ -3212,7 +3211,7 @@ function CalendarView({orgs,supabase,cu}){
 
     if(rowData.length>0){
       var wsIds=[...new Set(rowData.map(function(r){return r.worksheet_id;}))];
-      var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds);
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(500);
       setWorksheets(rw.data||[]);
     }else{setWorksheets([]);}
     setLoading(false);
