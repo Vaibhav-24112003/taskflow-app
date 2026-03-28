@@ -2072,7 +2072,7 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
   async function seedDefaults(){
     setSeeding(true);
     var entries=Object.entries(DEFAULT_WS_TYPE_CONFIGS);
-    var batch=entries.map(function(e,i){return{org_id:org.id,name:e[0],frequency:e[1].frequency,columns:e[1].cols,due_day:null,due_month:null,is_active:true,sort_order:i};});
+    var batch=entries.map(function(e,i){return{org_id:org.id,name:e[0],frequency:e[1].frequency,columns:e[1].cols,due_day:e[1].due_day||null,due_month:e[1].due_month||null,is_active:true,sort_order:i};});
     await supabase.from('work_type_configs').insert(batch);
     setSeeding(false);
     showToast('Default work types created');
@@ -2338,15 +2338,17 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 
 // Default column configs per work type (used as seed for work_type_configs table)
 var DEFAULT_WS_TYPE_CONFIGS = {
-  'GST':      {frequency:'monthly',  cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
-  'GST/GSTR': {frequency:'monthly',  cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
-  'ITR':      {frequency:'yearly',   cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'}]},
-  'TDS':      {frequency:'quarterly',cols:[{key:'data_recv',label:'Data Rcvd'},{key:'q1_done',label:'Q1 Filed'},{key:'q2_done',label:'Q2 Filed'},{key:'q3_done',label:'Q3 Filed'},{key:'q4_done',label:'Q4 Filed'}]},
-  'Accounts': {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
-  'Audit':    {frequency:'yearly',   cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
-  'MIS':      {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
-  'Payroll':  {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Processed'}]},
-  'Other':    {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'GST Returns':  {frequency:'monthly',  due_day:11, cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
+  'GSTR Returns': {frequency:'monthly',  due_day:11, cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
+  'ITR':          {frequency:'yearly',   due_day:31, due_month:7, cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'}]},
+  'TDS Returns':  {frequency:'quarterly',due_day:31, cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'},{key:'challan',label:'Challan Paid'}]},
+  'TDS Payments': {frequency:'monthly',  due_day:7,  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Paid'}]},
+  'Accounts':     {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'Audit':        {frequency:'yearly',   due_day:30, due_month:9, cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'MIS':          {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+  'Payroll':      {frequency:'monthly',  due_day:7,  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Processed'}]},
+  'Scrutiny':     {frequency:'yearly',   cols:[{key:'notice_recv',label:'Notice Rcvd'},{key:'reply_done',label:'Reply Filed'}]},
+  'Other':        {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
 };
 
 var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2390,9 +2392,11 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   var [worksheet,setWorksheet]=useState(null); // current period worksheet
   var [rows,setRows]=useState([]);
   var [loading,setLoading]=useState(true);
-  var [periodYear,setPeriodYear]=useState(new Date().getFullYear());
-  var [periodMonth,setPeriodMonth]=useState(new Date().getMonth()+1);
-  var [periodQuarter,setPeriodQuarter]=useState(1);
+  var _initP=getCurrentPeriod('monthly');
+  var _initQ=getCurrentPeriod('quarterly');
+  var [periodYear,setPeriodYear]=useState(_initP.year);
+  var [periodMonth,setPeriodMonth]=useState(_initP.month||1);
+  var [periodQuarter,setPeriodQuarter]=useState(_initQ.quarter||1);
   var [showCreateTask,setShowCreateTask]=useState(null); // {row, client}
   var [saving,setSaving]=useState(false);
   var [toast,setToast]=useState(null);
@@ -2498,17 +2502,26 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
       if(missing.length>0){
         // Compute due_date from config
+        // For monthly: due date falls in the NEXT month (e.g., Jan work → Feb due date)
+        // For quarterly: due date falls after the quarter ends
+        // For yearly: due date falls in next calendar year
         var dueDate=null;
         if(cfg.due_day){
-          if(cfg.frequency==='monthly'&&periodMonth)dueDate=periodYear+'-'+String(periodMonth).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
-          else if(cfg.frequency==='quarterly'&&periodQuarter){
-            var qMonths=[[4,5,6],[7,8,9],[10,11,12],[1,2,3]];
-            var qm=qMonths[periodQuarter-1];
-            var lastM=qm[cfg.due_month?Math.min(cfg.due_month,3)-1:2];
-            var dueY=periodQuarter===4?periodYear+1:periodYear;
-            dueDate=dueY+'-'+String(lastM).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
+          if(cfg.frequency==='monthly'&&periodMonth){
+            var nextM=periodMonth+1;var nextY=periodYear;
+            if(nextM>12){nextM=1;nextY++;}
+            dueDate=nextY+'-'+String(nextM).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
+          }else if(cfg.frequency==='quarterly'&&periodQuarter){
+            // Quarter end month + 1 for due date
+            var qEndMonths=[6,9,12,3]; // Q1=Jun, Q2=Sep, Q3=Dec, Q4=Mar
+            var dueM=qEndMonths[periodQuarter-1]+1; // month after quarter ends
+            var dueY=periodYear;
+            if(periodQuarter===3){dueM=1;dueY=periodYear+1;} // Q3 Dec→Jan next year
+            if(periodQuarter===4){dueM=4;dueY=periodYear+1;} // Q4 Mar→Apr next year
+            if(cfg.due_month){dueM=cfg.due_month;} // override if explicitly set
+            dueDate=dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
           }else if(cfg.frequency==='yearly'){
-            var dm=cfg.due_month||3;
+            var dm=cfg.due_month||7; // default July (after FY ends Mar)
             dueDate=(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
           }
         }
@@ -3316,12 +3329,16 @@ function CalendarView({orgs,supabase,cu}){
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
   }
 
+  // Compute which FY the current calendar month belongs to
+  var fyStart=calMonth>=3?calYear:calYear-1; // Apr+ = same year, Jan-Mar = prev year
+  var fyLabel='FY '+fyStart+'-'+String(fyStart+1).slice(2);
+
   return<div style={{padding:'0 0 60px'}}>
     {/* Header */}
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
       <div>
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Calendar</h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Due dates and workload overview</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Due dates and workload · {fyLabel}</div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <button onClick={prevMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>‹</button>
@@ -3412,11 +3429,14 @@ function CalendarView({orgs,supabase,cu}){
               {detailGrouped[wt].map(function(row){
                 var client=clientMap[row.client_id];
                 if(!client)return null;
+                var ws=wsMap[row.worksheet_id];
+                var periodStr=ws?ws.period_label:'';
                 var isCompleted=row.status==='completed';
                 var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
                 return<div key={row.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+                    {periodStr&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Period: {periodStr}</div>}
                     {client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
                     {isCompleted&&row.completed_at&&<div style={{fontSize:9,color:'#22c55e',marginTop:1}}>Done {new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>}
                     {isOverdue&&<div style={{fontSize:9,color:'#ef4444',fontWeight:600,marginTop:1}}>Overdue</div>}
