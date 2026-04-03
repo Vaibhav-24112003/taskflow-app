@@ -2505,41 +2505,34 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
         return wts.some(function(t){return t.trim()===activeType;});
       });
-      // Auto-insert missing rows
-      var existingClientIds=existingRows.map(function(r){return r.client_id;});
-      var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
-      if(missing.length>0){
-        // Compute due dates from config (supports multiple due dates)
-        // For monthly: due date falls in NEXT month (offset=1) or SAME month (offset=0)
-        // For quarterly: due date falls after quarter ends
-        // For yearly: due date falls in specified month of next FY
-        // For once: due date is manually entered per row, not computed here
-        function computeDueDate(day,month,freq,monthOffset){
-          if(!day)return null;
-          if(freq==='monthly'&&periodMonth){
-            // monthOffset: 0=same month as period, 1=next month (default)
-            var offset=(monthOffset!=null)?Number(monthOffset):1;
-            var targetM=periodMonth+offset;var targetY=periodYear;
-            if(targetM>12){targetM-=12;targetY++;}
-            if(targetM<1){targetM+=12;targetY--;}
-            return targetY+'-'+String(targetM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-          }else if(freq==='quarterly'&&periodQuarter){
-            var qEndMonths=[6,9,12,3];
-            var dueM=qEndMonths[periodQuarter-1]+1;
-            var dueY=periodYear;
-            if(periodQuarter===3){dueM=1;dueY=periodYear+1;}
-            if(periodQuarter===4){dueM=4;dueY=periodYear+1;}
-            if(month){dueM=month;}
-            return dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-          }else if(freq==='yearly'){
-            var dm=month||7;
-            return(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-          }
-          // 'once' frequency: returns null — due date entered manually per row
-          return null;
+
+      // Compute due dates from config (always, not just for new rows)
+      function computeDueDate(day,month,freq,monthOffset){
+        if(!day)return null;
+        if(freq==='monthly'&&periodMonth){
+          var offset=(monthOffset!=null)?Number(monthOffset):1;
+          var targetM=periodMonth+offset;var targetY=periodYear;
+          if(targetM>12){targetM-=12;targetY++;}
+          if(targetM<1){targetM+=12;targetY--;}
+          return targetY+'-'+String(targetM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        }else if(freq==='quarterly'&&periodQuarter){
+          var qEndMonths=[6,9,12,3];
+          var dueM=qEndMonths[periodQuarter-1]+1;
+          var dueY=periodYear;
+          if(periodQuarter===3){dueM=1;dueY=periodYear+1;}
+          if(periodQuarter===4){dueM=4;dueY=periodYear+1;}
+          if(month){dueM=month;}
+          return dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        }else if(freq==='yearly'){
+          var dm=month||7;
+          return(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }
-        // Build list of due dates from config
-        var dueDateList=[];
+        return null;
+      }
+
+      // Build due date list from config
+      var dueDateList=[];
+      if(cfg.frequency!=='once'){
         if(cfg.due_dates&&cfg.due_dates.length>0){
           cfg.due_dates.forEach(function(dd){
             var d=computeDueDate(dd.day,dd.month,cfg.frequency,dd.month_offset);
@@ -2549,36 +2542,62 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           var d=computeDueDate(cfg.due_day,cfg.due_month,cfg.frequency);
           if(d)dueDateList.push({date:d,label:'Due'});
         }
-        // Create rows: if multiple due dates, create one row per client per due date
-        var newRows=[];
+      }
+
+      // Update existing rows with correct due dates (fix stale dates)
+      if(dueDateList.length===1&&cfg.frequency!=='once'){
+        var dd0=dueDateList[0];
+        var toUpdate=existingRows.filter(function(r){return r.due_date!==dd0.date;});
+        if(toUpdate.length>0){
+          var updateIds=toUpdate.map(function(r){return r.id;});
+          await supabase.from('worksheet_rows').update({due_date:dd0.date,due_label:dd0.label}).in('id',updateIds);
+          existingRows=existingRows.map(function(r){return updateIds.includes(r.id)?Object.assign({},r,{due_date:dd0.date,due_label:dd0.label}):r;});
+        }
+      }
+
+      // Auto-insert missing rows
+      var existingClientIds=[...new Set(existingRows.map(function(r){return r.client_id;}))];
+      var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
+
+      // Build new rows for missing clients
+      var newRows=[];
+      if(missing.length>0){
         if(dueDateList.length<=1){
           var dd=dueDateList[0]||null;
           missing.forEach(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dd){r.due_date=dd.date;r.due_label=dd.label;}newRows.push(r);});
         }else{
-          // Multiple due dates: check which client+due_label combos already exist
-          var existingKeys={};
-          existingRows.forEach(function(r){existingKeys[r.client_id+'_'+(r.due_label||'')]=true;});
           missing.forEach(function(c){
             dueDateList.forEach(function(dd){
-              if(!existingKeys[c.id+'_'+dd.label]){
-                newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
-              }
-            });
-          });
-          // Also create missing due date rows for existing clients
-          typeClients.forEach(function(c){
-            if(!existingClientIds.includes(c.id))return; // already in missing
-            dueDateList.forEach(function(dd){
-              if(!existingKeys[c.id+'_'+dd.label]){
-                newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
-              }
+              newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
             });
           });
         }
-        if(newRows.length>0){
-          var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
-          existingRows=[...existingRows,...(ins2.data||[])];
-        }
+      }
+
+      // For multiple due dates: also create missing due_label rows for existing clients
+      if(dueDateList.length>1){
+        var existingKeys={};
+        existingRows.forEach(function(r){existingKeys[r.client_id+'_'+(r.due_label||'')]=true;});
+        typeClients.forEach(function(c){
+          dueDateList.forEach(function(dd){
+            if(!existingKeys[c.id+'_'+dd.label]){
+              newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+            }
+          });
+        });
+        // Also update existing rows with correct due dates per label
+        dueDateList.forEach(function(dd){
+          var toFix=existingRows.filter(function(r){return r.due_label===dd.label&&r.due_date!==dd.date;});
+          if(toFix.length>0){
+            var fixIds=toFix.map(function(r){return r.id;});
+            supabase.from('worksheet_rows').update({due_date:dd.date}).in('id',fixIds);
+            existingRows=existingRows.map(function(r){return fixIds.includes(r.id)?Object.assign({},r,{due_date:dd.date}):r;});
+          }
+        });
+      }
+      if(newRows.length>0){
+        var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
+        existingRows=[...existingRows,...(ins2.data||[])];
       }
       // Sort by client name
       var clientMap={};
