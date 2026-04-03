@@ -2428,6 +2428,65 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
+  var [recalculating,setRecalculating]=useState(false);
+  async function recalcAllDueDates(){
+    setRecalculating(true);
+    var rw=await supabase.from('worksheets').select('id,work_type,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).limit(1000);
+    var allWS=rw.data||[];
+    var fixCount=0;
+    for(var wi=0;wi<allWS.length;wi++){
+      var ws2=allWS[wi];
+      var cfg2=WS_TYPE_CONFIGS[ws2.work_type];
+      if(!cfg2||ws2.frequency==='once')continue;
+      function calcDue(day,month,freq,monthOffset){
+        if(!day)return null;
+        if(freq==='monthly'&&ws2.period_month){
+          var off=(monthOffset!=null)?Number(monthOffset):1;
+          var tM=ws2.period_month+off;var tY=ws2.period_year;
+          if(tM>12){tM-=12;tY++;}if(tM<1){tM+=12;tY--;}
+          return tY+'-'+String(tM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        }else if(freq==='quarterly'&&ws2.period_quarter){
+          var qEnd=[6,9,12,3];var dM=qEnd[ws2.period_quarter-1]+1;var dY=ws2.period_year;
+          if(ws2.period_quarter===3){dM=1;dY++;}if(ws2.period_quarter===4){dM=4;dY++;}
+          if(month){dM=month;}
+          return dY+'-'+String(dM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        }else if(freq==='yearly'){
+          return(ws2.period_year+1)+'-'+String(month||7).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        }
+        return null;
+      }
+      var dueDates2=[];
+      if(cfg2.due_dates&&cfg2.due_dates.length>0){
+        cfg2.due_dates.forEach(function(dd){var d3=calcDue(dd.day,dd.month,ws2.frequency,dd.month_offset);if(d3)dueDates2.push({date:d3,label:dd.label||'Due'});});
+      }else if(cfg2.due_day){
+        var d3=calcDue(cfg2.due_day,cfg2.due_month,ws2.frequency);if(d3)dueDates2.push({date:d3,label:'Due'});
+      }
+      if(dueDates2.length===0)continue;
+      var rr2=await supabase.from('worksheet_rows').select('id,due_date,due_label').eq('worksheet_id',ws2.id).limit(2000);
+      var wsRows2=rr2.data||[];
+      if(dueDates2.length===1){
+        var correct=dueDates2[0];
+        var stale=wsRows2.filter(function(r){return r.due_date!==correct.date;});
+        if(stale.length>0){
+          await supabase.from('worksheet_rows').update({due_date:correct.date,due_label:correct.label}).in('id',stale.map(function(r){return r.id;}));
+          fixCount+=stale.length;
+        }
+      }else{
+        for(var di=0;di<dueDates2.length;di++){
+          var dd2=dueDates2[di];
+          var matchR=wsRows2.filter(function(r){return r.due_label===dd2.label&&r.due_date!==dd2.date;});
+          if(matchR.length>0){
+            await supabase.from('worksheet_rows').update({due_date:dd2.date}).in('id',matchR.map(function(r){return r.id;}));
+            fixCount+=matchR.length;
+          }
+        }
+      }
+    }
+    setRecalculating(false);
+    showToast('Fixed '+fixCount+' due dates across '+allWS.length+' worksheets');
+    if(activeType)loadWorksheet();
+  }
+
   var [allColPrefs,setAllColPrefs]=useState({});
   async function loadColPrefs(){
     var r=await getUserWorksheetPrefs(cu.id,org.id);
@@ -2713,6 +2772,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Worksheets</h2>
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {allTypes.length} work types</div>
       </div>
+      <button onClick={recalcAllDueDates} disabled={recalculating} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:8,padding:'7px 14px',color:'#6b8cad',cursor:recalculating?'not-allowed':'pointer',fontSize:12,fontWeight:600,opacity:recalculating?0.6:1}}>{recalculating?'Recalculating...':'Recalculate Due Dates'}</button>
     </div>
 
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
@@ -3479,7 +3539,7 @@ function CalendarView({orgs,supabase,cu}){
     setClients(rc.data||[]);
 
     var rr=await supabase.from('worksheet_rows')
-      .select('id,worksheet_id,client_id,org_id,status,due_date,completed_at')
+      .select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at')
       .in('org_id',orgIds)
       .gte('due_date',startStr)
       .lte('due_date',endStr)
