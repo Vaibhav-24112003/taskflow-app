@@ -2285,10 +2285,10 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
                   <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
                   <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="15"/>
                 </div>
-                {frequency==='monthly'?<div style={{display:'flex',alignItems:'center',gap:4}}>
+                {(frequency==='monthly'||frequency==='quarterly')?<div style={{display:'flex',alignItems:'center',gap:4}}>
                   <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
                   <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:120,cursor:'pointer'})}>
-                    <option value={0}>Same month</option>
+                    <option value={0}>{frequency==='quarterly'?'Quarter end month':'Same month'}</option>
                     <option value={1}>Next month</option>
                   </select>
                 </div>:<div style={{display:'flex',alignItems:'center',gap:4}}>
@@ -2431,7 +2431,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   var [recalculating,setRecalculating]=useState(false);
   async function recalcAllDueDates(){
     setRecalculating(true);
-    var rw=await supabase.from('worksheets').select('id,work_type,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).limit(1000);
+    var rw=await supabase.from('worksheets').select('id,org_id,work_type,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).limit(1000);
     var allWS=rw.data||[];
     var fixCount=0;var createCount=0;
     for(var wi=0;wi<allWS.length;wi++){
@@ -2446,8 +2446,12 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           if(tM>12){tM-=12;tY++;}if(tM<1){tM+=12;tY--;}
           return tY+'-'+String(tM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='quarterly'&&ws2.period_quarter){
-          var qEnd=[6,9,12,3];var dM=qEnd[ws2.period_quarter-1]+1;var dY=ws2.period_year;
-          if(ws2.period_quarter===3){dM=1;dY++;}if(ws2.period_quarter===4){dM=4;dY++;}
+          var qEnd=[6,9,12,3];var qEndM2=qEnd[ws2.period_quarter-1];
+          var qOff2=(monthOffset!=null)?Number(monthOffset):1;
+          var dM=qEndM2+qOff2;var dY=ws2.period_year;
+          if(dM>12){dM-=12;dY++;}
+          if(ws2.period_quarter>=3&&qOff2>0){dY=ws2.period_year+1;if(ws2.period_quarter===3)dM=1+qOff2-1;if(ws2.period_quarter===4)dM=3+qOff2;}
+          if(dM>12){dM-=12;dY++;}
           if(month){dM=month;}
           return dY+'-'+String(dM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='yearly'){
@@ -2499,13 +2503,18 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         clientIds2.forEach(function(cid){
           dueDates2.forEach(function(dd){
             if(!existingKeys2[cid+'_'+dd.label]){
-              newRows2.push({worksheet_id:ws2.id,client_id:cid,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+              newRows2.push({worksheet_id:ws2.id,client_id:cid,org_id:ws2.org_id||org.id,data:{},due_date:dd.date,due_label:dd.label});
             }
           });
         });
         if(newRows2.length>0){
-          await supabase.from('worksheet_rows').insert(newRows2);
-          createCount+=newRows2.length;
+          // Insert in batches of 50 to avoid timeouts
+          for(var bi=0;bi<newRows2.length;bi+=50){
+            var batch=newRows2.slice(bi,bi+50);
+            var insR=await supabase.from('worksheet_rows').insert(batch);
+            if(insR.error){console.warn('Recalc insert error:',insR.error.message);}
+            else{createCount+=batch.length;}
+          }
         }
       }
     }
@@ -2602,12 +2611,18 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           if(targetM<1){targetM+=12;targetY--;}
           return targetY+'-'+String(targetM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='quarterly'&&periodQuarter){
+          // Quarter end months: Q1=Jun, Q2=Sep, Q3=Dec, Q4=Mar
           var qEndMonths=[6,9,12,3];
-          var dueM=qEndMonths[periodQuarter-1]+1;
+          var qEndM=qEndMonths[periodQuarter-1];
+          // monthOffset: 0=quarter end month, 1=next month after quarter (default)
+          var qOff=(monthOffset!=null)?Number(monthOffset):1;
+          var dueM=qEndM+qOff;
           var dueY=periodYear;
-          if(periodQuarter===3){dueM=1;dueY=periodYear+1;}
-          if(periodQuarter===4){dueM=4;dueY=periodYear+1;}
-          if(month){dueM=month;}
+          if(dueM>12){dueM-=12;dueY++;}
+          // Handle FY year rollover for Q3/Q4
+          if(periodQuarter>=3&&qOff>0){dueY=periodYear+1;if(periodQuarter===3)dueM=1+qOff-1;if(periodQuarter===4)dueM=3+qOff;}
+          if(dueM>12){dueM-=12;dueY++;}
+          if(month){dueM=month;} // absolute month override
           return dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='yearly'){
           var dm=month||7;
