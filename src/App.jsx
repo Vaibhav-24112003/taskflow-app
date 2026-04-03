@@ -2433,7 +2433,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     setRecalculating(true);
     var rw=await supabase.from('worksheets').select('id,work_type,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).limit(1000);
     var allWS=rw.data||[];
-    var fixCount=0;
+    var fixCount=0;var createCount=0;
     for(var wi=0;wi<allWS.length;wi++){
       var ws2=allWS[wi];
       var cfg2=WS_TYPE_CONFIGS[ws2.work_type];
@@ -2462,16 +2462,27 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         var d3=calcDue(cfg2.due_day,cfg2.due_month,ws2.frequency);if(d3)dueDates2.push({date:d3,label:'Due'});
       }
       if(dueDates2.length===0)continue;
-      var rr2=await supabase.from('worksheet_rows').select('id,due_date,due_label').eq('worksheet_id',ws2.id).limit(2000);
+      var rr2=await supabase.from('worksheet_rows').select('id,client_id,due_date,due_label').eq('worksheet_id',ws2.id).limit(2000);
       var wsRows2=rr2.data||[];
       if(dueDates2.length===1){
+        // Single due date: fix all rows
         var correct=dueDates2[0];
-        var stale=wsRows2.filter(function(r){return r.due_date!==correct.date;});
+        var stale=wsRows2.filter(function(r){return r.due_date!==correct.date||r.due_label!==correct.label;});
         if(stale.length>0){
           await supabase.from('worksheet_rows').update({due_date:correct.date,due_label:correct.label}).in('id',stale.map(function(r){return r.id;}));
           fixCount+=stale.length;
         }
       }else{
+        // Multiple due dates: assign first label to unlabeled rows, create missing rows for other labels
+        var unlabeled=wsRows2.filter(function(r){return !r.due_label||!dueDates2.some(function(dd){return dd.label===r.due_label;});});
+        if(unlabeled.length>0){
+          // Assign first due date to unlabeled rows
+          await supabase.from('worksheet_rows').update({due_date:dueDates2[0].date,due_label:dueDates2[0].label}).in('id',unlabeled.map(function(r){return r.id;}));
+          fixCount+=unlabeled.length;
+          // Update local state
+          unlabeled.forEach(function(r){r.due_label=dueDates2[0].label;r.due_date=dueDates2[0].date;});
+        }
+        // Fix dates for labeled rows
         for(var di=0;di<dueDates2.length;di++){
           var dd2=dueDates2[di];
           var matchR=wsRows2.filter(function(r){return r.due_label===dd2.label&&r.due_date!==dd2.date;});
@@ -2480,10 +2491,26 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
             fixCount+=matchR.length;
           }
         }
+        // Create missing rows for 2nd, 3rd, etc. due dates
+        var existingKeys2={};
+        wsRows2.forEach(function(r){existingKeys2[r.client_id+'_'+(r.due_label||'')]=true;});
+        var clientIds2=[...new Set(wsRows2.map(function(r){return r.client_id;}))];
+        var newRows2=[];
+        clientIds2.forEach(function(cid){
+          dueDates2.forEach(function(dd){
+            if(!existingKeys2[cid+'_'+dd.label]){
+              newRows2.push({worksheet_id:ws2.id,client_id:cid,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+            }
+          });
+        });
+        if(newRows2.length>0){
+          await supabase.from('worksheet_rows').insert(newRows2);
+          createCount+=newRows2.length;
+        }
       }
     }
     setRecalculating(false);
-    showToast('Fixed '+fixCount+' due dates across '+allWS.length+' worksheets');
+    showToast('Fixed '+fixCount+' dates, created '+createCount+' new rows across '+allWS.length+' worksheets');
     if(activeType)loadWorksheet();
   }
 
