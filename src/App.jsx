@@ -2158,7 +2158,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [name,setName]=useState(config?config.name:'');
   var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
-  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates:config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||''}]:[]);
+  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
@@ -2175,7 +2175,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     });});
   }
 
-  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:''}];});}
+  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:'',month_offset:1}];});}
   function removeDueDate(idx){setDueDates(function(p){return p.filter(function(_,i){return i!==idx;});});}
   function updateDueDate(idx,field,val){setDueDates(function(p){return p.map(function(d,i){if(i!==idx)return d;var u=Object.assign({},d);u[field]=val;return u;});});}
 
@@ -2200,7 +2200,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
-      due_dates:dueDates.filter(function(d){return d.day;}).map(function(d){return{label:d.label||'Due',day:Number(d.day),month:d.month?Number(d.month):null};}),
+      due_dates:dueDates.filter(function(d){return d.day;}).map(function(d){return{label:d.label||'Due',day:Number(d.day),month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1};}),
       client_fields:clientFields.filter(function(f){return f.label.trim();}).map(function(f){return{key:f.key,label:f.label.trim(),type:f.type,options:f.options||''};}),
       is_active:config?config.is_active:true,
       sort_order:config?config.sort_order:99
@@ -2279,16 +2279,22 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
           {dueDates.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No due dates configured.</div>:
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             {dueDates.map(function(dd,i){
-              return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px'}}>
-                <input value={dd.label} onChange={function(e){updateDueDate(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder="Label (e.g. GSTR1 Due)"/>
+              return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',flexWrap:'wrap'}}>
+                <input value={dd.label} onChange={function(e){updateDueDate(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1,minWidth:120})} placeholder="Label (e.g. GSTR1 Due)"/>
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
                   <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="15"/>
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                {frequency==='monthly'?<div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
+                  <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:120,cursor:'pointer'})}>
+                    <option value={0}>Same month</option>
+                    <option value={1}>Next month</option>
+                  </select>
+                </div>:<div style={{display:'flex',alignItems:'center',gap:4}}>
                   <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
                   <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
-                </div>
+                </div>}
                 <button onClick={function(){removeDueDate(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
               </div>;
             })}
@@ -2355,6 +2361,7 @@ var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','D
 var QUARTERS=['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
 
 function getPeriodLabel(freq, year, month, quarter){
+  if(freq==='once')     return 'One-time';
   if(freq==='monthly')  return MONTHS[(month||1)-1]+' '+year;
   if(freq==='quarterly'){
     var q=quarter||1;
@@ -2369,6 +2376,7 @@ function getCurrentPeriod(freq){
   var y=now.getFullYear(), m=now.getMonth()+1;
   // Indian FY: Apr-Mar
   var fy=m>=4?y:y-1;
+  if(freq==='once')      return {year:fy,month:null,quarter:null};
   if(freq==='monthly')   return {year:y,month:m,quarter:null};
   if(freq==='quarterly'){
     var q=m>=4&&m<=6?1:m>=7&&m<=9?2:m>=10&&m<=12?3:4;
@@ -2383,7 +2391,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
     var m={};
     workTypeConfigs.forEach(function(c){
-      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month};
+      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[]};
     });
     return m;
   },[workTypeConfigs]);
@@ -2501,33 +2509,76 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       var existingClientIds=existingRows.map(function(r){return r.client_id;});
       var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
       if(missing.length>0){
-        // Compute due_date from config
-        // For monthly: due date falls in the NEXT month (e.g., Jan work → Feb due date)
-        // For quarterly: due date falls after the quarter ends
-        // For yearly: due date falls in next calendar year
-        var dueDate=null;
-        if(cfg.due_day){
-          if(cfg.frequency==='monthly'&&periodMonth){
-            var nextM=periodMonth+1;var nextY=periodYear;
-            if(nextM>12){nextM=1;nextY++;}
-            dueDate=nextY+'-'+String(nextM).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
-          }else if(cfg.frequency==='quarterly'&&periodQuarter){
-            // Quarter end month + 1 for due date
-            var qEndMonths=[6,9,12,3]; // Q1=Jun, Q2=Sep, Q3=Dec, Q4=Mar
-            var dueM=qEndMonths[periodQuarter-1]+1; // month after quarter ends
+        // Compute due dates from config (supports multiple due dates)
+        // For monthly: due date falls in NEXT month (offset=1) or SAME month (offset=0)
+        // For quarterly: due date falls after quarter ends
+        // For yearly: due date falls in specified month of next FY
+        // For once: due date is manually entered per row, not computed here
+        function computeDueDate(day,month,freq,monthOffset){
+          if(!day)return null;
+          if(freq==='monthly'&&periodMonth){
+            // monthOffset: 0=same month as period, 1=next month (default)
+            var offset=(monthOffset!=null)?Number(monthOffset):1;
+            var targetM=periodMonth+offset;var targetY=periodYear;
+            if(targetM>12){targetM-=12;targetY++;}
+            if(targetM<1){targetM+=12;targetY--;}
+            return targetY+'-'+String(targetM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+          }else if(freq==='quarterly'&&periodQuarter){
+            var qEndMonths=[6,9,12,3];
+            var dueM=qEndMonths[periodQuarter-1]+1;
             var dueY=periodYear;
-            if(periodQuarter===3){dueM=1;dueY=periodYear+1;} // Q3 Dec→Jan next year
-            if(periodQuarter===4){dueM=4;dueY=periodYear+1;} // Q4 Mar→Apr next year
-            if(cfg.due_month){dueM=cfg.due_month;} // override if explicitly set
-            dueDate=dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
-          }else if(cfg.frequency==='yearly'){
-            var dm=cfg.due_month||7; // default July (after FY ends Mar)
-            dueDate=(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(cfg.due_day).padStart(2,'0');
+            if(periodQuarter===3){dueM=1;dueY=periodYear+1;}
+            if(periodQuarter===4){dueM=4;dueY=periodYear+1;}
+            if(month){dueM=month;}
+            return dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+          }else if(freq==='yearly'){
+            var dm=month||7;
+            return(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(day).padStart(2,'0');
           }
+          // 'once' frequency: returns null — due date entered manually per row
+          return null;
         }
-        var newRows=missing.map(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dueDate)r.due_date=dueDate;return r;});
-        var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
-        existingRows=[...existingRows,...(ins2.data||[])];
+        // Build list of due dates from config
+        var dueDateList=[];
+        if(cfg.due_dates&&cfg.due_dates.length>0){
+          cfg.due_dates.forEach(function(dd){
+            var d=computeDueDate(dd.day,dd.month,cfg.frequency,dd.month_offset);
+            if(d)dueDateList.push({date:d,label:dd.label||'Due'});
+          });
+        }else if(cfg.due_day){
+          var d=computeDueDate(cfg.due_day,cfg.due_month,cfg.frequency);
+          if(d)dueDateList.push({date:d,label:'Due'});
+        }
+        // Create rows: if multiple due dates, create one row per client per due date
+        var newRows=[];
+        if(dueDateList.length<=1){
+          var dd=dueDateList[0]||null;
+          missing.forEach(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dd){r.due_date=dd.date;r.due_label=dd.label;}newRows.push(r);});
+        }else{
+          // Multiple due dates: check which client+due_label combos already exist
+          var existingKeys={};
+          existingRows.forEach(function(r){existingKeys[r.client_id+'_'+(r.due_label||'')]=true;});
+          missing.forEach(function(c){
+            dueDateList.forEach(function(dd){
+              if(!existingKeys[c.id+'_'+dd.label]){
+                newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+              }
+            });
+          });
+          // Also create missing due date rows for existing clients
+          typeClients.forEach(function(c){
+            if(!existingClientIds.includes(c.id))return; // already in missing
+            dueDateList.forEach(function(dd){
+              if(!existingKeys[c.id+'_'+dd.label]){
+                newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+              }
+            });
+          });
+        }
+        if(newRows.length>0){
+          var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
+          existingRows=[...existingRows,...(ins2.data||[])];
+        }
       }
       // Sort by client name
       var clientMap={};
@@ -2555,6 +2606,11 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     else if(!allChecked&&row.completed_at){updates.completed_at=null;}
     await supabase.from('worksheet_rows').update(updates).eq('id',rowId);
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
+  }
+
+  async function updateRowDueDate(rowId,val){
+    await supabase.from('worksheet_rows').update({due_date:val||null}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{due_date:val||null}):r;});});
   }
 
   async function updateCellData(rowId,key,val){
@@ -2664,7 +2720,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
       {/* Period selector + toolbar */}
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap'}}>
-        <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>Period:</div>
+        {cfg.frequency!=='once'&&<div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>Period:</div>}
+        {cfg.frequency==='once'&&<div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>One-time Tasks</div>}
         {cfg.frequency==='monthly'&&<>
           <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
             {MONTHS.map(function(m,i){return<option key={m} value={i+1}>{m}</option>;})}
@@ -2675,10 +2732,10 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
             {QUARTERS.map(function(q,i){return<option key={q} value={i+1}>{q}</option>;})}
           </select>
         </>}
-        <select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+        {cfg.frequency!=='once'&&<select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
           {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{cfg.frequency==='yearly'?'FY '+y+'-'+String(y+1).slice(2):y}</option>;})}
-        </select>
-        <div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>
+        </select>}
+        {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
 
         {/* Columns toggle button */}
         <div style={{position:'relative',marginLeft:'auto'}}>
@@ -2782,9 +2839,10 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
               var allDone=checkboxCols.length>0&&checkboxCols.every(function(c){return d[c.key];});
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.02)':'transparent',transition:'background 0.15s'}}>
                 <td style={{padding:'10px 14px'}}>
-                  <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}</div>
+                  <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}</div>
                   {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{client.display_name}</div>}
                   {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
+                  {cfg.frequency==='once'?<div style={{marginTop:2}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
                 {visibleCols.map(function(col){
                   var colType=col.type||'checkbox';
@@ -3013,15 +3071,16 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   var [worksheets,setWorksheets]=useState([]);
   var [allRows,setAllRows]=useState([]);
   var [selectedYear,setSelectedYear]=useState(function(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;});
+  var [activeTab,setActiveTab]=useState('overview');
+  var [filterMonth,setFilterMonth]=useState(0);
   var [drillType,setDrillType]=useState(null);
-  var [drillFilter,setDrillFilter]=useState('all'); // all, pending, completed, overdue, early, ontime, late
+  var [drillFilter,setDrillFilter]=useState('all');
 
-  // Build config lookup
   var configMap=useMemo(function(){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
     var m={};
     workTypeConfigs.forEach(function(c){
-      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month};
+      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[]};
     });
     return m;
   },[workTypeConfigs]);
@@ -3038,7 +3097,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     setWorksheets(wsData);
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,completed_at').in('worksheet_id',wsIds).limit(2000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at').in('worksheet_id',wsIds).limit(2000);
       setAllRows(rr.data||[]);
     }else{setAllRows([]);}
     setLoading(false);
@@ -3047,74 +3106,156 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   var clientMap={};
   clients.forEach(function(c){clientMap[c.id]=c;});
 
-  // Group worksheets by work_type
+  // Filter worksheets by month if set
+  var filteredWS=worksheets;
+  if(filterMonth>0){
+    filteredWS=worksheets.filter(function(ws){return ws.period_month===filterMonth;});
+  }
+  var filteredWSIds=filteredWS.map(function(w){return w.id;});
+  var filteredRows=allRows.filter(function(r){return filteredWSIds.includes(r.worksheet_id);});
+
+  // Group by work_type
   var wsGrouped={};
-  worksheets.forEach(function(ws){
+  filteredWS.forEach(function(ws){
     if(!wsGrouped[ws.work_type])wsGrouped[ws.work_type]=[];
     wsGrouped[ws.work_type].push(ws);
   });
 
-  // Compute stats per work type
   var today=new Date();today.setHours(0,0,0,0);
-  var workTypeStats=Object.keys(wsGrouped).map(function(wt){
+  var workTypeNames=Object.keys(wsGrouped);
+
+  var workTypeStats=workTypeNames.map(function(wt){
     var wsIds=wsGrouped[wt].map(function(w){return w.id;});
-    var wtRows=allRows.filter(function(r){return wsIds.includes(r.worksheet_id);});
+    var wtRows=filteredRows.filter(function(r){return wsIds.includes(r.worksheet_id);});
     var total=wtRows.length;
     var completed=wtRows.filter(function(r){return r.status==='completed';}).length;
-    var pending=wtRows.filter(function(r){return r.status!=='completed';}).length;
+    var pending=total-completed;
     var overdue=wtRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;}).length;
-    // Timing analysis for completed
-    var early=0,ontime=0,late=0;
+    var early=0,ontime=0,late=0,totalDays=0,completedWithDue=0;
     wtRows.forEach(function(r){
       if(r.status==='completed'&&r.completed_at&&r.due_date){
         var comp=new Date(r.completed_at);comp.setHours(0,0,0,0);
         var due=new Date(r.due_date);due.setHours(0,0,0,0);
-        if(comp<due)early++;
-        else if(comp.getTime()===due.getTime())ontime++;
-        else late++;
+        var diff=Math.round((comp-due)/(1000*60*60*24));
+        if(diff<0)early++;else if(diff===0)ontime++;else late++;
+        totalDays+=Math.abs(diff);completedWithDue++;
       }
     });
-    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,early:early,ontime:ontime,late:late,rows:wtRows,wsIds:wsIds};
+    var avgDays=completedWithDue>0?Math.round(totalDays/completedWithDue):0;
+    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,early:early,ontime:ontime,late:late,avgDays:avgDays,rows:wtRows,wsIds:wsIds};
   });
 
-  // Drill-down data
+  // Totals
+  var totals={total:0,completed:0,pending:0,overdue:0};
+  workTypeStats.forEach(function(s){totals.total+=s.total;totals.completed+=s.completed;totals.pending+=s.pending;totals.overdue+=s.overdue;});
+  var totalPct=totals.total>0?Math.round(totals.completed/totals.total*100):0;
+
+  // Drill-down
   var drillData=null;
   if(drillType){
     var stat=workTypeStats.find(function(s){return s.wt===drillType;});
     if(stat){
-      var drillRows=stat.rows;
-      if(drillFilter==='pending')drillRows=drillRows.filter(function(r){return r.status!=='completed';});
-      else if(drillFilter==='completed')drillRows=drillRows.filter(function(r){return r.status==='completed';});
-      else if(drillFilter==='overdue')drillRows=drillRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;});
-      else if(drillFilter==='early')drillRows=drillRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2<new Date(r.due_date);});
-      else if(drillFilter==='ontime')drillRows=drillRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
-      else if(drillFilter==='late')drillRows=drillRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2>new Date(r.due_date);});
-      drillData={stat:stat,rows:drillRows};
+      var dRows=stat.rows;
+      if(drillFilter==='pending')dRows=dRows.filter(function(r){return r.status!=='completed';});
+      else if(drillFilter==='completed')dRows=dRows.filter(function(r){return r.status==='completed';});
+      else if(drillFilter==='overdue')dRows=dRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;});
+      else if(drillFilter==='early')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2<new Date(r.due_date);});
+      else if(drillFilter==='ontime')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
+      else if(drillFilter==='late')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2>new Date(r.due_date);});
+      drillData={stat:stat,rows:dRows};
     }
   }
 
   function daysDiff(d1,d2){return Math.round((new Date(d1)-new Date(d2))/(1000*60*60*24));}
-
   var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+  var FY_MONTHS=[4,5,6,7,8,9,10,11,12,1,2,3];
+  var MONTH_SHORT=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Monthly breakdown data
+  var monthlyData=FY_MONTHS.map(function(mo){
+    var moWS=worksheets.filter(function(ws){return ws.period_month===mo;});
+    var moWSIds=moWS.map(function(w){return w.id;});
+    var moRows=allRows.filter(function(r){return moWSIds.includes(r.worksheet_id);});
+    var byWT={};
+    workTypeNames.forEach(function(wt){
+      var wtWsIds=(wsGrouped[wt]||[]).map(function(w){return w.id;});
+      var wtMoRows=moRows.filter(function(r){return wtWsIds.includes(r.worksheet_id);});
+      var done=wtMoRows.filter(function(r){return r.status==='completed';}).length;
+      byWT[wt]={done:done,total:wtMoRows.length};
+    });
+    var totalDone=moRows.filter(function(r){return r.status==='completed';}).length;
+    return{month:mo,label:MONTH_SHORT[mo],byWT:byWT,done:totalDone,total:moRows.length};
+  });
+
+  // Client breakdown data
+  var clientStats=clients.map(function(cl){
+    var clRows=filteredRows.filter(function(r){return r.client_id===cl.id;});
+    var done=clRows.filter(function(r){return r.status==='completed';}).length;
+    var byWT={};
+    workTypeNames.forEach(function(wt){
+      var wtWsIds=(wsGrouped[wt]||[]).map(function(w){return w.id;});
+      var wtClRows=clRows.filter(function(r){return wtWsIds.includes(r.worksheet_id);});
+      var wtDone=wtClRows.filter(function(r){return r.status==='completed';}).length;
+      byWT[wt]={done:wtDone,total:wtClRows.length};
+    });
+    return{id:cl.id,name:cl.name,pan:cl.pan,done:done,total:clRows.length,pct:clRows.length>0?Math.round(done/clRows.length*100):100,byWT:byWT};
+  }).filter(function(c){return c.total>0;}).sort(function(a,b){return a.pct-b.pct;});
+
+  // Overdue data
+  var overdueRows=filteredRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;}).map(function(r){
+    var ws=filteredWS.find(function(w){return w.id===r.worksheet_id;});
+    return Object.assign({},r,{work_type:ws?ws.work_type:'',period_label:ws?ws.period_label:'',daysOverdue:Math.abs(daysDiff(today,r.due_date))});
+  }).sort(function(a,b){return b.daysOverdue-a.daysOverdue;});
+
+  var TAB_BTN=function(id,label,count){
+    var active=activeTab===id;
+    return<button key={id} onClick={function(){setActiveTab(id);setDrillType(null);}} style={{padding:'7px 16px',border:'none',borderBottom:active?'2px solid #6b8cad':'2px solid transparent',background:'none',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,whiteSpace:'nowrap'}}>{label}{count!=null&&<span style={{fontSize:10,marginLeft:4,opacity:0.7}}>({count})</span>}</button>;
+  };
 
   return<div style={{padding:'0 0 60px'}}>
-    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
       <div>
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Analytics Dashboard</h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Work type performance for FY {selectedYear}-{String(selectedYear+1).slice(2)}</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>FY {selectedYear}-{String(selectedYear+1).slice(2)}</div>
       </div>
-      <select value={selectedYear} onChange={function(e){setSelectedYear(Number(e.target.value));setDrillType(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-        {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>FY {y}-{String(y+1).slice(2)}</option>;})}
-      </select>
+      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        <select value={filterMonth} onChange={function(e){setFilterMonth(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          <option value={0}>All Months</option>
+          {FY_MONTHS.map(function(mo){return<option key={mo} value={mo}>{MONTH_SHORT[mo]}</option>;})}
+        </select>
+        <select value={selectedYear} onChange={function(e){setSelectedYear(Number(e.target.value));setDrillType(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>FY {y}-{String(y+1).slice(2)}</option>;})}
+        </select>
+      </div>
+    </div>
+
+    {/* Tab bar */}
+    <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--tf-border)',marginBottom:16,overflowX:'auto'}}>
+      {TAB_BTN('overview','Overview',null)}
+      {TAB_BTN('monthly','Monthly',null)}
+      {TAB_BTN('clients','Clients',clientStats.length)}
+      {TAB_BTN('overdue','Overdue',overdueRows.length)}
     </div>
 
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading analytics...</div>:
-    workTypeStats.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
-      <div style={{fontSize:32,marginBottom:12}}>📊</div>
+    workTypeStats.length===0&&activeTab==='overview'?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
       <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No worksheet data</div>
       <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Create worksheets in the Worksheets tab to see analytics here.</div>
     </div>:<>
-      {/* Summary Cards */}
+
+    {/* ── OVERVIEW TAB ── */}
+    {activeTab==='overview'&&<>
+      {/* KPI Row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10,marginBottom:20}}>
+        {[{label:'Total Tasks',value:totals.total,color:'var(--tf-text)'},{label:'Completed',value:totalPct+'%',color:'#22c55e'},{label:'Pending',value:totals.pending,color:'#94a3b8'},{label:'Overdue',value:totals.overdue,color:'#ef4444'}].map(function(k){
+          return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.label}</div>
+          </div>;
+        })}
+      </div>
+      {/* Work type cards */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12,marginBottom:24}}>
         {workTypeStats.map(function(s){
           var pct=s.total>0?Math.round(s.completed/s.total*100):0;
@@ -3125,7 +3266,6 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
               <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{s.wt}</span>
               <span style={{fontSize:20,fontWeight:800,color:pct===100?'#22c55e':pct>50?'#6b8cad':'#94a3b8'}}>{pct}%</span>
             </div>
-            {/* Progress bar */}
             <div style={{background:'var(--tf-border)',borderRadius:99,height:6,marginBottom:10,overflow:'hidden'}}>
               <div style={{width:pct+'%',height:'100%',background:pct===100?'#22c55e':'#6b8cad',transition:'width 0.3s',borderRadius:99}}/>
             </div>
@@ -3142,7 +3282,6 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           </div>;
         })}
       </div>
-
       {/* Drill-down */}
       {drillData&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
         <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
@@ -3158,55 +3297,132 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           </div>
         </div>
         {drillData.rows.length===0?<div style={{padding:'24px 18px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No matching records</div>:
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead>
-            <tr style={{background:'rgba(107,140,173,0.04)'}}>
-              <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
-              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
-              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Due Date</th>
-              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Completed</th>
-              <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Timing</th>
-            </tr>
-          </thead>
+        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:'rgba(107,140,173,0.04)'}}>
+            <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
+            <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
+            <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Due Date</th>
+            <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Completed</th>
+            <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Timing</th>
+          </tr></thead>
           <tbody>
             {drillData.rows.map(function(row,ri){
-              var client=clientMap[row.client_id];
-              if(!client)return null;
+              var client=clientMap[row.client_id];if(!client)return null;
               var isCompleted=row.status==='completed';
               var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
-              var timing='';
-              var timingColor='var(--tf-text-sub)';
-              if(isCompleted&&row.completed_at&&row.due_date){
-                var diff=daysDiff(row.completed_at,row.due_date);
-                if(diff<0){timing=Math.abs(diff)+' days early';timingColor='#22c55e';}
-                else if(diff===0){timing='On time';timingColor='#6b8cad';}
-                else{timing=diff+' days late';timingColor='#ef4444';}
-              }else if(isOverdue){
-                timing=Math.abs(daysDiff(today,row.due_date))+' days overdue';
-                timingColor='#ef4444';
-              }
+              var timing='',timingColor='var(--tf-text-sub)';
+              if(isCompleted&&row.completed_at&&row.due_date){var diff=daysDiff(row.completed_at,row.due_date);if(diff<0){timing=Math.abs(diff)+'d early';timingColor='#22c55e';}else if(diff===0){timing='On time';timingColor='#6b8cad';}else{timing=diff+'d late';timingColor='#ef4444';}}
+              else if(isOverdue){timing=Math.abs(daysDiff(today,row.due_date))+'d overdue';timingColor='#ef4444';}
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
-                <td style={{padding:'9px 14px'}}>
-                  <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}</div>
-                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
-                </td>
-                <td style={{padding:'9px 10px',textAlign:'center'}}>
-                  <span style={{fontSize:11,fontWeight:700,color:SC_STATUS[row.status||'pending'],textTransform:'capitalize'}}>{(row.status||'pending').replace('_',' ')}</span>
-                </td>
-                <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>
-                  {row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}
-                </td>
-                <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>
-                  {row.completed_at?new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}
-                </td>
-                <td style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:600,color:timingColor}}>
-                  {timing||'—'}
-                </td>
+                <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>{client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+                <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:SC_STATUS[row.status||'pending'],textTransform:'capitalize'}}>{(row.status||'pending').replace('_',' ')}</span></td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>{row.completed_at?new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
+                <td style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:600,color:timingColor}}>{timing||'—'}</td>
               </tr>;
             })}
           </tbody>
-        </table>}
+        </table></div>}
       </div>}
+    </>}
+
+    {/* ── MONTHLY TAB ── */}
+    {activeTab==='monthly'&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>Monthly Breakdown — FY {selectedYear}-{String(selectedYear+1).slice(2)}</div>
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr style={{background:'rgba(107,140,173,0.04)'}}>
+          <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',position:'sticky',left:0,background:'var(--tf-surface)',zIndex:1}}>Month</th>
+          {workTypeNames.map(function(wt){return<th key={wt} style={{padding:'9px 10px',textAlign:'center',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{wt}</th>;})}
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Total</th>
+        </tr></thead>
+        <tbody>
+          {monthlyData.map(function(md,mi){
+            var mPct=md.total>0?Math.round(md.done/md.total*100):null;
+            return<tr key={md.month} style={{borderBottom:'1px solid var(--tf-border)',background:mi%2?'rgba(107,140,173,0.02)':'transparent'}}>
+              <td style={{padding:'9px 14px',fontWeight:700,color:'var(--tf-text)',position:'sticky',left:0,background:mi%2?'rgba(107,140,173,0.02)':'var(--tf-surface)',zIndex:1}}>{md.label}</td>
+              {workTypeNames.map(function(wt){
+                var cell=md.byWT[wt]||{done:0,total:0};
+                var cp=cell.total>0?Math.round(cell.done/cell.total*100):null;
+                var bg=cp===null?'transparent':cp>=80?'rgba(34,197,94,0.08)':cp>=50?'rgba(245,158,11,0.08)':'rgba(239,68,68,0.06)';
+                var clr=cp===null?'var(--tf-text-sub)':cp>=80?'#22c55e':cp>=50?'#f59e0b':'#ef4444';
+                return<td key={wt} style={{padding:'9px 10px',textAlign:'center',background:bg}}>
+                  {cell.total>0?<div><span style={{fontWeight:700,color:clr}}>{cell.done}/{cell.total}</span><div style={{fontSize:9,color:clr}}>{cp}%</div></div>:<span style={{color:'var(--tf-text-sub)',fontSize:10}}>—</span>}
+                </td>;
+              })}
+              <td style={{padding:'9px 10px',textAlign:'center',fontWeight:700,color:mPct!=null?(mPct>=80?'#22c55e':mPct>=50?'#f59e0b':'#ef4444'):'var(--tf-text-sub)'}}>
+                {md.total>0?md.done+'/'+md.total+' ('+mPct+'%)':'—'}
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table></div>
+    </div>}
+
+    {/* ── CLIENTS TAB ── */}
+    {activeTab==='clients'&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>Client-wise Report ({clientStats.length} clients)</div>
+      {clientStats.length===0?<div style={{padding:'24px 18px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No client data for this period.</div>:
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr style={{background:'rgba(107,140,173,0.04)'}}>
+          <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',position:'sticky',left:0,background:'var(--tf-surface)',zIndex:1}}>Client</th>
+          {workTypeNames.map(function(wt){return<th key={wt} style={{padding:'9px 10px',textAlign:'center',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{wt}</th>;})}
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Overall</th>
+        </tr></thead>
+        <tbody>
+          {clientStats.map(function(cl,ci){
+            return<tr key={cl.id} style={{borderBottom:'1px solid var(--tf-border)',background:ci%2?'rgba(107,140,173,0.02)':'transparent'}}>
+              <td style={{padding:'9px 14px',position:'sticky',left:0,background:ci%2?'rgba(107,140,173,0.02)':'var(--tf-surface)',zIndex:1}}>
+                <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{cl.name}</div>
+                {cl.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{cl.pan}</div>}
+              </td>
+              {workTypeNames.map(function(wt){
+                var cell=cl.byWT[wt]||{done:0,total:0};
+                var cp=cell.total>0?Math.round(cell.done/cell.total*100):null;
+                var clr=cp===null?'var(--tf-text-sub)':cp>=80?'#22c55e':cp>=50?'#f59e0b':'#ef4444';
+                return<td key={wt} style={{padding:'9px 10px',textAlign:'center'}}>
+                  {cell.total>0?<span style={{fontWeight:600,color:clr}}>{cell.done}/{cell.total}</span>:<span style={{color:'var(--tf-text-sub)',fontSize:10}}>—</span>}
+                </td>;
+              })}
+              <td style={{padding:'9px 10px',textAlign:'center'}}>
+                <span style={{fontWeight:700,color:cl.pct>=80?'#22c55e':cl.pct>=50?'#f59e0b':'#ef4444'}}>{cl.pct}%</span>
+                <div style={{fontSize:9,color:'var(--tf-text-sub)'}}>{cl.done}/{cl.total}</div>
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table></div>}
+    </div>}
+
+    {/* ── OVERDUE TAB ── */}
+    {activeTab==='overdue'&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>Overdue Tasks</div>
+        <span style={{background:'rgba(239,68,68,0.1)',color:'#ef4444',fontWeight:700,fontSize:12,padding:'3px 10px',borderRadius:20}}>{overdueRows.length} overdue</span>
+      </div>
+      {overdueRows.length===0?<div style={{padding:'24px 18px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No overdue tasks. Great job!</div>:
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr style={{background:'rgba(107,140,173,0.04)'}}>
+          <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
+          <th style={{padding:'9px 10px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Work Type</th>
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Period</th>
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Due Date</th>
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Days Overdue</th>
+        </tr></thead>
+        <tbody>
+          {overdueRows.map(function(row,ri){
+            var client=clientMap[row.client_id];if(!client)return null;
+            return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
+              <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{client.name}</div>{client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+              <td style={{padding:'9px 10px',fontSize:12,color:'var(--tf-text)'}}>{row.work_type}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>{row.period_label||'—'}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'#ef4444'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
+              <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontWeight:700,color:'#ef4444',fontSize:13}}>{row.daysOverdue}d</span></td>
+            </tr>;
+          })}
+        </tbody>
+      </table></div>}
+    </div>}
+
     </>}
   </div>;
 }
@@ -3435,8 +3651,8 @@ function CalendarView({orgs,supabase,cu}){
                 var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
                 return<div key={row.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
-                    {periodStr&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Period: {periodStr}</div>}
+                    <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,fontWeight:600,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>
+                    {periodStr&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Period: {periodStr}{row.due_label&&row.due_label!=='Due'?' · '+row.due_label:''}</div>}
                     {client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
                     {isCompleted&&row.completed_at&&<div style={{fontSize:9,color:'#22c55e',marginTop:1}}>Done {new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>}
                     {isOverdue&&<div style={{fontSize:9,color:'#ef4444',fontWeight:600,marginTop:1}}>Overdue</div>}
