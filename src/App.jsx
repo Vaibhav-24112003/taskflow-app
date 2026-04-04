@@ -589,25 +589,41 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>
         ⚡ Who is your Manager / Delegator for this task?
       </div>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
-        {wsMembers.map(m=><MemberCard key={m.id} m={m} selected={delegatorId===m.id} onClick={()=>setDelegatorId(m.id)} accent='#f59e0b'/>)}
-      </div>
+      <select value={delegatorId||''} onChange={e=>setDelegatorId(e.target.value)} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',fontFamily:'inherit',marginBottom:16}}>
+        <option value="">— Select Manager —</option>
+        {wsMembers.map(m=><option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
+      </select>
+      {delegatorId&&(()=>{const dm=wsMembers.find(m=>m.id===delegatorId);const eu=dm?enrich(dm):null;return eu?<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'8px 12px',borderRadius:8,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.06)'}}>
+        <Avatar user={eu} size={24}/><span style={{fontSize:12,fontWeight:600,color:'#f59e0b'}}>{dm.name||dm.email.split('@')[0]} — Manager</span>
+      </div>:null})()}
       <div style={{background:'rgba(143,165,190,0.06)',border:'1px solid rgba(143,165,190,0.15)',borderRadius:G.radiusMd,padding:'10px 14px',fontSize:11,color:'#8fa5be'}}>
-        ℹ This task will appear on <strong>your board</strong> as "Assigned by [Manager]". The manager sees it as a delegated task under their watch.
+        This task will appear on <strong>your board</strong> as "Assigned by [Manager]". The manager sees it as a delegated task under their watch.
       </div>
     </>}
 
     {/* CASE B: Delegate → pick subordinates */}
     {mode==='delegate'&&<>
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:6}}>
-        👥 Select subordinates to assign this task to
+        Select subordinates to assign this task to
       </div>
       <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:10}}>You will be the Manager / Delegator. Selected members will see it on their board.</div>
       {others.length===0
         ?<div style={{padding:20,textAlign:'center',color:'var(--tf-text-mut)',fontSize:12}}>No other members in this workspace</div>
-        :<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
-          {others.map(m=><MemberCard key={m.id} m={m} selected={subordinates.includes(m.id)} onClick={()=>toggleSub(m.id)} accent={ws.color}/>)}
-        </div>
+        :<>
+          <select value="" onChange={e=>{if(e.target.value)toggleSub(e.target.value);e.target.value='';}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',fontFamily:'inherit',marginBottom:8}}>
+            <option value="">— Add Assignee —</option>
+            {others.filter(m=>!subordinates.includes(m.id)).map(m=><option key={m.id} value={m.id}>{m.name||m.email.split('@')[0]}</option>)}
+          </select>
+          {subordinates.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+            {subordinates.map(sid=>{const m=others.find(x=>x.id===sid);if(!m)return null;const eu=enrich(m);
+              return<div key={sid} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,border:'1.5px solid rgba(107,140,173,0.4)',background:'rgba(107,140,173,0.08)'}}>
+                <Avatar user={eu} size={20}/>
+                <span style={{fontSize:12,fontWeight:600,color:ws.color}}>{m.name||m.email.split('@')[0]}</span>
+                <span onClick={()=>toggleSub(sid)} style={{cursor:'pointer',fontSize:14,color:'var(--tf-text-sub)',marginLeft:2,lineHeight:1}}>×</span>
+              </div>
+            })}
+          </div>}
+        </>
       }
       <div style={{background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.15)',borderRadius:G.radiusMd,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
         <Avatar user={enrich(wsMembers.find(m=>m.id===cu.id)||{id:cu.id})} size={28}/>
@@ -677,50 +693,31 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F label="Priority"><CustomSelect value={priority} onChange={setPriority} options={PRIORITIES} style={{width:'100%'}}/></F>
       {/* ── DELEGATOR / MANAGER ── */}
       <F full label="⚡ Manager / Delegator">
-        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-          {wsMembers.map(m=>{const eu=enrich(m);const sel=delegatorId===m.id
-            return<div key={m.id} onClick={()=>setDelegatorId(m.id)}
-              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:G.radiusMd,cursor:'pointer',
-                border:`1.5px solid ${sel?'rgba(245,158,11,0.6)':'var(--tf-border)'}`,
-                background:sel?'rgba(245,158,11,0.1)':'var(--tf-surface)',
-                transition:G.trans,flex:'0 0 auto'}}>
-              <Avatar user={eu} size={26}/>
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:sel?'#f59e0b':'var(--tf-text)'}}>
-                  {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
-                </div>
-                <div style={{fontSize:10,color:sel?'rgba(245,158,11,0.7)':'var(--tf-text-sub)'}}>
-                  {sel?'✓ Manager':m.email}
-                </div>
-              </div>
-            </div>
-          })}
-        </div>
+        <select value={delegatorId||''} onChange={e=>setDelegatorId(e.target.value)} style={{...INP,cursor:'pointer'}}>
+          <option value="">— Select Manager —</option>
+          {wsMembers.map(m=><option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
+        </select>
+        {delegatorId&&(()=>{const dm=wsMembers.find(m=>m.id===delegatorId);const eu=dm?enrich(dm):null;return eu?<div style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'6px 10px',borderRadius:G.radiusMd,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.06)'}}>
+          <Avatar user={eu} size={22}/>
+          <span style={{fontSize:12,fontWeight:600,color:'#f59e0b'}}>{dm.name||dm.email.split('@')[0]}</span>
+          <span style={{fontSize:10,color:'rgba(245,158,11,0.7)',marginLeft:4}}>Manager</span>
+        </div>:null})()}
       </F>
       {/* ── ASSIGNEES ── */}
       <F full label={`✅ Assignee${assignees.length>1?'s':''} (${assignees.length})`}>
-        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-          {wsMembers.map(m=>{const eu=enrich(m);const sel=assignees.includes(m.id)
-            return<div key={m.id} onClick={()=>toggleA(m.id)}
-              style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:G.radiusMd,cursor:'pointer',
-                border:`1.5px solid ${sel?`rgba(${rgb},0.6)`:'var(--tf-border)'}`,
-                background:sel?`rgba(${rgb},0.1)`:'var(--tf-surface)',
-                transition:G.trans,flex:'0 0 auto'}}>
-              <Avatar user={eu} size={26}/>
-              <div>
-                <div style={{fontSize:12,fontWeight:700,color:sel?ws.color:'var(--tf-text)'}}>
-                  {m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}
-                </div>
-                <div style={{fontSize:10,color:sel?`rgba(${rgb},0.7)`:'var(--tf-text-sub)'}}>
-                  {sel?'✓ Assignee':m.email}
-                </div>
-              </div>
-              <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?ws.color:'var(--tf-text-mut)'}`,background:sel?ws.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginLeft:2}}>
-                {sel&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
-              </div>
+        <select value="" onChange={e=>{if(e.target.value)toggleA(e.target.value);e.target.value='';}} style={{...INP,cursor:'pointer'}}>
+          <option value="">— Add Assignee —</option>
+          {wsMembers.filter(m=>!assignees.includes(m.id)).map(m=><option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
+        </select>
+        {assignees.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
+          {assignees.map(aid=>{const m=wsMembers.find(x=>x.id===aid);if(!m)return null;const eu=enrich(m);
+            return<div key={aid} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:G.radiusMd,border:`1.5px solid rgba(${rgb},0.4)`,background:`rgba(${rgb},0.08)`}}>
+              <Avatar user={eu} size={20}/>
+              <span style={{fontSize:12,fontWeight:600,color:ws.color}}>{m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</span>
+              <span onClick={()=>toggleA(aid)} style={{cursor:'pointer',fontSize:14,color:'var(--tf-text-sub)',marginLeft:2,lineHeight:1}}>×</span>
             </div>
           })}
-        </div>
+        </div>}
         {delegatorId&&assignees.length>0&&!assignees.includes(delegatorId)&&
           <div style={{marginTop:8,fontSize:11,color:'#f59e0b',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.15)',borderRadius:G.radiusSm,padding:'6px 10px'}}>
             ⚡ Delegated via {wsMembers.find(m=>m.id===delegatorId)?.name||'?'}
