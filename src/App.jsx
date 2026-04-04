@@ -2213,6 +2213,7 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{c.name}</span>
                 <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'1px 6px'}}>{FREQ_LABELS[c.frequency]||c.frequency}</span>
+                {c.worksheet_group&&<span style={{fontSize:10,fontWeight:600,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:4,padding:'1px 6px'}}>{c.worksheet_group}</span>}
                 {!c.is_active&&<span style={{fontSize:10,fontWeight:600,color:'#94a3b8',background:'rgba(148,163,184,0.1)',borderRadius:4,padding:'1px 6px'}}>Inactive</span>}
               </div>
               <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>
@@ -2245,6 +2246,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [tab,setTab]=useState('basic');
   var [name,setName]=useState(config?config.name:'');
   var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
+  var [worksheetGroup,setWorksheetGroup]=useState(config?config.worksheet_group||'':'');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
   var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
@@ -2284,7 +2286,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     setSaving(true);
     var firstDue=dueDates.length>0?dueDates[0]:null;
     var payload={
-      org_id:orgId, name:name.trim(), frequency:frequency,
+      org_id:orgId, name:name.trim(), frequency:frequency, worksheet_group:worksheetGroup.trim()||null,
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
@@ -2328,6 +2330,11 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               <option value="yearly">Yearly</option>
               <option value="once">One-time</option>
             </select>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={LBL}>Worksheet Group <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
+            <input value={worksheetGroup} onChange={function(e){setWorksheetGroup(e.target.value);}} style={INP} placeholder="e.g. GST Returns — groups multiple work types into one tab"/>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Work types with the same group name will appear under one worksheet tab with sub-tabs.</div>
           </div>
         </div>}
 
@@ -2479,7 +2486,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
     var m={};
     workTypeConfigs.forEach(function(c){
-      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[]};
+      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null};
     });
     return m;
   },[workTypeConfigs]);
@@ -2487,6 +2494,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   var [activeType,setActiveType]=useState(null);
   var [worksheet,setWorksheet]=useState(null); // current period worksheet
   var [rows,setRows]=useState([]);
+  var [activeGroup,setActiveGroup]=useState(null); // for grouped work types
   var [loading,setLoading]=useState(true);
   var _initP=getCurrentPeriod('monthly');
   var _initQ=getCurrentPeriod('quarterly');
@@ -2514,6 +2522,24 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
   // Get all work types used by clients in this org
   var [allTypes,setAllTypes]=useState([]);
+
+  // Build grouped tab structure: [{label, types:[], isGroup}]
+  var tabLayout=useMemo(function(){
+    var groups={};var ungrouped=[];
+    allTypes.forEach(function(t){
+      var cfg=WS_TYPE_CONFIGS[t];
+      if(cfg&&cfg.worksheet_group){
+        if(!groups[cfg.worksheet_group])groups[cfg.worksheet_group]=[];
+        groups[cfg.worksheet_group].push(t);
+      }else{ungrouped.push(t);}
+    });
+    var tabs=[];
+    // Add group tabs first
+    Object.keys(groups).forEach(function(g){tabs.push({label:g,types:groups[g],isGroup:true});});
+    // Add ungrouped tabs
+    ungrouped.forEach(function(t){tabs.push({label:t,types:[t],isGroup:false});});
+    return tabs;
+  },[allTypes,WS_TYPE_CONFIGS]);
 
   useEffect(function(){loadClients();loadColPrefs();},[org.id]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
@@ -2657,8 +2683,14 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       var typeArr=Array.from(types).filter(function(t){return WS_TYPE_CONFIGS[t];});
       setAllTypes(typeArr);
       if(typeArr.length>0&&!activeType){
-        setActiveType(typeArr[0]);
-        var freq=WS_TYPE_CONFIGS[typeArr[0]]?WS_TYPE_CONFIGS[typeArr[0]].frequency:'monthly';
+        // Pick first tab from grouped layout
+        var groups={};var ungrouped=[];
+        typeArr.forEach(function(t){var c=WS_TYPE_CONFIGS[t];if(c&&c.worksheet_group){if(!groups[c.worksheet_group])groups[c.worksheet_group]=[];groups[c.worksheet_group].push(t);}else ungrouped.push(t);});
+        var firstGroup=Object.keys(groups)[0];
+        var firstType=firstGroup?groups[firstGroup][0]:(ungrouped[0]||typeArr[0]);
+        setActiveType(firstType);
+        if(firstGroup)setActiveGroup(firstGroup);
+        var freq=WS_TYPE_CONFIGS[firstType]?WS_TYPE_CONFIGS[firstType].frequency:'monthly';
         var p=getCurrentPeriod(freq);
         setPeriodYear(p.year);
         if(p.month)setPeriodMonth(p.month);
@@ -2972,21 +3004,46 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No work types assigned</div>
       <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to Client Master Data → edit each client → Work Types tab to assign work types.</div>
     </div>:<div>
-      {/* Work type tabs */}
-      <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
-        {allTypes.map(function(t){
-          var active=activeType===t;
-          return<button key={t} onClick={function(){
-            setActiveType(t);
-            var f2=WS_TYPE_CONFIGS[t]?WS_TYPE_CONFIGS[t].frequency:'monthly';
-            var p2=getCurrentPeriod(f2);
-            setPeriodYear(p2.year);
-            if(p2.month)setPeriodMonth(p2.month);
-            if(p2.quarter)setPeriodQuarter(p2.quarter);
+      {/* Work type tabs — with grouping support */}
+      <div style={{display:'flex',gap:4,marginBottom:0,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
+        {tabLayout.map(function(tab){
+          var isActiveTab=tab.isGroup?activeGroup===tab.label:activeType===tab.types[0];
+          return<button key={tab.label} onClick={function(){
+            if(tab.isGroup){
+              setActiveGroup(tab.label);
+              // Select first work type in group
+              var firstType=tab.types[0];
+              setActiveType(firstType);
+              var f2=WS_TYPE_CONFIGS[firstType]?WS_TYPE_CONFIGS[firstType].frequency:'monthly';
+              var p2=getCurrentPeriod(f2);
+              setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
+            }else{
+              setActiveGroup(null);
+              setActiveType(tab.types[0]);
+              var f2=WS_TYPE_CONFIGS[tab.types[0]]?WS_TYPE_CONFIGS[tab.types[0]].frequency:'monthly';
+              var p2=getCurrentPeriod(f2);
+              setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
+            }
             clearFilters();
-          }} style={{padding:'8px 16px',border:'none',borderBottom:active?'2px solid #6b8cad':'2px solid transparent',background:'none',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>{t}</button>;
+          }} style={{padding:'8px 16px',border:'none',borderBottom:isActiveTab?'2px solid #6b8cad':'2px solid transparent',background:'none',color:isActiveTab?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:isActiveTab?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>{tab.label}{tab.isGroup&&<span style={{fontSize:9,marginLeft:4,color:'#f59e0b',fontWeight:700}}>▾</span>}</button>;
         })}
       </div>
+      {/* Sub-tabs for grouped work types */}
+      {activeGroup&&<div style={{display:'flex',gap:2,padding:'6px 0',marginBottom:8,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
+        {(tabLayout.find(function(t){return t.label===activeGroup;})||{types:[]}).types.map(function(t){
+          var active=activeType===t;
+          var cfg2=WS_TYPE_CONFIGS[t]||{};
+          return<button key={t} onClick={function(){
+            setActiveType(t);
+            var f2=cfg2.frequency||'monthly';
+            var p2=getCurrentPeriod(f2);
+            setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
+            clearFilters();
+          }} style={{padding:'5px 12px',borderRadius:'100px',border:active?'1.5px solid rgba(107,140,173,0.5)':'1.5px solid var(--tf-border)',background:active?'rgba(107,140,173,0.1)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>
+            {t}<span style={{fontSize:9,marginLeft:4,color:'var(--tf-text-mut)'}}>{(cfg2.frequency||'monthly').charAt(0).toUpperCase()}</span>
+          </button>;
+        })}
+      </div>}
 
       {/* Period selector + toolbar */}
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap'}}>
