@@ -2665,6 +2665,13 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
   async function loadWorksheet(){
     if(!activeType)return;
+    // Ensure clients are loaded before proceeding
+    var currentClients=clients;
+    if(currentClients.length===0){
+      var rc=await supabase.from('clients').select('*').eq('org_id',org.id).order('name').limit(500);
+      currentClients=rc.data||[];
+      if(currentClients.length>0)setClients(currentClients);
+    }
     var cfg=WS_TYPE_CONFIGS[activeType]||{frequency:'monthly',cols:[]};
     var label=getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter);
     // Find or create worksheet for this period
@@ -2685,8 +2692,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       // Load rows, auto-create for missing clients
       var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws.id).limit(2000);
       var existingRows=rr.data||[];
-      // Get clients for this work type
-      var typeClients=clients.filter(function(c){
+      // Get clients for this work type (use currentClients to avoid stale state)
+      var typeClients=currentClients.filter(function(c){
         var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
         return wts.some(function(t){return t.trim()===activeType;});
       });
@@ -2750,7 +2757,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       if(cfg.frequency==='once'){
         // For one-time: just load existing rows, don't auto-create
         var clientMap={};
-        clients.forEach(function(c){clientMap[c.id]=c;});
+        currentClients.forEach(function(c){clientMap[c.id]=c;});
         existingRows.sort(function(a,b){
           var na=(clientMap[a.client_id]||{}).name||'';
           var nb=(clientMap[b.client_id]||{}).name||'';
@@ -2801,6 +2808,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       }
       if(newRows.length>0){
         var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
+        if(ins2.error)console.error('worksheet_rows insert error:',ins2.error);
         existingRows=[...existingRows,...(ins2.data||[])];
       }
       // Sort by client name
