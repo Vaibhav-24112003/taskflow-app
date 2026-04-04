@@ -2393,6 +2393,12 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   var [periodQuarter,setPeriodQuarter]=useState(_initQ.quarter||1);
   var [showCreateTask,setShowCreateTask]=useState(null); // {row, client}
   var [saving,setSaving]=useState(false);
+  // One-time task form
+  var [showAddOnce,setShowAddOnce]=useState(false);
+  var [onceClientId,setOnceClientId]=useState('');
+  var [onceDueDate,setOnceDueDate]=useState('');
+  var [onceAssignee,setOnceAssignee]=useState('');
+  var [orgMembers,setOrgMembers]=useState([]);
   var [toast,setToast]=useState(null);
 
   // Column show/hide
@@ -2409,6 +2415,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
   useEffect(function(){loadClients();loadColPrefs();},[org.id]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
+  useEffect(function(){if(activeType){var f=WS_TYPE_CONFIGS[activeType];if(f&&f.frequency==='once')loadOrgMembers();}},[activeType]);
   // Load column prefs when active type changes
   useEffect(function(){if(activeType)loadColPrefsForType(activeType);},[activeType]);
 
@@ -2642,7 +2649,20 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         }
       }
 
-      // Auto-insert missing rows
+      // Auto-insert missing rows (skip for 'once' — those are added manually)
+      if(cfg.frequency==='once'){
+        // For one-time: just load existing rows, don't auto-create
+        var clientMap={};
+        clients.forEach(function(c){clientMap[c.id]=c;});
+        existingRows.sort(function(a,b){
+          var na=(clientMap[a.client_id]||{}).name||'';
+          var nb=(clientMap[b.client_id]||{}).name||'';
+          return na.localeCompare(nb);
+        });
+        setRows(existingRows);
+        setLoading(false);
+        return;
+      }
       var existingClientIds=[...new Set(existingRows.map(function(r){return r.client_id;}))];
       var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
 
@@ -2717,6 +2737,39 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   async function updateRowDueDate(rowId,val){
     await supabase.from('worksheet_rows').update({due_date:val||null}).eq('id',rowId);
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{due_date:val||null}):r;});});
+  }
+
+  // Load org members for assignee dropdown (one-time tasks)
+  async function loadOrgMembers(){
+    if(orgMembers.length>0)return;
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var mlist=rm.data||[];
+    if(mlist.length>0){
+      var ids=mlist.map(function(m){return m.user_id;});
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      setOrgMembers(rp.data||[]);
+    }
+  }
+
+  async function addOnceTask(){
+    if(!onceClientId||!worksheet)return;
+    setSaving(true);
+    var newRow={worksheet_id:worksheet.id,client_id:onceClientId,org_id:org.id,data:{},due_date:onceDueDate||null,status:'pending'};
+    if(onceAssignee){newRow.data={__assignee:onceAssignee};}
+    var ins=await supabase.from('worksheet_rows').insert(newRow).select().single();
+    if(ins.data){
+      setRows(function(prev){return[...prev,ins.data];});
+      showToast('One-time task added');
+    }else{showToast('Failed to add','err');}
+    setOnceClientId('');setOnceDueDate('');setOnceAssignee('');setShowAddOnce(false);
+    setSaving(false);
+  }
+
+  async function deleteOnceRow(rowId){
+    if(!window.confirm('Remove this one-time task?'))return;
+    await supabase.from('worksheet_rows').delete().eq('id',rowId);
+    setRows(function(prev){return prev.filter(function(r){return r.id!==rowId;});});
+    showToast('Task removed');
   }
 
   async function updateCellData(rowId,key,val){
@@ -2828,7 +2881,10 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       {/* Period selector + toolbar */}
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap'}}>
         {cfg.frequency!=='once'&&<div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>Period:</div>}
-        {cfg.frequency==='once'&&<div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>One-time Tasks</div>}
+        {cfg.frequency==='once'&&<>
+          <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05}}>One-time Tasks</div>
+          <button onClick={function(){setShowAddOnce(!showAddOnce);loadOrgMembers();}} style={{background:showAddOnce?'rgba(34,197,94,0.15)':'rgba(107,140,173,0.1)',border:'1px solid '+(showAddOnce?'rgba(34,197,94,0.3)':'rgba(107,140,173,0.25)'),borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:showAddOnce?'#22c55e':'#6b8cad',cursor:'pointer'}}>+ Add Task</button>
+        </>}
         {cfg.frequency==='monthly'&&<>
           <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
             {MONTHS.map(function(m,i){return<option key={m} value={i+1}>{m}</option>;})}
@@ -2909,6 +2965,30 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         {hasActiveFilters&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing {filteredRows.length} of {rows.length}</span>}
       </div>}
 
+      {/* Add one-time task form */}
+      {cfg.frequency==='once'&&showAddOnce&&<div style={{display:'flex',alignItems:'flex-end',gap:10,marginBottom:14,padding:'14px 16px',background:'rgba(34,197,94,0.04)',border:'1px solid rgba(34,197,94,0.2)',borderRadius:10,flexWrap:'wrap'}}>
+        <div style={{flex:1,minWidth:160}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>Client</div>
+          <select value={onceClientId} onChange={function(e){setOnceClientId(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+            <option value="">— Select Client —</option>
+            {clients.map(function(c){return<option key={c.id} value={c.id}>{c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
+          </select>
+        </div>
+        <div style={{minWidth:140}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>Assignee</div>
+          <select value={onceAssignee} onChange={function(e){setOnceAssignee(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+            <option value="">— Optional —</option>
+            {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          </select>
+        </div>
+        <div style={{minWidth:130}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>Due Date</div>
+          <input type="date" value={onceDueDate} onChange={function(e){setOnceDueDate(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+        </div>
+        <button onClick={addOnceTask} disabled={!onceClientId||saving} style={{background:onceClientId?'#22c55e':'#64748b',color:'#fff',border:'none',borderRadius:7,padding:'8px 18px',fontSize:12,fontWeight:700,cursor:onceClientId?'pointer':'not-allowed',opacity:onceClientId?1:0.5}}>Add</button>
+        <button onClick={function(){setShowAddOnce(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12}}>Cancel</button>
+      </div>}
+
       {/* Summary stats */}
       {rows.length>0&&<div style={{display:'flex',gap:12,marginBottom:12,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
         {cfg.cols.map(function(col){
@@ -2923,7 +3003,12 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       </div>}
 
       {/* Table */}
-      {typeClients.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
+      {cfg.frequency==='once'&&rows.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
+        <div style={{fontSize:28,marginBottom:8}}>📝</div>
+        <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No one-time tasks yet</div>
+        <div>Click <b>+ Add Task</b> above to generate a one-time task by selecting a client, assignee, and due date.</div>
+      </div>:
+      cfg.frequency!=='once'&&typeClients.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
         No clients have {activeType} as a work type. Add clients in Client Master Data.
       </div>:
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}}>
@@ -2935,6 +3020,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
               {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>}
               {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
               {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
+              {cfg.frequency==='once'&&<th style={{padding:'10px 6px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:60}}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -3011,6 +3097,10 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
                 {showTaskCard&&<td style={{padding:'10px 10px',textAlign:'center'}}>
                   {row.task_card_id?<span style={{fontSize:11,fontWeight:600,color:'#22c55e',background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.25)',borderRadius:20,padding:'3px 10px'}}>✓ Created</span>:
                   <button onClick={function(){setShowCreateTask({row,client});}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 10px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>+ Create</button>}
+                </td>}
+                {cfg.frequency==='once'&&<td style={{padding:'10px 6px',textAlign:'center'}}>
+                  {row.data&&row.data.__assignee&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>{(orgMembers.find(function(m){return m.id===row.data.__assignee;})||{}).name||'Assigned'}</div>}
+                  <button onClick={function(){deleteOnceRow(row.id);}} title="Remove task" style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>✕</button>
                 </td>}
               </tr>;
             })}
