@@ -976,21 +976,15 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
   )
 
   return<div style={{display:'flex',flexDirection:'column',gap:16}}>
-    {/* Member picker row */}
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-      <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',marginRight:4}}>Member</span>
-      {wsMembers.map(m=>{
-        const eu=enrich(m);const sel=m.id===teamMemberId;const isSelf=m.id===cu.id
-        const mAll=allT.filter(t=>isOnMyBoard(t,m.id)).length
-        return<div key={m.id} onClick={()=>setTeamMemberId(m.id)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderRadius:G.radiusMd,cursor:'pointer',border:`1.5px solid ${sel?`rgba(${rgb},0.5)`:'var(--tf-border)'}`,background:sel?`rgba(${rgb},0.1)`:'var(--tf-surface)',transition:G.trans}}>
-          <Avatar user={eu} size={28}/>
-          <div>
-            <div style={{fontSize:12,fontWeight:700,color:sel?wsColor:'var(--tf-text)'}}>{m.name||m.email.split('@')[0]}{isSelf?' (You)':''}</div>
-            <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{mAll} task{mAll!==1?'s':''}</div>
-          </div>
-          {sel&&<div style={{width:6,height:6,borderRadius:'50%',background:wsColor,marginLeft:4,boxShadow:`0 0 8px ${wsColor}`}}/>}
-        </div>
-      })}
+    {/* Member picker - compact dropdown */}
+    <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+      <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Member</span>
+      <select value={teamMemberId||''} onChange={e=>setTeamMemberId(e.target.value)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',fontSize:13,fontWeight:600,cursor:'pointer',outline:'none',fontFamily:'inherit',minWidth:220}}>
+        {wsMembers.map(m=>{
+          const mAll=allT.filter(t=>isOnMyBoard(t,m.id)).length
+          return<option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')} — {mAll} task{mAll!==1?'s':''}</option>
+        })}
+      </select>
     </div>
 
     {selMem&&<>
