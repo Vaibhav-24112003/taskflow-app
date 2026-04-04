@@ -976,27 +976,20 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
   )
 
   return<div style={{display:'flex',flexDirection:'column',gap:16}}>
-    {/* Member picker - compact dropdown */}
+    {/* Member picker + selected info — single compact row */}
     <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
       <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Member</span>
-      <select value={teamMemberId||''} onChange={e=>setTeamMemberId(e.target.value)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',fontSize:13,fontWeight:600,cursor:'pointer',outline:'none',fontFamily:'inherit',minWidth:220}}>
+      <select value={teamMemberId||''} onChange={e=>setTeamMemberId(e.target.value)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 12px',color:'var(--tf-text)',fontSize:12,fontWeight:600,cursor:'pointer',outline:'none',fontFamily:'inherit',minWidth:200}}>
         {wsMembers.map(m=>{
           const mAll=allT.filter(t=>isOnMyBoard(t,m.id)).length
           return<option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')} — {mAll} task{mAll!==1?'s':''}</option>
         })}
       </select>
-    </div>
-
-    {selMem&&<>
-      {/* Member header + stats */}
-      <div style={{background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.2)`,borderRadius:G.radius,padding:'18px 22px',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
-        <Avatar user={enrich(selMem)} size={52} ring={wsColor}/>
-        <div style={{flex:1,minWidth:160}}>
-          <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{selMem.name||selMem.email}</div>
-          <div style={{fontSize:11,color:'#10b981',marginTop:4,fontWeight:600}}>● Workspace member</div>
-        </div>
-        {/* Stats */}
-        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      {selMem&&<div style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:'100px',padding:'4px 12px 4px 4px',flexShrink:0}}>
+        <Avatar user={enrich(selMem)} size={22} ring={wsColor}/>
+        <span style={{fontSize:11,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap'}}>{selMem.name||selMem.email.split('@')[0]}{selMem.id===cu.id?' (You)':''}</span>
+      </div>}
+      <div style={{display:'flex',gap:4,flexWrap:'wrap',marginLeft:'auto'}}>
           {[
             {l:'Total',v:memberAll.length,c:wsColor,f:'all'},
             {l:'Own',v:memberOwn.length,c:'#8fa5be',f:'own'},
@@ -1006,14 +999,15 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
           ].map(x=>{
             const xrgb=hexRgb(x.c);const active=filter===x.f
             return<div key={x.l} onClick={x.f?()=>setFilter(f=>f===x.f?'all':x.f):undefined}
-              style={{textAlign:'center',background:active?`rgba(${xrgb},0.15)`:'var(--tf-surface)',border:`1px solid ${active?`rgba(${xrgb},0.4)`:'var(--tf-border)'}`,borderRadius:G.radiusMd,padding:'10px 16px',cursor:x.f?'pointer':'default',transition:G.trans,minWidth:60}}>
-              <div style={{fontSize:22,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
-              <div style={{fontSize:10,color:active?x.c:'var(--tf-text-sub)',fontWeight:700,marginTop:3,textTransform:'uppercase',letterSpacing:'0.06em'}}>{x.l}</div>
+              style={{textAlign:'center',background:active?`rgba(${xrgb},0.15)`:'var(--tf-surface)',border:`1px solid ${active?`rgba(${xrgb},0.4)`:'var(--tf-border)'}`,borderRadius:G.radiusSm,padding:'5px 10px',cursor:x.f?'pointer':'default',transition:G.trans,minWidth:44}}>
+              <div style={{fontSize:16,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
+              <div style={{fontSize:9,color:active?x.c:'var(--tf-text-sub)',fontWeight:700,marginTop:2,textTransform:'uppercase',letterSpacing:'0.06em'}}>{x.l}</div>
             </div>
           })}
         </div>
-      </div>
+    </div>
 
+    {selMem&&<>
       {/* Filter tabs */}
       <div style={{display:'flex',alignItems:'center',gap:8}}>
         <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>Showing:</span>
@@ -1222,6 +1216,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>✦</div>
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
+      <button onClick={()=>setActiveWsId(null)} title="Home — All Modules" style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0,fontFamily:G.font,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>⌂</button>
       <div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
       <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
