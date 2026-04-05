@@ -2983,7 +2983,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   // Visible columns (exclude hidden)
   var visibleCols=cfg.cols.filter(function(col){return !hiddenCols.includes(col.key);});
   // All toggleable columns (dynamic + built-in)
-  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat([{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
+  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat([{key:'__assignee',label:'Assignee'},{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
+  var showAssignee=!hiddenCols.includes('__assignee');
   var showStatus=!hiddenCols.includes('__status');
   var showComments=!hiddenCols.includes('__comments');
   var showTaskCard=!hiddenCols.includes('__taskcard');
@@ -2997,12 +2998,14 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     if(filterClient&&!client.name.toLowerCase().includes(filterClient.toLowerCase())&&!(client.display_name||'').toLowerCase().includes(filterClient.toLowerCase()))return false;
     // Status filter
     if(filters.__status&&(row.status||'pending')!==filters.__status)return false;
+    // Assignee filter
+    if(filters.__assignee){var ra=(row.data||{}).__assignee||'';if(filters.__assignee==='__unassigned'&&ra)return false;if(filters.__assignee!=='__unassigned'&&ra!==filters.__assignee)return false;}
     // Column filters
     var d=row.data||{};
     var keys=Object.keys(filters);
     for(var i=0;i<keys.length;i++){
       var k=keys[i];
-      if(k==='__status')continue;
+      if(k==='__status'||k==='__assignee')continue;
       var fv=filters[k];
       var colDef=cfg.cols.find(function(c){return c.key===k;});
       var ct=colDef&&colDef.type||'checkbox';
@@ -3137,6 +3140,11 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
         </select>
+        <select value={filters.__assignee||'all'} onChange={function(e){setFilter('__assignee',e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          <option value="all">All Assignees</option>
+          <option value="__unassigned">Unassigned</option>
+          {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+        </select>
         {cfg.cols.map(function(col){
           var ct=col.type||'checkbox';
           if(ct==='checkbox'){
@@ -3216,6 +3224,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           <thead>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
               <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
+              {showAssignee&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120}}>Assignee</th>}
               {visibleCols.map(function(col){var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw}}>{col.label}</th>;})}
               {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>}
               {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
@@ -3237,6 +3246,13 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
                   {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
                   {cfg.frequency==='once'?<div style={{marginTop:2}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
+                {showAssignee&&<td style={{padding:'6px 8px',textAlign:'center'}}>
+                  <select value={(row.data||{}).__assignee||''} onChange={function(e){updateCellData(row.id,'__assignee',e.target.value);}}
+                    style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:130}}>
+                    <option value="">— Unassigned —</option>
+                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                  </select>
+                </td>}
                 {visibleCols.map(function(col){
                   var colType=col.type||'checkbox';
                   if(colType==='checkbox'){
