@@ -2546,7 +2546,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
 
   useEffect(function(){loadClients();loadColPrefs();},[org.id]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
-  useEffect(function(){if(activeType){var f=WS_TYPE_CONFIGS[activeType];if(f&&f.frequency==='once')loadOrgMembers();}},[activeType]);
+  useEffect(function(){if(activeType){loadOrgMembers();}},[activeType]);
   // Load column prefs when active type changes
   useEffect(function(){if(activeType)loadColPrefsForType(activeType);},[activeType]);
 
@@ -3248,9 +3248,9 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
                 </td>
                 {showAssignee&&<td style={{padding:'6px 8px',textAlign:'center'}}>
                   <select value={(row.data||{}).__assignee||''} onChange={function(e){updateCellData(row.id,'__assignee',e.target.value);}}
-                    style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:130}}>
-                    <option value="">— Unassigned —</option>
-                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:(row.data||{}).__assignee?'var(--tf-text)':'var(--tf-text-sub)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:140,WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'5\' viewBox=\'0 0 8 5\'%3E%3Cpath d=\'M0 0l4 5 4-5z\' fill=\'%236b8cad\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 6px center',paddingRight:18}}>
+                    <option value="" style={{background:'var(--tf-surface)',color:'var(--tf-text-sub)'}}>— Unassigned —</option>
+                    {orgMembers.map(function(m){return<option key={m.id} value={m.id} style={{background:'var(--tf-surface)',color:'var(--tf-text)'}}>{m.name||m.email}</option>;})}
                   </select>
                 </td>}
                 {visibleCols.map(function(col){
