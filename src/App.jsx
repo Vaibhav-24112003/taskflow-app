@@ -1066,7 +1066,12 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [qaMembers,setQaMembers]=useState([])
   const [qaWorkTypes,setQaWorkTypes]=useState([])
   const [qaSaving,setQaSaving]=useState(false)
-  const userMenuRef=useRef();const wsMenuRef=useRef()
+  const userMenuRef=useRef();const wsMenuRef=useRef();const notifRef=useRef()
+  // Notifications
+  const [showNotif,setShowNotif]=useState(false)
+  const [notifData,setNotifData]=useState({today:[],overdue:[],assigned:[]})
+  const [notifLoading,setNotifLoading]=useState(false)
+  const notifCountRef=useRef(0)
 
   useEffect(()=>{localStorage.setItem('tf-light',lightMode?'1':'0')},[lightMode])
 
@@ -1077,7 +1082,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   useEffect(()=>{setTeamMemberId(null);setView('board')},[activeWsId])
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
-  useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
+  useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false);if(notifRef.current&&!notifRef.current.contains(e.target))setShowNotif(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
   useEffect(()=>{
@@ -1136,6 +1141,68 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     }else{showToast('Failed to create worksheet','err');}
     setQaSaving(false);
   }
+
+  // --- Notifications: load today's due, overdue, and assigned-to-me tasks ---
+  const loadNotifications=useCallback(async()=>{
+    if(orgs.length===0)return;
+    setNotifLoading(true);
+    try{
+      var today=new Date();
+      var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+      var orgIds=orgs.map(function(o){return o.id;});
+
+      // Fetch all non-completed rows with due_date <= today OR assigned to me
+      var rr=await supabase.from('worksheet_rows').select('id,client_id,org_id,due_date,due_label,status,data,worksheet_id,comments').in('org_id',orgIds).neq('status','completed').limit(3000);
+      var allRows=rr.data||[];
+
+      // Fetch worksheet info for work_type names
+      var wsIds=[...new Set(allRows.map(function(r){return r.worksheet_id;}))];
+      var wsMap={};
+      if(wsIds.length>0){
+        var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(2000);
+        (rw.data||[]).forEach(function(w){wsMap[w.id]=w;});
+      }
+
+      // Fetch client names
+      var clientIds=[...new Set(allRows.map(function(r){return r.client_id;}))];
+      var clientMap={};
+      if(clientIds.length>0){
+        var rc=await supabase.from('clients').select('id,name,display_name').in('id',clientIds).limit(2000);
+        (rc.data||[]).forEach(function(c){clientMap[c.id]=c;});
+      }
+
+      // Org name map
+      var orgMap={};
+      orgs.forEach(function(o){orgMap[o.id]=o.name;});
+
+      // Enrich rows
+      var enriched=allRows.map(function(row){
+        var ws=wsMap[row.worksheet_id]||{};
+        var client=clientMap[row.client_id]||{};
+        return{id:row.id,clientName:client.display_name||client.name||'Unknown',workType:ws.work_type||'',period:ws.period_label||'',orgName:orgMap[row.org_id]||'',dueDate:row.due_date,dueLabel:row.due_label||'',status:row.status||'pending',assignee:(row.data||{}).__assignee||null,orgId:row.org_id};
+      });
+
+      var todayTasks=enriched.filter(function(r){return r.dueDate===todayStr;});
+      var overdueTasks=enriched.filter(function(r){return r.dueDate&&r.dueDate<todayStr;});
+      var assignedToMe=enriched.filter(function(r){return r.assignee===cu.id;});
+
+      // Remove duplicates: assigned tasks that are also today/overdue stay in their category
+      var todayIds=new Set(todayTasks.map(function(r){return r.id;}));
+      var overdueIds=new Set(overdueTasks.map(function(r){return r.id;}));
+      var assignedFiltered=assignedToMe.filter(function(r){return !todayIds.has(r.id)&&!overdueIds.has(r.id);});
+
+      setNotifData({today:todayTasks,overdue:overdueTasks,assigned:assignedFiltered});
+      notifCountRef.current=todayTasks.length+overdueTasks.length+assignedFiltered.length;
+    }catch(e){console.error('Notification load error:',e);}
+    setNotifLoading(false);
+  },[orgs,cu.id]);
+
+  // Load notifications on mount and every 5 minutes
+  useEffect(function(){
+    if(orgs.length>0){loadNotifications();}
+    var iv=setInterval(function(){if(orgs.length>0)loadNotifications();},300000);
+    return function(){clearInterval(iv);};
+  },[orgs.length,loadNotifications]);
 
   const saveTask=async td=>{
     if(td.id){
@@ -1289,6 +1356,78 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
+      {/* Notifications bell */}
+      <div ref={notifRef} style={{position:'relative',flexShrink:0}}>
+        <button onClick={()=>{setShowNotif(v=>!v);if(!showNotif)loadNotifications();}} title="Notifications" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(107,140,173,0.4)':'var(--tf-border)'),color:showNotif?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>{if(!showNotif)e.currentTarget.style.background='var(--tf-surface)'}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          {(notifData.today.length+notifData.overdue.length+notifData.assigned.length)>0&&<div style={{position:'absolute',top:-3,right:-3,minWidth:16,height:16,borderRadius:8,background:'#ef4444',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid var(--tf-panel)'}}>{notifData.today.length+notifData.overdue.length+notifData.assigned.length>99?'99+':notifData.today.length+notifData.overdue.length+notifData.assigned.length}</div>}
+        </button>
+        {showNotif&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:12,width:380,maxHeight:'70vh',boxShadow:'0 12px 40px rgba(0,0,0,0.25)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300,display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'14px 16px 10px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Notifications</div>
+            <button onClick={loadNotifications} title="Refresh" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color='#6b8cad'} onMouseLeave={e=>e.currentTarget.style.color='var(--tf-text-sub)'}>↻</button>
+          </div>
+          <div style={{overflowY:'auto',flex:1,maxHeight:'calc(70vh - 50px)'}}>
+            {notifLoading&&(notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Loading...</div>:
+            (notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center'}}>
+              <div style={{fontSize:28,marginBottom:8}}>&#x2714;&#xFE0F;</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--tf-text)'}}>All clear!</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>No pending due dates or assignments.</div>
+            </div>:<>
+              {notifData.overdue.length>0&&<div>
+                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#ef4444',display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:3,background:'#ef4444',display:'inline-block'}}></span>
+                  Overdue ({notifData.overdue.length})
+                </div>
+                {notifData.overdue.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:'#ef4444',marginTop:5,flexShrink:0}}></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
+                    <div style={{fontSize:10,color:'#ef4444',marginTop:2,fontWeight:600}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+                  </div>
+                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
+                </div>;})}
+                {notifData.overdue.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.overdue.length-20} more</div>}
+              </div>}
+
+              {notifData.today.length>0&&<div>
+                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#f59e0b',display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:3,background:'#f59e0b',display:'inline-block'}}></span>
+                  Due Today ({notifData.today.length})
+                </div>
+                {notifData.today.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:'#f59e0b',marginTop:5,flexShrink:0}}></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
+                    <div style={{fontSize:10,color:'#f59e0b',marginTop:2,fontWeight:600}}>Due today</div>
+                  </div>
+                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
+                </div>;})}
+                {notifData.today.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.today.length-20} more</div>}
+              </div>}
+
+              {notifData.assigned.length>0&&<div>
+                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#6b8cad',display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:3,background:'#6b8cad',display:'inline-block'}}></span>
+                  Assigned to You ({notifData.assigned.length})
+                </div>
+                {notifData.assigned.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:'#6b8cad',marginTop:5,flexShrink:0}}></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
+                    {item.dueDate&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
+                  </div>
+                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
+                </div>;})}
+                {notifData.assigned.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.assigned.length-20} more</div>}
+              </div>}
+            </>}
+          </div>
+        </div>}
+      </div>
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
