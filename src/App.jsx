@@ -3855,11 +3855,10 @@ function CalendarView({orgs,supabase,cu}){
 
   async function loadCalData(){
     setLoading(true);
-    // Date range for visible month
-    var start=new Date(calYear,calMonth,1);
-    var end=new Date(calYear,calMonth+1,0);
-    var startStr=start.toISOString().slice(0,10);
-    var endStr=end.toISOString().slice(0,10);
+    // Date range for visible month (use local date formatting, not toISOString which converts to UTC)
+    var startStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-01';
+    var lastDay=new Date(calYear,calMonth+1,0).getDate();
+    var endStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
 
     var rc=await supabase.from('clients').select('id,name,display_name,pan,org_id').in('org_id',orgIds).limit(2000);
     setClients(rc.data||[]);
