@@ -2457,11 +2457,14 @@ var QUARTERS=['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
 
 function getPeriodLabel(freq, year, month, quarter){
   if(freq==='once')     return 'One-time';
-  if(freq==='monthly')  return MONTHS[(month||1)-1]+' '+year;
+  if(freq==='monthly'){
+    // year = FY start year. month 4-12 fall in 'year', month 1-3 fall in 'year+1'
+    var calYear=month>=4?year:year+1;
+    return MONTHS[(month||1)-1]+' '+calYear;
+  }
   if(freq==='quarterly'){
     var q=quarter||1;
-    var y=(q===4)?year-1:year; // Q4 Jan-Mar belongs to prev FY start
-    return 'Q'+q+' FY'+(y)+'-'+(String(y+1).slice(2));
+    return 'Q'+q+' FY'+year+'-'+(String(year+1).slice(2));
   }
   return 'FY '+year+'-'+String(year+1).slice(2);
 }
@@ -2469,10 +2472,10 @@ function getPeriodLabel(freq, year, month, quarter){
 function getCurrentPeriod(freq){
   var now=new Date();
   var y=now.getFullYear(), m=now.getMonth()+1;
-  // Indian FY: Apr-Mar
+  // Indian FY: Apr-Mar. FY start year: Apr 2025 → 2025, Jan 2026 → 2025
   var fy=m>=4?y:y-1;
   if(freq==='once')      return {year:fy,month:null,quarter:null};
-  if(freq==='monthly')   return {year:y,month:m,quarter:null};
+  if(freq==='monthly')   return {year:fy,month:m,quarter:null};
   if(freq==='quarterly'){
     var q=m>=4&&m<=6?1:m>=7&&m<=9?2:m>=10&&m<=12?3:4;
     return {year:fy,month:null,quarter:q};
@@ -2561,22 +2564,25 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       if(!cfg2||ws2.frequency==='once')continue;
       function calcDue(day,month,freq,monthOffset){
         if(!day)return null;
+        // ws2.period_year = FY start year
         if(freq==='monthly'&&ws2.period_month){
+          var calY2=ws2.period_month>=4?ws2.period_year:ws2.period_year+1;
           var off=(monthOffset!=null)?Number(monthOffset):1;
-          var tM=ws2.period_month+off;var tY=ws2.period_year;
+          var tM=ws2.period_month+off;var tY=calY2;
           if(tM>12){tM-=12;tY++;}if(tM<1){tM+=12;tY--;}
           return tY+'-'+String(tM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='quarterly'&&ws2.period_quarter){
           var qEnd=[6,9,12,3];var qEndM2=qEnd[ws2.period_quarter-1];
+          var qCalY2=ws2.period_quarter<=3?ws2.period_year:ws2.period_year+1;
           var qOff2=(monthOffset!=null)?Number(monthOffset):1;
-          var dM=qEndM2+qOff2;var dY=ws2.period_year;
-          if(dM>12){dM-=12;dY++;}
-          if(ws2.period_quarter>=3&&qOff2>0){dY=ws2.period_year+1;if(ws2.period_quarter===3)dM=1+qOff2-1;if(ws2.period_quarter===4)dM=3+qOff2;}
+          var dM=qEndM2+qOff2;var dY=qCalY2;
           if(dM>12){dM-=12;dY++;}
           if(month){dM=month;}
           return dY+'-'+String(dM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='yearly'){
-          return(ws2.period_year+1)+'-'+String(month||7).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+          var dm2=month||7;
+          var dueCalY2=dm2>=4?ws2.period_year:ws2.period_year+1;
+          return dueCalY2+'-'+String(dm2).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }
         return null;
       }
@@ -2739,28 +2745,31 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
       function computeDueDate(day,month,freq,monthOffset){
         if(!day)return null;
         if(freq==='monthly'&&periodMonth){
+          // periodYear = FY start year. Convert to calendar year for the period month.
+          var calY=periodMonth>=4?periodYear:periodYear+1;
           var offset=(monthOffset!=null)?Number(monthOffset):1;
-          var targetM=periodMonth+offset;var targetY=periodYear;
+          var targetM=periodMonth+offset;var targetY=calY;
           if(targetM>12){targetM-=12;targetY++;}
           if(targetM<1){targetM+=12;targetY--;}
           return targetY+'-'+String(targetM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='quarterly'&&periodQuarter){
+          // periodYear = FY start year.
           // Quarter end months: Q1=Jun, Q2=Sep, Q3=Dec, Q4=Mar
           var qEndMonths=[6,9,12,3];
           var qEndM=qEndMonths[periodQuarter-1];
-          // monthOffset: 0=quarter end month, 1=next month after quarter (default)
+          // Calendar year of the quarter end month
+          var qCalY=periodQuarter<=3?periodYear:periodYear+1;
           var qOff=(monthOffset!=null)?Number(monthOffset):1;
           var dueM=qEndM+qOff;
-          var dueY=periodYear;
-          if(dueM>12){dueM-=12;dueY++;}
-          // Handle FY year rollover for Q3/Q4
-          if(periodQuarter>=3&&qOff>0){dueY=periodYear+1;if(periodQuarter===3)dueM=1+qOff-1;if(periodQuarter===4)dueM=3+qOff;}
+          var dueY=qCalY;
           if(dueM>12){dueM-=12;dueY++;}
           if(month){dueM=month;} // absolute month override
           return dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='yearly'){
+          // periodYear = FY start year. Due dates fall in FY year or year+1
           var dm=month||7;
-          return(periodYear+1)+'-'+String(dm).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+          var dueCalY=dm>=4?periodYear:periodYear+1;
+          return dueCalY+'-'+String(dm).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }
         return null;
       }
@@ -3054,7 +3063,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         </>}
         {cfg.frequency==='monthly'&&<>
           <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-            {MONTHS.map(function(m,i){return<option key={m} value={i+1}>{m}</option>;})}
+            {[4,5,6,7,8,9,10,11,12,1,2,3].map(function(mi){return<option key={mi} value={mi}>{MONTHS[mi-1]}</option>;})}
           </select>
         </>}
         {cfg.frequency==='quarterly'&&<>
@@ -3063,7 +3072,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           </select>
         </>}
         {cfg.frequency!=='once'&&<select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-          {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{cfg.frequency==='yearly'?'FY '+y+'-'+String(y+1).slice(2):y}</option>;})}
+          {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{'FY '+y+'-'+String(y+1).slice(2)}</option>;})}
         </select>}
         {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
 
