@@ -2555,9 +2555,33 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   var [recalculating,setRecalculating]=useState(false);
   async function recalcAllDueDates(){
     setRecalculating(true);
-    var rw=await supabase.from('worksheets').select('id,org_id,work_type,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).limit(1000);
+    var rw=await supabase.from('worksheets').select('id,org_id,work_type,period_year,period_month,period_quarter,frequency,period_label').eq('org_id',org.id).limit(1000);
     var allWS=rw.data||[];
     var fixCount=0;var createCount=0;
+
+    // Step 0: Migrate old monthly worksheets (Jan-Mar) from calendar year to FY year
+    // Old format stored period_year=2026 for Jan 2026, new format stores period_year=2025
+    for(var mi=0;mi<allWS.length;mi++){
+      var mws=allWS[mi];
+      if(mws.frequency==='monthly'&&mws.period_month&&mws.period_month<=3){
+        // Check if period_label contains the same year as period_year (old calendar format)
+        // e.g. period_label="Jan 2026", period_year=2026 → needs migration to 2025
+        var labelMatch=mws.period_label&&mws.period_label.match(/(\d{4})$/);
+        if(labelMatch){
+          var labelYear=Number(labelMatch[1]);
+          if(labelYear===mws.period_year){
+            // Old format: period_year is calendar year, should be FY start year (year-1)
+            var newFY=mws.period_year-1;
+            await supabase.from('worksheets').update({period_year:newFY}).eq('id',mws.id);
+            mws.period_year=newFY;
+            // Also update the period_label to match new format
+            var newLabel=MONTHS[(mws.period_month||1)-1]+' '+labelYear;
+            await supabase.from('worksheets').update({period_label:newLabel}).eq('id',mws.id);
+          }
+        }
+      }
+    }
+
     for(var wi=0;wi<allWS.length;wi++){
       var ws2=allWS[wi];
       var cfg2=WS_TYPE_CONFIGS[ws2.work_type];
@@ -3463,9 +3487,17 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   async function loadData(){
     setLoading(true);
     var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
-    var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).eq('period_year',selectedYear).limit(500);
+    // Fetch worksheets for the selected FY year, also include year+1 to catch old calendar-year monthly data (Jan-Mar)
+    var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).in('period_year',[selectedYear,selectedYear+1]).limit(1000);
     var clientData=rc.data||[];
-    var wsData=rw.data||[];
+    // Filter: keep worksheets that belong to this FY
+    // FY year: months 4-12 have period_year=selectedYear, months 1-3 have period_year=selectedYear (new) or selectedYear+1 (old)
+    var wsData=(rw.data||[]).filter(function(ws){
+      if(ws.period_year===selectedYear)return true;
+      // Old calendar-year format: period_year=selectedYear+1 and period_month 1-3
+      if(ws.period_year===selectedYear+1&&ws.frequency==='monthly'&&ws.period_month&&ws.period_month<=3)return true;
+      return false;
+    });
     setClients(clientData);
     setWorksheets(wsData);
     if(wsData.length>0){
