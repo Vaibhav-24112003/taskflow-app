@@ -2353,6 +2353,7 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
                 <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{c.name}</span>
                 <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'1px 6px'}}>{FREQ_LABELS[c.frequency]||c.frequency}</span>
                 {c.worksheet_group&&<span style={{fontSize:10,fontWeight:600,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:4,padding:'1px 6px'}}>{c.worksheet_group}</span>}
+                {(c.sop_steps||[]).length>0&&<span style={{fontSize:10,fontWeight:600,color:'#22c55e',background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.2)',borderRadius:4,padding:'1px 6px'}}>SOP</span>}
                 {!c.is_active&&<span style={{fontSize:10,fontWeight:600,color:'#94a3b8',background:'rgba(148,163,184,0.1)',borderRadius:4,padding:'1px 6px'}}>Inactive</span>}
               </div>
               <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>
@@ -2360,6 +2361,7 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
                 {(c.due_dates||[]).length>0&&<span> · Due: {(c.due_dates||[]).map(function(d){return(d.label||'Due')+' '+d.day+(d.month?'/'+d.month:'');}).join(', ')}</span>}
                 {!(c.due_dates||[]).length&&c.due_day&&<span> · Due: day {c.due_day}{c.due_month?' of month '+c.due_month:''}</span>}
                 {(c.client_fields||[]).length>0&&<span> · {(c.client_fields||[]).length} client field{(c.client_fields||[]).length!==1?'s':''}</span>}
+                {(c.sop_steps||[]).length>0&&<span> · {(c.sop_steps||[]).length} SOP step{(c.sop_steps||[]).length!==1?'s':''}</span>}
               </div>
               {colCount>0&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
                 {(c.columns||[]).map(function(col){return<span key={col.key} style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.06)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 6px'}}>{col.label}</span>;})}
@@ -2389,6 +2391,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
   var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
+  var [sopSteps,setSopSteps]=useState(config&&config.sop_steps?config.sop_steps.map(function(s){return{title:s.title||'',description:s.description||'',link:s.link||''};}):[]);
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
@@ -2419,6 +2422,11 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     });});
   }
 
+  function addSopStep(){setSopSteps(function(p){return[...p,{title:'',description:'',link:''}];});}
+  function removeSopStep(idx){setSopSteps(function(p){return p.filter(function(_,i){return i!==idx;});});}
+  function updateSopStep(idx,field,val){setSopSteps(function(p){return p.map(function(s,i){if(i!==idx)return s;var u=Object.assign({},s);u[field]=val;return u;});});}
+  function moveSopStep(idx,dir){setSopSteps(function(p){var a=[...p];var ni=idx+dir;if(ni<0||ni>=a.length)return a;var t=a[idx];a[idx]=a[ni];a[ni]=t;return a;});}
+
   async function save(){
     if(!name.trim()){setErr('Name required');return;}
     if(columns.some(function(c){return!c.label.trim();})){setErr('All columns must have a label');return;}
@@ -2431,6 +2439,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
       due_dates:dueDates.filter(function(d){return d.day;}).map(function(d){return{label:d.label||'Due',day:Number(d.day),month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1};}),
       client_fields:clientFields.filter(function(f){return f.label.trim();}).map(function(f){return{key:f.key,label:f.label.trim(),type:f.type,options:f.options||''};}),
+      sop_steps:sopSteps.filter(function(s){return s.title.trim();}).map(function(s,i){return{step:i+1,title:s.title.trim(),description:s.description.trim(),link:s.link.trim()};}),
       is_active:config?config.is_active:true,
       sort_order:config?config.sort_order:99
     };
@@ -2444,7 +2453,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
-  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'}];
+  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'},{id:'sop',label:'SOP'+(sopSteps.length?' ('+sopSteps.length+')':'')}];
 
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
     <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:560,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
@@ -2561,6 +2570,32 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
           </div>}
         </div>}
 
+        {tab==='sop'&&<div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Standard Operating Procedure</label>
+            <button onClick={addSopStep} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Step</button>
+          </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Define step-by-step procedure for this work type. Team members can reference this while working.</div>
+          {sopSteps.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No SOP steps defined. Add steps to create a procedure guide.</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {sopSteps.map(function(s,i){
+              return<div key={i} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <span style={{width:22,height:22,borderRadius:11,background:'rgba(107,140,173,0.15)',color:'#6b8cad',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</span>
+                  <input value={s.title} onChange={function(e){updateSopStep(i,'title',e.target.value);}} style={Object.assign({},INP,{flex:1,fontWeight:600})} placeholder="Step title (e.g. Collect Data from Client)"/>
+                  <div style={{display:'flex',gap:2,flexShrink:0}}>
+                    <button onClick={function(){moveSopStep(i,-1);}} disabled={i===0} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:11,opacity:i===0?0.3:1}}>↑</button>
+                    <button onClick={function(){moveSopStep(i,1);}} disabled={i===sopSteps.length-1} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',cursor:i===sopSteps.length-1?'default':'pointer',fontSize:11,opacity:i===sopSteps.length-1?0.3:1}}>↓</button>
+                    <button onClick={function(){removeSopStep(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:4,padding:'2px 6px',color:'#ef4444',cursor:'pointer',fontSize:13,lineHeight:1}}>×</button>
+                  </div>
+                </div>
+                <textarea value={s.description} onChange={function(e){updateSopStep(i,'description',e.target.value);}} style={Object.assign({},INP,{minHeight:48,resize:'vertical',fontSize:12})} placeholder="Description / instructions for this step..."/>
+                <input value={s.link||''} onChange={function(e){updateSopStep(i,'link',e.target.value);}} style={Object.assign({},INP,{marginTop:6,fontSize:11})} placeholder="Reference link (optional — e.g. https://gst.gov.in)"/>
+              </div>;
+            })}
+          </div>}
+        </div>}
+
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}}>{err}</div>}
       </div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}}>
@@ -2628,7 +2663,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
     var m={};
     workTypeConfigs.forEach(function(c){
-      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null};
+      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null,sop_steps:c.sop_steps||[]};
     });
     return m;
   },[workTypeConfigs]);
@@ -2652,6 +2687,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   var [onceAssignee,setOnceAssignee]=useState('');
   var [orgMembers,setOrgMembers]=useState([]);
   var [toast,setToast]=useState(null);
+  var [showSop,setShowSop]=useState(false);
 
   // Column show/hide
   var [hiddenCols,setHiddenCols]=useState([]);
@@ -3242,8 +3278,13 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
         </select>}
         {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
 
+        {/* SOP button */}
+        {cfg.sop_steps&&cfg.sop_steps.length>0&&<button onClick={function(){setShowSop(!showSop);}} style={{marginLeft:'auto',background:showSop?'rgba(34,197,94,0.12)':'var(--tf-surface)',border:'1px solid '+(showSop?'rgba(34,197,94,0.3)':'var(--tf-border)'),borderRadius:7,padding:'5px 10px',color:showSop?'#22c55e':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          SOP ({cfg.sop_steps.length})
+        </button>}
         {/* Columns toggle button */}
-        <div style={{position:'relative',marginLeft:'auto'}}>
+        <div style={{position:'relative',marginLeft:cfg.sop_steps&&cfg.sop_steps.length>0?0:'auto'}}>
           <button onClick={function(){setShowColMenu(!showColMenu);}} style={{background:showColMenu?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
             ⊞ Columns{hiddenCols.length>0&&<span style={{fontSize:10,color:'#f59e0b'}}>({hiddenCols.length} hidden)</span>}
           </button>
@@ -3465,6 +3506,35 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     </div>}
 
     {showCreateTask&&<WorksheetTaskModal row={showCreateTask.row} client={showCreateTask.client} workType={activeType} period={periodLabel} allWorkspaces={allWorkspaces} supabase={supabase} cu={cu} orgId={org.id} onClose={function(){setShowCreateTask(null);}} onCreated={function(taskId,wsId){supabase.from('worksheet_rows').update({task_card_id:taskId,task_workspace_id:wsId}).eq('id',showCreateTask.row.id).then(function(){setRows(function(p){return p.map(function(r){return r.id===showCreateTask.row.id?Object.assign({},r,{task_card_id:taskId,task_workspace_id:wsId}):r;});});setShowCreateTask(null);showToast('Task card created!');});}}/>}
+
+    {/* SOP Slide-out Panel */}
+    {showSop&&cfg.sop_steps&&cfg.sop_steps.length>0&&<div style={{position:'fixed',inset:0,zIndex:999,display:'flex',justifyContent:'flex-end'}} onClick={function(e){if(e.target===e.currentTarget)setShowSop(false);}}>
+      <div style={{background:'rgba(0,0,0,0.3)',position:'absolute',inset:0}} onClick={function(){setShowSop(false);}}/>
+      <div style={{position:'relative',width:420,maxWidth:'90vw',background:'var(--tf-bg)',borderLeft:'1px solid var(--tf-border)',boxShadow:'-8px 0 32px rgba(0,0,0,0.2)',display:'flex',flexDirection:'column',zIndex:1}}>
+        <div style={{padding:'18px 20px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>SOP — {activeType}</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Standard Operating Procedure · {cfg.sop_steps.length} step{cfg.sop_steps.length!==1?'s':''}</div>
+          </div>
+          <button onClick={function(){setShowSop(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
+          {cfg.sop_steps.map(function(step,i){
+            return<div key={i} style={{marginBottom:16,position:'relative',paddingLeft:36}}>
+              <div style={{position:'absolute',left:0,top:0,width:26,height:26,borderRadius:13,background:'rgba(107,140,173,0.15)',border:'1px solid rgba(107,140,173,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#6b8cad'}}>{step.step||i+1}</div>
+              {i<cfg.sop_steps.length-1&&<div style={{position:'absolute',left:12,top:28,width:2,height:'calc(100% - 8px)',background:'rgba(107,140,173,0.15)'}}/>}
+              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4,paddingTop:3}}>{step.title}</div>
+              {step.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{step.description}</div>}
+              {step.link&&<a href={step.link} target="_blank" rel="noopener noreferrer" style={{fontSize:11,color:'#6b8cad',marginTop:4,display:'inline-flex',alignItems:'center',gap:3,textDecoration:'none',wordBreak:'break-all'}} onMouseEnter={function(e){e.currentTarget.style.textDecoration='underline';}} onMouseLeave={function(e){e.currentTarget.style.textDecoration='none';}}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                {step.link.length>50?step.link.slice(0,50)+'...':step.link}
+              </a>}
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>}
+
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
   </div>;
 }
