@@ -1179,12 +1179,17 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       var enriched=allRows.map(function(row){
         var ws=wsMap[row.worksheet_id]||{};
         var client=clientMap[row.client_id]||{};
-        return{id:row.id,clientName:client.display_name||client.name||'Unknown',workType:ws.work_type||'',period:ws.period_label||'',orgName:orgMap[row.org_id]||'',dueDate:row.due_date,dueLabel:row.due_label||'',status:row.status||'pending',assignee:(row.data||{}).__assignee||null,orgId:row.org_id};
+        // Check if this row is assigned to current user via any hierarchy level or legacy __assignee
+        var rd=row.data||{};
+        var isAssignedToMe=rd.__assignee===cu.id;
+        var dataKeys=Object.keys(rd);
+        for(var dk=0;dk<dataKeys.length;dk++){if(dataKeys[dk].indexOf('__h_')===0&&rd[dataKeys[dk]]===cu.id){isAssignedToMe=true;break;}}
+        return{id:row.id,clientName:client.display_name||client.name||'Unknown',workType:ws.work_type||'',period:ws.period_label||'',orgName:orgMap[row.org_id]||'',dueDate:row.due_date,dueLabel:row.due_label||'',status:row.status||'pending',isAssignedToMe:isAssignedToMe,orgId:row.org_id};
       });
 
       var todayTasks=enriched.filter(function(r){return r.dueDate===todayStr;});
       var overdueTasks=enriched.filter(function(r){return r.dueDate&&r.dueDate<todayStr;});
-      var assignedToMe=enriched.filter(function(r){return r.assignee===cu.id;});
+      var assignedToMe=enriched.filter(function(r){return r.isAssignedToMe;});
 
       // Remove duplicates: assigned tasks that are also today/overdue stay in their category
       var todayIds=new Set(todayTasks.map(function(r){return r.id;}));
@@ -2087,6 +2092,143 @@ function OrgFormModal({org,cu,supabase,onClose,onSaved}){
 }
 
 
+// ── Org Settings Panel (replaces OrgManagementPanel inside org view) ─
+function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
+  var [hierarchy,setHierarchy]=useState((org.workflow_hierarchy||[]).map(function(h){return{key:h.key,label:h.label};}));
+  var [saving,setSaving]=useState(false);
+  var [toast,setToast]=useState(null);
+  var [orgName,setOrgName]=useState(org.name||'');
+  var [orgDesc,setOrgDesc]=useState(org.description||'');
+
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  function addLevel(){setHierarchy(function(p){var n=p.length+1;return[...p,{key:'level_'+Date.now(),label:''}];});}
+  function removeLevel(idx){setHierarchy(function(p){return p.filter(function(_,i){return i!==idx;});});}
+  function updateLevel(idx,label){
+    setHierarchy(function(p){return p.map(function(h,i){
+      if(i!==idx)return h;
+      var key=label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'level_'+i;
+      return{key:key,label:label};
+    });});
+  }
+  function moveLevel(idx,dir){
+    setHierarchy(function(p){var a=[...p];var ni=idx+dir;if(ni<0||ni>=a.length)return a;var t=a[idx];a[idx]=a[ni];a[ni]=t;return a;});
+  }
+
+  async function saveHierarchy(){
+    var valid=hierarchy.filter(function(h){return h.label.trim();});
+    setSaving(true);
+    var res=await supabase.from('organizations').update({workflow_hierarchy:valid}).eq('id',org.id);
+    setSaving(false);
+    if(res.error){showToast(res.error.message,'err');return;}
+    org.workflow_hierarchy=valid;
+    showToast('Workflow hierarchy saved!');
+  }
+
+  async function saveOrgInfo(){
+    if(!orgName.trim()){showToast('Name required','err');return;}
+    setSaving(true);
+    var res=await supabase.from('organizations').update({name:orgName.trim(),description:orgDesc.trim()||null}).eq('id',org.id);
+    setSaving(false);
+    if(res.error){showToast(res.error.message,'err');return;}
+    org.name=orgName.trim();org.description=orgDesc.trim()||null;
+    showToast('Organisation info saved!');
+  }
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+  var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4,display:'block'};
+  var PRESET_LEVELS=[
+    {label:'Assignee',desc:'Primary person doing the work'},
+    {label:'Sub-Assignee',desc:'Assistant / junior assigned'},
+    {label:'Reviewer',desc:'Person who reviews the work'},
+    {label:'Senior Reviewer',desc:'Final review before filing'},
+    {label:'Approver',desc:'Final authority / Partner'}
+  ];
+
+  return<div style={{maxWidth:700,margin:'0 auto',padding:'0 0 40px'}}>
+    {/* Organisation Info */}
+    <div style={{marginBottom:32}}>
+      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 16px'}}>Organisation Info</h2>
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'18px 20px'}}>
+        <div style={{marginBottom:12}}>
+          <label style={LBL}>Organisation Name</label>
+          <input value={orgName} onChange={function(e){setOrgName(e.target.value);}} style={INP}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={LBL}>Description</label>
+          <input value={orgDesc} onChange={function(e){setOrgDesc(e.target.value);}} style={INP} placeholder="e.g. CA Firm, Accounting Practice..."/>
+        </div>
+        <button onClick={saveOrgInfo} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>Save Info</button>
+      </div>
+    </div>
+
+    {/* Workflow Hierarchy */}
+    <div style={{marginBottom:32}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16}}>
+        <div>
+          <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Workflow Hierarchy</h2>
+          <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Define the org workflow levels. These become default columns in all Worksheets — each as a member dropdown.</p>
+        </div>
+      </div>
+
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'18px 20px',marginBottom:14}}>
+        {hierarchy.length===0?<div style={{textAlign:'center',padding:'16px 0'}}>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:12}}>No hierarchy levels defined. Add levels to create workflow columns in worksheets.</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:12}}>Quick presets:</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',justifyContent:'center'}}>
+            {PRESET_LEVELS.map(function(p){return<button key={p.label} onClick={function(){setHierarchy(function(prev){return[...prev,{key:p.label.toLowerCase().replace(/[^a-z0-9]+/g,'_'),label:p.label}];});}} style={{background:'rgba(107,140,173,0.08)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:20,padding:'4px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ {p.label}</button>;})}
+          </div>
+        </div>:
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>Hierarchy Order (top = first column in worksheets)</div>
+          {hierarchy.map(function(h,i){
+            return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px'}}>
+              <span style={{width:24,height:24,borderRadius:12,background:'rgba(107,140,173,0.15)',color:'#6b8cad',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{i+1}</span>
+              <input value={h.label} onChange={function(e){updateLevel(i,e.target.value);}} style={Object.assign({},INP,{flex:1,fontWeight:600})} placeholder="Level name (e.g. Assignee, Reviewer)"/>
+              <div style={{display:'flex',gap:2,flexShrink:0}}>
+                <button onClick={function(){moveLevel(i,-1);}} disabled={i===0} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:11,opacity:i===0?0.3:1}}>↑</button>
+                <button onClick={function(){moveLevel(i,1);}} disabled={i===hierarchy.length-1} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',cursor:i===hierarchy.length-1?'default':'pointer',fontSize:11,opacity:i===hierarchy.length-1?0.3:1}}>↓</button>
+                <button onClick={function(){removeLevel(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:4,padding:'2px 6px',color:'#ef4444',cursor:'pointer',fontSize:13,lineHeight:1}}>×</button>
+              </div>
+            </div>;
+          })}
+        </div>}
+
+        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:12}}>
+          <button onClick={addLevel} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 14px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Level</button>
+          {hierarchy.length>0&&<>
+            <div style={{flex:1}}/>
+            <button onClick={saveHierarchy} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Save Hierarchy'}</button>
+          </>}
+        </div>
+      </div>
+
+      {hierarchy.length>0&&<div style={{background:'rgba(107,140,173,0.04)',border:'1px solid rgba(107,140,173,0.15)',borderRadius:10,padding:'12px 16px'}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',marginBottom:6}}>Preview — Worksheet columns will appear as:</div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <span style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 8px'}}>Client</span>
+          {hierarchy.map(function(h,i){return<span key={i} style={{fontSize:11,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'3px 8px'}}>{h.label||'Level '+(i+1)}</span>;})}
+          <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 8px'}}>Data Rcvd</span>
+          <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 8px'}}>Completed</span>
+          <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 8px'}}>Status</span>
+        </div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:6}}>Each level will be a dropdown of org members.</div>
+      </div>}
+
+      {hierarchy.length>0&&<div style={{marginTop:12}}>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Quick add presets:</div>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:4}}>
+          {PRESET_LEVELS.filter(function(p){return !hierarchy.some(function(h){return h.label===p.label;});}).map(function(p){return<button key={p.label} onClick={function(){setHierarchy(function(prev){return[...prev,{key:p.label.toLowerCase().replace(/[^a-z0-9]+/g,'_'),label:p.label}];});}} title={p.desc} style={{background:'rgba(107,140,173,0.05)',border:'1px solid rgba(107,140,173,0.15)',borderRadius:16,padding:'2px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:500}}>+ {p.label}</button>;})}
+        </div>
+      </div>}
+    </div>
+
+    {/* Workspace Assignment (from original OrgManagementPanel) */}
+    <OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
 
 // ── Org Members Panel ───────────────────────────────────────────────
 function OrgMembersPanel({org,cu,supabase}){
@@ -2657,7 +2799,8 @@ function getCurrentPeriod(freq){
   return {year:fy,month:null,quarter:null};
 }
 
-function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
+function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy}){
+  var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
   var WS_TYPE_CONFIGS=useMemo(function(){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
@@ -3158,8 +3301,9 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
   // Visible columns (exclude hidden)
   var visibleCols=cfg.cols.filter(function(col){return !hiddenCols.includes(col.key);});
   // All toggleable columns (dynamic + built-in)
-  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat([{key:'__assignee',label:'Assignee'},{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
-  var showAssignee=!hiddenCols.includes('__assignee');
+  var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):
+    [{key:'__assignee',label:'Assignee'}];
+  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat(hierarchyCols).concat([{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
   var showStatus=!hiddenCols.includes('__status');
   var showComments=!hiddenCols.includes('__comments');
   var showTaskCard=!hiddenCols.includes('__taskcard');
@@ -3174,13 +3318,14 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
     // Status filter
     if(filters.__status&&(row.status||'pending')!==filters.__status)return false;
     // Assignee filter
-    if(filters.__assignee){var ra=(row.data||{}).__assignee||'';if(filters.__assignee==='__unassigned'&&ra)return false;if(filters.__assignee!=='__unassigned'&&ra!==filters.__assignee)return false;}
+    // Hierarchy / assignee filters
+    for(var hi=0;hi<hierarchyCols.length;hi++){var hk=hierarchyCols[hi].key;var hf=filters[hk];if(hf&&hf!=='all'){var hv=(row.data||{})[hk]||'';if(hf==='__unassigned'&&hv)return false;if(hf!=='__unassigned'&&hv!==hf)return false;}}
     // Column filters
     var d=row.data||{};
     var keys=Object.keys(filters);
     for(var i=0;i<keys.length;i++){
       var k=keys[i];
-      if(k==='__status'||k==='__assignee')continue;
+      if(k==='__status'||k.indexOf('__h_')===0||k==='__assignee')continue;
       var fv=filters[k];
       var colDef=cfg.cols.find(function(c){return c.key===k;});
       var ct=colDef&&colDef.type||'checkbox';
@@ -3320,11 +3465,11 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
         </select>
-        <select value={filters.__assignee||'all'} onChange={function(e){setFilter('__assignee',e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-          <option value="all">All Assignees</option>
+        {hierarchyCols.map(function(hc){return<select key={hc.key} value={filters[hc.key]||'all'} onChange={function(e){setFilter(hc.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          <option value="all">All {hc.label}s</option>
           <option value="__unassigned">Unassigned</option>
           {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-        </select>
+        </select>;})}
         {cfg.cols.map(function(col){
           var ct=col.type||'checkbox';
           if(ct==='checkbox'){
@@ -3404,7 +3549,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
           <thead>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
               <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
-              {showAssignee&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120}}>Assignee</th>}
+              {hierarchyCols.map(function(hc){return!hiddenCols.includes(hc.key)&&<th key={hc.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120}}>{hc.label}</th>;})}
               {visibleCols.map(function(col){var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw}}>{col.label}</th>;})}
               {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>}
               {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
@@ -3426,13 +3571,13 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs}){
                   {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
                   {cfg.frequency==='once'?<div style={{marginTop:2}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
-                {showAssignee&&<td style={{padding:'6px 8px',textAlign:'center'}}>
-                  <select value={(row.data||{}).__assignee||''} onChange={function(e){updateCellData(row.id,'__assignee',e.target.value);}}
-                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:(row.data||{}).__assignee?'var(--tf-text)':'var(--tf-text-sub)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:140,WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'5\' viewBox=\'0 0 8 5\'%3E%3Cpath d=\'M0 0l4 5 4-5z\' fill=\'%236b8cad\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 6px center',paddingRight:18}}>
-                    <option value="" style={{background:'var(--tf-surface)',color:'var(--tf-text-sub)'}}>— Unassigned —</option>
+                {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hVal=(row.data||{})[hc.key]||'';return<td key={hc.key} style={{padding:'6px 8px',textAlign:'center'}}>
+                  <select value={hVal} onChange={function(e){updateCellData(row.id,hc.key,e.target.value);}}
+                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:hVal?'var(--tf-text)':'var(--tf-text-sub)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:140,WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'5\' viewBox=\'0 0 8 5\'%3E%3Cpath d=\'M0 0l4 5 4-5z\' fill=\'%236b8cad\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 6px center',paddingRight:18}}>
+                    <option value="" style={{background:'var(--tf-surface)',color:'var(--tf-text-sub)'}}>—</option>
                     {orgMembers.map(function(m){return<option key={m.id} value={m.id} style={{background:'var(--tf-surface)',color:'var(--tf-text)'}}>{m.name||m.email}</option>;})}
                   </select>
-                </td>}
+                </td>;})}
                 {visibleCols.map(function(col){
                   var colType=col.type||'checkbox';
                   if(colType==='checkbox'){
@@ -4335,11 +4480,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     </div>
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
       {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
-      {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs}/>}
+      {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
       {tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
-      {tab==='settings'&&<OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
     </div>
   </div>;
 }
