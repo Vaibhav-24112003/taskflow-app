@@ -4568,14 +4568,33 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
 }
 
 // ── Your Dashboard Module — personalised works + calendar sidebar ───
-function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType}){
+function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
+  var [allClients,setAllClients]=useState([]); // all org clients (for Create Task dropdown)
   var [worksheets,setWorksheets]=useState([]);
+  var [orgMembers,setOrgMembers]=useState([]);
   var [loading,setLoading]=useState(true);
   var [filter,setFilter]=useState('all');
   var [showCalendar,setShowCalendar]=useState(true);
+  // Create Task modal state
+  var [showCreate,setShowCreate]=useState(false);
+  var [ctClientId,setCtClientId]=useState('');
+  var [ctWorkType,setCtWorkType]=useState('');
+  var [ctTitle,setCtTitle]=useState('');
+  var [ctDesc,setCtDesc]=useState('');
+  var [ctPriority,setCtPriority]=useState('medium');
+  var [ctDueDate,setCtDueDate]=useState('');
+  var [ctContact,setCtContact]=useState('');
+  var [ctHierarchy,setCtHierarchy]=useState({});
+  var [ctChecklist,setCtChecklist]=useState([]);
+  var [ctSaving,setCtSaving]=useState(false);
+  var [toast,setToast]=useState(null);
   var wfHierarchy=workflowHierarchy||[];
+  var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
+  var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):[{key:'__assignee',label:'Assignee'}];
+
+  function showToast(msg,kind){setToast({msg:msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id]);
 
@@ -4591,14 +4610,24 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
       return false;
     });
     setRows(myRows);
+    // Load all clients of this org (for task creation dropdown + row display)
+    var rcAll=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
+    setAllClients(rcAll.data||[]);
+    setClients(rcAll.data||[]);
+    // Load worksheets referenced by my rows
     if(myRows.length>0){
-      var cids=Array.from(new Set(myRows.map(function(r){return r.client_id;}).filter(Boolean)));
       var wsIds=Array.from(new Set(myRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
-      var rc=await supabase.from('clients').select('id,name,display_name,pan').in('id',cids).limit(1000);
-      setClients(rc.data||[]);
       var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(500);
       setWorksheets(rw.data||[]);
-    }else{setClients([]);setWorksheets([]);}
+    }else{setWorksheets([]);}
+    // Load org members (for hierarchy dropdowns in Create Task form)
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var mlist=rm.data||[];
+    if(mlist.length>0){
+      var ids=mlist.map(function(m){return m.user_id;});
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      setOrgMembers(rp.data||[]);
+    }
     setLoading(false);
   }
 
@@ -4657,6 +4686,72 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
 
   var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
 
+  function resetCreateForm(){setCtClientId('');setCtWorkType('');setCtTitle('');setCtDesc('');setCtPriority('medium');setCtDueDate('');setCtContact('');setCtHierarchy({});setCtChecklist([]);setShowCreate(false);}
+
+  // Resolve (find or create) a worksheet for the chosen work type. If wtName is empty,
+  // returns the Unclassified worksheet for this org (creates if missing).
+  async function resolveWorksheet(wtName){
+    var cfg=wtName?activeConfigs.find(function(c){return c.name===wtName;}):null;
+    var freq=cfg?cfg.frequency:'once';
+    var effectiveName=wtName||'Unclassified';
+    var p=getCurrentPeriod(freq);
+    var label=getPeriodLabel(freq,p.year,p.month,p.quarter);
+    var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',effectiveName).eq('period_label',label).maybeSingle();
+    if(rw.data)return rw.data;
+    var ins=await supabase.from('worksheets').insert({
+      org_id:org.id,work_type:effectiveName,period_label:label,
+      period_year:p.year,
+      period_month:freq==='monthly'?p.month:null,
+      period_quarter:freq==='quarterly'?p.quarter:null,
+      frequency:freq,created_by:cu.id
+    }).select().single();
+    return ins.data;
+  }
+
+  async function submitCreateTask(){
+    if(!ctClientId){showToast('Please select a client','err');return;}
+    setCtSaving(true);
+    try{
+      var ws=await resolveWorksheet(ctWorkType);
+      if(!ws){showToast('Failed to create worksheet','err');setCtSaving(false);return;}
+      var rowData={};
+      var hKeys=Object.keys(ctHierarchy);
+      for(var hi=0;hi<hKeys.length;hi++){if(ctHierarchy[hKeys[hi]])rowData[hKeys[hi]]=ctHierarchy[hKeys[hi]];}
+      // Back-compat assignee
+      if(hierarchyCols.length>0&&rowData[hierarchyCols[0].key])rowData.__assignee=rowData[hierarchyCols[0].key];
+      // Auto-assign creator if nobody picked — so it shows up in their dashboard
+      var anyAssigned=Object.keys(rowData).length>0;
+      if(!anyAssigned){
+        rowData[hierarchyCols[0].key]=cu.id;
+        rowData.__assignee=cu.id;
+      }
+      if(ctTitle.trim())rowData.__title=ctTitle.trim();
+      if(ctDesc.trim())rowData.__description=ctDesc.trim();
+      if(ctPriority)rowData.__priority=ctPriority;
+      if(ctContact.trim())rowData.__contact=ctContact.trim();
+      var validChecklist=ctChecklist.filter(function(c){return c.text&&c.text.trim();});
+      if(validChecklist.length>0)rowData.__checklist=validChecklist;
+      var newRow={worksheet_id:ws.id,client_id:ctClientId,org_id:org.id,data:rowData,due_date:ctDueDate||null,due_label:ctTitle.trim()||(ctWorkType?'Task':'Unclassified'),status:'pending'};
+      var ins=await supabase.from('worksheet_rows').insert(newRow).select().single();
+      if(ins.error||!ins.data){showToast('Failed to create task','err');setCtSaving(false);return;}
+      showToast('Task created!');
+      resetCreateForm();
+      await load();
+    }catch(e){showToast('Error: '+(e.message||'unknown'),'err');}
+    setCtSaving(false);
+  }
+
+  // Classify an unclassified row: move it to the chosen work type's worksheet
+  async function classifyRow(row,newWorkType){
+    if(!newWorkType)return;
+    var ws=await resolveWorksheet(newWorkType);
+    if(!ws){showToast('Failed to resolve worksheet','err');return;}
+    var res=await supabase.from('worksheet_rows').update({worksheet_id:ws.id}).eq('id',row.id);
+    if(res.error){showToast('Failed to classify','err');return;}
+    showToast('Task classified as '+newWorkType);
+    await load();
+  }
+
   // Greeting
   var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?cu.email.split('@')[0]:'')||'there';
   var firstName=displayName.split(' ')[0];
@@ -4673,9 +4768,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
         <h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>Hey, {firstName}! <span style={{fontSize:18}}>👋</span></h2>
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Your personal dashboard for <b style={{color:'var(--tf-text)'}}>{org.name}</b></div>
       </div>
-      <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-        <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
-      </button>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
+          <span style={{fontSize:14}}>+</span>Create Task
+        </button>
+        <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
+        </button>
+      </div>
     </div>
 
     {/* KPI tiles */}
@@ -4706,17 +4806,23 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
           <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
         </div>:
         <div>
-          {Object.keys(grouped).sort().map(function(wt){
+          {Object.keys(grouped).sort(function(a,b){
+            // Put Unclassified at the top so it's easy to triage
+            if(a==='Unclassified')return -1;
+            if(b==='Unclassified')return 1;
+            return a<b?-1:1;
+          }).map(function(wt){
+            var isUnclassified=wt==='Unclassified';
             return<div key={wt} style={{marginBottom:18}}>
-              <button onClick={function(){if(onOpenWorkType)onOpenWorkType(wt);}}
-                title={"Open "+wt+" worksheet with only my clients"}
-                style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'0 0 8px 2px',cursor:onOpenWorkType?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,color:'#6b8cad',fontFamily:'inherit'}}
-                onMouseEnter={function(e){if(onOpenWorkType)e.currentTarget.style.color='#4a7a9b';}}
-                onMouseLeave={function(e){e.currentTarget.style.color='#6b8cad';}}>
-                <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.06em'}}>{wt} · {grouped[wt].length}</span>
-                {onOpenWorkType&&<span style={{fontSize:10,fontWeight:700,opacity:0.7}}>Open worksheet →</span>}
+              <button onClick={function(){if(onOpenWorkType&&!isUnclassified)onOpenWorkType(wt);}}
+                title={isUnclassified?"Unclassified tasks — classify them below to move to a work type":"Open "+wt+" worksheet with only my clients"}
+                style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'0 0 8px 2px',cursor:(onOpenWorkType&&!isUnclassified)?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,color:isUnclassified?'#f59e0b':'#6b8cad',fontFamily:'inherit'}}
+                onMouseEnter={function(e){if(onOpenWorkType&&!isUnclassified)e.currentTarget.style.color='#4a7a9b';}}
+                onMouseLeave={function(e){e.currentTarget.style.color=isUnclassified?'#f59e0b':'#6b8cad';}}>
+                <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.06em'}}>{isUnclassified?'🏷 Unclassified':wt} · {grouped[wt].length}</span>
+                {onOpenWorkType&&!isUnclassified&&<span style={{fontSize:10,fontWeight:700,opacity:0.7}}>Open worksheet →</span>}
               </button>
-              <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+              <div style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isUnclassified?'rgba(245,158,11,0.4)':'var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
                 {grouped[wt].map(function(row,idx){
                   var client=clientMap[row.client_id];
                   var ws=wsMap[row.worksheet_id];
@@ -4724,11 +4830,13 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
                   var isOverdue=row.due_date&&row.due_date<todayStr;
                   var isToday=row.due_date===todayStr;
                   var isReview=role.label.toLowerCase().indexOf('review')>=0;
+                  var rowTitle=(row.data&&row.data.__title)||'';
                   return<div key={row.id} style={{padding:'12px 16px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
                     <div style={{flex:1,minWidth:180}}>
                       <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
                         {client?(client.display_name||client.name):'Unknown'}
-                        {row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
+                        {rowTitle&&<span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:6,fontWeight:600}}>· {rowTitle}</span>}
+                        {!rowTitle&&row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
                       </div>
                       <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
                         {ws&&<span>{ws.period_label}</span>}
@@ -4739,6 +4847,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
                       {isOverdue?'Overdue · ':isToday?'Today · ':''}
                       {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
                     </div>}
+                    {isUnclassified&&activeConfigs.length>0&&
+                      <select value="" onChange={function(e){if(e.target.value)classifyRow(row,e.target.value);}}
+                        title="Classify this task into a work type"
+                        style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:6,padding:'4px 8px',color:'#f59e0b',fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',flexShrink:0}}>
+                        <option value="">Classify →</option>
+                        {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+                      </select>
+                    }
                     <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
                       style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
                       <option value="pending">Pending</option>
@@ -4760,6 +4876,131 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType})
         <MiniCalendar rows={rows} clientMap={clientMap} wsMap={wsMap}/>
       </div>}
     </div>
+
+    {/* Toast */}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+
+    {/* Create Task Modal */}
+    {showCreate&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:999,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px',overflowY:'auto'}} onClick={function(e){if(e.target===e.currentTarget)resetCreateForm();}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:640,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+        {/* Header */}
+        <div style={{padding:'18px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:800,color:'#22c55e',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>New Task</div>
+            <h3 style={{margin:0,fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>Create Input Task</h3>
+          </div>
+          <button onClick={resetCreateForm} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,width:32,height:32,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:14}}>
+          {/* Client + Work Type row */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Client *</label>
+              <select value={ctClientId} onChange={function(e){setCtClientId(e.target.value);}}
+                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none'}}>
+                <option value="">— Select a client —</option>
+                {allClients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
+              </select>
+            </div>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Work Type</label>
+              <select value={ctWorkType} onChange={function(e){setCtWorkType(e.target.value);}}
+                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none'}}>
+                <option value="">— Unclassified (classify later) —</option>
+                {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+              </select>
+            </div>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Task Title</label>
+            <input type="text" value={ctTitle} onChange={function(e){setCtTitle(e.target.value);}} placeholder="e.g., Scrutiny Notice reply"
+              style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Description</label>
+            <textarea value={ctDesc} onChange={function(e){setCtDesc(e.target.value);}} rows={3} placeholder="Add any details, context or instructions…"
+              style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+          </div>
+
+          {/* Hierarchy assignees */}
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Assign To</label>
+            <div style={{display:'grid',gridTemplateColumns:hierarchyCols.length>1?'repeat(auto-fit,minmax(180px,1fr))':'1fr',gap:8}}>
+              {hierarchyCols.map(function(h){
+                return<div key={h.key}>
+                  <div style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:600,marginBottom:3}}>{h.label}</div>
+                  <select value={ctHierarchy[h.key]||''} onChange={function(e){var v=e.target.value;setCtHierarchy(function(p){var n=Object.assign({},p);if(v)n[h.key]=v;else delete n[h.key];return n;});}}
+                    style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                    <option value="">— Unassigned —</option>
+                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                  </select>
+                </div>;
+              })}
+            </div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:5,fontStyle:'italic'}}>Leave all blank to auto-assign yourself.</div>
+          </div>
+
+          {/* Priority + Due Date row */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Priority</label>
+              <select value={ctPriority} onChange={function(e){setCtPriority(e.target.value);}}
+                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none'}}>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Due Date</label>
+              <input type="date" value={ctDueDate} onChange={function(e){setCtDueDate(e.target.value);}}
+                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            </div>
+          </div>
+
+          {/* Contact Person */}
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Contact Person</label>
+            <input type="text" value={ctContact} onChange={function(e){setCtContact(e.target.value);}} placeholder="e.g., Mr. Sharma (+91 98xxx xxxxx)"
+              style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+          </div>
+
+          {/* Checklist */}
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Checklist</label>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {ctChecklist.map(function(item,idx){
+                return<div key={idx} style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <input type="text" value={item.text} onChange={function(e){var v=e.target.value;setCtChecklist(function(p){return p.map(function(x,i){return i===idx?Object.assign({},x,{text:v}):x;});});}} placeholder={"Item "+(idx+1)}
+                    style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                  <button onClick={function(){setCtChecklist(function(p){return p.filter(function(_,i){return i!==idx;});});}}
+                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,width:32,height:32,color:'#ef4444',cursor:'pointer',fontSize:14,fontWeight:700,flexShrink:0}}>×</button>
+                </div>;
+              })}
+              <button onClick={function(){setCtChecklist(function(p){return[...p,{text:'',done:false}];});}}
+                style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ Add checklist item</button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:'14px 22px',borderTop:'1px solid var(--tf-border)',display:'flex',justifyContent:'flex-end',gap:8}}>
+          <button onClick={resetCreateForm} disabled={ctSaving}
+            style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text)',cursor:ctSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>Cancel</button>
+          <button onClick={submitCreateTask} disabled={ctSaving||!ctClientId}
+            style={{background:(ctSaving||!ctClientId)?'var(--tf-surface)':'linear-gradient(135deg,#22c55e,#16a34a)',border:'1px solid',borderColor:(ctSaving||!ctClientId)?'var(--tf-border)':'#16a34a',borderRadius:8,padding:'9px 18px',color:(ctSaving||!ctClientId)?'var(--tf-text-sub)':'#fff',cursor:(ctSaving||!ctClientId)?'not-allowed':'pointer',fontSize:12,fontWeight:800,boxShadow:(ctSaving||!ctClientId)?'none':'0 4px 14px rgba(34,197,94,0.25)'}}>
+            {ctSaving?'Creating…':'Create Task'}
+          </button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
@@ -4977,7 +5218,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
     {header}
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
-      {orgModule==='dashboard'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} onOpenWorkType={navigateToWorkType}/>}
+      {orgModule==='dashboard'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
