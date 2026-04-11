@@ -2802,13 +2802,20 @@ function getCurrentPeriod(freq){
 function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly}){
   var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
+  // Always include a synthetic "Unclassified" entry (frequency=once) so tasks
+  // created from Your Dashboard without a work type can be triaged here.
   var WS_TYPE_CONFIGS=useMemo(function(){
-    if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
-    var m={};
-    workTypeConfigs.forEach(function(c){
-      m[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null,sop_steps:c.sop_steps||[]};
-    });
-    return m;
+    var base;
+    if(!workTypeConfigs||workTypeConfigs.length===0) base=Object.assign({},DEFAULT_WS_TYPE_CONFIGS);
+    else{
+      base={};
+      workTypeConfigs.forEach(function(c){
+        base[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null,sop_steps:c.sop_steps||[]};
+      });
+    }
+    // Synthetic Unclassified work type (free-form, one-time tasks)
+    base['Unclassified']={frequency:'once',cols:[],due_dates:[],worksheet_group:null,sop_steps:[],synthetic:true};
+    return base;
   },[workTypeConfigs]);
   var [clients,setClients]=useState([]);
   var [activeType,setActiveType]=useState(null);
@@ -2853,8 +2860,9 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
 
   // Build grouped tab structure: [{label, types:[], isGroup}]
   var tabLayout=useMemo(function(){
-    var groups={};var ungrouped=[];
+    var groups={};var ungrouped=[];var hasUnclassified=false;
     allTypes.forEach(function(t){
+      if(t==='Unclassified'){hasUnclassified=true;return;}
       var cfg=WS_TYPE_CONFIGS[t];
       if(cfg&&cfg.worksheet_group){
         if(!groups[cfg.worksheet_group])groups[cfg.worksheet_group]=[];
@@ -2866,6 +2874,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
     Object.keys(groups).forEach(function(g){tabs.push({label:g,types:groups[g],isGroup:true});});
     // Add ungrouped tabs
     ungrouped.forEach(function(t){tabs.push({label:t,types:[t],isGroup:false});});
+    // Unclassified always last, clearly distinct
+    if(hasUnclassified)tabs.push({label:'Unclassified',types:['Unclassified'],isGroup:false,isUnclassified:true});
     return tabs;
   },[allTypes,WS_TYPE_CONFIGS]);
 
@@ -3036,6 +3046,12 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
         wts.forEach(function(t){types.add(t.trim());});
       });
       var typeArr=Array.from(types).filter(function(t){return WS_TYPE_CONFIGS[t];});
+      // Always check if an Unclassified worksheet exists for this org — if so,
+      // surface it as an always-available tab at the end.
+      var rwUnc=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type','Unclassified').limit(1);
+      if(rwUnc.data&&rwUnc.data.length>0&&typeArr.indexOf('Unclassified')<0){
+        typeArr.push('Unclassified');
+      }
       setAllTypes(typeArr);
       if(typeArr.length>0&&!activeType){
         // If initWorkType was passed, prefer it
@@ -3415,7 +3431,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
               setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
             }
             clearFilters();
-          }} style={{padding:'8px 16px',border:'none',borderBottom:isActiveTab?'2px solid #6b8cad':'2px solid transparent',background:'none',color:isActiveTab?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:isActiveTab?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>{tab.label}{tab.isGroup&&<span style={{fontSize:9,marginLeft:4,color:'#f59e0b',fontWeight:700}}>▾</span>}</button>;
+          }} style={{padding:'8px 16px',border:'none',borderBottom:isActiveTab?('2px solid '+(tab.isUnclassified?'#f59e0b':'#6b8cad')):'2px solid transparent',background:'none',color:isActiveTab?(tab.isUnclassified?'#f59e0b':'#6b8cad'):(tab.isUnclassified?'#f59e0b':'var(--tf-text-sub)'),cursor:'pointer',fontSize:12,fontWeight:isActiveTab?700:(tab.isUnclassified?700:500),whiteSpace:'nowrap',transition:'all 0.15s'}}>{tab.isUnclassified&&<span style={{marginRight:4}}>🏷</span>}{tab.label}{tab.isGroup&&<span style={{fontSize:9,marginLeft:4,color:'#f59e0b',fontWeight:700}}>▾</span>}</button>;
         })}
       </div>
       {/* Sub-tabs for grouped work types */}
