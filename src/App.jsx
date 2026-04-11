@@ -1574,7 +1574,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
         {/* CALENDAR - Due Dates */}
         {orgs.length>0&&<div style={{marginTop:40,paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
-          <CalendarView orgs={orgs} supabase={supabase} cu={cu}/>
+          <CalendarView orgs={orgs} supabase={supabase} cu={cu} showMineToggle={true}/>
         </div>}
 
       </div>
@@ -3315,7 +3315,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
 
   var periodLabel=activeType?getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter):'';
 
-  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
 
   // Visible columns (exclude hidden)
   var visibleCols=cfg.cols.filter(function(col){return !hiddenCols.includes(col.key);});
@@ -3716,6 +3716,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
                     style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC_STATUS[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize'}}>
                     <option value="pending">Pending</option>
                     <option value="in_progress">In Progress</option>
+                    <option value="under_review">Under Review</option>
                     <option value="completed">Completed</option>
                   </select>
                 </td>}
@@ -4032,7 +4033,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   }
 
   function daysDiff(d1,d2){return Math.round((new Date(d1)-new Date(d2))/(1000*60*60*24));}
-  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
   var FY_MONTHS=[4,5,6,7,8,9,10,11,12,1,2,3];
   var MONTH_SHORT=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -4296,7 +4297,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 // CALENDAR VIEW
 // ══════════════════════════════════════════════════════════════════
 
-function CalendarView({orgs,supabase,cu}){
+function CalendarView({orgs,supabase,cu,showMineToggle}){
   var orgIds=useMemo(function(){return(orgs||[]).map(function(o){return o.id;});},[orgs]);
   var orgIdKey=orgIds.join(',');
   var orgMap={};(orgs||[]).forEach(function(o){orgMap[o.id]=o;});
@@ -4307,6 +4308,7 @@ function CalendarView({orgs,supabase,cu}){
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
   var [selectedDay,setSelectedDay]=useState(null); // day number or null
+  var [mineOnly,setMineOnly]=useState(!!showMineToggle); // personalized: show only tasks where current user is assigned/reviewer
 
   var today=new Date();today.setHours(0,0,0,0);
   var isCurrentMonth=calYear===today.getFullYear()&&calMonth===today.getMonth();
@@ -4324,7 +4326,7 @@ function CalendarView({orgs,supabase,cu}){
     setClients(rc.data||[]);
 
     var rr=await supabase.from('worksheet_rows')
-      .select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at')
+      .select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data')
       .in('org_id',orgIds)
       .gte('due_date',startStr)
       .lte('due_date',endStr)
@@ -4363,9 +4365,18 @@ function CalendarView({orgs,supabase,cu}){
     weeks.push(week);
   }
 
+  // Personalized filter: keep only rows where current user is involved (assignee or any hierarchy level)
+  var visibleRows=mineOnly?rows.filter(function(r){
+    var d=r.data||{};
+    if(d.__assignee===cu.id)return true;
+    var ks=Object.keys(d);
+    for(var ki=0;ki<ks.length;ki++){if(ks[ki].indexOf('__h_')===0&&d[ks[ki]]===cu.id)return true;}
+    return false;
+  }):rows;
+
   // Group rows by day
   var dayRows={};
-  rows.forEach(function(r){
+  visibleRows.forEach(function(r){
     if(!r.due_date)return;
     var d=new Date(r.due_date).getDate();
     if(!dayRows[d])dayRows[d]=[];
@@ -4388,7 +4399,7 @@ function CalendarView({orgs,supabase,cu}){
 
   var MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var DAY_HEADERS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',completed:'#22c55e'};
+  var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
 
   // Detail panel data
   var detailRows=selectedDay&&dayRows[selectedDay]?dayRows[selectedDay]:[];
@@ -4420,7 +4431,8 @@ function CalendarView({orgs,supabase,cu}){
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Calendar</h2>
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Due dates and workload · {fyLabel}</div>
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:8}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {showMineToggle&&<button onClick={function(){setMineOnly(!mineOnly);setSelectedDay(null);}} title="Show only tasks assigned to you" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 12px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>}
         <button onClick={prevMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>‹</button>
         <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',minWidth:160,textAlign:'center'}}>{MONTH_NAMES[calMonth]} {calYear}</div>
         <button onClick={nextMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>›</button>
@@ -4525,6 +4537,7 @@ function CalendarView({orgs,supabase,cu}){
                     style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'2px 6px',color:SC_STATUS[row.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
                     <option value="pending">Pending</option>
                     <option value="in_progress">In Progress</option>
+                    <option value="under_review">Under Review</option>
                     <option value="completed">Completed</option>
                   </select>
                 </div>;
@@ -4537,13 +4550,197 @@ function CalendarView({orgs,supabase,cu}){
   </div>;
 }
 
+// ── My Work Module — personal task dashboard ─────────────────────
+function MyWorkModule({org,supabase,cu,workflowHierarchy}){
+  var [rows,setRows]=useState([]);
+  var [clients,setClients]=useState([]);
+  var [worksheets,setWorksheets]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [filter,setFilter]=useState('all');
+  var wfHierarchy=workflowHierarchy||[];
+
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id]);
+
+  async function load(){
+    setLoading(true);
+    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments').eq('org_id',org.id).neq('status','completed').limit(3000);
+    var rowData=rr.data||[];
+    var myRows=rowData.filter(function(r){
+      var d=r.data||{};
+      if(d.__assignee===cu.id)return true;
+      var keys=Object.keys(d);
+      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===cu.id)return true;}
+      return false;
+    });
+    setRows(myRows);
+    if(myRows.length>0){
+      var cids=Array.from(new Set(myRows.map(function(r){return r.client_id;}).filter(Boolean)));
+      var wsIds=Array.from(new Set(myRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+      var rc=await supabase.from('clients').select('id,name,display_name,pan').in('id',cids).limit(1000);
+      setClients(rc.data||[]);
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(500);
+      setWorksheets(rw.data||[]);
+    }else{setClients([]);setWorksheets([]);}
+    setLoading(false);
+  }
+
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+  var wsMap={};worksheets.forEach(function(w){wsMap[w.id]=w;});
+
+  var today=new Date();today.setHours(0,0,0,0);
+  var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+
+  function getRole(r){
+    var d=r.data||{};
+    if(wfHierarchy.length>0){
+      for(var i=0;i<wfHierarchy.length;i++){var k='__h_'+wfHierarchy[i].key;if(d[k]===cu.id)return{level:i,label:wfHierarchy[i].label};}
+    }
+    if(d.__assignee===cu.id)return{level:0,label:'Assignee'};
+    return{level:-1,label:'Involved'};
+  }
+
+  var stats={
+    total:rows.length,
+    today:rows.filter(function(r){return r.due_date===todayStr;}).length,
+    overdue:rows.filter(function(r){return r.due_date&&r.due_date<todayStr;}).length,
+    review:rows.filter(function(r){var role=getRole(r);return role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';}).length,
+  };
+
+  var filteredRows=rows.filter(function(r){
+    var role=getRole(r);
+    var isReview=role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';
+    if(filter==='assigned')return !isReview;
+    if(filter==='review')return isReview;
+    if(filter==='overdue')return r.due_date&&r.due_date<todayStr;
+    if(filter==='today')return r.due_date===todayStr;
+    return true;
+  });
+
+  var grouped={};
+  filteredRows.forEach(function(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws?ws.work_type:'Unknown';
+    if(!grouped[wt])grouped[wt]=[];
+    grouped[wt].push(r);
+  });
+  // Sort each group by due_date asc (no date last)
+  Object.keys(grouped).forEach(function(k){grouped[k].sort(function(a,b){if(!a.due_date&&!b.due_date)return 0;if(!a.due_date)return 1;if(!b.due_date)return -1;return a.due_date<b.due_date?-1:1;});});
+
+  async function updateStatus(rowId,newStatus){
+    var updates={status:newStatus};
+    if(newStatus==='completed')updates.completed_at=new Date().toISOString();
+    else updates.completed_at=null;
+    await supabase.from('worksheet_rows').update(updates).eq('id',rowId);
+    if(newStatus==='completed'){
+      setRows(function(prev){return prev.filter(function(r){return r.id!==rowId;});});
+    }else{
+      setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
+    }
+  }
+
+  var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading your tasks...</div>;
+
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{marginBottom:20}}>
+      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>My Work</h2>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Tasks where you're assigned or reviewing · {org.name}</div>
+    </div>
+
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:22}}>
+      {[
+        {id:'all',label:'Total Active',count:stats.total,color:'#6b8cad'},
+        {id:'today',label:'Due Today',count:stats.today,color:'#f59e0b'},
+        {id:'overdue',label:'Overdue',count:stats.overdue,color:'#ef4444'},
+        {id:'review',label:'For Review',count:stats.review,color:'#8b5cf6'},
+      ].map(function(k){
+        var active=filter===k.id;
+        return<button key={k.id} onClick={function(){setFilter(k.id);}}
+          style={{textAlign:'left',padding:'14px 16px',background:active?'rgba(107,140,173,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:active?k.color:'var(--tf-border)',borderRadius:12,cursor:'pointer',fontFamily:'inherit',transition:'all 0.14s'}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>{k.label}</div>
+          <div style={{fontSize:26,fontWeight:800,color:k.color,lineHeight:1}}>{k.count}</div>
+        </button>;
+      })}
+    </div>
+
+    {filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+      <div style={{fontSize:40,marginBottom:10}}>✓</div>
+      <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
+      <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
+    </div>:
+    <div>
+      {Object.keys(grouped).sort().map(function(wt){
+        return<div key={wt} style={{marginBottom:18}}>
+          <div style={{fontSize:11,fontWeight:800,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8,paddingLeft:2}}>{wt} · {grouped[wt].length}</div>
+          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+            {grouped[wt].map(function(row,idx){
+              var client=clientMap[row.client_id];
+              var ws=wsMap[row.worksheet_id];
+              var role=getRole(row);
+              var isOverdue=row.due_date&&row.due_date<todayStr;
+              var isToday=row.due_date===todayStr;
+              var isReview=role.label.toLowerCase().indexOf('review')>=0;
+              return<div key={row.id} style={{padding:'12px 16px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                <div style={{flex:1,minWidth:200}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
+                    {client?(client.display_name||client.name):'Unknown'}
+                    {row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
+                  </div>
+                  <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                    {ws&&<span>{ws.period_label}</span>}
+                    <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
+                  </div>
+                </div>
+                {row.due_date&&<div style={{fontSize:11,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',flexShrink:0}}>
+                  {isOverdue?'Overdue · ':isToday?'Today · ':''}
+                  {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
+                </div>}
+                <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
+                  style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="under_review">Under Review</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>;
+            })}
+          </div>
+        </div>;
+      })}
+    </div>}
+  </div>;
+}
+
+// ── Module Placeholder (HR / Billing — coming soon) ────────────────
+function ModulePlaceholder({moduleLabel,activeTab,features}){
+  var active=features.find(function(f){return f.tab===activeTab;})||features[0];
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:14,padding:'36px 28px',textAlign:'center'}}>
+      <div style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:20,padding:'4px 12px',display:'inline-block',marginBottom:16,letterSpacing:'0.08em'}}>COMING SOON</div>
+      <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px'}}>{active.title}</h2>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)',maxWidth:460,margin:'0 auto'}}>{active.desc}</div>
+    </div>
+    <div style={{marginTop:22,fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Planned features in the {moduleLabel} module</div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:10}}>
+      {features.map(function(f){
+        var isActive=f.tab===activeTab;
+        return<div key={f.tab} style={{padding:14,background:'var(--tf-surface)',border:'1px solid',borderColor:isActive?'#6b8cad':'var(--tf-border)',borderRadius:10,opacity:isActive?1:0.72}}>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{f.title}</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.5}}>{f.desc}</div>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
-  const [tab,setTab]=useState('clients');
+  const [orgModule,setOrgModule]=useState(null); // null=launcher | 'mywork'|'clients'|'dashboard'|'hr'|'billing'|'setup'
+  const [tab,setTab]=useState('');
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
 
-  // Load work type configs for this org
   useEffect(function(){loadWTC();},[org.id]);
   async function loadWTC(){
     var r=await getAllWorkTypeConfigs(org.id);
@@ -4552,29 +4749,98 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var activeConfigs=workTypeConfigs.filter(function(c){return c.is_active;});
   var workTypeNames=activeConfigs.map(function(c){return c.name;});
 
-  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-    <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
-      <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:16,paddingBottom:12}}>
-        <button onClick={onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>&#x2190; Back</button>
-        <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
-        <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')+' · Organisation Master Data'}</div></div>
-      </div>
-      <div style={{display:'flex',gap:2,overflowX:'auto'}}>
-        {[{id:'clients',label:'Client Master Data',avail:true},{id:'worksheets',label:'Worksheets',avail:true},{id:'analytics',label:'Analytics',avail:true},{id:'worktypes',label:'Work Types',avail:true},{id:'members',label:'Members & Invites',avail:true},{id:'settings',label:'Org Settings',avail:true},{id:'billing',label:'Billing',avail:false},{id:'time',label:'Time Tracking',avail:false}].map(function(t){
-          return<button key={t.id} onClick={function(){if(t.avail)setTab(t.id);}} disabled={!t.avail}
-            style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:!t.avail?'var(--tf-text-sub)':tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:t.avail?'pointer':'default',fontSize:12,fontWeight:tab===t.id?700:500,opacity:t.avail?1:0.5,whiteSpace:'nowrap'}}>
-            {t.label}{!t.avail&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:3,padding:'1px 4px'}}>SOON</span>}
-          </button>;
-        })}
+  var MODULES=[
+    {id:'mywork',label:'My Work',icon:'⚡',desc:'Your personal task dashboard — assigned, under review, and everything due from you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'personal',label:'My Tasks'}]},
+    {id:'clients',label:'Clients & Worksheets',icon:'📇',desc:'Client master data and operational worksheets for every work type.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'}]},
+    {id:'dashboard',label:'Dashboard',icon:'📊',desc:'Organisation-wide calendar and analytics. Personalise with "Mine Only".',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'calendar',label:'Calendar'},{id:'analytics',label:'Analytics'}]},
+    {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}],soon:true},
+    {id:'billing',label:'Billing',icon:'💰',desc:'Client-wise and work-wise invoicing with reusable templates.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'templates',label:'Templates'}],soon:true},
+    {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]},
+  ];
+
+  function openModule(m){if(m.soon&&m.id!=='hr'&&m.id!=='billing')return;setOrgModule(m.id);setTab(m.tabs[0].id);}
+  function backToLauncher(){setOrgModule(null);setTab('');}
+
+  var currentModule=orgModule?MODULES.find(function(m){return m.id===orgModule;}):null;
+  var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
+
+  var header=<div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:16,paddingBottom:showSubTabs?12:16}}>
+      <button onClick={orgModule?backToLauncher:onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>&#x2190; {orgModule?'Modules':'Back'}</button>
+      <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
+      <div>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>
+          {org.name}
+          {currentModule&&<span style={{color:'var(--tf-text-sub)',fontWeight:500}}> · {currentModule.label}</span>}
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div>
       </div>
     </div>
+    {showSubTabs&&<div style={{display:'flex',gap:2,overflowX:'auto'}}>
+      {currentModule.tabs.map(function(t){
+        return<button key={t.id} onClick={function(){setTab(t.id);}}
+          style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500,whiteSpace:'nowrap'}}>
+          {t.label}
+        </button>;
+      })}
+    </div>}
+  </div>;
+
+  // Module launcher view
+  if(orgModule===null){
+    return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+      {header}
+      <div style={{flex:1,overflow:'auto',padding:'28px 24px 60px'}}>
+        <div style={{maxWidth:1100,margin:'0 auto'}}>
+          <div style={{marginBottom:22}}>
+            <div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Modules</div>
+            <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Pick a module to get focused. Each one groups a specific workflow.</div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
+            {MODULES.map(function(m){
+              return<button key={m.id} onClick={function(){openModule(m);}}
+                style={{textAlign:'left',padding:20,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,cursor:'pointer',position:'relative',transition:'transform 0.16s, border-color 0.16s, box-shadow 0.16s',fontFamily:'inherit'}}
+                onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.boxShadow='0 10px 30px rgba(0,0,0,0.12)';}}
+                onMouseLeave={function(e){e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}>
+                <div style={{width:48,height:48,borderRadius:12,background:m.gradient,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,marginBottom:14}}>{m.icon}</div>
+                <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
+                  {m.label}
+                  {m.soon&&<span style={{fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:3,padding:'1px 5px',letterSpacing:'0.06em'}}>PREVIEW</span>}
+                </div>
+                <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.5,marginBottom:m.tabs&&m.tabs.length>1?12:0}}>{m.desc}</div>
+                {m.tabs&&m.tabs.length>1&&<div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {m.tabs.map(function(t){return<span key={t.id} style={{fontSize:10,fontWeight:600,color:'var(--tf-text-sub)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 7px'}}>{t.label}</span>;})}
+                </div>}
+              </button>;
+            })}
+          </div>
+        </div>
+      </div>
+    </div>;
+  }
+
+  // Module content
+  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+    {header}
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
-      {tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
-      {tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
-      {tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
-      {tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
-      {tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {orgModule==='mywork'&&<MyWorkModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='dashboard'&&tab==='calendar'&&<CalendarView orgs={[org]} supabase={supabase} cu={cu} showMineToggle={true}/>}
+      {orgModule==='dashboard'&&tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
+      {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {orgModule==='hr'&&<ModulePlaceholder moduleLabel="HR" activeTab={tab} features={[
+        {tab:'performance',title:'Performance',desc:'Track employee KPIs, reviews and goals across review cycles.'},
+        {tab:'attendance',title:'Attendance',desc:'Daily check-in / check-out and monthly attendance summaries.'},
+        {tab:'leaves',title:'Leaves',desc:'Apply, approve and track leave balances across leave types.'},
+        {tab:'logs',title:'Activity Logs',desc:'Employee activity trail and audit logs across the organisation.'},
+      ]}/>}
+      {orgModule==='billing'&&<ModulePlaceholder moduleLabel="Billing" activeTab={tab} features={[
+        {tab:'invoices',title:'Invoices',desc:'Client-wise and work-wise invoicing with automatic totals and taxes.'},
+        {tab:'templates',title:'Templates',desc:'Reusable invoice templates for quick creation.'},
+      ]}/>}
     </div>
   </div>;
 }
