@@ -2827,7 +2827,12 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [showAddOnce,setShowAddOnce]=useState(false);
   var [onceClientId,setOnceClientId]=useState('');
   var [onceDueDate,setOnceDueDate]=useState('');
-  var [onceAssignee,setOnceAssignee]=useState('');
+  var [onceTitle,setOnceTitle]=useState('');
+  var [onceDesc,setOnceDesc]=useState('');
+  var [oncePriority,setOncePriority]=useState('medium');
+  var [onceContact,setOnceContact]=useState('');
+  var [onceChecklist,setOnceChecklist]=useState([]);
+  var [onceHierarchy,setOnceHierarchy]=useState({});
   var [orgMembers,setOrgMembers]=useState([]);
   var [toast,setToast]=useState(null);
   var [showSop,setShowSop]=useState(false);
@@ -3244,17 +3249,31 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
     }
   }
 
+  function resetOnceForm(){setOnceClientId('');setOnceDueDate('');setOnceTitle('');setOnceDesc('');setOncePriority('medium');setOnceContact('');setOnceChecklist([]);setOnceHierarchy({});setShowAddOnce(false);}
+
   async function addOnceTask(){
     if(!onceClientId||!worksheet)return;
     setSaving(true);
-    var newRow={worksheet_id:worksheet.id,client_id:onceClientId,org_id:org.id,data:{},due_date:onceDueDate||null,status:'pending'};
-    if(onceAssignee){newRow.data={__assignee:onceAssignee};}
+    var rowData={};
+    // Hierarchy assignments
+    var hKeys=Object.keys(onceHierarchy);
+    for(var hi=0;hi<hKeys.length;hi++){if(onceHierarchy[hKeys[hi]])rowData[hKeys[hi]]=onceHierarchy[hKeys[hi]];}
+    // Legacy __assignee fallback (first hierarchy or direct)
+    if(hierarchyCols.length>0&&rowData[hierarchyCols[0].key])rowData.__assignee=rowData[hierarchyCols[0].key];
+    // Extra fields
+    if(onceTitle.trim())rowData.__title=onceTitle.trim();
+    if(onceDesc.trim())rowData.__description=onceDesc.trim();
+    if(oncePriority)rowData.__priority=oncePriority;
+    if(onceContact.trim())rowData.__contact=onceContact.trim();
+    if(onceChecklist.length>0)rowData.__checklist=onceChecklist.filter(function(c){return c.text.trim();});
+
+    var newRow={worksheet_id:worksheet.id,client_id:onceClientId,org_id:org.id,data:rowData,due_date:onceDueDate||null,due_label:onceTitle.trim()||'One-time',status:'pending'};
     var ins=await supabase.from('worksheet_rows').insert(newRow).select().single();
     if(ins.data){
       setRows(function(prev){return[...prev,ins.data];});
-      showToast('One-time task added');
+      showToast('Task created!');
     }else{showToast('Failed to add','err');}
-    setOnceClientId('');setOnceDueDate('');setOnceAssignee('');setShowAddOnce(false);
+    resetOnceForm();
     setSaving(false);
   }
 
@@ -3498,28 +3517,99 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
         {hasActiveFilters&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing {filteredRows.length} of {rows.length}</span>}
       </div>}
 
-      {/* Add one-time task form */}
-      {cfg.frequency==='once'&&showAddOnce&&<div style={{display:'flex',alignItems:'flex-end',gap:10,marginBottom:14,padding:'14px 16px',background:'rgba(34,197,94,0.04)',border:'1px solid rgba(34,197,94,0.2)',borderRadius:10,flexWrap:'wrap'}}>
-        <div style={{flex:1,minWidth:160}}>
-          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>Client</div>
-          <select value={onceClientId} onChange={function(e){setOnceClientId(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-            <option value="">— Select Client —</option>
-            {clients.map(function(c){return<option key={c.id} value={c.id}>{c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
-          </select>
+      {/* Add one-time task modal */}
+      {cfg.frequency==='once'&&showAddOnce&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)resetOnceForm();}}>
+        <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:540,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid var(--tf-border)'}}>
+            <h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>New One-time Task — {activeType}</h3>
+            <button onClick={resetOnceForm} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>
+          </div>
+          <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
+            {(function(){
+              var _INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+              var _LBL={fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:4,display:'block'};
+              return<div>
+                {/* Client */}
+                <div style={{marginBottom:14}}>
+                  <label style={_LBL}>Client *</label>
+                  <select value={onceClientId} onChange={function(e){setOnceClientId(e.target.value);}} style={Object.assign({},_INP,{cursor:'pointer'})}>
+                    <option value="">— Select Client —</option>
+                    {clients.map(function(c){return<option key={c.id} value={c.id}>{c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
+                  </select>
+                </div>
+
+                {/* Task Title */}
+                <div style={{marginBottom:14}}>
+                  <label style={_LBL}>Task Title</label>
+                  <input value={onceTitle} onChange={function(e){setOnceTitle(e.target.value);}} style={_INP} placeholder="e.g. GST Registration, Company Incorporation..."/>
+                </div>
+
+                {/* Description */}
+                <div style={{marginBottom:14}}>
+                  <label style={_LBL}>Description <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
+                  <textarea value={onceDesc} onChange={function(e){setOnceDesc(e.target.value);}} style={Object.assign({},_INP,{minHeight:56,resize:'vertical'})} placeholder="Task details, instructions, notes..."/>
+                </div>
+
+                {/* Hierarchy-level Assignees */}
+                <div style={{marginBottom:14}}>
+                  <label style={_LBL}>Assign To</label>
+                  <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+                    {hierarchyCols.map(function(hc){return<div key={hc.key} style={{flex:1,minWidth:140}}>
+                      <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
+                      <select value={onceHierarchy[hc.key]||''} onChange={function(e){setOnceHierarchy(function(p){var n=Object.assign({},p);n[hc.key]=e.target.value;return n;});}} style={Object.assign({},_INP,{cursor:'pointer',fontSize:12})}>
+                        <option value="">— Select —</option>
+                        {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                      </select>
+                    </div>;})}
+                  </div>
+                </div>
+
+                {/* Priority + Due Date + Contact row */}
+                <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
+                  <div style={{flex:1,minWidth:120}}>
+                    <label style={_LBL}>Priority</label>
+                    <select value={oncePriority} onChange={function(e){setOncePriority(e.target.value);}} style={Object.assign({},_INP,{cursor:'pointer'})}>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div style={{flex:1,minWidth:140}}>
+                    <label style={_LBL}>Due Date</label>
+                    <input type="date" value={onceDueDate} onChange={function(e){setOnceDueDate(e.target.value);}} style={_INP}/>
+                  </div>
+                  <div style={{flex:1,minWidth:140}}>
+                    <label style={_LBL}>Contact Person</label>
+                    <input value={onceContact} onChange={function(e){setOnceContact(e.target.value);}} style={_INP} placeholder="Client's contact name"/>
+                  </div>
+                </div>
+
+                {/* Checklist */}
+                <div style={{marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+                    <label style={Object.assign({},_LBL,{marginBottom:0})}>Checklist <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
+                    <button onClick={function(){setOnceChecklist(function(p){return[...p,{text:'',done:false}];});}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'2px 10px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600}}>+ Item</button>
+                  </div>
+                  {onceChecklist.length===0?<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No checklist items.</div>:
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {onceChecklist.map(function(item,ci){
+                      return<div key={ci} style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:11,color:'var(--tf-text-sub)',width:18,textAlign:'center',flexShrink:0}}>{ci+1}.</span>
+                        <input value={item.text} onChange={function(e){setOnceChecklist(function(p){return p.map(function(c,i){return i===ci?{text:e.target.value,done:c.done}:c;});});}} style={Object.assign({},_INP,{flex:1,padding:'5px 8px',fontSize:12})} placeholder="Checklist item..."/>
+                        <button onClick={function(){setOnceChecklist(function(p){return p.filter(function(_,i){return i!==ci;});});}} style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:14,padding:'0 4px'}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>×</button>
+                      </div>;
+                    })}
+                  </div>}
+                </div>
+              </div>;
+            })()}
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}}>
+            <button onClick={resetOnceForm} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+            <button onClick={addOnceTask} disabled={!onceClientId||saving} style={{background:onceClientId?'#22c55e':'#64748b',color:'#fff',border:'none',borderRadius:8,padding:'7px 20px',fontSize:13,fontWeight:700,cursor:onceClientId?'pointer':'not-allowed',opacity:saving?0.6:onceClientId?1:0.5}}>{saving?'Creating...':'Create Task'}</button>
+          </div>
         </div>
-        <div style={{minWidth:140}}>
-          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>Assignee</div>
-          <select value={onceAssignee} onChange={function(e){setOnceAssignee(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-            <option value="">— Optional —</option>
-            {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-          </select>
-        </div>
-        <div style={{minWidth:130}}>
-          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>Due Date</div>
-          <input type="date" value={onceDueDate} onChange={function(e){setOnceDueDate(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-        </div>
-        <button onClick={addOnceTask} disabled={!onceClientId||saving} style={{background:onceClientId?'#22c55e':'#64748b',color:'#fff',border:'none',borderRadius:7,padding:'8px 18px',fontSize:12,fontWeight:700,cursor:onceClientId?'pointer':'not-allowed',opacity:onceClientId?1:0.5}}>Add</button>
-        <button onClick={function(){setShowAddOnce(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12}}>Cancel</button>
       </div>}
 
       {/* Summary stats */}
