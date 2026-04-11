@@ -2799,7 +2799,7 @@ function getCurrentPeriod(freq){
   return {year:fy,month:null,quarter:null};
 }
 
-function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy}){
+function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly}){
   var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
   var WS_TYPE_CONFIGS=useMemo(function(){
@@ -2845,6 +2845,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [filters,setFilters]=useState({});
   // Filter: client name search
   var [filterClient,setFilterClient]=useState('');
+  // Mine-only filter: restrict rows to those where current user is assignee or in any hierarchy level
+  var [mineOnly,setMineOnly]=useState(!!initMineOnly);
 
   // Get all work types used by clients in this org
   var [allTypes,setAllTypes]=useState([]);
@@ -3020,7 +3022,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   }
 
   function setFilter(key,val){setFilters(function(p){var n=Object.assign({},p);if(!val||val==='all')delete n[key];else n[key]=val;return n;});}
-  function clearFilters(){setFilters({});setFilterClient('');}
+  function clearFilters(){setFilters({});setFilterClient('');setMineOnly(false);}
 
   async function loadClients(){
     setLoading(true);
@@ -3036,13 +3038,19 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
       var typeArr=Array.from(types).filter(function(t){return WS_TYPE_CONFIGS[t];});
       setAllTypes(typeArr);
       if(typeArr.length>0&&!activeType){
+        // If initWorkType was passed, prefer it
+        var preferType=initWorkType&&typeArr.indexOf(initWorkType)>=0?initWorkType:null;
         // Pick first tab from grouped layout
         var groups={};var ungrouped=[];
         typeArr.forEach(function(t){var c=WS_TYPE_CONFIGS[t];if(c&&c.worksheet_group){if(!groups[c.worksheet_group])groups[c.worksheet_group]=[];groups[c.worksheet_group].push(t);}else ungrouped.push(t);});
         var firstGroup=Object.keys(groups)[0];
-        var firstType=firstGroup?groups[firstGroup][0]:(ungrouped[0]||typeArr[0]);
+        var firstType=preferType||(firstGroup?groups[firstGroup][0]:(ungrouped[0]||typeArr[0]));
         setActiveType(firstType);
-        if(firstGroup)setActiveGroup(firstGroup);
+        // Set group if preferred type is part of a group
+        if(preferType){
+          var preferCfg=WS_TYPE_CONFIGS[preferType];
+          if(preferCfg&&preferCfg.worksheet_group)setActiveGroup(preferCfg.worksheet_group);
+        }else if(firstGroup){setActiveGroup(firstGroup);}
         var freq=WS_TYPE_CONFIGS[firstType]?WS_TYPE_CONFIGS[firstType].frequency:'monthly';
         var p=getCurrentPeriod(freq);
         setPeriodYear(p.year);
@@ -3328,10 +3336,17 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var showTaskCard=!hiddenCols.includes('__taskcard');
 
   // Apply filters to rows
-  var hasActiveFilters=Object.keys(filters).length>0||filterClient;
+  var hasActiveFilters=Object.keys(filters).length>0||filterClient||mineOnly;
   var filteredRows=rows.filter(function(row){
     var client=clientMap[row.client_id];
     if(!client)return false;
+    // Mine-only filter: row.data must contain cu.id as __assignee or in any __h_*
+    if(mineOnly){
+      var rd=row.data||{};
+      var isMine=rd.__assignee===cu.id;
+      if(!isMine){var _dks=Object.keys(rd);for(var _di=0;_di<_dks.length;_di++){if(_dks[_di].indexOf('__h_')===0&&rd[_dks[_di]]===cu.id){isMine=true;break;}}}
+      if(!isMine)return false;
+    }
     // Client name filter
     if(filterClient&&!client.name.toLowerCase().includes(filterClient.toLowerCase())&&!(client.display_name||'').toLowerCase().includes(filterClient.toLowerCase()))return false;
     // Status filter
@@ -3469,6 +3484,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
           </div>}
         </div>
 
+        {/* Mine Only toggle */}
+        <button onClick={function(){setMineOnly(!mineOnly);}} title="Show only tasks where I'm assigned or reviewing" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>
         {/* Filter toggle button */}
         <button onClick={function(){setShowFilters(!showFilters);}} style={{background:showFilters||hasActiveFilters?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:hasActiveFilters?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
           ▽ Filter{hasActiveFilters&&<span style={{fontSize:10,color:'#f59e0b'}}>Active</span>}
@@ -4550,13 +4567,14 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
   </div>;
 }
 
-// ── My Work Module — personal task dashboard ─────────────────────
-function MyWorkModule({org,supabase,cu,workflowHierarchy}){
+// ── Your Dashboard Module — personalised works + calendar sidebar ───
+function YourDashboardModule({org,supabase,cu,workflowHierarchy,onOpenWorkType}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
   var [worksheets,setWorksheets]=useState([]);
   var [loading,setLoading]=useState(true);
   var [filter,setFilter]=useState('all');
+  var [showCalendar,setShowCalendar]=useState(true);
   var wfHierarchy=workflowHierarchy||[];
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id]);
@@ -4623,7 +4641,6 @@ function MyWorkModule({org,supabase,cu,workflowHierarchy}){
     if(!grouped[wt])grouped[wt]=[];
     grouped[wt].push(r);
   });
-  // Sort each group by due_date asc (no date last)
   Object.keys(grouped).forEach(function(k){grouped[k].sort(function(a,b){if(!a.due_date&&!b.due_date)return 0;if(!a.due_date)return 1;if(!b.due_date)return -1;return a.due_date<b.due_date?-1:1;});});
 
   async function updateStatus(rowId,newStatus){
@@ -4640,14 +4657,28 @@ function MyWorkModule({org,supabase,cu,workflowHierarchy}){
 
   var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
 
-  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading your tasks...</div>;
+  // Greeting
+  var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?cu.email.split('@')[0]:'')||'there';
+  var firstName=displayName.split(' ')[0];
+  var hr=new Date().getHours();
+  var greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading your dashboard...</div>;
 
   return<div style={{padding:'0 0 60px'}}>
-    <div style={{marginBottom:20}}>
-      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>My Work</h2>
-      <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Tasks where you're assigned or reviewing · {org.name}</div>
+    {/* Greeting header */}
+    <div style={{marginBottom:20,display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
+      <div>
+        <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>{greet}</div>
+        <h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>Hey, {firstName}! <span style={{fontSize:18}}>👋</span></h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Your personal dashboard for <b style={{color:'var(--tf-text)'}}>{org.name}</b></div>
+      </div>
+      <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+        <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
+      </button>
     </div>
 
+    {/* KPI tiles */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:22}}>
       {[
         {id:'all',label:'Total Active',count:stats.total,color:'#6b8cad'},
@@ -4664,48 +4695,150 @@ function MyWorkModule({org,supabase,cu,workflowHierarchy}){
       })}
     </div>
 
-    {filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
-      <div style={{fontSize:40,marginBottom:10}}>✓</div>
-      <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
-      <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
-    </div>:
-    <div>
-      {Object.keys(grouped).sort().map(function(wt){
-        return<div key={wt} style={{marginBottom:18}}>
-          <div style={{fontSize:11,fontWeight:800,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8,paddingLeft:2}}>{wt} · {grouped[wt].length}</div>
-          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-            {grouped[wt].map(function(row,idx){
-              var client=clientMap[row.client_id];
-              var ws=wsMap[row.worksheet_id];
-              var role=getRole(row);
-              var isOverdue=row.due_date&&row.due_date<todayStr;
-              var isToday=row.due_date===todayStr;
-              var isReview=role.label.toLowerCase().indexOf('review')>=0;
-              return<div key={row.id} style={{padding:'12px 16px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-                <div style={{flex:1,minWidth:200}}>
-                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
-                    {client?(client.display_name||client.name):'Unknown'}
-                    {row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
-                  </div>
-                  <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-                    {ws&&<span>{ws.period_label}</span>}
-                    <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
-                  </div>
-                </div>
-                {row.due_date&&<div style={{fontSize:11,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',flexShrink:0}}>
-                  {isOverdue?'Overdue · ':isToday?'Today · ':''}
-                  {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
-                </div>}
-                <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
-                  style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="under_review">Under Review</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>;
-            })}
-          </div>
+    {/* Main content + Calendar sidebar */}
+    <div style={{display:'flex',gap:18,alignItems:'flex-start',flexWrap:'wrap'}}>
+      {/* Your Works */}
+      <div style={{flex:'1 1 560px',minWidth:320}}>
+        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Your Works</div>
+        {filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+          <div style={{fontSize:40,marginBottom:10}}>✓</div>
+          <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
+          <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
+        </div>:
+        <div>
+          {Object.keys(grouped).sort().map(function(wt){
+            return<div key={wt} style={{marginBottom:18}}>
+              <button onClick={function(){if(onOpenWorkType)onOpenWorkType(wt);}}
+                title={"Open "+wt+" worksheet with only my clients"}
+                style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'0 0 8px 2px',cursor:onOpenWorkType?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,color:'#6b8cad',fontFamily:'inherit'}}
+                onMouseEnter={function(e){if(onOpenWorkType)e.currentTarget.style.color='#4a7a9b';}}
+                onMouseLeave={function(e){e.currentTarget.style.color='#6b8cad';}}>
+                <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.06em'}}>{wt} · {grouped[wt].length}</span>
+                {onOpenWorkType&&<span style={{fontSize:10,fontWeight:700,opacity:0.7}}>Open worksheet →</span>}
+              </button>
+              <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+                {grouped[wt].map(function(row,idx){
+                  var client=clientMap[row.client_id];
+                  var ws=wsMap[row.worksheet_id];
+                  var role=getRole(row);
+                  var isOverdue=row.due_date&&row.due_date<todayStr;
+                  var isToday=row.due_date===todayStr;
+                  var isReview=role.label.toLowerCase().indexOf('review')>=0;
+                  return<div key={row.id} style={{padding:'12px 16px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+                    <div style={{flex:1,minWidth:180}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
+                        {client?(client.display_name||client.name):'Unknown'}
+                        {row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
+                      </div>
+                      <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                        {ws&&<span>{ws.period_label}</span>}
+                        <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
+                      </div>
+                    </div>
+                    {row.due_date&&<div style={{fontSize:11,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',flexShrink:0}}>
+                      {isOverdue?'Overdue · ':isToday?'Today · ':''}
+                      {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
+                    </div>}
+                    <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
+                      style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="under_review">Under Review</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>;
+                })}
+              </div>
+            </div>;
+          })}
+        </div>}
+      </div>
+
+      {/* Right-side Calendar */}
+      {showCalendar&&<div style={{flex:'0 0 360px',minWidth:300,position:'sticky',top:8}}>
+        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Your Calendar</div>
+        <MiniCalendar rows={rows} clientMap={clientMap} wsMap={wsMap}/>
+      </div>}
+    </div>
+  </div>;
+}
+
+// ── Mini Calendar — compact month grid with task dots ──────────────
+function MiniCalendar({rows,clientMap,wsMap}){
+  var now=new Date();
+  var [year,setYear]=useState(now.getFullYear());
+  var [month,setMonth]=useState(now.getMonth());
+  var [selDay,setSelDay]=useState(null);
+
+  var today=new Date();today.setHours(0,0,0,0);
+  var isCurrentMonth=year===today.getFullYear()&&month===today.getMonth();
+
+  var firstDay=new Date(year,month,1);
+  var lastDayD=new Date(year,month+1,0);
+  var daysInMonth=lastDayD.getDate();
+  var startWeekday=(firstDay.getDay()+6)%7; // Mon=0
+
+  var weeks=[];var dayNum=1-startWeekday;
+  for(var w=0;w<6;w++){var week=[];for(var d=0;d<7;d++){if(dayNum>=1&&dayNum<=daysInMonth)week.push(dayNum);else week.push(null);dayNum++;}if(week.every(function(x){return x===null;}))break;weeks.push(week);}
+
+  // Group rows visible in this month by day
+  var monthStart=year+'-'+String(month+1).padStart(2,'0')+'-01';
+  var monthEnd=year+'-'+String(month+1).padStart(2,'0')+'-'+String(daysInMonth).padStart(2,'0');
+  var monthRows=(rows||[]).filter(function(r){return r.due_date&&r.due_date>=monthStart&&r.due_date<=monthEnd;});
+  var dayRows={};
+  monthRows.forEach(function(r){var d=new Date(r.due_date).getDate();if(!dayRows[d])dayRows[d]=[];dayRows[d].push(r);});
+
+  var MONTH_NAMES=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DAY_HDR=['M','T','W','T','F','S','S'];
+
+  function prev(){if(month===0){setYear(year-1);setMonth(11);}else setMonth(month-1);setSelDay(null);}
+  function next(){if(month===11){setYear(year+1);setMonth(0);}else setMonth(month+1);setSelDay(null);}
+
+  var detailRows=selDay&&dayRows[selDay]?dayRows[selDay]:[];
+
+  return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+      <button onClick={prev} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'2px 8px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:700}}>‹</button>
+      <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)'}}>{MONTH_NAMES[month]} {year}</div>
+      <button onClick={next} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'2px 8px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:700}}>›</button>
+    </div>
+    {/* Grid */}
+    <div style={{padding:'8px 8px 10px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,marginBottom:4}}>
+        {DAY_HDR.map(function(h,i){return<div key={i} style={{textAlign:'center',fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',padding:'2px 0'}}>{h}</div>;})}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2}}>
+        {weeks.map(function(wk,wi){return wk.map(function(day,di){
+          if(day===null)return<div key={wi+'-'+di}/>;
+          var isToday=isCurrentMonth&&day===today.getDate();
+          var isSel=selDay===day;
+          var dRows=dayRows[day]||[];
+          var cnt=dRows.length;
+          var hasOverdue=dRows.some(function(r){return r.due_date&&r.due_date<(today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'))&&r.status!=='completed';});
+          var dotColor=hasOverdue?'#ef4444':cnt>0?'#6366f1':'transparent';
+          return<button key={wi+'-'+di} onClick={function(){setSelDay(isSel?null:day);}}
+            style={{aspectRatio:'1',background:isSel?'rgba(99,102,241,0.15)':'transparent',border:isSel?'1px solid #6366f1':isToday?'1px solid rgba(99,102,241,0.4)':'1px solid transparent',borderRadius:6,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:2,fontFamily:'inherit',position:'relative'}}>
+            <div style={{fontSize:11,fontWeight:isToday?800:600,color:isToday?'#6366f1':'var(--tf-text)'}}>{day}</div>
+            {cnt>0&&<div style={{position:'absolute',bottom:2,left:0,right:0,display:'flex',justifyContent:'center',gap:2}}>
+              <div style={{width:4,height:4,borderRadius:'50%',background:dotColor}}/>
+              {cnt>1&&<div style={{width:4,height:4,borderRadius:'50%',background:dotColor}}/>}
+              {cnt>2&&<div style={{width:4,height:4,borderRadius:'50%',background:dotColor}}/>}
+            </div>}
+          </button>;
+        });})}
+      </div>
+    </div>
+    {/* Day detail */}
+    {selDay&&<div style={{borderTop:'1px solid var(--tf-border)',padding:'10px 12px',maxHeight:260,overflowY:'auto'}}>
+      <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>{selDay} {MONTH_NAMES[month]} · {detailRows.length} task{detailRows.length!==1?'s':''}</div>
+      {detailRows.length===0?<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No tasks on this day.</div>:
+      detailRows.map(function(r){
+        var client=clientMap[r.client_id];
+        var ws=wsMap[r.worksheet_id];
+        return<div key={r.id} style={{padding:'6px 0',borderBottom:'1px solid var(--tf-border)',fontSize:11}}>
+          <div style={{fontWeight:700,color:'var(--tf-text)'}}>{client?(client.display_name||client.name):'Unknown'}</div>
+          <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{ws?ws.work_type:''} {ws&&ws.period_label?'· '+ws.period_label:''}</div>
         </div>;
       })}
     </div>}
@@ -4736,30 +4869,51 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
 
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
-  const [orgModule,setOrgModule]=useState(null); // null=launcher | 'mywork'|'clients'|'dashboard'|'hr'|'billing'|'setup'
+  const [orgModule,setOrgModule]=useState(null); // null=launcher | 'dashboard'|'clients'|'analytics'|'hr'|'billing'|'setup'
   const [tab,setTab]=useState('');
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
+  const [myRole,setMyRole]=useState('member');
+  // Worksheet navigation hint (set when user clicks a work type in Your Dashboard)
+  const [wsInitWorkType,setWsInitWorkType]=useState(null);
+  const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
 
-  useEffect(function(){loadWTC();},[org.id]);
+  useEffect(function(){loadWTC();loadMyRole();/* eslint-disable-next-line */},[org.id]);
   async function loadWTC(){
     var r=await getAllWorkTypeConfigs(org.id);
     setWorkTypeConfigs(r.data||[]);
   }
+  async function loadMyRole(){
+    if(org.created_by===cu.id){setMyRole('owner');return;}
+    var r=await supabase.from('organization_members').select('role').eq('org_id',org.id).eq('user_id',cu.id).maybeSingle();
+    if(r.data&&r.data.role)setMyRole(r.data.role);
+  }
   var activeConfigs=workTypeConfigs.filter(function(c){return c.is_active;});
   var workTypeNames=activeConfigs.map(function(c){return c.name;});
+  var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
 
   var MODULES=[
-    {id:'mywork',label:'My Work',icon:'⚡',desc:'Your personal task dashboard — assigned, under review, and everything due from you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'personal',label:'My Tasks'}]},
+    {id:'dashboard',label:'Your Dashboard',icon:'⚡',desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'}]},
     {id:'clients',label:'Clients & Worksheets',icon:'📇',desc:'Client master data and operational worksheets for every work type.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'}]},
-    {id:'dashboard',label:'Dashboard',icon:'📊',desc:'Organisation-wide calendar and analytics. Personalise with "Mine Only".',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'calendar',label:'Calendar'},{id:'analytics',label:'Analytics'}]},
+  ];
+  if(canSeeAnalytics){
+    MODULES.push({id:'analytics',label:'Analytics',icon:'📊',desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
+  }
+  MODULES.push(
     {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}],soon:true},
     {id:'billing',label:'Billing',icon:'💰',desc:'Client-wise and work-wise invoicing with reusable templates.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'templates',label:'Templates'}],soon:true},
-    {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]},
-  ];
+    {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
+  );
 
-  function openModule(m){if(m.soon&&m.id!=='hr'&&m.id!=='billing')return;setOrgModule(m.id);setTab(m.tabs[0].id);}
-  function backToLauncher(){setOrgModule(null);setTab('');}
+  function openModule(m){setOrgModule(m.id);setTab(m.tabs[0].id);}
+  function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);}
+  // Called from YourDashboard when a work type header is clicked
+  function navigateToWorkType(wt){
+    setWsInitWorkType(wt);
+    setWsInitMineOnly(true);
+    setOrgModule('clients');
+    setTab('worksheets');
+  }
 
   var currentModule=orgModule?MODULES.find(function(m){return m.id===orgModule;}):null;
   var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
@@ -4823,11 +4977,10 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
     {header}
     <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
-      {orgModule==='mywork'&&<MyWorkModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='dashboard'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} onOpenWorkType={navigateToWorkType}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
-      {orgModule==='dashboard'&&tab==='calendar'&&<CalendarView orgs={[org]} supabase={supabase} cu={cu} showMineToggle={true}/>}
-      {orgModule==='dashboard'&&tab==='analytics'&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
+      {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
