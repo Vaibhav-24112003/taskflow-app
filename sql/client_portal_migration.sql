@@ -174,3 +174,30 @@ GRANT SELECT, UPDATE ON client_requests TO anon;
 GRANT SELECT ON organizations TO anon;
 
 -- Done! Client Portal is ready.
+-- NOTE: Create a Storage bucket called "client-portal" in Supabase Dashboard → Storage
+--       Set it to public (or use signed URLs). This is for file uploads.
+
+-- ═══════════════════════════════════════════════════════════════════
+-- Phase 2: Structured Q&A forms + File uploads
+-- Run this AFTER the migration above has been applied
+-- ═══════════════════════════════════════════════════════════════════
+
+-- Add form_fields (question form schema), form_responses (client answers), files (uploaded docs)
+ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS form_fields jsonb DEFAULT '[]';
+ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS form_responses jsonb DEFAULT '{}';
+ALTER TABLE client_requests ADD COLUMN IF NOT EXISTS files jsonb DEFAULT '[]';
+
+-- Email templates for reusable request notifications
+CREATE TABLE IF NOT EXISTS email_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id uuid REFERENCES organizations(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  subject text NOT NULL,
+  body text NOT NULL,
+  type text DEFAULT 'general',
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can manage email templates"
+  ON email_templates FOR ALL USING (true) WITH CHECK (true);
