@@ -3308,6 +3308,33 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
     showToast('Task removed');
   }
 
+  // Classify an unclassified row: move it to the chosen work type's current-period worksheet
+  var classifiableConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active&&c.name!=='Unclassified';});
+  async function classifyRowInSheet(row,newWorkType){
+    if(!newWorkType)return;
+    var targetCfg=classifiableConfigs.find(function(c){return c.name===newWorkType;});
+    var freq=targetCfg?targetCfg.frequency:'once';
+    var p=getCurrentPeriod(freq);
+    var label=getPeriodLabel(freq,p.year,p.month,p.quarter);
+    var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',newWorkType).eq('period_label',label).maybeSingle();
+    var targetWs=rw.data;
+    if(!targetWs){
+      var ins=await supabase.from('worksheets').insert({
+        org_id:org.id,work_type:newWorkType,period_label:label,
+        period_year:p.year,
+        period_month:freq==='monthly'?p.month:null,
+        period_quarter:freq==='quarterly'?p.quarter:null,
+        frequency:freq,created_by:cu.id
+      }).select().single();
+      targetWs=ins.data;
+    }
+    if(!targetWs){showToast('Failed to resolve worksheet','err');return;}
+    var res=await supabase.from('worksheet_rows').update({worksheet_id:targetWs.id}).eq('id',row.id);
+    if(res.error){showToast('Failed to classify','err');return;}
+    setRows(function(prev){return prev.filter(function(r){return r.id!==row.id;});});
+    showToast('Task classified as '+newWorkType);
+  }
+
   async function updateCellData(rowId,key,val){
     var row=rows.find(function(r){return r.id===rowId;});
     if(!row)return;
@@ -3764,7 +3791,15 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
                   <button onClick={function(){setShowCreateTask({row,client});}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 10px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>+ Create</button>}
                 </td>}
                 {cfg.frequency==='once'&&<td style={{padding:'10px 6px',textAlign:'center'}}>
-                  {row.data&&row.data.__assignee&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>{(orgMembers.find(function(m){return m.id===row.data.__assignee;})||{}).name||'Assigned'}</div>}
+                  {activeType==='Unclassified'&&classifiableConfigs.length>0&&<div style={{marginBottom:4}}>
+                    <select value="" onChange={function(e){if(e.target.value)classifyRowInSheet(row,e.target.value);}}
+                      title="Classify this task into a work type"
+                      style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:6,padding:'4px 8px',color:'#f59e0b',fontSize:10,fontWeight:700,cursor:'pointer',outline:'none'}}>
+                      <option value="">Classify →</option>
+                      {classifiableConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+                    </select>
+                  </div>}
+                  {row.data&&row.data.__assignee&&activeType!=='Unclassified'&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>{(orgMembers.find(function(m){return m.id===row.data.__assignee;})||{}).name||'Assigned'}</div>}
                   <button onClick={function(){deleteOnceRow(row.id);}} title="Remove task" style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>✕</button>
                 </td>}
               </tr>;
