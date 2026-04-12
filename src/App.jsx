@@ -5159,6 +5159,310 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
   </div>;
 }
 
+// ── Client Portal Module (Firm Side) — manage portal users & requests ──
+function ClientPortalModule({org,supabase,cu}){
+  var [tab,setTab]=useState('users');
+  var [users,setUsers]=useState([]);
+  var [requests,setRequests]=useState([]);
+  var [clients,setClients]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  // Invite form
+  var [showInvite,setShowInvite]=useState(false);
+  var [invClientId,setInvClientId]=useState('');
+  var [invEmail,setInvEmail]=useState('');
+  var [invName,setInvName]=useState('');
+  var [invPass,setInvPass]=useState('');
+  var [invSaving,setInvSaving]=useState(false);
+  // Request form
+  var [showReqForm,setShowReqForm]=useState(false);
+  var [reqType,setReqType]=useState('data_collection');
+  var [reqClientId,setReqClientId]=useState('');
+  var [reqTitle,setReqTitle]=useState('');
+  var [reqDesc,setReqDesc]=useState('');
+  var [reqDue,setReqDue]=useState('');
+  var [reqAmount,setReqAmount]=useState('');
+  var [reqSaving,setReqSaving]=useState(false);
+  // Detail view
+  var [selReq,setSelReq]=useState(null);
+  var [messages,setMessages]=useState([]);
+  var [msgText,setMsgText]=useState('');
+
+  function showToast(msg,kind){setToast({msg:msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  useEffect(function(){loadAll();},[org.id]);
+
+  async function loadAll(){
+    setLoading(true);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
+    setClients(rc.data||[]);
+    var ru=await supabase.from('client_portal_access').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
+    setUsers(ru.data||[]);
+    var rr=await supabase.from('client_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
+    setRequests(rr.data||[]);
+    setLoading(false);
+  }
+
+  function genPassword(){var c='abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';var p='';for(var i=0;i<8;i++)p+=c.charAt(Math.floor(Math.random()*c.length));return p;}
+
+  async function inviteUser(){
+    if(!invClientId||!invEmail.trim()){showToast('Client and email required','err');return;}
+    setInvSaving(true);
+    var pw=invPass.trim()||genPassword();
+    var res=await supabase.rpc('create_client_portal_user',{p_client_id:invClientId,p_org_id:org.id,p_email:invEmail.trim().toLowerCase(),p_password:pw,p_display_name:invName.trim()||null});
+    if(res.error){showToast(res.error.message,'err');setInvSaving(false);return;}
+    showToast('Portal user created!');
+    // Open mailto with credentials
+    var client=clients.find(function(c){return c.id===invClientId;});
+    var cName=client?(client.display_name||client.name):'Client';
+    var portalUrl=window.location.origin+'/#portal';
+    var subject=encodeURIComponent('Your '+org.name+' Portal Login');
+    var body=encodeURIComponent('Hi '+cName+',\n\nYour client portal login has been created.\n\nPortal: '+portalUrl+'\nEmail: '+invEmail.trim()+'\nPassword: '+pw+'\n\nPlease login and change your password.\n\nRegards,\n'+org.name);
+    window.open('mailto:'+encodeURIComponent(invEmail.trim())+'?subject='+subject+'&body='+body,'_blank');
+    setInvClientId('');setInvEmail('');setInvName('');setInvPass('');setShowInvite(false);
+    setInvSaving(false);
+    await loadAll();
+  }
+
+  async function toggleUserActive(u){
+    await supabase.from('client_portal_access').update({is_active:!u.is_active}).eq('id',u.id);
+    setUsers(function(p){return p.map(function(x){return x.id===u.id?Object.assign({},x,{is_active:!u.is_active}):x;});});
+    showToast(u.is_active?'User deactivated':'User activated');
+  }
+
+  async function createRequest(){
+    if(!reqClientId||!reqTitle.trim()){showToast('Client and title required','err');return;}
+    setReqSaving(true);
+    var ins=await supabase.from('client_requests').insert({
+      org_id:org.id,client_id:reqClientId,type:reqType,title:reqTitle.trim(),
+      description:reqDesc.trim()||null,due_date:reqDue||null,
+      amount:reqAmount?Number(reqAmount):null,created_by:cu.id
+    }).select().single();
+    if(ins.error){showToast(ins.error.message,'err');setReqSaving(false);return;}
+    showToast('Request created!');
+    // Mailto to client portal users for this client
+    var portalUsers=users.filter(function(u){return u.client_id===reqClientId&&u.is_active;});
+    if(portalUsers.length>0){
+      var emails=portalUsers.map(function(u){return u.email;}).join(',');
+      var portalUrl=window.location.origin+'/#portal';
+      var subject=encodeURIComponent('New request: '+reqTitle.trim()+' — '+org.name);
+      var body=encodeURIComponent('Hi,\n\nA new '+reqType.replace(/_/g,' ')+' request has been created:\n\n'+reqTitle.trim()+(reqDesc.trim()?'\n'+reqDesc.trim():'')+'\n'+(reqDue?'Due: '+reqDue+'\n':'')+(reqAmount?'Amount: ₹'+reqAmount+'\n':'')+'\nPlease login to respond: '+portalUrl+'\n\nRegards,\n'+org.name);
+      window.open('mailto:'+emails+'?subject='+subject+'&body='+body,'_blank');
+    }
+    setReqType('data_collection');setReqClientId('');setReqTitle('');setReqDesc('');setReqDue('');setReqAmount('');setShowReqForm(false);
+    setReqSaving(false);
+    await loadAll();
+  }
+
+  async function loadMessages(reqId){
+    var rm=await supabase.from('client_request_messages').select('*').eq('request_id',reqId).order('created_at').limit(500);
+    setMessages(rm.data||[]);
+  }
+
+  async function sendMessage(){
+    if(!msgText.trim()||!selReq)return;
+    var ins=await supabase.from('client_request_messages').insert({request_id:selReq.id,sender_type:'firm',sender_id:cu.id,message:msgText.trim()}).select().single();
+    if(ins.data)setMessages(function(p){return[...p,ins.data];});
+    setMsgText('');
+  }
+
+  async function updateReqStatus(req,newStatus){
+    await supabase.from('client_requests').update({status:newStatus,updated_at:new Date().toISOString()}).eq('id',req.id);
+    setRequests(function(p){return p.map(function(r){return r.id===req.id?Object.assign({},r,{status:newStatus}):r;});});
+    if(selReq&&selReq.id===req.id)setSelReq(Object.assign({},selReq,{status:newStatus}));
+    showToast('Status updated');
+  }
+
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+  var REQ_TYPES=[{id:'data_collection',label:'Data Collection',icon:'📂'},{id:'invoice',label:'Invoice',icon:'🧾'},{id:'question',label:'Question',icon:'❓'},{id:'statement',label:'Statement',icon:'📄'},{id:'communication',label:'Communication',icon:'💬'}];
+  var REQ_STATUS_COLORS={pending:'#f59e0b',responded:'#6366f1',closed:'#22c55e'};
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'};
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading client portal...</div>;
+
+  // Detail view for a request
+  if(selReq){
+    var rc=clientMap[selReq.client_id];
+    return<div style={{padding:'0 0 60px'}}>
+      <button onClick={function(){setSelReq(null);setMessages([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,marginBottom:16}}>← Back to requests</button>
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap',marginBottom:12}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>{(REQ_TYPES.find(function(t){return t.id===selReq.type;})||{}).label||selReq.type}</div>
+            <h3 style={{margin:0,fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>{selReq.title}</h3>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>Client: <b>{rc?(rc.display_name||rc.name):'Unknown'}</b>{selReq.due_date&&<span> · Due: {new Date(selReq.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</span>}{selReq.amount&&<span> · ₹{Number(selReq.amount).toLocaleString('en-IN')}</span>}</div>
+          </div>
+          <select value={selReq.status} onChange={function(e){updateReqStatus(selReq,e.target.value);}} style={{border:'1px solid',borderColor:REQ_STATUS_COLORS[selReq.status]||'#f59e0b',borderRadius:20,padding:'4px 10px',color:REQ_STATUS_COLORS[selReq.status]||'#f59e0b',fontSize:11,fontWeight:700,background:'transparent',cursor:'pointer',textTransform:'capitalize'}}>
+            <option value="pending">Pending</option><option value="responded">Responded</option><option value="closed">Closed</option>
+          </select>
+        </div>
+        {selReq.description&&<div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:12}}>{selReq.description}</div>}
+      </div>
+      {/* Messages thread */}
+      <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Conversation</div>
+      <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+        {messages.length===0&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic',padding:16,textAlign:'center'}}>No messages yet.</div>}
+        {messages.map(function(m){
+          var isFirm=m.sender_type==='firm';
+          return<div key={m.id} style={{alignSelf:isFirm?'flex-end':'flex-start',maxWidth:'80%',background:isFirm?'rgba(99,102,241,0.1)':'var(--tf-surface)',border:'1px solid',borderColor:isFirm?'rgba(99,102,241,0.25)':'var(--tf-border)',borderRadius:10,padding:'10px 14px'}}>
+            <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{m.message}</div>
+            <div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:4,textAlign:'right'}}>{isFirm?'You':'Client'} · {new Date(m.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+          </div>;
+        })}
+      </div>
+      <div style={{display:'flex',gap:8}}>
+        <input value={msgText} onChange={function(e){setMsgText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder="Type a message..." style={Object.assign({},INP,{flex:1})}/>
+        <button onClick={sendMessage} disabled={!msgText.trim()} style={{background:msgText.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:msgText.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 18px',color:msgText.trim()?'#fff':'var(--tf-text-sub)',cursor:msgText.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700,flexShrink:0}}>Send</button>
+      </div>
+    </div>;
+  }
+
+  return<div style={{padding:'0 0 60px'}}>
+    {/* Tabs */}
+    <div style={{display:'flex',gap:4,marginBottom:20,borderBottom:'1px solid var(--tf-border)'}}>
+      {[{id:'users',label:'Portal Users'},{id:'requests',label:'Requests'}].map(function(t){
+        return<button key={t.id} onClick={function(){setTab(t.id);}} style={{padding:'8px 16px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500}}>{t.label}</button>;
+      })}
+    </div>
+
+    {/* Portal Users Tab */}
+    {tab==='users'&&<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>Portal Users <span style={{fontSize:12,fontWeight:500,color:'var(--tf-text-sub)'}}>({users.length})</span></div>
+        <button onClick={function(){setShowInvite(!showInvite);if(!invPass)setInvPass(genPassword());}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>+ Invite Client</button>
+      </div>
+      {showInvite&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:12}}>Invite Client to Portal</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Client *</label>
+            <select value={invClientId} onChange={function(e){setInvClientId(e.target.value);var c=clients.find(function(x){return x.id===e.target.value;});if(c)setInvName(c.display_name||c.name);}} style={INP}>
+              <option value="">— Select client —</option>
+              {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Email *</label>
+            <input type="email" value={invEmail} onChange={function(e){setInvEmail(e.target.value);}} placeholder="client@example.com" style={INP}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Display Name</label>
+            <input value={invName} onChange={function(e){setInvName(e.target.value);}} placeholder="Contact person name" style={INP}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Password (auto-generated)</label>
+            <div style={{display:'flex',gap:6}}>
+              <input value={invPass} onChange={function(e){setInvPass(e.target.value);}} style={Object.assign({},INP,{fontFamily:'monospace'})}/>
+              <button onClick={function(){setInvPass(genPassword());}} title="Generate new" style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'0 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,flexShrink:0}}>⟳</button>
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowInvite(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>
+          <button onClick={inviteUser} disabled={invSaving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:invSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{invSaving?'Creating...':'Create & Send Email'}</button>
+        </div>
+      </div>}
+      {/* Users list */}
+      {users.length===0?<div style={{textAlign:'center',padding:40,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+        <div style={{fontSize:32,marginBottom:8}}>👤</div>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No portal users yet</div>
+        <div style={{fontSize:12}}>Invite your first client to access their portal.</div>
+      </div>:
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:'rgba(107,140,173,0.06)'}}>
+            <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
+            <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Email</th>
+            <th style={{padding:'10px 14px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
+            <th style={{padding:'10px 14px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Last Login</th>
+            <th style={{padding:'10px 14px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Actions</th>
+          </tr></thead>
+          <tbody>{users.map(function(u,i){
+            var cl=clientMap[u.client_id];
+            return<tr key={u.id} style={{borderBottom:'1px solid var(--tf-border)'}}>
+              <td style={{padding:'10px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{cl?(cl.display_name||cl.name):'Unknown'}</div>{u.display_name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{u.display_name}</div>}</td>
+              <td style={{padding:'10px 14px',fontSize:12,color:'var(--tf-text)'}}>{u.email}</td>
+              <td style={{padding:'10px 14px',textAlign:'center'}}><span style={{fontSize:10,fontWeight:700,color:u.is_active?'#22c55e':'#ef4444',background:u.is_active?'rgba(34,197,94,0.1)':'rgba(239,68,68,0.1)',borderRadius:20,padding:'3px 10px'}}>{u.is_active?'Active':'Inactive'}</span></td>
+              <td style={{padding:'10px 14px',textAlign:'center',fontSize:11,color:'var(--tf-text-sub)'}}>{u.last_login?new Date(u.last_login).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'Never'}</td>
+              <td style={{padding:'10px 14px',textAlign:'center'}}><button onClick={function(){toggleUserActive(u);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:u.is_active?'#ef4444':'#22c55e',cursor:'pointer',fontSize:10,fontWeight:700}}>{u.is_active?'Deactivate':'Activate'}</button></td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>}
+    </div>}
+
+    {/* Requests Tab */}
+    {tab==='requests'&&<div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>Requests <span style={{fontSize:12,fontWeight:500,color:'var(--tf-text-sub)'}}>({requests.length})</span></div>
+        <button onClick={function(){setShowReqForm(!showReqForm);}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:'0 4px 14px rgba(99,102,241,0.25)'}}>+ New Request</button>
+      </div>
+      {showReqForm&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:12}}>Create Request</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Type</label>
+            <select value={reqType} onChange={function(e){setReqType(e.target.value);}} style={INP}>
+              {REQ_TYPES.map(function(t){return<option key={t.id} value={t.id}>{t.icon} {t.label}</option>;})}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Client *</label>
+            <select value={reqClientId} onChange={function(e){setReqClientId(e.target.value);}} style={INP}>
+              <option value="">— Select client —</option>
+              {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
+            </select>
+          </div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Title *</label>
+          <input value={reqTitle} onChange={function(e){setReqTitle(e.target.value);}} placeholder="e.g., GST Return documents needed" style={INP}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Description</label>
+          <textarea value={reqDesc} onChange={function(e){setReqDesc(e.target.value);}} rows={3} placeholder="Details about what is needed..." style={Object.assign({},INP,{resize:'vertical'})}/>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Due Date</label>
+            <input type="date" value={reqDue} onChange={function(e){setReqDue(e.target.value);}} style={INP}/>
+          </div>
+          {reqType==='invoice'&&<div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Amount (₹)</label>
+            <input type="number" value={reqAmount} onChange={function(e){setReqAmount(e.target.value);}} placeholder="0" style={INP}/>
+          </div>}
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowReqForm(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>
+          <button onClick={createRequest} disabled={reqSaving} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:reqSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{reqSaving?'Creating...':'Create & Notify'}</button>
+        </div>
+      </div>}
+      {/* Requests list */}
+      {requests.length===0?<div style={{textAlign:'center',padding:40,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+        <div style={{fontSize:32,marginBottom:8}}>📋</div>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No requests yet</div>
+        <div style={{fontSize:12}}>Create your first data collection, invoice or question request.</div>
+      </div>:
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {requests.map(function(r){
+          var cl=clientMap[r.client_id];
+          var rt=REQ_TYPES.find(function(t){return t.id===r.type;})||{label:r.type,icon:'📋'};
+          var isOverdue=r.due_date&&r.due_date<new Date().toISOString().slice(0,10)&&r.status!=='closed';
+          return<button key={r.id} onClick={function(){setSelReq(r);loadMessages(r.id);}} style={{width:'100%',textAlign:'left',background:'var(--tf-surface)',border:'1px solid',borderColor:isOverdue?'rgba(239,68,68,0.4)':'var(--tf-border)',borderRadius:10,padding:'12px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:12,transition:'all 0.14s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.borderColor=isOverdue?'rgba(239,68,68,0.4)':'var(--tf-border)';}}>
+            <div style={{fontSize:20,flexShrink:0}}>{rt.icon}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{r.title}</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cl?(cl.display_name||cl.name):'Unknown'} · {rt.label}{r.due_date&&<span> · Due {new Date(r.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}{r.amount&&<span> · ₹{Number(r.amount).toLocaleString('en-IN')}</span>}</div>
+            </div>
+            <span style={{fontSize:10,fontWeight:700,color:REQ_STATUS_COLORS[r.status]||'#f59e0b',background:(r.status==='closed'?'rgba(34,197,94,0.1)':r.status==='responded'?'rgba(99,102,241,0.1)':'rgba(245,158,11,0.1)'),borderRadius:20,padding:'3px 10px',textTransform:'capitalize',flexShrink:0}}>{r.status}</span>
+          </button>;
+        })}
+      </div>}
+    </div>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   const [orgModule,setOrgModule]=useState(null); // null=launcher | 'dashboard'|'clients'|'analytics'|'hr'|'billing'|'setup'
@@ -5192,6 +5496,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     MODULES.push({id:'analytics',label:'Analytics',icon:'📊',desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
   MODULES.push(
+    {id:'portal',label:'Client Portal',icon:'🔗',desc:'Invite clients to their portal — data collection, invoices, questions and communication.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'users',label:'Portal Users'},{id:'requests',label:'Requests'}]},
     {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}],soon:true},
     {id:'billing',label:'Billing',icon:'💰',desc:'Client-wise and work-wise invoicing with reusable templates.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'templates',label:'Templates'}],soon:true},
     {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
@@ -5273,6 +5578,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
@@ -5290,7 +5596,240 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   </div>;
 }
 
+// ── Client Portal (Client-Facing) — login + dashboard + request detail ──
+function ClientPortal({supabase}){
+  var [portalUser,setPortalUser]=useState(null);
+  var [org,setOrg]=useState(null);
+  var [email,setEmail]=useState('');
+  var [password,setPassword]=useState('');
+  var [loginErr,setLoginErr]=useState('');
+  var [logging,setLogging]=useState(false);
+  var [requests,setRequests]=useState([]);
+  var [selReq,setSelReq]=useState(null);
+  var [messages,setMessages]=useState([]);
+  var [msgText,setMsgText]=useState('');
+  var [loading,setLoading]=useState(false);
+  var [changePw,setChangePw]=useState(false);
+  var [newPw,setNewPw]=useState('');
+  var [pwMsg,setPwMsg]=useState('');
+
+  // Check saved session
+  useEffect(function(){
+    var saved=localStorage.getItem('tf_portal_session');
+    if(saved){try{var s=JSON.parse(saved);setPortalUser(s);loadOrg(s.org_id);loadRequests(s.client_id,s.org_id);}catch(e){}}
+  },[]);
+
+  async function loadOrg(orgId){
+    var r=await supabase.from('organizations').select('id,name,description,portal_settings').eq('id',orgId).single();
+    if(r.data)setOrg(r.data);
+  }
+
+  async function doLogin(){
+    if(!email.trim()||!password.trim()){setLoginErr('Email and password required');return;}
+    setLogging(true);setLoginErr('');
+    var res=await supabase.rpc('client_portal_login',{p_email:email.trim().toLowerCase(),p_password:password.trim()});
+    if(res.error){setLoginErr(res.error.message);setLogging(false);return;}
+    var data=res.data;
+    if(data&&data.error){setLoginErr(data.error);setLogging(false);return;}
+    if(!data||!data.id){setLoginErr('Invalid credentials');setLogging(false);return;}
+    setPortalUser(data);
+    localStorage.setItem('tf_portal_session',JSON.stringify(data));
+    loadOrg(data.org_id);
+    loadRequests(data.client_id,data.org_id);
+    setLogging(false);
+  }
+
+  function logout(){setPortalUser(null);setOrg(null);setRequests([]);setSelReq(null);setMessages([]);localStorage.removeItem('tf_portal_session');}
+
+  async function loadRequests(clientId,orgId){
+    setLoading(true);
+    var r=await supabase.from('client_requests').select('*').eq('org_id',orgId).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200);
+    setRequests(r.data||[]);
+    setLoading(false);
+  }
+
+  async function loadMessages(reqId){
+    var r=await supabase.from('client_request_messages').select('*').eq('request_id',reqId).order('created_at').limit(500);
+    setMessages(r.data||[]);
+  }
+
+  async function sendMessage(){
+    if(!msgText.trim()||!selReq||!portalUser)return;
+    var ins=await supabase.from('client_request_messages').insert({request_id:selReq.id,sender_type:'client',sender_id:portalUser.id,message:msgText.trim()}).select().single();
+    if(ins.data)setMessages(function(p){return[...p,ins.data];});
+    // Mark request as responded
+    if(selReq.status==='pending'){
+      await supabase.from('client_requests').update({status:'responded',updated_at:new Date().toISOString()}).eq('id',selReq.id);
+      setSelReq(Object.assign({},selReq,{status:'responded'}));
+      setRequests(function(p){return p.map(function(r){return r.id===selReq.id?Object.assign({},r,{status:'responded'}):r;});});
+    }
+    setMsgText('');
+  }
+
+  async function changePassword(){
+    if(!newPw.trim()||newPw.trim().length<6){setPwMsg('Password must be at least 6 characters');return;}
+    var res=await supabase.rpc('change_client_portal_password',{p_user_id:portalUser.id,p_new_password:newPw.trim()});
+    if(res.error){setPwMsg(res.error.message);return;}
+    setPwMsg('Password changed!');setNewPw('');setTimeout(function(){setChangePw(false);setPwMsg('');},1500);
+  }
+
+  var siteName=(org&&org.portal_settings&&org.portal_settings.site_name)?org.portal_settings.site_name:(org?org.name:'Client Portal');
+  var REQ_TYPES={data_collection:{label:'Data Collection',icon:'📂'},invoice:{label:'Invoice',icon:'🧾'},question:{label:'Question',icon:'❓'},statement:{label:'Statement',icon:'📄'},communication:{label:'Communication',icon:'💬'}};
+  var STATUS_COLORS={pending:'#f59e0b',responded:'#6366f1',closed:'#22c55e'};
+
+  // Login screen
+  if(!portalUser){
+    return<div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0b0f1a,#131825)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Sans',system-ui,sans-serif",padding:16}}>
+      <div style={{width:'100%',maxWidth:400}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{width:52,height:52,borderRadius:14,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 14px',boxShadow:'0 8px 32px rgba(6,182,212,0.3)',color:'#fff'}}>🔗</div>
+          <h1 style={{fontSize:22,fontWeight:800,color:'#eaecf5',margin:'0 0 4px'}}>Client Portal</h1>
+          <div style={{fontSize:12,color:'#5c6b87'}}>Login to access your requests and documents</div>
+        </div>
+        <div style={{background:'#131825',border:'1px solid rgba(255,255,255,0.07)',borderRadius:14,padding:24}}>
+          {loginErr&&<div style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'8px 12px',color:'#ef4444',fontSize:12,fontWeight:600,marginBottom:14}}>{loginErr}</div>}
+          <div style={{marginBottom:14}}>
+            <label style={{fontSize:10,fontWeight:700,color:'#5c6b87',textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Email</label>
+            <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="your@email.com" style={{width:'100%',background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',color:'#eaecf5',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+          </div>
+          <div style={{marginBottom:18}}>
+            <label style={{fontSize:10,fontWeight:700,color:'#5c6b87',textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Password</label>
+            <input type="password" value={password} onChange={function(e){setPassword(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="••••••••" style={{width:'100%',background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',color:'#eaecf5',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+          </div>
+          <button onClick={doLogin} disabled={logging} style={{width:'100%',background:'linear-gradient(135deg,#06b6d4,#0891b2)',border:'none',borderRadius:8,padding:'11px 0',color:'#fff',fontSize:13,fontWeight:700,cursor:logging?'not-allowed':'pointer',boxShadow:'0 4px 14px rgba(6,182,212,0.3)'}}>{logging?'Logging in...':'Login'}</button>
+        </div>
+        <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#2a3655'}}>Powered by TaskFlow</div>
+      </div>
+    </div>;
+  }
+
+  // Request detail view
+  if(selReq){
+    var rt=REQ_TYPES[selReq.type]||{label:selReq.type,icon:'📋'};
+    return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+      <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <button onClick={function(){setSelReq(null);setMessages([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>← Back</button>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{siteName}</div>
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{portalUser.display_name||portalUser.email}</div>
+      </div>
+      <div style={{maxWidth:700,margin:'0 auto',padding:'24px 16px 60px'}}>
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:20}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <span style={{fontSize:20}}>{rt.icon}</span>
+            <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase'}}>{rt.label}</span>
+            <span style={{fontSize:10,fontWeight:700,color:STATUS_COLORS[selReq.status]||'#f59e0b',background:'rgba(245,158,11,0.1)',borderRadius:20,padding:'2px 8px',textTransform:'capitalize',marginLeft:'auto'}}>{selReq.status}</span>
+          </div>
+          <h2 style={{margin:'0 0 8px',fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>{selReq.title}</h2>
+          {selReq.description&&<div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap',marginBottom:8}}>{selReq.description}</div>}
+          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>
+            {selReq.due_date&&<span>Due: {new Date(selReq.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} · </span>}
+            {selReq.amount&&<span>Amount: ₹{Number(selReq.amount).toLocaleString('en-IN')} · </span>}
+            Created {new Date(selReq.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+          </div>
+        </div>
+        {/* Messages */}
+        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Messages</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+          {messages.length===0&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic',padding:16,textAlign:'center',background:'var(--tf-surface)',borderRadius:10}}>No messages yet. Reply below to respond.</div>}
+          {messages.map(function(m){
+            var isClient=m.sender_type==='client';
+            return<div key={m.id} style={{alignSelf:isClient?'flex-end':'flex-start',maxWidth:'80%',background:isClient?'rgba(6,182,212,0.1)':'var(--tf-surface)',border:'1px solid',borderColor:isClient?'rgba(6,182,212,0.25)':'var(--tf-border)',borderRadius:10,padding:'10px 14px'}}>
+              <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{m.message}</div>
+              <div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:4,textAlign:'right'}}>{isClient?'You':'Firm'} · {new Date(m.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+            </div>;
+          })}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <textarea value={msgText} onChange={function(e){setMsgText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder="Type your reply..." rows={2} style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+          <button onClick={sendMessage} disabled={!msgText.trim()} style={{alignSelf:'flex-end',background:msgText.trim()?'linear-gradient(135deg,#06b6d4,#0891b2)':'var(--tf-surface)',border:'1px solid',borderColor:msgText.trim()?'#0891b2':'var(--tf-border)',borderRadius:8,padding:'10px 18px',color:msgText.trim()?'#fff':'var(--tf-text-sub)',cursor:msgText.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700,flexShrink:0}}>Reply</button>
+        </div>
+      </div>
+    </div>;
+  }
+
+  // Client dashboard
+  var pendingReqs=requests.filter(function(r){return r.status==='pending';});
+  var otherReqs=requests.filter(function(r){return r.status!=='pending';});
+
+  return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+    <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:'#fff',fontWeight:700}}>{siteName.charAt(0)}</div>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{siteName}</div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{portalUser.display_name||portalUser.email}</span>
+        <button onClick={function(){setChangePw(!changePw);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>⚙️</button>
+        <button onClick={logout} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:600}}>Logout</button>
+      </div>
+    </div>
+    <div style={{maxWidth:800,margin:'0 auto',padding:'24px 16px 60px'}}>
+      {/* Change password */}
+      {changePw&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:16,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>Change Password</div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <input type="password" value={newPw} onChange={function(e){setNewPw(e.target.value);}} placeholder="New password (min 6 chars)" style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+          <button onClick={changePassword} style={{background:'linear-gradient(135deg,#06b6d4,#0891b2)',border:'none',borderRadius:8,padding:'8px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Update</button>
+        </div>
+        {pwMsg&&<div style={{fontSize:11,color:pwMsg.includes('changed')?'#22c55e':'#ef4444',marginTop:6}}>{pwMsg}</div>}
+      </div>}
+      {/* Welcome */}
+      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px'}}>Welcome{portalUser.display_name?', '+portalUser.display_name:''}!</h2>
+      <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>You have {pendingReqs.length} pending request{pendingReqs.length!==1?'s':''}.</div>
+
+      {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:<>
+        {/* Pending requests */}
+        {pendingReqs.length>0&&<div style={{marginBottom:24}}>
+          <div style={{fontSize:11,fontWeight:800,color:'#f59e0b',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Action Required ({pendingReqs.length})</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {pendingReqs.map(function(r){
+              var rt=REQ_TYPES[r.type]||{label:r.type,icon:'📋'};
+              return<button key={r.id} onClick={function(){setSelReq(r);loadMessages(r.id);}} style={{width:'100%',textAlign:'left',background:'var(--tf-surface)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:10,padding:'14px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:12,transition:'all 0.14s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#f59e0b';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='rgba(245,158,11,0.3)';}}>
+                <div style={{fontSize:22,flexShrink:0}}>{rt.icon}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{r.title}</div>
+                  <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{rt.label}{r.due_date&&<span> · Due {new Date(r.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}{r.amount&&<span> · ₹{Number(r.amount).toLocaleString('en-IN')}</span>}</div>
+                </div>
+                <span style={{fontSize:18,color:'#f59e0b',flexShrink:0}}>→</span>
+              </button>;
+            })}
+          </div>
+        </div>}
+        {/* Other requests */}
+        {otherReqs.length>0&&<div>
+          <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Previous Requests ({otherReqs.length})</div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {otherReqs.map(function(r){
+              var rt=REQ_TYPES[r.type]||{label:r.type,icon:'📋'};
+              return<button key={r.id} onClick={function(){setSelReq(r);loadMessages(r.id);}} style={{width:'100%',textAlign:'left',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:12}}>
+                <div style={{fontSize:18,flexShrink:0,opacity:0.6}}>{rt.icon}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{r.title}</div>
+                  <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{rt.label} · {new Date(r.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>
+                </div>
+                <span style={{fontSize:10,fontWeight:700,color:STATUS_COLORS[r.status]||'#22c55e',textTransform:'capitalize'}}>{r.status}</span>
+              </button>;
+            })}
+          </div>
+        </div>}
+        {requests.length===0&&<div style={{textAlign:'center',padding:40,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+          <div style={{fontSize:32,marginBottom:8}}>📭</div>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No requests yet</div>
+          <div style={{fontSize:12}}>Your firm will send requests here when they need data, documents or responses from you.</div>
+        </div>}
+      </>}
+      <div style={{textAlign:'center',marginTop:40,fontSize:10,color:'var(--tf-text-mut)'}}>Powered by TaskFlow</div>
+    </div>
+  </div>;
+}
+
 export default function App(){
+  // Client Portal route: if URL hash starts with #portal, render client portal
+  const [isPortal]=useState(function(){return window.location.hash.indexOf('#portal')===0||window.location.hash.indexOf('#/portal')===0;});
+  if(isPortal)return<><GlobalStyle lightMode={false}/><ClientPortal supabase={supabase}/></>;
+
   const [session,setSession]=useState(null)
   const [loading,setLoading]=useState(true)
   const [pendingInvites,setPendingInvites]=useState([])
