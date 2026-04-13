@@ -5161,12 +5161,15 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 function ClientPortalModule({org,supabase,cu}){
-  var [tab,setTab]=useState('users');
   var [users,setUsers]=useState([]);
   var [requests,setRequests]=useState([]);
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
   var [toast,setToast]=useState(null);
+  // Left panel
+  var [selClientId,setSelClientId]=useState(null);
+  var [leftView,setLeftView]=useState('clients'); // 'clients' | 'templates'
+  var [clientSearch,setClientSearch]=useState('');
   // Invite form
   var [showInvite,setShowInvite]=useState(false);
   var [invClientId,setInvClientId]=useState('');
@@ -5316,265 +5319,199 @@ function ClientPortalModule({org,supabase,cu}){
 
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading client portal...</div>;
 
-  // Detail view for a request
+  // Group users by client_id for left panel
+  var portalClients=[];
+  var clientUserMap={};
+  users.forEach(function(u){if(!clientUserMap[u.client_id])clientUserMap[u.client_id]=[];clientUserMap[u.client_id].push(u);});
+  Object.keys(clientUserMap).forEach(function(cid){
+    var cl=clientMap[cid];
+    var cUsers=clientUserMap[cid];
+    var cReqs=requests.filter(function(r){return r.client_id===cid;});
+    var pending=cReqs.filter(function(r){return r.status==='pending';}).length;
+    portalClients.push({id:cid,name:cl?(cl.display_name||cl.name):'Unknown',pan:cl?cl.pan:'',users:cUsers,reqCount:cReqs.length,pending:pending});
+  });
+  var filteredPortalClients=portalClients.filter(function(c){
+    if(!clientSearch.trim())return true;
+    var s=clientSearch.toLowerCase();
+    return c.name.toLowerCase().includes(s)||(c.pan||'').toLowerCase().includes(s);
+  });
+  var selClientReqs=selClientId?requests.filter(function(r){return r.client_id===selClientId;}):[];
+  var selClientUsers=selClientId?(clientUserMap[selClientId]||[]):[];
+  var selClientObj=selClientId?clientMap[selClientId]:null;
+
+  // Request detail view
   if(selReq){
     var rc=clientMap[selReq.client_id];
-    return<div style={{padding:'0 0 60px'}}>
-      <button onClick={function(){setSelReq(null);setMessages([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,marginBottom:16}}>← Back to requests</button>
-      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:16}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap',marginBottom:12}}>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>{(REQ_TYPES.find(function(t){return t.id===selReq.type;})||{}).label||selReq.type}</div>
-            <h3 style={{margin:0,fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>{selReq.title}</h3>
-            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>Client: <b>{rc?(rc.display_name||rc.name):'Unknown'}</b>{selReq.due_date&&<span> · Due: {new Date(selReq.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</span>}{selReq.amount&&<span> · ₹{Number(selReq.amount).toLocaleString('en-IN')}</span>}</div>
-          </div>
-          <select value={selReq.status} onChange={function(e){updateReqStatus(selReq,e.target.value);}} style={{border:'1px solid',borderColor:REQ_STATUS_COLORS[selReq.status]||'#f59e0b',borderRadius:20,padding:'4px 10px',color:REQ_STATUS_COLORS[selReq.status]||'#f59e0b',fontSize:11,fontWeight:700,background:'transparent',cursor:'pointer',textTransform:'capitalize'}}>
-            <option value="pending">Pending</option><option value="responded">Responded</option><option value="closed">Closed</option>
-          </select>
-        </div>
-        {selReq.description&&<div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:12}}>{selReq.description}</div>}
+    return<div style={{display:'flex',height:'calc(100vh - 120px)',margin:'0 -24px -60px'}}>
+      <div style={{width:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',padding:'12px 0',overflowY:'auto',flexShrink:0}}>
+        <div style={{padding:'0 12px 8px',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase'}}>Clients ({portalClients.length})</div>
+        {portalClients.map(function(c){return<button key={c.id} onClick={function(){setSelReq(null);setMessages([]);setSelClientId(c.id);}} style={{width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:c.id===selReq.client_id?'rgba(107,140,173,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:c.id===selReq.client_id?'3px solid #6b8cad':'3px solid transparent'}}><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.name}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{c.reqCount} req{c.reqCount!==1?'s':''}{c.pending>0?' · '+c.pending+' pending':''}</div></button>;})}
       </div>
-      {/* Form responses (for question type) */}
-      {selReq.form_fields&&selReq.form_fields.length>0&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:10}}>Form Responses</div>
-        {selReq.form_fields.map(function(f){
-          var val=(selReq.form_responses||{})[f.id];
-          var answered=val!==undefined&&val!==null&&val!=='';
-          return<div key={f.id} style={{marginBottom:10,padding:'8px 12px',background:'var(--tf-bg)',borderRadius:8,border:'1px solid var(--tf-border)'}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>{f.label}{f.required&&<span style={{color:'#ef4444'}}> *</span>}</div>
-            <div style={{fontSize:13,color:answered?'var(--tf-text)':'var(--tf-text-mut)',fontStyle:answered?'normal':'italic'}}>{answered?String(val):'Not answered yet'}</div>
-          </div>;
-        })}
-      </div>}
-      {/* Uploaded files (for data_collection type) */}
-      {selReq.files&&selReq.files.length>0&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
-        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:10}}>Uploaded Files ({selReq.files.length})</div>
-        {selReq.files.map(function(f,i){
-          return<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:i>0?'1px solid var(--tf-border)':'none'}}>
-            <span style={{fontSize:16}}>📎</span>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{f.name}</div>
-              <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{f.size?Math.round(f.size/1024)+'KB':''}{f.uploaded_at?' · '+new Date(f.uploaded_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>
+      <div style={{flex:1,overflowY:'auto',padding:'16px 24px 60px'}}>
+        <button onClick={function(){setSelReq(null);setMessages([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,marginBottom:16}}>← Back</button>
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexWrap:'wrap',marginBottom:12}}>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4}}>{(REQ_TYPES.find(function(t){return t.id===selReq.type;})||{}).label||selReq.type}</div>
+              <h3 style={{margin:0,fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>{selReq.title}</h3>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>Client: <b>{rc?(rc.display_name||rc.name):'Unknown'}</b>{selReq.due_date&&<span> · Due: {new Date(selReq.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</span>}{selReq.amount&&<span> · ₹{Number(selReq.amount).toLocaleString('en-IN')}</span>}</div>
             </div>
-            {f.url&&<a href={f.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontWeight:700,color:'#6366f1',textDecoration:'none'}}>Download</a>}
-          </div>;
-        })}
-      </div>}
-      {/* Messages thread */}
-      <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Conversation</div>
-      <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
-        {messages.length===0&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic',padding:16,textAlign:'center'}}>No messages yet.</div>}
-        {messages.map(function(m){
-          var isFirm=m.sender_type==='firm';
-          return<div key={m.id} style={{alignSelf:isFirm?'flex-end':'flex-start',maxWidth:'80%',background:isFirm?'rgba(99,102,241,0.1)':'var(--tf-surface)',border:'1px solid',borderColor:isFirm?'rgba(99,102,241,0.25)':'var(--tf-border)',borderRadius:10,padding:'10px 14px'}}>
-            <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{m.message}</div>
-            <div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:4,textAlign:'right'}}>{isFirm?'You':'Client'} · {new Date(m.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
-          </div>;
-        })}
-      </div>
-      <div style={{display:'flex',gap:8}}>
-        <input value={msgText} onChange={function(e){setMsgText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder="Type a message..." style={Object.assign({},INP,{flex:1})}/>
-        <button onClick={sendMessage} disabled={!msgText.trim()} style={{background:msgText.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:msgText.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 18px',color:msgText.trim()?'#fff':'var(--tf-text-sub)',cursor:msgText.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700,flexShrink:0}}>Send</button>
+            <select value={selReq.status} onChange={function(e){updateReqStatus(selReq,e.target.value);}} style={{border:'1px solid',borderColor:REQ_STATUS_COLORS[selReq.status]||'#f59e0b',borderRadius:20,padding:'4px 10px',color:REQ_STATUS_COLORS[selReq.status]||'#f59e0b',fontSize:11,fontWeight:700,background:'transparent',cursor:'pointer',textTransform:'capitalize'}}><option value="pending">Pending</option><option value="responded">Responded</option><option value="closed">Closed</option></select>
+          </div>
+          {selReq.description&&<div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:12}}>{selReq.description}</div>}
+        </div>
+        {selReq.form_fields&&selReq.form_fields.length>0&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:10}}>Form Responses</div>
+          {selReq.form_fields.map(function(f){var val=(selReq.form_responses||{})[f.id];var answered=val!==undefined&&val!==null&&val!=='';return<div key={f.id} style={{marginBottom:10,padding:'8px 12px',background:'var(--tf-bg)',borderRadius:8,border:'1px solid var(--tf-border)'}}><div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>{f.label}{f.required&&<span style={{color:'#ef4444'}}> *</span>}</div><div style={{fontSize:13,color:answered?'var(--tf-text)':'var(--tf-text-mut)',fontStyle:answered?'normal':'italic'}}>{answered?String(val):'Not answered yet'}</div></div>;})}
+        </div>}
+        {selReq.files&&selReq.files.length>0&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:10}}>Uploaded Files ({selReq.files.length})</div>
+          {selReq.files.map(function(f,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:i>0?'1px solid var(--tf-border)':'none'}}><span style={{fontSize:16}}>📎</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{f.name}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{f.size?Math.round(f.size/1024)+'KB':''}{f.uploaded_at?' · '+new Date(f.uploaded_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div></div>{f.url&&<a href={f.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontWeight:700,color:'#6366f1',textDecoration:'none'}}>Download</a>}</div>;})}
+        </div>}
+        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Conversation</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+          {messages.length===0&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic',padding:16,textAlign:'center'}}>No messages yet.</div>}
+          {messages.map(function(m){var isFirm=m.sender_type==='firm';return<div key={m.id} style={{alignSelf:isFirm?'flex-end':'flex-start',maxWidth:'80%',background:isFirm?'rgba(99,102,241,0.1)':'var(--tf-surface)',border:'1px solid',borderColor:isFirm?'rgba(99,102,241,0.25)':'var(--tf-border)',borderRadius:10,padding:'10px 14px'}}><div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{m.message}</div><div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:4,textAlign:'right'}}>{isFirm?'You':'Client'} · {new Date(m.created_at).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</div></div>;})}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <input value={msgText} onChange={function(e){setMsgText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder="Type a message..." style={Object.assign({},INP,{flex:1})}/>
+          <button onClick={sendMessage} disabled={!msgText.trim()} style={{background:msgText.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:msgText.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 18px',color:msgText.trim()?'#fff':'var(--tf-text-sub)',cursor:msgText.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700,flexShrink:0}}>Send</button>
+        </div>
       </div>
     </div>;
   }
 
-  return<div style={{padding:'0 0 60px'}}>
-    {/* Tabs */}
-    <div style={{display:'flex',gap:4,marginBottom:20,borderBottom:'1px solid var(--tf-border)'}}>
-      {[{id:'users',label:'Portal Users'},{id:'requests',label:'Requests'},{id:'templates',label:'Email Templates'}].map(function(t){
-        return<button key={t.id} onClick={function(){setTab(t.id);}} style={{padding:'8px 16px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500}}>{t.label}</button>;
-      })}
-    </div>
-
-    {/* Portal Users Tab */}
-    {tab==='users'&&<div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>Portal Users <span style={{fontSize:12,fontWeight:500,color:'var(--tf-text-sub)'}}>({users.length})</span></div>
-        <button onClick={function(){setShowInvite(!showInvite);if(!invPass)setInvPass(genPassword());}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>+ Invite Client</button>
+  // ── MAIN LAYOUT: Left panel (clients) + Right panel (selected client requests) ──
+  return<div style={{display:'flex',height:'calc(100vh - 120px)',margin:'0 -24px -60px'}}>
+    {/* LEFT PANEL */}
+    <div style={{width:280,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0}}>
+      {/* Left panel header */}
+      <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--tf-border)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>Clients <span style={{fontWeight:500,color:'var(--tf-text-sub)'}}>({portalClients.length})</span></div>
+          <div style={{display:'flex',gap:4}}>
+            <button onClick={function(){setLeftView(leftView==='templates'?'clients':'templates');}} title="Email Templates" style={{background:leftView==='templates'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='templates'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>📧</button>
+            <button onClick={function(){setShowInvite(!showInvite);if(!invPass)setInvPass(genPassword());}} title="Invite Client" style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>+</button>
+          </div>
+        </div>
+        {leftView==='clients'&&<input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>}
       </div>
-      {showInvite&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:16}}>
-        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:12}}>Invite Client to Portal</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Client *</label>
-            <select value={invClientId} onChange={function(e){setInvClientId(e.target.value);var c=clients.find(function(x){return x.id===e.target.value;});if(c)setInvName(c.display_name||c.name);}} style={INP}>
-              <option value="">— Select client —</option>
-              {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
-            </select>
+      {/* Left panel body */}
+      <div style={{flex:1,overflowY:'auto'}}>
+        {leftView==='templates'?<div style={{padding:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Email Templates</div>
+          <div style={{marginBottom:12}}>
+            <input value={tplName} onChange={function(e){setTplName(e.target.value);}} placeholder="Template name" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',marginBottom:6}}/>
+            <input value={tplSubject} onChange={function(e){setTplSubject(e.target.value);}} placeholder="Subject line" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',marginBottom:6}}/>
+            <textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={3} placeholder="Body..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical',marginBottom:6}}/>
+            <button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'#6366f1':'var(--tf-surface)',border:'none',borderRadius:6,padding:'5px 12px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:11,fontWeight:700,width:'100%'}}>Save Template</button>
           </div>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Email *</label>
-            <input type="email" value={invEmail} onChange={function(e){setInvEmail(e.target.value);}} placeholder="client@example.com" style={INP}/>
-          </div>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Display Name</label>
-            <input value={invName} onChange={function(e){setInvName(e.target.value);}} placeholder="Contact person name" style={INP}/>
-          </div>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Password (auto-generated)</label>
-            <div style={{display:'flex',gap:6}}>
-              <input value={invPass} onChange={function(e){setInvPass(e.target.value);}} style={Object.assign({},INP,{fontFamily:'monospace'})}/>
-              <button onClick={function(){setInvPass(genPassword());}} title="Generate new" style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'0 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,flexShrink:0}}>⟳</button>
+          {templates.map(function(t){return<div key={t.id} style={{padding:'8px 10px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,marginBottom:6}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{t.name}</span><button onClick={function(){deleteTemplate(t.id);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:12,padding:0}}>×</button></div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>{t.subject}</div>
+          </div>;})}
+        </div>:
+        /* Client list */
+        filteredPortalClients.length===0?<div style={{padding:'24px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>{users.length===0?'No portal users yet. Click + to invite.':'No matching clients.'}</div>:
+        filteredPortalClients.map(function(c){
+          var isActive=selClientId===c.id;
+          return<button key={c.id} onClick={function(){setSelClientId(c.id);setShowReqForm(false);}}
+            style={{width:'100%',textAlign:'left',padding:'12px 14px',border:'none',background:isActive?'rgba(107,140,173,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:isActive?'3px solid #6b8cad':'3px solid transparent',transition:'background 0.1s'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{fontSize:13,fontWeight:isActive?700:600,color:'var(--tf-text)'}}>{c.name}</div>
+              {c.pending>0&&<span style={{fontSize:9,fontWeight:700,color:'#fff',background:'#f59e0b',borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{c.pending}</span>}
             </div>
-          </div>
-        </div>
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button onClick={function(){setShowInvite(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>
-          <button onClick={inviteUser} disabled={invSaving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:invSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{invSaving?'Creating...':'Create & Send Email'}</button>
-        </div>
-      </div>}
-      {/* Users list */}
-      {users.length===0?<div style={{textAlign:'center',padding:40,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
-        <div style={{fontSize:32,marginBottom:8}}>👤</div>
-        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No portal users yet</div>
-        <div style={{fontSize:12}}>Invite your first client to access their portal.</div>
-      </div>:
-      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead><tr style={{background:'rgba(107,140,173,0.06)'}}>
-            <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
-            <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Email</th>
-            <th style={{padding:'10px 14px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
-            <th style={{padding:'10px 14px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Last Login</th>
-            <th style={{padding:'10px 14px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Actions</th>
-          </tr></thead>
-          <tbody>{users.map(function(u,i){
-            var cl=clientMap[u.client_id];
-            return<tr key={u.id} style={{borderBottom:'1px solid var(--tf-border)'}}>
-              <td style={{padding:'10px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{cl?(cl.display_name||cl.name):'Unknown'}</div>{u.display_name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{u.display_name}</div>}</td>
-              <td style={{padding:'10px 14px',fontSize:12,color:'var(--tf-text)'}}>{u.email}</td>
-              <td style={{padding:'10px 14px',textAlign:'center'}}><span style={{fontSize:10,fontWeight:700,color:u.is_active?'#22c55e':'#ef4444',background:u.is_active?'rgba(34,197,94,0.1)':'rgba(239,68,68,0.1)',borderRadius:20,padding:'3px 10px'}}>{u.is_active?'Active':'Inactive'}</span></td>
-              <td style={{padding:'10px 14px',textAlign:'center',fontSize:11,color:'var(--tf-text-sub)'}}>{u.last_login?new Date(u.last_login).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):'Never'}</td>
-              <td style={{padding:'10px 14px',textAlign:'center'}}><button onClick={function(){toggleUserActive(u);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:u.is_active?'#ef4444':'#22c55e',cursor:'pointer',fontSize:10,fontWeight:700}}>{u.is_active?'Deactivate':'Activate'}</button></td>
-            </tr>;
-          })}</tbody>
-        </table>
-      </div>}
-    </div>}
-
-    {/* Requests Tab */}
-    {tab==='requests'&&<div>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>Requests <span style={{fontSize:12,fontWeight:500,color:'var(--tf-text-sub)'}}>({requests.length})</span></div>
-        <button onClick={function(){setShowReqForm(!showReqForm);}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:'0 4px 14px rgba(99,102,241,0.25)'}}>+ New Request</button>
-      </div>
-      {showReqForm&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:16}}>
-        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:12}}>Create Request</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Type</label>
-            <select value={reqType} onChange={function(e){setReqType(e.target.value);}} style={INP}>
-              {REQ_TYPES.map(function(t){return<option key={t.id} value={t.id}>{t.icon} {t.label}</option>;})}
-            </select>
-          </div>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Client *</label>
-            <select value={reqClientId} onChange={function(e){setReqClientId(e.target.value);}} style={INP}>
-              <option value="">— Select client —</option>
-              {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
-            </select>
-          </div>
-        </div>
-        <div style={{marginBottom:10}}>
-          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Title *</label>
-          <input value={reqTitle} onChange={function(e){setReqTitle(e.target.value);}} placeholder="e.g., GST Return documents needed" style={INP}/>
-        </div>
-        <div style={{marginBottom:10}}>
-          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Description</label>
-          <textarea value={reqDesc} onChange={function(e){setReqDesc(e.target.value);}} rows={3} placeholder="Details about what is needed..." style={Object.assign({},INP,{resize:'vertical'})}/>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Due Date</label>
-            <input type="date" value={reqDue} onChange={function(e){setReqDue(e.target.value);}} style={INP}/>
-          </div>
-          {reqType==='invoice'&&<div>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Amount (₹)</label>
-            <input type="number" value={reqAmount} onChange={function(e){setReqAmount(e.target.value);}} placeholder="0" style={INP}/>
-          </div>}
-        </div>
-        {/* Question form builder */}
-        {reqType==='question'&&<div style={{marginBottom:12}}>
-          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:6}}>Form Fields</label>
-          {reqFields.map(function(f,idx){
-            return<div key={f.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}>
-              <input value={f.label} onChange={function(e){updateField(idx,'label',e.target.value);}} placeholder="Question label" style={Object.assign({},INP,{flex:1})}/>
-              <select value={f.type} onChange={function(e){updateField(idx,'type',e.target.value);}} style={Object.assign({},INP,{width:110,flex:'none'})}>
-                <option value="text">Text</option>
-                <option value="textarea">Long Text</option>
-                <option value="number">Number</option>
-                <option value="date">Date</option>
-                <option value="select">Dropdown</option>
-                <option value="yes_no">Yes / No</option>
-              </select>
-              {f.type==='select'&&<input value={f.options||''} onChange={function(e){updateField(idx,'options',e.target.value);}} placeholder="Option1, Option2, ..." style={Object.assign({},INP,{flex:1})}/>}
-              <label style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',alignItems:'center',gap:3,flexShrink:0,cursor:'pointer'}}><input type="checkbox" checked={f.required} onChange={function(e){updateField(idx,'required',e.target.checked);}}/> Req</label>
-              <button onClick={function(){removeField(idx);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,color:'#ef4444',cursor:'pointer',fontSize:14,flexShrink:0}}>×</button>
-            </div>;
-          })}
-          <button onClick={addField} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ Add field</button>
-        </div>}
-        {/* Use email template */}
-        {templates.length>0&&<div style={{marginBottom:12}}>
-          <button onClick={function(){setShowTemplates(!showTemplates);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>📧 Use Email Template</button>
-          {showTemplates&&<div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}>
-            {templates.map(function(t){return<button key={t.id} onClick={function(){useTemplate(t);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'4px 10px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:600}}>{t.name}</button>;})}
-          </div>}
-        </div>}
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button onClick={function(){setShowReqForm(false);setReqFields([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>
-          <button onClick={createRequest} disabled={reqSaving} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:reqSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{reqSaving?'Creating...':'Create & Notify'}</button>
-        </div>
-      </div>}
-      {/* Requests list */}
-      {requests.length===0?<div style={{textAlign:'center',padding:40,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
-        <div style={{fontSize:32,marginBottom:8}}>📋</div>
-        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No requests yet</div>
-        <div style={{fontSize:12}}>Create your first data collection, invoice or question request.</div>
-      </div>:
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {requests.map(function(r){
-          var cl=clientMap[r.client_id];
-          var rt=REQ_TYPES.find(function(t){return t.id===r.type;})||{label:r.type,icon:'📋'};
-          var isOverdue=r.due_date&&r.due_date<new Date().toISOString().slice(0,10)&&r.status!=='closed';
-          return<button key={r.id} onClick={function(){setSelReq(r);loadMessages(r.id);}} style={{width:'100%',textAlign:'left',background:'var(--tf-surface)',border:'1px solid',borderColor:isOverdue?'rgba(239,68,68,0.4)':'var(--tf-border)',borderRadius:10,padding:'12px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:12,transition:'all 0.14s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.borderColor=isOverdue?'rgba(239,68,68,0.4)':'var(--tf-border)';}}>
-            <div style={{fontSize:20,flexShrink:0}}>{rt.icon}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{r.title}</div>
-              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cl?(cl.display_name||cl.name):'Unknown'} · {rt.label}{r.due_date&&<span> · Due {new Date(r.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}{r.amount&&<span> · ₹{Number(r.amount).toLocaleString('en-IN')}</span>}</div>
-            </div>
-            <span style={{fontSize:10,fontWeight:700,color:REQ_STATUS_COLORS[r.status]||'#f59e0b',background:(r.status==='closed'?'rgba(34,197,94,0.1)':r.status==='responded'?'rgba(99,102,241,0.1)':'rgba(245,158,11,0.1)'),borderRadius:20,padding:'3px 10px',textTransform:'capitalize',flexShrink:0}}>{r.status}</span>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>{c.users.map(function(u){return u.email;}).join(', ')}</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{c.reqCount} request{c.reqCount!==1?'s':''}</div>
           </button>;
         })}
-      </div>}
-    </div>}
-    {/* Email Templates Tab */}
-    {tab==='templates'&&<div>
-      <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:16}}>Email Templates <span style={{fontSize:12,fontWeight:500,color:'var(--tf-text-sub)'}}>({templates.length})</span></div>
-      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
-        <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Create Template</div>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-          <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Template Name</label><input value={tplName} onChange={function(e){setTplName(e.target.value);}} placeholder="e.g., GST Data Request" style={INP}/></div>
-          <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject Line</label><input value={tplSubject} onChange={function(e){setTplSubject(e.target.value);}} placeholder="Request subject" style={INP}/></div>
-        </div>
-        <div style={{marginBottom:10}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label><textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={4} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/></div>
-        <div style={{textAlign:'right'}}><button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:tplName.trim()&&tplSubject.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'8px 16px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700}}>Save Template</button></div>
       </div>
-      {templates.length===0?<div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)',fontSize:12}}>No templates yet. Create one above to reuse when sending requests.</div>:
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {templates.map(function(t){
-          return<div key={t.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:12}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{t.name}</div>
-              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Subject: {t.subject}</div>
-              {t.body&&<div style={{fontSize:11,color:'var(--tf-text-mut)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:400}}>{t.body}</div>}
-            </div>
-            <button onClick={function(){deleteTemplate(t.id);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:600,flexShrink:0}}>Delete</button>
-          </div>;
-        })}
+    </div>
+
+    {/* RIGHT PANEL */}
+    <div style={{flex:1,overflowY:'auto',padding:'20px 24px 60px'}}>
+      {/* Invite form modal */}
+      {showInvite&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}><div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>Invite Client to Portal</div><button onClick={function(){setShowInvite(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16}}>×</button></div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+          <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Client *</label><select value={invClientId} onChange={function(e){setInvClientId(e.target.value);var c=clients.find(function(x){return x.id===e.target.value;});if(c)setInvName(c.display_name||c.name);}} style={INP}><option value="">— Select —</option>{clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}{c.pan?' ('+c.pan+')':''}</option>;})}</select></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Email *</label><input type="email" value={invEmail} onChange={function(e){setInvEmail(e.target.value);}} placeholder="client@example.com" style={INP}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Display Name</label><input value={invName} onChange={function(e){setInvName(e.target.value);}} placeholder="Contact person" style={INP}/></div>
+          <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Password</label><div style={{display:'flex',gap:6}}><input value={invPass} onChange={function(e){setInvPass(e.target.value);}} style={Object.assign({},INP,{fontFamily:'monospace'})}/><button onClick={function(){setInvPass(genPassword());}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'0 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,flexShrink:0}}>⟳</button></div></div>
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={function(){setShowInvite(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button><button onClick={inviteUser} disabled={invSaving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:invSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{invSaving?'Creating...':'Create & Send Email'}</button></div>
       </div>}
-    </div>}
+
+      {!selClientId?
+      /* No client selected — overview */
+      <div>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Portal Overview</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Select a client from the left panel to view their requests.</div>
+        {/* Summary cards */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:24}}>
+          {[{label:'Portal Users',value:users.filter(function(u){return u.is_active;}).length,color:'#22c55e'},{label:'Total Requests',value:requests.length,color:'#6366f1'},{label:'Pending',value:requests.filter(function(r){return r.status==='pending';}).length,color:'#f59e0b'},{label:'Responded',value:requests.filter(function(r){return r.status==='responded';}).length,color:'#6366f1'},{label:'Closed',value:requests.filter(function(r){return r.status==='closed';}).length,color:'#22c55e'}].map(function(k){return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.label}</div></div>;})}
+        </div>
+        {/* Recent requests */}
+        <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Recent Requests</div>
+        {requests.length===0?<div style={{textAlign:'center',padding:32,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)',fontSize:12}}>No requests yet. Select a client and create one.</div>:
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {requests.slice(0,10).map(function(r){var cl=clientMap[r.client_id];var rt=REQ_TYPES.find(function(t){return t.id===r.type;})||{label:r.type,icon:'📋'};return<button key={r.id} onClick={function(){setSelClientId(r.client_id);setSelReq(r);loadMessages(r.id);}} style={{width:'100%',textAlign:'left',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:10}}><span style={{fontSize:16}}>{rt.icon}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{r.title}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{cl?(cl.display_name||cl.name):'Unknown'} · {rt.label}</div></div><span style={{fontSize:10,fontWeight:700,color:REQ_STATUS_COLORS[r.status]||'#f59e0b',textTransform:'capitalize'}}>{r.status}</span></button>;})}
+        </div>}
+      </div>:
+
+      /* Client selected — show their requests */
+      <div>
+        {/* Client header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:10}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>{selClientObj?(selClientObj.display_name||selClientObj.name):'Client'}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>
+              {selClientUsers.map(function(u){return u.email;}).join(', ')}
+              {selClientUsers.length>0&&<span> · {selClientUsers[0].is_active?<span style={{color:'#22c55e'}}>Active</span>:<span style={{color:'#ef4444'}}>Inactive</span>}</span>}
+              {selClientUsers.length>0&&selClientUsers[0].last_login&&<span> · Last login: {new Date(selClientUsers[0].last_login).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
+            </div>
+          </div>
+          <button onClick={function(){setShowReqForm(!showReqForm);setReqClientId(selClientId);}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Request</button>
+        </div>
+
+        {/* New request form */}
+        {showReqForm&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:12}}>Create Request for {selClientObj?(selClientObj.display_name||selClientObj.name):''}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Type</label><select value={reqType} onChange={function(e){setReqType(e.target.value);}} style={INP}>{REQ_TYPES.map(function(t){return<option key={t.id} value={t.id}>{t.icon} {t.label}</option>;})}</select></div>
+            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Due Date</label><input type="date" value={reqDue} onChange={function(e){setReqDue(e.target.value);}} style={INP}/></div>
+          </div>
+          <div style={{marginBottom:10}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Title *</label><input value={reqTitle} onChange={function(e){setReqTitle(e.target.value);}} placeholder="e.g., GST Return documents needed" style={INP}/></div>
+          <div style={{marginBottom:10}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Description</label><textarea value={reqDesc} onChange={function(e){setReqDesc(e.target.value);}} rows={3} placeholder="Details..." style={Object.assign({},INP,{resize:'vertical'})}/></div>
+          {reqType==='invoice'&&<div style={{marginBottom:10}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Amount (₹)</label><input type="number" value={reqAmount} onChange={function(e){setReqAmount(e.target.value);}} placeholder="0" style={INP}/></div>}
+          {reqType==='question'&&<div style={{marginBottom:12}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:6}}>Form Fields</label>{reqFields.map(function(f,idx){return<div key={f.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}><input value={f.label} onChange={function(e){updateField(idx,'label',e.target.value);}} placeholder="Question label" style={Object.assign({},INP,{flex:1})}/><select value={f.type} onChange={function(e){updateField(idx,'type',e.target.value);}} style={Object.assign({},INP,{width:100,flex:'none'})}><option value="text">Text</option><option value="textarea">Long Text</option><option value="number">Number</option><option value="date">Date</option><option value="select">Dropdown</option><option value="yes_no">Yes/No</option></select>{f.type==='select'&&<input value={f.options||''} onChange={function(e){updateField(idx,'options',e.target.value);}} placeholder="Opt1,Opt2,..." style={Object.assign({},INP,{flex:1})}/>}<button onClick={function(){removeField(idx);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,color:'#ef4444',cursor:'pointer',fontSize:14,flexShrink:0}}>×</button></div>;})}<button onClick={addField} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>+ Add field</button></div>}
+          {templates.length>0&&<div style={{marginBottom:12}}><button onClick={function(){setShowTemplates(!showTemplates);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>📧 Use Template</button>{showTemplates&&<div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}>{templates.map(function(t){return<button key={t.id} onClick={function(){useTemplate(t);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'4px 10px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:600}}>{t.name}</button>;})}</div>}</div>}
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={function(){setShowReqForm(false);setReqFields([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button><button onClick={createRequest} disabled={reqSaving} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:reqSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{reqSaving?'Creating...':'Create & Notify'}</button></div>
+        </div>}
+
+        {/* Request summary cards by type */}
+        {selClientReqs.length>0&&<div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+          {REQ_TYPES.map(function(rt){var count=selClientReqs.filter(function(r){return r.type===rt.id;}).length;if(count===0)return null;var pendCount=selClientReqs.filter(function(r){return r.type===rt.id&&r.status==='pending';}).length;return<div key={rt.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:16}}>{rt.icon}</span><div><div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{count} {rt.label}</div>{pendCount>0&&<div style={{fontSize:10,color:'#f59e0b'}}>{pendCount} pending</div>}</div></div>;})}
+        </div>}
+
+        {/* Client's requests list */}
+        {selClientReqs.length===0?<div style={{textAlign:'center',padding:32,background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)',fontSize:12}}>No requests for this client yet.</div>:
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {selClientReqs.map(function(r){
+            var rt=REQ_TYPES.find(function(t){return t.id===r.type;})||{label:r.type,icon:'📋'};
+            var isOverdue=r.due_date&&r.due_date<new Date().toISOString().slice(0,10)&&r.status!=='closed';
+            return<button key={r.id} onClick={function(){setSelReq(r);loadMessages(r.id);}} style={{width:'100%',textAlign:'left',background:'var(--tf-surface)',border:'1px solid',borderColor:isOverdue?'rgba(239,68,68,0.4)':'var(--tf-border)',borderRadius:10,padding:'12px 16px',cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',gap:12,transition:'border-color 0.14s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.borderColor=isOverdue?'rgba(239,68,68,0.4)':'var(--tf-border)';}}>
+              <div style={{fontSize:20,flexShrink:0}}>{rt.icon}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{r.title}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{rt.label}{r.due_date&&<span> · Due {new Date(r.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}{r.amount&&<span> · ₹{Number(r.amount).toLocaleString('en-IN')}</span>}</div>
+              </div>
+              <span style={{fontSize:10,fontWeight:700,color:REQ_STATUS_COLORS[r.status]||'#f59e0b',background:(r.status==='closed'?'rgba(34,197,94,0.1)':r.status==='responded'?'rgba(99,102,241,0.1)':'rgba(245,158,11,0.1)'),borderRadius:20,padding:'3px 10px',textTransform:'capitalize',flexShrink:0}}>{r.status}</span>
+            </button>;
+          })}
+        </div>}
+      </div>}
+    </div>
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
   </div>;
 }
@@ -5612,7 +5549,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     MODULES.push({id:'analytics',label:'Analytics',icon:'📊',desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
   MODULES.push(
-    {id:'portal',label:'Client Portal',icon:'🔗',desc:'Invite clients to their portal — data collection, invoices, questions and communication.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'users',label:'Portal Users'},{id:'requests',label:'Requests'},{id:'templates',label:'Templates'}]},
+    {id:'portal',label:'Client Portal',icon:'🔗',desc:'Manage client access, requests, communication and data collection.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)'},
     {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}],soon:true},
     {id:'billing',label:'Billing',icon:'💰',desc:'Client-wise and work-wise invoicing with reusable templates.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'templates',label:'Templates'}],soon:true},
     {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
