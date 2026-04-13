@@ -5202,7 +5202,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     var email=portalEmailMap[c.id]||c.email||'';
     var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean).map(function(w){return w.trim();});
     return{id:c.id,name:c.display_name||c.name,pan:c.pan||'',email:email,workTypes:wts};
-  }).filter(function(c){return c.email;});
+  });
 
   // Filter by work type
   var filteredClients=emailClients;
@@ -5265,19 +5265,19 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
           <div style={{padding:'0 12px 6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)'}}>{Object.keys(bulkSelIds).length} selected</span>
             <div style={{display:'flex',gap:4}}>
-              <button onClick={function(){var all={};filteredClients.forEach(function(c){all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>All</button>
+              <button onClick={function(){var all={};filteredClients.forEach(function(c){if(c.email)all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>All</button>
               <span style={{color:'var(--tf-border)'}}>|</span>
               <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>Clear</button>
             </div>
           </div>
-          {filteredClients.map(function(c){var checked=!!bulkSelIds[c.id];return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:checked?'rgba(107,140,173,0.06)':'transparent'}}>
-            <input type="checkbox" checked={checked} onChange={function(){setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad',flexShrink:0}}/>
+          {filteredClients.map(function(c){var checked=!!bulkSelIds[c.id];var hasEmail=!!c.email;return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:checked?'rgba(107,140,173,0.06)':'transparent',opacity:hasEmail?1:0.5}}>
+            <input type="checkbox" checked={checked} disabled={!hasEmail} onChange={function(){if(!hasEmail)return;setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad',flexShrink:0}}/>
             <div style={{minWidth:0,flex:1}}>
               <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-              <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</div>
+              <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
             </div>
           </label>;})}
-          {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients with email found.</div>}
+          {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients found.</div>}
         </>:
         /* Templates list in left panel */
         <>
@@ -5302,7 +5302,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
           <div style={{flex:1,minWidth:180}}>
             <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Filter by Work Type</label>
-            <select value={bulkFilterWT} onChange={function(e){setBulkFilterWT(e.target.value);var wt=e.target.value;if(!wt){setBulkSelIds({});return;}var sel={};emailClients.forEach(function(c){if(c.workTypes.some(function(w){return w===wt;}))sel[c.id]=true;});setBulkSelIds(sel);}} style={INP}>
+            <select value={bulkFilterWT} onChange={function(e){setBulkFilterWT(e.target.value);var wt=e.target.value;if(!wt){setBulkSelIds({});return;}var sel={};emailClients.forEach(function(c){if(c.email&&c.workTypes.some(function(w){return w===wt;}))sel[c.id]=true;});setBulkSelIds(sel);}} style={INP}>
               <option value="">— All Clients —</option>
               {(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
             </select>
