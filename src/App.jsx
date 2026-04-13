@@ -5160,6 +5160,210 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
 }
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
+
+function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
+  var [loading,setLoading]=useState(true);
+  var [clients,setClients]=useState([]);
+  var [portalUsers,setPortalUsers]=useState([]);
+  var [templates,setTemplates]=useState([]);
+  var [toast,setToast]=useState(null);
+  var [activeTab,setActiveTab]=useState('bulk'); // 'bulk' | 'templates'
+  // Bulk email state
+  var [bulkSelIds,setBulkSelIds]=useState({});
+  var [bulkFilterWT,setBulkFilterWT]=useState('');
+  var [bulkSubject,setBulkSubject]=useState('');
+  var [bulkBody,setBulkBody]=useState('');
+  var [clientSearch,setClientSearch]=useState('');
+  // Template form
+  var [tplName,setTplName]=useState('');
+  var [tplSubject,setTplSubject]=useState('');
+  var [tplBody,setTplBody]=useState('');
+  var [editTplId,setEditTplId]=useState(null);
+
+  function showToast(msg,kind){setToast({msg:msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  useEffect(function(){loadData();},[org.id]);
+
+  async function loadData(){
+    setLoading(true);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);
+    var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);
+    var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);
+    setClients(rc.data||[]);
+    setPortalUsers(ru.data||[]);
+    setTemplates(rt.data||[]);
+    setLoading(false);
+  }
+
+  // Build email-able client list: use portal email if exists, else client.email
+  var portalEmailMap={};
+  (portalUsers||[]).forEach(function(u){if(u.is_active&&!portalEmailMap[u.client_id])portalEmailMap[u.client_id]=u.email;});
+  var emailClients=clients.map(function(c){
+    var email=portalEmailMap[c.id]||c.email||'';
+    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean).map(function(w){return w.trim();});
+    return{id:c.id,name:c.display_name||c.name,pan:c.pan||'',email:email,workTypes:wts};
+  }).filter(function(c){return c.email;});
+
+  // Filter by work type
+  var filteredClients=emailClients;
+  if(bulkFilterWT){filteredClients=emailClients.filter(function(c){return c.workTypes.some(function(w){return w===bulkFilterWT;});});}
+  if(clientSearch.trim()){var s=clientSearch.toLowerCase();filteredClients=filteredClients.filter(function(c){return c.name.toLowerCase().includes(s)||(c.pan||'').toLowerCase().includes(s)||c.email.toLowerCase().includes(s);});}
+
+  // Template CRUD
+  async function saveTemplate(){
+    if(!tplName.trim()||!tplSubject.trim()){showToast('Name and subject required','err');return;}
+    if(editTplId){
+      await supabase.from('email_templates').update({name:tplName.trim(),subject:tplSubject.trim(),body:tplBody.trim()}).eq('id',editTplId);
+      setTemplates(function(p){return p.map(function(t){return t.id===editTplId?Object.assign({},t,{name:tplName.trim(),subject:tplSubject.trim(),body:tplBody.trim()}):t;});});
+      showToast('Template updated!');
+    }else{
+      var ins=await supabase.from('email_templates').insert({org_id:org.id,name:tplName.trim(),subject:tplSubject.trim(),body:tplBody.trim()}).select().single();
+      if(ins.data){setTemplates(function(p){return[ins.data,...p];});showToast('Template saved!');}
+    }
+    setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);
+  }
+  async function deleteTemplate(id){
+    await supabase.from('email_templates').delete().eq('id',id);
+    setTemplates(function(p){return p.filter(function(t){return t.id!==id;});});
+    showToast('Template deleted');
+  }
+  function editTemplate(t){setTplName(t.name);setTplSubject(t.subject);setTplBody(t.body||'');setEditTplId(t.id);}
+
+  function sendBulk(){
+    var selCount=Object.keys(bulkSelIds).length;
+    if(selCount===0){showToast('Select at least one client','err');return;}
+    if(!bulkSubject.trim()){showToast('Subject required','err');return;}
+    var emails=[];
+    Object.keys(bulkSelIds).forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email&&emails.indexOf(c.email)===-1)emails.push(c.email);});
+    if(emails.length===0){showToast('No emails found for selected clients','err');return;}
+    var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','))+'&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
+    window.open(mailto,'_blank');
+    showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));
+  }
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'};
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading communications...</div>;
+
+  return<div style={{display:'flex',height:'calc(100vh - 120px)',margin:'0 -24px -60px'}}>
+    {/* LEFT PANEL — Tabs + Quick actions */}
+    <div style={{width:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0}}>
+      <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+        <div style={{display:'flex',gap:4}}>
+          {[{id:'bulk',label:'Bulk Email',icon:'✉'},{id:'templates',label:'Templates',icon:'📧'}].map(function(t){
+            var active=activeTab===t.id;
+            return<button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{flex:1,padding:'8px 6px',border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',borderRadius:8,background:active?'rgba(107,140,173,0.1)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit',textAlign:'center'}}>{t.icon} {t.label}</button>;
+          })}
+        </div>
+      </div>
+      {/* Left body — client select for bulk, template list for templates */}
+      <div style={{flex:1,overflowY:'auto',padding:'10px 0'}}>
+        {activeTab==='bulk'?<>
+          <div style={{padding:'0 12px 8px'}}>
+            <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
+          </div>
+          <div style={{padding:'0 12px 6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)'}}>{Object.keys(bulkSelIds).length} selected</span>
+            <div style={{display:'flex',gap:4}}>
+              <button onClick={function(){var all={};filteredClients.forEach(function(c){all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>All</button>
+              <span style={{color:'var(--tf-border)'}}>|</span>
+              <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>Clear</button>
+            </div>
+          </div>
+          {filteredClients.map(function(c){var checked=!!bulkSelIds[c.id];return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:checked?'rgba(107,140,173,0.06)':'transparent'}}>
+            <input type="checkbox" checked={checked} onChange={function(){setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad',flexShrink:0}}/>
+            <div style={{minWidth:0,flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+              <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.email}</div>
+            </div>
+          </label>;})}
+          {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients with email found.</div>}
+        </>:
+        /* Templates list in left panel */
+        <>
+          <div style={{padding:'0 12px 8px'}}>
+            <button onClick={function(){setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{width:'100%',background:'rgba(99,102,241,0.08)',border:'1px dashed rgba(99,102,241,0.3)',borderRadius:8,padding:'8px 10px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ New Template</button>
+          </div>
+          {templates.map(function(t){var active=editTplId===t.id;return<button key={t.id} onClick={function(){editTemplate(t);}} style={{width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:active?'rgba(107,140,173,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:active?'3px solid #6b8cad':'3px solid transparent'}}>
+            <div style={{fontSize:12,fontWeight:active?700:600,color:'var(--tf-text)'}}>{t.name}</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.subject}</div>
+          </button>;})}
+          {templates.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No templates yet.</div>}
+        </>}
+      </div>
+    </div>
+
+    {/* RIGHT PANEL */}
+    <div style={{flex:1,overflowY:'auto',padding:'20px 24px 60px'}}>
+      {activeTab==='bulk'?<>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Bulk Email</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Compose and send emails to multiple clients. Recipients are BCC'd so they don't see each other.</div>
+        {/* Filter + Template row */}
+        <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Filter by Work Type</label>
+            <select value={bulkFilterWT} onChange={function(e){setBulkFilterWT(e.target.value);var wt=e.target.value;if(!wt){setBulkSelIds({});return;}var sel={};emailClients.forEach(function(c){if(c.workTypes.some(function(w){return w===wt;}))sel[c.id]=true;});setBulkSelIds(sel);}} style={INP}>
+              <option value="">— All Clients —</option>
+              {(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+            </select>
+          </div>
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Use Template</label>
+            <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t){setBulkSubject(t.subject);setBulkBody(t.body||'');}e.target.value='';}} style={INP}>
+              <option value="">— Pick a template —</option>
+              {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
+            </select>
+          </div>
+        </div>
+        {/* Subject */}
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject</label>
+          <input value={bulkSubject} onChange={function(e){setBulkSubject(e.target.value);}} placeholder="Email subject line" style={INP}/>
+        </div>
+        {/* Body */}
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
+          <textarea value={bulkBody} onChange={function(e){setBulkBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
+        </div>
+        {/* Recipient summary + Send */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 18px',marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:8}}>Recipients ({Object.keys(bulkSelIds).length})</div>
+          {Object.keys(bulkSelIds).length===0?<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Select clients from the left panel or use a work type filter.</div>:
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {Object.keys(bulkSelIds).map(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(!c)return null;return<span key={cid} style={{display:'inline-flex',alignItems:'center',gap:4,background:'rgba(107,140,173,0.08)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:20,padding:'3px 10px 3px 10px',fontSize:11,color:'var(--tf-text)'}}>
+              {c.name} <span style={{color:'var(--tf-text-sub)',fontSize:10}}>({c.email})</span>
+              <button onClick={function(){setBulkSelIds(function(p){var n=Object.assign({},p);delete n[cid];return n;});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:0,marginLeft:2}}>×</button>
+            </span>;})}
+          </div>}
+        </div>
+        <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0} style={{background:Object.keys(bulkSelIds).length>0?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
+      </>:
+      /* Templates tab — editor on right */
+      <>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Email Templates</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Create reusable templates for bulk emails and client request notifications.</div>
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20}}>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>{editTplId?'Edit Template':'New Template'}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Template Name</label><input value={tplName} onChange={function(e){setTplName(e.target.value);}} placeholder="e.g., GST Data Request" style={INP}/></div>
+            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject Line</label><input value={tplSubject} onChange={function(e){setTplSubject(e.target.value);}} placeholder="Email subject" style={INP}/></div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
+            <textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
+          </div>
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+            {editTplId&&<button onClick={function(){setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>}
+            {editTplId&&<button onClick={function(){deleteTemplate(editTplId);setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'9px 16px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Delete</button>}
+            <button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:tplName.trim()&&tplSubject.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 20px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>{editTplId?'Update Template':'Save Template'}</button>
+          </div>
+        </div>
+      </>}
+    </div>
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
 function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   var [users,setUsers]=useState([]);
   var [requests,setRequests]=useState([]);
@@ -5168,13 +5372,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   var [toast,setToast]=useState(null);
   // Left panel
   var [selClientId,setSelClientId]=useState(null);
-  var [leftView,setLeftView]=useState('clients'); // 'clients' | 'templates' | 'bulkemail'
   var [clientSearch,setClientSearch]=useState('');
-  // Bulk email
-  var [bulkSelIds,setBulkSelIds]=useState({});
-  var [bulkFilterWT,setBulkFilterWT]=useState('');
-  var [bulkSubject,setBulkSubject]=useState('');
-  var [bulkBody,setBulkBody]=useState('');
   // Invite form
   var [showInvite,setShowInvite]=useState(false);
   var [invClientId,setInvClientId]=useState('');
@@ -5193,12 +5391,9 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   var [reqSaving,setReqSaving]=useState(false);
   // Form fields for question type
   var [reqFields,setReqFields]=useState([]);
-  // Email templates
+  // Email templates (read-only, CRUD in Communications module)
   var [templates,setTemplates]=useState([]);
   var [showTemplates,setShowTemplates]=useState(false);
-  var [tplName,setTplName]=useState('');
-  var [tplSubject,setTplSubject]=useState('');
-  var [tplBody,setTplBody]=useState('');
   // Detail view
   var [selReq,setSelReq]=useState(null);
   var [messages,setMessages]=useState([]);
@@ -5301,18 +5496,6 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   function updateField(idx,key,val){setReqFields(function(p){return p.map(function(f,i){if(i!==idx)return f;var n=Object.assign({},f);n[key]=val;return n;});});}
   function removeField(idx){setReqFields(function(p){return p.filter(function(_,i){return i!==idx;});});}
 
-  // Email template helpers
-  async function saveTemplate(){
-    if(!tplName.trim()||!tplSubject.trim()){showToast('Template name and subject required','err');return;}
-    var ins=await supabase.from('email_templates').insert({org_id:org.id,name:tplName.trim(),subject:tplSubject.trim(),body:tplBody.trim()}).select().single();
-    if(ins.data){setTemplates(function(p){return[ins.data,...p];});showToast('Template saved!');}
-    setTplName('');setTplSubject('');setTplBody('');
-  }
-  async function deleteTemplate(id){
-    await supabase.from('email_templates').delete().eq('id',id);
-    setTemplates(function(p){return p.filter(function(t){return t.id!==id;});});
-    showToast('Template deleted');
-  }
   function useTemplate(tpl){
     setReqTitle(tpl.subject);setReqDesc(tpl.body);setShowTemplates(false);
   }
@@ -5395,8 +5578,6 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>Clients <span style={{fontWeight:500,color:'var(--tf-text-sub)'}}>({portalClients.length})</span></div>
           <div style={{display:'flex',gap:4}}>
-            <button onClick={function(){setLeftView(leftView==='bulkemail'?'clients':'bulkemail');}} title="Bulk Email" style={{background:leftView==='bulkemail'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='bulkemail'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12}}>✉</button>
-            <button onClick={function(){setLeftView(leftView==='templates'?'clients':'templates');}} title="Email Templates" style={{background:leftView==='templates'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='templates'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>📧</button>
             <button onClick={function(){setShowInvite(!showInvite);if(!invPass)setInvPass(genPassword());}} title="Invite Client" style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>+</button>
           </div>
         </div>
@@ -5434,91 +5615,10 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={function(){setShowInvite(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button><button onClick={inviteUser} disabled={invSaving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:invSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{invSaving?'Creating...':'Create & Send Email'}</button></div>
       </div>}
 
-      {leftView==='templates'?
-      /* Email Templates — right panel */
-      <div>
-        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Email Templates</div>
-        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Create reusable templates for client notifications. Use them when creating requests.</div>
-        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:20}}>
-          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>New Template</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Template Name</label><input value={tplName} onChange={function(e){setTplName(e.target.value);}} placeholder="e.g., GST Data Request" style={INP}/></div>
-            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject Line</label><input value={tplSubject} onChange={function(e){setTplSubject(e.target.value);}} placeholder="Request subject" style={INP}/></div>
-          </div>
-          <div style={{marginBottom:14}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label><textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={6} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/></div>
-          <div style={{textAlign:'right'}}><button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:tplName.trim()&&tplSubject.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 20px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>Save Template</button></div>
-        </div>
-        {templates.length===0?<div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)',fontSize:12}}>No templates yet. Create one above to reuse when sending requests.</div>:
-        <div style={{display:'flex',flexDirection:'column',gap:8}}>
-          {templates.map(function(t){return<div key={t.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 18px',display:'flex',alignItems:'flex-start',gap:14}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{t.name}</div>
-              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:4}}>Subject: {t.subject}</div>
-              {t.body&&<div style={{fontSize:12,color:'var(--tf-text-mut)',lineHeight:1.5,whiteSpace:'pre-wrap',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 12px',marginTop:6}}>{t.body}</div>}
-            </div>
-            <button onClick={function(){deleteTemplate(t.id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0}}>Delete</button>
-          </div>;})}
-        </div>}
-      </div>:
-
-      leftView==='bulkemail'?
-      /* Bulk Email — right panel */
-      <div>
-        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Bulk Email</div>
-        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Send emails to multiple clients at once. Filter by work type or pick individually.</div>
-        {/* Filter + Template row */}
-        <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
-          <div style={{flex:1,minWidth:180}}>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Filter by Work Type</label>
-            <select value={bulkFilterWT} onChange={function(e){setBulkFilterWT(e.target.value);var wt=e.target.value;if(!wt){setBulkSelIds({});return;}var sel={};clients.forEach(function(c){var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);if(wts.some(function(w){return w.trim()===wt;})){var pu=users.find(function(u){return u.client_id===c.id&&u.is_active;});if(pu)sel[c.id]=true;}});setBulkSelIds(sel);}} style={INP}>
-              <option value="">— All Clients —</option>
-              {(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
-            </select>
-          </div>
-          <div style={{flex:1,minWidth:180}}>
-            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Use Template</label>
-            <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t){setBulkSubject(t.subject);setBulkBody(t.body||'');}e.target.value='';}} style={INP}>
-              <option value="">— Pick a template —</option>
-              {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
-            </select>
-          </div>
-        </div>
-        {/* Client selection */}
-        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-            <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>Select Recipients</div>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={function(){var all={};portalClients.forEach(function(c){all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700}}>Select All</button>
-              <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Clear</button>
-            </div>
-          </div>
-          <div style={{maxHeight:200,overflowY:'auto',display:'flex',flexDirection:'column',gap:2}}>
-            {portalClients.map(function(c){var checked=!!bulkSelIds[c.id];return<label key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 8px',borderRadius:6,cursor:'pointer',background:checked?'rgba(107,140,173,0.06)':'transparent'}}>
-              <input type="checkbox" checked={checked} onChange={function(){setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad'}}/>
-              <div style={{flex:1}}><span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{c.name}</span><span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:8}}>{c.users.map(function(u){return u.email;}).join(', ')}</span></div>
-            </label>;})}
-          </div>
-          <div style={{fontSize:11,color:'#6b8cad',fontWeight:600,marginTop:8}}>{Object.keys(bulkSelIds).length} client{Object.keys(bulkSelIds).length!==1?'s':''} selected</div>
-        </div>
-        {/* Subject + Body */}
-        <div style={{marginBottom:12}}>
-          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject</label>
-          <input value={bulkSubject} onChange={function(e){setBulkSubject(e.target.value);}} placeholder="Email subject line" style={INP}/>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
-          <textarea value={bulkBody} onChange={function(e){setBulkBody(e.target.value);}} rows={8} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
-        </div>
-        {/* Send button */}
-        <div style={{display:'flex',gap:10,alignItems:'center'}}>
-          <button onClick={function(){var selCount=Object.keys(bulkSelIds).length;if(selCount===0){showToast('Select at least one client','err');return;}if(!bulkSubject.trim()){showToast('Subject required','err');return;}var emails=[];Object.keys(bulkSelIds).forEach(function(cid){var cUsers=(clientUserMap[cid]||[]).filter(function(u){return u.is_active;});cUsers.forEach(function(u){if(emails.indexOf(u.email)===-1)emails.push(u.email);});});if(emails.length===0){showToast('No active portal emails found','err');return;}var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','))+'&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);window.open(mailto,'_blank');showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'10px 24px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:'0 4px 14px rgba(99,102,241,0.25)'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Opens your email client with all recipients in BCC</div>
-        </div>
-      </div>:
-
-      !selClientId?
+      {!selClientId?
       /* No client selected — overview */
       <div>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Portal Overview</div>
         <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Portal Overview</div>
         <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Select a client from the left panel to view their requests.</div>
         {/* Summary cards */}
@@ -5624,12 +5724,13 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   }
   MODULES.push(
     {id:'portal',label:'Client Portal',icon:'🔗',desc:'Manage client access, requests, communication and data collection.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)'},
+    {id:'comms',label:'Communications',icon:'✉',desc:'Bulk email clients, manage email templates and notifications.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)'},
     {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}],soon:true},
     {id:'billing',label:'Billing',icon:'💰',desc:'Client-wise and work-wise invoicing with reusable templates.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'templates',label:'Templates'}],soon:true},
     {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
   );
 
-  function openModule(m){setOrgModule(m.id);setTab(m.tabs[0].id);}
+  function openModule(m){setOrgModule(m.id);setTab(m.tabs&&m.tabs[0]?m.tabs[0].id:'');}
   function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);}
   // Called from YourDashboard when a work type header is clicked
   function navigateToWorkType(wt){
@@ -5706,6 +5807,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='comms'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
