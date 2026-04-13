@@ -5160,7 +5160,7 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
 }
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
-function ClientPortalModule({org,supabase,cu}){
+function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   var [users,setUsers]=useState([]);
   var [requests,setRequests]=useState([]);
   var [clients,setClients]=useState([]);
@@ -5168,8 +5168,13 @@ function ClientPortalModule({org,supabase,cu}){
   var [toast,setToast]=useState(null);
   // Left panel
   var [selClientId,setSelClientId]=useState(null);
-  var [leftView,setLeftView]=useState('clients'); // 'clients' | 'templates'
+  var [leftView,setLeftView]=useState('clients'); // 'clients' | 'templates' | 'bulkemail'
   var [clientSearch,setClientSearch]=useState('');
+  // Bulk email
+  var [bulkSelIds,setBulkSelIds]=useState({});
+  var [bulkFilterWT,setBulkFilterWT]=useState('');
+  var [bulkSubject,setBulkSubject]=useState('');
+  var [bulkBody,setBulkBody]=useState('');
   // Invite form
   var [showInvite,setShowInvite]=useState(false);
   var [invClientId,setInvClientId]=useState('');
@@ -5390,7 +5395,8 @@ function ClientPortalModule({org,supabase,cu}){
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>Clients <span style={{fontWeight:500,color:'var(--tf-text-sub)'}}>({portalClients.length})</span></div>
           <div style={{display:'flex',gap:4}}>
-            <button onClick={function(){if(leftView==='templates'){setLeftView('clients');}else{setLeftView('templates');}}} title="Email Templates" style={{background:leftView==='templates'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='templates'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>📧</button>
+            <button onClick={function(){setLeftView(leftView==='bulkemail'?'clients':'bulkemail');}} title="Bulk Email" style={{background:leftView==='bulkemail'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='bulkemail'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12}}>✉</button>
+            <button onClick={function(){setLeftView(leftView==='templates'?'clients':'templates');}} title="Email Templates" style={{background:leftView==='templates'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='templates'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>📧</button>
             <button onClick={function(){setShowInvite(!showInvite);if(!invPass)setInvPass(genPassword());}} title="Invite Client" style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>+</button>
           </div>
         </div>
@@ -5453,6 +5459,61 @@ function ClientPortalModule({org,supabase,cu}){
             <button onClick={function(){deleteTemplate(t.id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0}}>Delete</button>
           </div>;})}
         </div>}
+      </div>:
+
+      leftView==='bulkemail'?
+      /* Bulk Email — right panel */
+      <div>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Bulk Email</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Send emails to multiple clients at once. Filter by work type or pick individually.</div>
+        {/* Filter + Template row */}
+        <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Filter by Work Type</label>
+            <select value={bulkFilterWT} onChange={function(e){setBulkFilterWT(e.target.value);var wt=e.target.value;if(!wt){setBulkSelIds({});return;}var sel={};clients.forEach(function(c){var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);if(wts.some(function(w){return w.trim()===wt;})){var pu=users.find(function(u){return u.client_id===c.id&&u.is_active;});if(pu)sel[c.id]=true;}});setBulkSelIds(sel);}} style={INP}>
+              <option value="">— All Clients —</option>
+              {(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+            </select>
+          </div>
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Use Template</label>
+            <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t){setBulkSubject(t.subject);setBulkBody(t.body||'');}e.target.value='';}} style={INP}>
+              <option value="">— Pick a template —</option>
+              {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
+            </select>
+          </div>
+        </div>
+        {/* Client selection */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>Select Recipients</div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={function(){var all={};portalClients.forEach(function(c){all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700}}>Select All</button>
+              <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Clear</button>
+            </div>
+          </div>
+          <div style={{maxHeight:200,overflowY:'auto',display:'flex',flexDirection:'column',gap:2}}>
+            {portalClients.map(function(c){var checked=!!bulkSelIds[c.id];return<label key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'6px 8px',borderRadius:6,cursor:'pointer',background:checked?'rgba(107,140,173,0.06)':'transparent'}}>
+              <input type="checkbox" checked={checked} onChange={function(){setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad'}}/>
+              <div style={{flex:1}}><span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{c.name}</span><span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:8}}>{c.users.map(function(u){return u.email;}).join(', ')}</span></div>
+            </label>;})}
+          </div>
+          <div style={{fontSize:11,color:'#6b8cad',fontWeight:600,marginTop:8}}>{Object.keys(bulkSelIds).length} client{Object.keys(bulkSelIds).length!==1?'s':''} selected</div>
+        </div>
+        {/* Subject + Body */}
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject</label>
+          <input value={bulkSubject} onChange={function(e){setBulkSubject(e.target.value);}} placeholder="Email subject line" style={INP}/>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
+          <textarea value={bulkBody} onChange={function(e){setBulkBody(e.target.value);}} rows={8} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
+        </div>
+        {/* Send button */}
+        <div style={{display:'flex',gap:10,alignItems:'center'}}>
+          <button onClick={function(){var selCount=Object.keys(bulkSelIds).length;if(selCount===0){showToast('Select at least one client','err');return;}if(!bulkSubject.trim()){showToast('Subject required','err');return;}var emails=[];Object.keys(bulkSelIds).forEach(function(cid){var cUsers=(clientUserMap[cid]||[]).filter(function(u){return u.is_active;});cUsers.forEach(function(u){if(emails.indexOf(u.email)===-1)emails.push(u.email);});});if(emails.length===0){showToast('No active portal emails found','err');return;}var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','))+'&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);window.open(mailto,'_blank');showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'10px 24px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:'0 4px 14px rgba(99,102,241,0.25)'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Opens your email client with all recipients in BCC</div>
+        </div>
       </div>:
 
       !selClientId?
@@ -5644,7 +5705,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
