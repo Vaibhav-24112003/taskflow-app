@@ -5390,29 +5390,15 @@ function ClientPortalModule({org,supabase,cu}){
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>Clients <span style={{fontWeight:500,color:'var(--tf-text-sub)'}}>({portalClients.length})</span></div>
           <div style={{display:'flex',gap:4}}>
-            <button onClick={function(){setLeftView(leftView==='templates'?'clients':'templates');}} title="Email Templates" style={{background:leftView==='templates'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='templates'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>📧</button>
+            <button onClick={function(){if(leftView==='templates'){setLeftView('clients');}else{setLeftView('templates');}}} title="Email Templates" style={{background:leftView==='templates'?'rgba(107,140,173,0.15)':'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:leftView==='templates'?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>📧</button>
             <button onClick={function(){setShowInvite(!showInvite);if(!invPass)setInvPass(genPassword());}} title="Invite Client" style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>+</button>
           </div>
         </div>
-        {leftView==='clients'&&<input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>}
+        <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
       </div>
       {/* Left panel body */}
       <div style={{flex:1,overflowY:'auto'}}>
-        {leftView==='templates'?<div style={{padding:12}}>
-          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Email Templates</div>
-          <div style={{marginBottom:12}}>
-            <input value={tplName} onChange={function(e){setTplName(e.target.value);}} placeholder="Template name" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',marginBottom:6}}/>
-            <input value={tplSubject} onChange={function(e){setTplSubject(e.target.value);}} placeholder="Subject line" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',marginBottom:6}}/>
-            <textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={3} placeholder="Body..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',resize:'vertical',marginBottom:6}}/>
-            <button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'#6366f1':'var(--tf-surface)',border:'none',borderRadius:6,padding:'5px 12px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:11,fontWeight:700,width:'100%'}}>Save Template</button>
-          </div>
-          {templates.map(function(t){return<div key={t.id} style={{padding:'8px 10px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,marginBottom:6}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{t.name}</span><button onClick={function(){deleteTemplate(t.id);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:12,padding:0}}>×</button></div>
-            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>{t.subject}</div>
-          </div>;})}
-        </div>:
-        /* Client list */
-        filteredPortalClients.length===0?<div style={{padding:'24px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>{users.length===0?'No portal users yet. Click + to invite.':'No matching clients.'}</div>:
+        {filteredPortalClients.length===0?<div style={{padding:'24px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>{users.length===0?'No portal users yet. Click + to invite.':'No matching clients.'}</div>:
         filteredPortalClients.map(function(c){
           var isActive=selClientId===c.id;
           return<button key={c.id} onClick={function(){setSelClientId(c.id);setShowReqForm(false);}}
@@ -5442,7 +5428,34 @@ function ClientPortalModule({org,supabase,cu}){
         <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={function(){setShowInvite(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button><button onClick={inviteUser} disabled={invSaving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:invSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{invSaving?'Creating...':'Create & Send Email'}</button></div>
       </div>}
 
-      {!selClientId?
+      {leftView==='templates'?
+      /* Email Templates — right panel */
+      <div>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Email Templates</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Create reusable templates for client notifications. Use them when creating requests.</div>
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:20}}>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>New Template</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Template Name</label><input value={tplName} onChange={function(e){setTplName(e.target.value);}} placeholder="e.g., GST Data Request" style={INP}/></div>
+            <div><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject Line</label><input value={tplSubject} onChange={function(e){setTplSubject(e.target.value);}} placeholder="Request subject" style={INP}/></div>
+          </div>
+          <div style={{marginBottom:14}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label><textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={6} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/></div>
+          <div style={{textAlign:'right'}}><button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:tplName.trim()&&tplSubject.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 20px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>Save Template</button></div>
+        </div>
+        {templates.length===0?<div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)',fontSize:12}}>No templates yet. Create one above to reuse when sending requests.</div>:
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {templates.map(function(t){return<div key={t.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 18px',display:'flex',alignItems:'flex-start',gap:14}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{t.name}</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:4}}>Subject: {t.subject}</div>
+              {t.body&&<div style={{fontSize:12,color:'var(--tf-text-mut)',lineHeight:1.5,whiteSpace:'pre-wrap',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 12px',marginTop:6}}>{t.body}</div>}
+            </div>
+            <button onClick={function(){deleteTemplate(t.id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'5px 12px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:600,flexShrink:0}}>Delete</button>
+          </div>;})}
+        </div>}
+      </div>:
+
+      !selClientId?
       /* No client selected — overview */
       <div>
         <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Portal Overview</div>
