@@ -2855,6 +2855,52 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   // Mine-only filter: restrict rows to those where current user is assignee or in any hierarchy level
   var [mineOnly,setMineOnly]=useState(!!initMineOnly);
 
+  // Expandable task detail in worksheet rows
+  var [wsExpandedRow,setWsExpandedRow]=useState(null);
+  var [wsEditingRow,setWsEditingRow]=useState(null);
+  var [wsEditData,setWsEditData]=useState({});
+  var WS_PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
+
+  function toggleWsExpand(rowId){setWsExpandedRow(function(p){return p===rowId?null:rowId;});setWsEditingRow(null);}
+
+  function startWsEditing(row){
+    var d=row.data||{};
+    setWsEditingRow(row.id);
+    setWsEditData({
+      title:d.__title||'',
+      description:d.__description||'',
+      priority:d.__priority||'medium',
+      contact:d.__contact||'',
+      checklist:d.__checklist?d.__checklist.map(function(c){return{text:c.text||'',done:!!c.done};}):[]
+    });
+  }
+
+  async function saveWsRowData(rowId){
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var d=Object.assign({},row.data||{});
+    if(wsEditData.title.trim())d.__title=wsEditData.title.trim();else delete d.__title;
+    if(wsEditData.description.trim())d.__description=wsEditData.description.trim();else delete d.__description;
+    d.__priority=wsEditData.priority||'medium';
+    if(wsEditData.contact.trim())d.__contact=wsEditData.contact.trim();else delete d.__contact;
+    var validCl=wsEditData.checklist.filter(function(c){return c.text&&c.text.trim();});
+    if(validCl.length>0)d.__checklist=validCl;else delete d.__checklist;
+    await supabase.from('worksheet_rows').update({data:d}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:d}):r;});});
+    setWsEditingRow(null);
+    showToast('Task details updated!');
+  }
+
+  async function toggleWsChecklist(rowId,idx){
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var d=Object.assign({},row.data||{});
+    var cl=(d.__checklist||[]).map(function(c,i){return i===idx?{text:c.text,done:!c.done}:c;});
+    d.__checklist=cl;
+    await supabase.from('worksheet_rows').update({data:d}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:d}):r;});});
+  }
+
   // Get all work types used by clients in this org
   var [allTypes,setAllTypes]=useState([]);
 
@@ -3714,12 +3760,29 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
               var d=row.data||{};
               var checkboxCols=cfg.cols.filter(function(c){return !c.type||c.type==='checkbox';});
               var allDone=checkboxCols.length>0&&checkboxCols.every(function(c){return d[c.key];});
-              return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.02)':'transparent',transition:'background 0.15s'}}>
+              var wsIsExpanded=wsExpandedRow===row.id;
+              var wsIsEditing=wsEditingRow===row.id;
+              var wsPriority=d.__priority||'medium';
+              var wsClDone=(d.__checklist||[]).filter(function(c){return c.done;}).length;
+              var wsClTotal=(d.__checklist||[]).length;
+              var hasDetails=!!(d.__title||d.__description||d.__contact||wsClTotal>0);
+              var totalCols=1+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
+              return<React.Fragment key={row.id}>
+              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.02)':'transparent',transition:'background 0.15s',cursor:'pointer'}}
+                onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='INPUT'||e.target.tagName==='BUTTON')return;toggleWsExpand(row.id);}}>
                 <td style={{padding:'10px 14px'}}>
-                  <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}</div>
-                  {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{client.display_name}</div>}
-                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1}}>{client.pan}</div>}
-                  {cfg.frequency==='once'?<div style={{marginTop:2}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}</div>
+                      {d.__title&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{d.__title}</div>}
+                    </div>
+                    {wsClTotal>0&&<span style={{fontSize:9,color:wsClDone===wsClTotal?'#22c55e':'#6b8cad',fontWeight:700,whiteSpace:'nowrap'}}>✓{wsClDone}/{wsClTotal}</span>}
+                    <span style={{fontSize:8,color:'var(--tf-text-sub)',transform:wsIsExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
+                  </div>
+                  {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:13}}>{client.display_name}</div>}
+                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>{client.pan}</div>}
+                  {cfg.frequency==='once'?<div style={{marginTop:2,marginLeft:13}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
                 {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hVal=(row.data||{})[hc.key]||'';return<td key={hc.key} style={{padding:'6px 8px',textAlign:'center'}}>
                   <select value={hVal} onChange={function(e){updateCellData(row.id,hc.key,e.target.value);}}
@@ -3802,7 +3865,88 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
                   {row.data&&row.data.__assignee&&activeType!=='Unclassified'&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>{(orgMembers.find(function(m){return m.id===row.data.__assignee;})||{}).name||'Assigned'}</div>}
                   <button onClick={function(){deleteOnceRow(row.id);}} title="Remove task" style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>✕</button>
                 </td>}
-              </tr>;
+              </tr>
+              {/* Expandable task detail row */}
+              {wsIsExpanded&&<tr style={{borderBottom:'1px solid var(--tf-border)',background:'rgba(107,140,173,0.03)'}}>
+                <td colSpan={totalCols} style={{padding:'10px 20px 14px'}}>
+                  {!wsIsEditing?<div>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
+                      <span style={{fontSize:10,fontWeight:800,color:WS_PC[wsPriority],background:wsPriority==='urgent'?'rgba(239,68,68,0.1)':wsPriority==='high'?'rgba(245,158,11,0.1)':wsPriority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{wsPriority}</span>
+                      {d.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Contact: {d.__contact}</span>}
+                      <button onClick={function(e){e.stopPropagation();startWsEditing(row);}}
+                        style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit Details</button>
+                    </div>
+                    {d.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{d.__description}</div>}
+                    {wsClTotal>0&&<div>
+                      <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Checklist ({wsClDone}/{wsClTotal})</div>
+                      {d.__checklist.map(function(item,ci){
+                        return<div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,cursor:'pointer'}} onClick={function(e){e.stopPropagation();toggleWsChecklist(row.id,ci);}}>
+                          <div style={{width:15,height:15,borderRadius:3,border:'1.5px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}>
+                            {item.done&&<span style={{color:'#fff',fontSize:9,fontWeight:900}}>✓</span>}
+                          </div>
+                          <span style={{fontSize:12,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none'}}>{item.text}</span>
+                        </div>;
+                      })}
+                    </div>}
+                    {!d.__description&&wsClTotal===0&&!d.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No additional details. Click "Edit Details" to add title, description, checklist, contact person.</div>}
+                  </div>
+                  :<div>
+                    <div style={{display:'flex',flexDirection:'column',gap:8,maxWidth:500}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                        <div>
+                          <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Title</label>
+                          <input type="text" value={wsEditData.title} onChange={function(e){setWsEditData(function(p){return Object.assign({},p,{title:e.target.value});});}}
+                            onClick={function(e){e.stopPropagation();}}
+                            style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                        </div>
+                        <div>
+                          <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Priority</label>
+                          <select value={wsEditData.priority} onChange={function(e){setWsEditData(function(p){return Object.assign({},p,{priority:e.target.value});});}}
+                            onClick={function(e){e.stopPropagation();}}
+                            style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Contact Person</label>
+                        <input type="text" value={wsEditData.contact} onChange={function(e){setWsEditData(function(p){return Object.assign({},p,{contact:e.target.value});});}}
+                          onClick={function(e){e.stopPropagation();}}
+                          placeholder="e.g., Mr. Sharma (+91 98xxx)"
+                          style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                      </div>
+                      <div>
+                        <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Description</label>
+                        <textarea value={wsEditData.description} onChange={function(e){setWsEditData(function(p){return Object.assign({},p,{description:e.target.value});});}}
+                          onClick={function(e){e.stopPropagation();}} rows={2}
+                          placeholder="Add details…"
+                          style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                      </div>
+                      <div>
+                        <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Checklist</label>
+                        {wsEditData.checklist.map(function(item,ci){
+                          return<div key={ci} style={{display:'flex',gap:5,alignItems:'center',marginBottom:3}}>
+                            <input type="text" value={item.text} onChange={function(e){var v=e.target.value;setWsEditData(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}}
+                              onClick={function(e){e.stopPropagation();}}
+                              style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'5px 7px',color:'var(--tf-text)',fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                            <button onClick={function(e){e.stopPropagation();setWsEditData(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
+                              style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,width:24,height:24,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}>×</button>
+                          </div>;
+                        })}
+                        <button onClick={function(e){e.stopPropagation();setWsEditData(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
+                          style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,width:'100%'}}>+ Add item</button>
+                      </div>
+                      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                        <button onClick={function(e){e.stopPropagation();setWsEditingRow(null);}}
+                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>Cancel</button>
+                        <button onClick={function(e){e.stopPropagation();saveWsRowData(row.id);}}
+                          style={{background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,boxShadow:'0 2px 8px rgba(59,130,246,0.25)'}}>Save</button>
+                      </div>
+                    </div>
+                  </div>}
+                </td>
+              </tr>}
+              </React.Fragment>;
             })}
           </tbody>
         </table>
