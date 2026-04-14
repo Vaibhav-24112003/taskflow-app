@@ -4771,6 +4771,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [orgMembers,setOrgMembers]=useState([]);
   var [loading,setLoading]=useState(true);
   var [filter,setFilter]=useState('all');
+  var [dateFilter,setDateFilter]=useState('all');
   var [showCalendar,setShowCalendar]=useState(true);
   // Create Task modal state
   var [showCreate,setShowCreate]=useState(false);
@@ -4848,13 +4849,33 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     review:rows.filter(function(r){var role=getRole(r);return role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';}).length,
   };
 
+  // Compute date range boundaries for dateFilter
+  function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  var weekEnd=new Date(today);weekEnd.setDate(weekEnd.getDate()+6);
+  var weekEndStr=ymd(weekEnd);
+  var monthEnd=new Date(today.getFullYear(),today.getMonth()+1,0);
+  var monthEndStr=ymd(monthEnd);
+  var next7=new Date(today);next7.setDate(next7.getDate()+7);
+  var next7Str=ymd(next7);
+  var next30=new Date(today);next30.setDate(next30.getDate()+30);
+  var next30Str=ymd(next30);
+
   var filteredRows=rows.filter(function(r){
     var role=getRole(r);
     var isReview=role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';
-    if(filter==='assigned')return !isReview;
-    if(filter==='review')return isReview;
-    if(filter==='overdue')return r.due_date&&r.due_date<todayStr;
-    if(filter==='today')return r.due_date===todayStr;
+    // Status/role filter from KPI cards
+    if(filter==='assigned'&&isReview)return false;
+    if(filter==='review'&&!isReview)return false;
+    if(filter==='overdue'&&!(r.due_date&&r.due_date<todayStr))return false;
+    if(filter==='today'&&r.due_date!==todayStr)return false;
+    // Date range filter from dropdown
+    if(dateFilter==='today'&&r.due_date!==todayStr)return false;
+    if(dateFilter==='overdue'&&!(r.due_date&&r.due_date<todayStr))return false;
+    if(dateFilter==='week'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=weekEndStr))return false;
+    if(dateFilter==='month'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=monthEndStr))return false;
+    if(dateFilter==='next7'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=next7Str))return false;
+    if(dateFilter==='next30'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=next30Str))return false;
+    if(dateFilter==='nodate'&&r.due_date)return false;
     return true;
   });
 
@@ -5010,6 +5031,18 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Your personal dashboard for <b style={{color:'var(--tf-text)'}}>{org.name}</b></div>
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <select value={dateFilter} onChange={function(e){setDateFilter(e.target.value);}}
+          title="Filter tasks by due date range"
+          style={{background:dateFilter!=='all'?'rgba(59,130,246,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:8,padding:'7px 12px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,outline:'none',fontFamily:'inherit'}}>
+          <option value="all">📆 All Dates</option>
+          <option value="overdue">⚠ Overdue</option>
+          <option value="today">Due Today</option>
+          <option value="week">This Week</option>
+          <option value="month">This Month</option>
+          <option value="next7">Next 7 Days</option>
+          <option value="next30">Next 30 Days</option>
+          <option value="nodate">No Due Date</option>
+        </select>
         <button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
           <span style={{fontSize:14}}>+</span>Create Task
         </button>
