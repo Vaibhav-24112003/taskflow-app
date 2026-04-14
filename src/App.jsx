@@ -4736,6 +4736,52 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   }
 
   var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
+  var PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
+
+  // Expandable task detail state
+  var [expandedRow,setExpandedRow]=useState(null);
+  var [editingRow,setEditingRow]=useState(null);
+  var [editData,setEditData]=useState({});
+
+  function toggleExpand(rowId){setExpandedRow(function(p){return p===rowId?null:rowId;});setEditingRow(null);}
+
+  function startEditing(row){
+    var d=row.data||{};
+    setEditingRow(row.id);
+    setEditData({
+      title:d.__title||'',
+      description:d.__description||'',
+      priority:d.__priority||'medium',
+      contact:d.__contact||'',
+      checklist:d.__checklist?d.__checklist.map(function(c){return{text:c.text||'',done:!!c.done};}):[]
+    });
+  }
+
+  async function saveRowData(rowId){
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var d=Object.assign({},row.data||{});
+    if(editData.title.trim())d.__title=editData.title.trim();else delete d.__title;
+    if(editData.description.trim())d.__description=editData.description.trim();else delete d.__description;
+    d.__priority=editData.priority||'medium';
+    if(editData.contact.trim())d.__contact=editData.contact.trim();else delete d.__contact;
+    var validCl=editData.checklist.filter(function(c){return c.text&&c.text.trim();});
+    if(validCl.length>0)d.__checklist=validCl;else delete d.__checklist;
+    await supabase.from('worksheet_rows').update({data:d}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:d}):r;});});
+    setEditingRow(null);
+    showToast('Task updated!');
+  }
+
+  async function toggleChecklistItem(rowId,idx){
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var d=Object.assign({},row.data||{});
+    var cl=(d.__checklist||[]).map(function(c,i){return i===idx?{text:c.text,done:!c.done}:c;});
+    d.__checklist=cl;
+    await supabase.from('worksheet_rows').update({data:d}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:d}):r;});});
+  }
 
   function resetCreateForm(){setCtClientId('');setCtWorkType('');setCtTitle('');setCtDesc('');setCtPriority('medium');setCtDueDate('');setCtContact('');setCtHierarchy({});setCtChecklist([]);setShowCreate(false);}
 
@@ -4882,37 +4928,130 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   var isToday=row.due_date===todayStr;
                   var isReview=role.label.toLowerCase().indexOf('review')>=0;
                   var rowTitle=(row.data&&row.data.__title)||'';
-                  return<div key={row.id} style={{padding:'12px 16px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-                    <div style={{flex:1,minWidth:180}}>
-                      <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
-                        {client?(client.display_name||client.name):'Unknown'}
-                        {rowTitle&&<span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:6,fontWeight:600}}>· {rowTitle}</span>}
-                        {!rowTitle&&row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
+                  var rd=row.data||{};
+                  var priority=rd.__priority||'medium';
+                  var isExpanded=expandedRow===row.id;
+                  var isEditing=editingRow===row.id;
+                  var clDone=(rd.__checklist||[]).filter(function(c){return c.done;}).length;
+                  var clTotal=(rd.__checklist||[]).length;
+                  return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)'}}>
+                    {/* Summary row */}
+                    <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',cursor:'pointer',transition:'background 0.1s'}}
+                      onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION')return;toggleExpand(row.id);}}
+                      onMouseEnter={function(e){e.currentTarget.style.background='rgba(107,140,173,0.04)';}}
+                      onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                      {/* Priority dot */}
+                      <div style={{width:8,height:8,borderRadius:'50%',background:PC[priority],flexShrink:0}} title={priority+' priority'}/>
+                      <div style={{flex:1,minWidth:180}}>
+                        <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
+                          {client?(client.display_name||client.name):'Unknown'}
+                          {rowTitle&&<span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:6,fontWeight:600}}>· {rowTitle}</span>}
+                          {!rowTitle&&row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
+                        </div>
+                        <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                          {ws&&<span>{ws.period_label}</span>}
+                          <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
+                          {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
+                        </div>
                       </div>
-                      <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-                        {ws&&<span>{ws.period_label}</span>}
-                        <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
-                      </div>
-                    </div>
-                    {row.due_date&&<div style={{fontSize:11,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',flexShrink:0}}>
-                      {isOverdue?'Overdue · ':isToday?'Today · ':''}
-                      {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
-                    </div>}
-                    {isUnclassified&&activeConfigs.length>0&&
-                      <select value="" onChange={function(e){if(e.target.value)classifyRow(row,e.target.value);}}
-                        title="Classify this task into a work type"
-                        style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:6,padding:'4px 8px',color:'#f59e0b',fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',flexShrink:0}}>
-                        <option value="">Classify →</option>
-                        {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+                      {row.due_date&&<div style={{fontSize:11,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',flexShrink:0}}>
+                        {isOverdue?'Overdue · ':isToday?'Today · ':''}
+                        {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
+                      </div>}
+                      {isUnclassified&&activeConfigs.length>0&&
+                        <select value="" onChange={function(e){if(e.target.value)classifyRow(row,e.target.value);}}
+                          title="Classify this task into a work type"
+                          onClick={function(e){e.stopPropagation();}}
+                          style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:6,padding:'4px 8px',color:'#f59e0b',fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',flexShrink:0}}>
+                          <option value="">Classify →</option>
+                          {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+                        </select>
+                      }
+                      <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
+                        onClick={function(e){e.stopPropagation();}}
+                        style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="under_review">Under Review</option>
+                        <option value="completed">Completed</option>
                       </select>
-                    }
-                    <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
-                      style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="under_review">Under Review</option>
-                      <option value="completed">Completed</option>
-                    </select>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)',transform:isExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s',flexShrink:0}}>▼</span>
+                    </div>
+                    {/* Expanded detail panel */}
+                    {isExpanded&&<div style={{padding:'0 16px 14px 28px',background:'rgba(107,140,173,0.03)'}}>
+                      {!isEditing?<div>
+                        {/* View mode */}
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
+                          <span style={{fontSize:10,fontWeight:800,color:PC[priority],background:priority==='urgent'?'rgba(239,68,68,0.1)':priority==='high'?'rgba(245,158,11,0.1)':priority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{priority}</span>
+                          {rd.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📞 {rd.__contact}</span>}
+                          <button onClick={function(){startEditing(row);}}
+                            style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit</button>
+                        </div>
+                        {rd.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:10,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{rd.__description}</div>}
+                        {clTotal>0&&<div style={{marginBottom:6}}>
+                          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Checklist ({clDone}/{clTotal})</div>
+                          {rd.__checklist.map(function(item,ci){
+                            return<div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,cursor:'pointer'}} onClick={function(){toggleChecklistItem(row.id,ci);}}>
+                              <div style={{width:16,height:16,borderRadius:4,border:'1.5px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}>
+                                {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span>}
+                              </div>
+                              <span style={{fontSize:12,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none'}}>{item.text}</span>
+                            </div>;
+                          })}
+                        </div>}
+                        {!rd.__description&&clTotal===0&&!rd.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No additional details. Click Edit to add.</div>}
+                      </div>
+                      :<div>
+                        {/* Edit mode */}
+                        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                            <div>
+                              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Title</label>
+                              <input type="text" value={editData.title} onChange={function(e){setEditData(function(p){return Object.assign({},p,{title:e.target.value});});}}
+                                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div>
+                              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Priority</label>
+                              <select value={editData.priority} onChange={function(e){setEditData(function(p){return Object.assign({},p,{priority:e.target.value});});}}
+                                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Contact Person</label>
+                            <input type="text" value={editData.contact} onChange={function(e){setEditData(function(p){return Object.assign({},p,{contact:e.target.value});});}}
+                              placeholder="e.g., Mr. Sharma (+91 98xxx)"
+                              style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div>
+                            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Description</label>
+                            <textarea value={editData.description} onChange={function(e){setEditData(function(p){return Object.assign({},p,{description:e.target.value});});}} rows={3}
+                              placeholder="Add details, context or instructions…"
+                              style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                          </div>
+                          <div>
+                            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Checklist</label>
+                            {editData.checklist.map(function(item,ci){
+                              return<div key={ci} style={{display:'flex',gap:6,alignItems:'center',marginBottom:4}}>
+                                <input type="text" value={item.text} onChange={function(e){var v=e.target.value;setEditData(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}}
+                                  style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                                <button onClick={function(){setEditData(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
+                                  style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>×</button>
+                              </div>;
+                            })}
+                            <button onClick={function(){setEditData(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
+                              style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:6,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,width:'100%'}}>+ Add item</button>
+                          </div>
+                          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                            <button onClick={function(){setEditingRow(null);}}
+                              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>Cancel</button>
+                            <button onClick={function(){saveRowData(row.id);}}
+                              style={{background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,boxShadow:'0 2px 8px rgba(59,130,246,0.25)'}}>Save Changes</button>
+                          </div>
+                        </div>
+                      </div>}
+                    </div>}
                   </div>;
                 })}
               </div>
