@@ -5902,7 +5902,6 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
       /* No client selected — overview */
       <div>
         <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Portal Overview</div>
-        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Portal Overview</div>
         <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Select a client from the left panel to view their requests.</div>
         {/* Summary cards */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:24}}>
