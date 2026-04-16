@@ -5475,6 +5475,157 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
   </div>;
 }
 
+// ── Big Clients Module — project-style task boards for high-volume clients ──
+function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
+  var [loading,setLoading]=useState(true);
+  var [clients,setClients]=useState([]);
+  var [selClientId,setSelClientId]=useState(null);
+  var [search,setSearch]=useState('');
+  var [showPicker,setShowPicker]=useState(false);
+  var [toast,setToast]=useState(null);
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id]);
+
+  async function load(){
+    setLoading(true);
+    var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);
+    setClients(r.data||[]);
+    setLoading(false);
+  }
+
+  function isBig(c){return c.custom_fields&&c.custom_fields.is_big_client===true;}
+
+  async function toggleBig(c,val){
+    var cf=Object.assign({},c.custom_fields||{});
+    if(val)cf.is_big_client=true;else delete cf.is_big_client;
+    await supabase.from('clients').update({custom_fields:cf}).eq('id',c.id);
+    setClients(function(prev){return prev.map(function(x){return x.id===c.id?Object.assign({},x,{custom_fields:cf}):x;});});
+    showToast(val?'Marked as Big Client':'Removed from Big Clients');
+  }
+
+  var bigClients=clients.filter(isBig);
+  var filteredBig=bigClients.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);});
+  var nonBig=clients.filter(function(c){return !isBig(c);});
+  var selClient=clients.find(function(c){return c.id===selClientId;});
+
+  function getClientWorkTypes(c){
+    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
+    return wts;
+  }
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>;
+
+  return<div style={{display:'flex',gap:0,height:'calc(100vh - 180px)',minHeight:500,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+    {/* Left panel — big client list */}
+    <div style={{width:280,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)'}}>
+      <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>⭐ Big Clients · {bigClients.length}</div>
+        <button onClick={function(){setShowPicker(true);}} title="Mark a client as Big"
+          style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+      </div>
+      <div style={{padding:'8px 10px',borderBottom:'1px solid var(--tf-border)'}}>
+        <input type="text" value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..."
+          style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        {filteredBig.length===0?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>
+          <div style={{fontSize:24,marginBottom:8}}>⭐</div>
+          <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No big clients yet</div>
+          <div style={{fontSize:11,lineHeight:1.5}}>Click + above to mark high-volume clients as "Big" and give them a project board.</div>
+        </div>:filteredBig.map(function(c){
+          var wts=getClientWorkTypes(c);
+          var isActive=selClientId===c.id;
+          return<div key={c.id} onClick={function(){setSelClientId(c.id);}}
+            style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(249,115,22,0.1)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#f97316':'transparent',transition:'all 0.12s'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
+                {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
+                {wts.length>0&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{wts.join(' · ')}</div>}
+              </div>
+              <button onClick={function(e){e.stopPropagation();if(confirm('Remove "'+(c.display_name||c.name)+'" from Big Clients?'))toggleBig(c,false);}}
+                title="Remove from Big Clients"
+                style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.6}}>×</button>
+            </div>
+          </div>;
+        })}
+      </div>
+    </div>
+
+    {/* Right panel */}
+    <div style={{flex:1,overflowY:'auto',padding:'18px 22px'}}>
+      {!selClient?<div>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Big Clients</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Project-style boards for your high-volume clients. Each big client gets a task board per work type per period with sub-tasks, assignees and checklists — instead of a single checkbox.</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:24}}>
+          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:800,color:'#f97316'}}>{bigClients.length}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Big Clients</div>
+          </div>
+          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
+            <div style={{fontSize:22,fontWeight:800,color:'#6b8cad'}}>{clients.length}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Total Clients</div>
+          </div>
+        </div>
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px'}}>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>How it works</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.6}}>
+            <b>1.</b> Click <b>+</b> in the left panel to mark a client as "Big".<br/>
+            <b>2.</b> Select the client to open their project workspace.<br/>
+            <b>3.</b> For each work type (Accounting, Payroll, etc.), add sub-tasks with different assignees, due dates, priorities and checklists.<br/>
+            <b>4.</b> Each sub-task rolls up to your normal worksheet and appears on the assignee's dashboard.
+          </div>
+        </div>
+      </div>
+      :<div>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#f97316',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>⭐ Big Client</div>
+          <h2 style={{margin:0,fontSize:22,fontWeight:800,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}</h2>
+          {selClient.pan&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:3,fontFamily:'monospace'}}>{selClient.pan}</div>}
+        </div>
+        <div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'32px 20px',textAlign:'center'}}>
+          <div style={{fontSize:36,marginBottom:10}}>🏗️</div>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Project Board Coming in Next Phase</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',maxWidth:420,margin:'0 auto',lineHeight:1.5}}>
+            Next up: work type tabs, period selector and the sub-task board where you can add tasks like "Bank Reco HDFC", "Vendor Reco", "MIS Report" — each with its own assignee, due date and checklist.
+          </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:14}}>Assigned work types: {getClientWorkTypes(selClient).join(', ')||'None yet'}</div>
+        </div>
+      </div>}
+    </div>
+
+    {/* Mark-as-big picker modal */}
+    {showPicker&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)setShowPicker(false);}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:12,width:'100%',maxWidth:460,maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <h3 style={{margin:0,fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Mark Client as Big</h3>
+          <button onClick={function(){setShowPicker(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18}}>×</button>
+        </div>
+        <div style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)'}}>
+          <input type="text" value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search clients..."
+            style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          {nonBig.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q);}).map(function(c){
+            return<div key={c.id} style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
+                {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
+              </div>
+              <button onClick={function(){toggleBig(c,true);setShowPicker(false);}}
+                style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
+            </div>;
+          })}
+          {nonBig.length===0&&<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>All clients are already marked as Big.</div>}
+        </div>
+      </div>
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
 function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
@@ -6032,7 +6183,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
 
   var MODULES=[
     {id:'dashboard',label:'Your Dashboard',icon:'⚡',desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'}]},
-    {id:'clients',label:'Clients & Worksheets',icon:'📇',desc:'Client master data and operational worksheets for every work type.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'}]},
+    {id:'clients',label:'Clients & Worksheets',icon:'📇',desc:'Client master data, worksheets and project boards for big clients.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'}]},
   ];
   if(canSeeAnalytics){
     MODULES.push({id:'analytics',label:'Analytics',icon:'📊',desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
@@ -6120,6 +6271,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='dashboard'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
+      {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='comms'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
