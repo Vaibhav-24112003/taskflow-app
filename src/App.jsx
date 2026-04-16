@@ -2799,6 +2799,29 @@ function getCurrentPeriod(freq){
   return {year:fy,month:null,quarter:null};
 }
 
+// Returns the most useful "default" period to land on for a work type:
+// if any due date falls in a later month/quarter (month_offset>=1), shift back by one period
+// so users land on last period whose due date is around now.
+function getDefaultPeriod(freq, cfg){
+  var p=getCurrentPeriod(freq);
+  if(!cfg)return p;
+  var dueArr=cfg.due_dates||[];
+  var hasShift=dueArr.length>0?dueArr.some(function(dd){return (dd.month_offset==null?1:Number(dd.month_offset))>=1;}):!!cfg.due_day;
+  if(!hasShift)return p;
+  if(freq==='monthly'){
+    var m=p.month-1, y=p.year;
+    if(m<1){m=12;y-=1;}
+    if(m===3)y-=1; // Mar belongs to previous FY
+    return {year:y,month:m,quarter:null};
+  }
+  if(freq==='quarterly'){
+    var q=p.quarter-1, yq=p.year;
+    if(q<1){q=4;yq-=1;}
+    return {year:yq,month:null,quarter:q};
+  }
+  return p;
+}
+
 function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly}){
   var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
@@ -3113,8 +3136,9 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
           var preferCfg=WS_TYPE_CONFIGS[preferType];
           if(preferCfg&&preferCfg.worksheet_group)setActiveGroup(preferCfg.worksheet_group);
         }else if(firstGroup){setActiveGroup(firstGroup);}
-        var freq=WS_TYPE_CONFIGS[firstType]?WS_TYPE_CONFIGS[firstType].frequency:'monthly';
-        var p=getCurrentPeriod(freq);
+        var firstCfg=WS_TYPE_CONFIGS[firstType];
+        var freq=firstCfg?firstCfg.frequency:'monthly';
+        var p=getDefaultPeriod(freq,firstCfg);
         setPeriodYear(p.year);
         if(p.month)setPeriodMonth(p.month);
         if(p.quarter)setPeriodQuarter(p.quarter);
@@ -3493,14 +3517,16 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
               // Select first work type in group
               var firstType=tab.types[0];
               setActiveType(firstType);
-              var f2=WS_TYPE_CONFIGS[firstType]?WS_TYPE_CONFIGS[firstType].frequency:'monthly';
-              var p2=getCurrentPeriod(f2);
+              var cfg2g=WS_TYPE_CONFIGS[firstType];
+              var f2=cfg2g?cfg2g.frequency:'monthly';
+              var p2=getDefaultPeriod(f2,cfg2g);
               setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
             }else{
               setActiveGroup(null);
               setActiveType(tab.types[0]);
-              var f2=WS_TYPE_CONFIGS[tab.types[0]]?WS_TYPE_CONFIGS[tab.types[0]].frequency:'monthly';
-              var p2=getCurrentPeriod(f2);
+              var cfg2t=WS_TYPE_CONFIGS[tab.types[0]];
+              var f2=cfg2t?cfg2t.frequency:'monthly';
+              var p2=getDefaultPeriod(f2,cfg2t);
               setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
             }
             clearFilters();
@@ -3515,7 +3541,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
           return<button key={t} onClick={function(){
             setActiveType(t);
             var f2=cfg2.frequency||'monthly';
-            var p2=getCurrentPeriod(f2);
+            var p2=getDefaultPeriod(f2,cfg2);
             setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
             clearFilters();
           }} style={{padding:'5px 12px',borderRadius:'100px',border:active?'1.5px solid rgba(107,140,173,0.5)':'1.5px solid var(--tf-border)',background:active?'rgba(107,140,173,0.1)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>
