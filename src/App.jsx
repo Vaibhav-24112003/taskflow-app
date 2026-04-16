@@ -5494,6 +5494,9 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [toast,setToast]=useState(null);
   var [showAdd,setShowAdd]=useState(false);
   var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:''});
+  var [expTaskId,setExpTaskId]=useState(null);
+  var [editTaskId,setEditTaskId]=useState(null);
+  var [editTaskData,setEditTaskData]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',checklist:[]});
   var [saving,setSaving]=useState(false);
   var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
   var PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
@@ -5592,6 +5595,45 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     await supabase.from('worksheet_rows').delete().eq('id',id);
     setSubtasks(function(p){return p.filter(function(r){return r.id!==id;});});
     showToast('Task removed');
+  }
+
+  function toggleExpTask(id){setExpTaskId(function(p){return p===id?null:id;});setEditTaskId(null);}
+  function startEditTask(row){
+    var d=row.data||{};
+    setEditTaskId(row.id);
+    setEditTaskData({
+      title:d.__title||'',
+      assignee:d.__assignee||'',
+      due:row.due_date||'',
+      priority:d.__priority||'medium',
+      notes:d.__description||'',
+      checklist:d.__checklist?d.__checklist.map(function(c){return{text:c.text||'',done:!!c.done};}):[]
+    });
+  }
+  async function saveEditTask(id){
+    var row=subtasks.find(function(r){return r.id===id;});
+    if(!row)return;
+    var d=Object.assign({},row.data||{});
+    if(editTaskData.title.trim())d.__title=editTaskData.title.trim();else delete d.__title;
+    if(editTaskData.assignee)d.__assignee=editTaskData.assignee;else delete d.__assignee;
+    d.__priority=editTaskData.priority||'medium';
+    if(editTaskData.notes.trim())d.__description=editTaskData.notes.trim();else delete d.__description;
+    var validCl=editTaskData.checklist.filter(function(c){return c.text&&c.text.trim();});
+    if(validCl.length>0)d.__checklist=validCl;else delete d.__checklist;
+    var dueVal=editTaskData.due||null;
+    await supabase.from('worksheet_rows').update({data:d,due_date:dueVal}).eq('id',id);
+    setSubtasks(function(p){return p.map(function(r){return r.id===id?Object.assign({},r,{data:d,due_date:dueVal}):r;});});
+    setEditTaskId(null);
+    showToast('Task updated!');
+  }
+  async function toggleTaskChecklist(id,idx){
+    var row=subtasks.find(function(r){return r.id===id;});
+    if(!row)return;
+    var d=Object.assign({},row.data||{});
+    var cl=(d.__checklist||[]).map(function(c,i){return i===idx?{text:c.text,done:!c.done}:c;});
+    d.__checklist=cl;
+    await supabase.from('worksheet_rows').update({data:d}).eq('id',id);
+    setSubtasks(function(p){return p.map(function(r){return r.id===id?Object.assign({},r,{data:d}):r;});});
   }
 
   var doneCnt=subtasks.filter(function(r){return r.status==='completed';}).length;
@@ -5694,22 +5736,90 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                 var d=row.data||{};
                 var assignee=orgMembers.find(function(m){return m.id===d.__assignee;})||null;
                 var isOverdue=row.due_date&&row.due_date<new Date().toISOString().slice(0,10);
-                return<div key={row.id} style={{padding:'11px 14px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-                  <div style={{width:8,height:8,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:160}}>
-                    <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{d.__title||'Untitled'}</div>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:8,marginTop:2,flexWrap:'wrap'}}>
-                      {assignee&&<span>👤 {assignee.name||assignee.email}</span>}
-                      {row.due_date&&<span style={{color:isOverdue?'#ef4444':'var(--tf-text-sub)',fontWeight:isOverdue?700:400}}>{isOverdue?'Overdue · ':''}{new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
-                      {d.__description&&<span style={{fontStyle:'italic',opacity:0.7}}>{d.__description.slice(0,40)}{d.__description.length>40?'…':''}</span>}
+                var isExp=expTaskId===row.id;
+                var isEdit=editTaskId===row.id;
+                var clDone=(d.__checklist||[]).filter(function(c){return c.done;}).length;
+                var clTotal=(d.__checklist||[]).length;
+                return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)'}}>
+                  <div style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',cursor:'pointer'}}
+                    onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='BUTTON')return;toggleExpTask(row.id);}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:160}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{d.__title||'Untitled'}</div>
+                      <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:8,marginTop:2,flexWrap:'wrap'}}>
+                        {assignee&&<span>👤 {assignee.name||assignee.email}</span>}
+                        {row.due_date&&<span style={{color:isOverdue?'#ef4444':'var(--tf-text-sub)',fontWeight:isOverdue?700:400}}>{isOverdue?'Overdue · ':''}{new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
+                        {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
+                      </div>
                     </div>
+                    <select value={row.status||'pending'} onChange={function(e){updateTaskStatus(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}}
+                      style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                      <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
+                    </select>
+                    <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove this task?'))deleteTask(row.id);}}
+                      style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,padding:'2px 4px',opacity:0.5}} title="Remove">✕</button>
+                    <span style={{fontSize:9,color:'var(--tf-text-sub)',transform:isExp?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
                   </div>
-                  <select value={row.status||'pending'} onChange={function(e){updateTaskStatus(row.id,e.target.value);}}
-                    style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
-                    <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
-                  </select>
-                  <button onClick={function(){if(window.confirm('Remove this task?'))deleteTask(row.id);}}
-                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,padding:'2px 4px',opacity:0.5}} title="Remove">✕</button>
+                  {isExp&&<div style={{padding:'2px 14px 14px 30px',background:'rgba(107,140,173,0.03)'}}>
+                    {!isEdit?<div>
+                      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:8}}>
+                        <span style={{fontSize:10,fontWeight:800,color:PC[d.__priority||'medium'],background:'rgba(59,130,246,0.08)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{d.__priority||'medium'}</span>
+                        <button onClick={function(){startEditTask(row);}}
+                          style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit</button>
+                      </div>
+                      {d.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{d.__description}</div>}
+                      {clTotal>0&&<div>
+                        <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Checklist ({clDone}/{clTotal})</div>
+                        {d.__checklist.map(function(item,ci){
+                          return<div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,cursor:'pointer'}} onClick={function(){toggleTaskChecklist(row.id,ci);}}>
+                            <div style={{width:15,height:15,borderRadius:3,border:'1.5px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                              {item.done&&<span style={{color:'#fff',fontSize:9,fontWeight:900}}>✓</span>}
+                            </div>
+                            <span style={{fontSize:12,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none'}}>{item.text}</span>
+                          </div>;
+                        })}
+                      </div>}
+                      {!d.__description&&clTotal===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No notes or checklist. Click Edit to add.</div>}
+                    </div>
+                    :<div style={{display:'flex',flexDirection:'column',gap:8}}>
+                      <input value={editTaskData.title} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Title"
+                        style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                        <select value={editTaskData.assignee} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{assignee:e.target.value});});}}
+                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                          <option value="">— Assignee —</option>
+                          {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                        </select>
+                        <input type="date" value={editTaskData.due} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{due:e.target.value});});}}
+                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                        <select value={editTaskData.priority} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{priority:e.target.value});});}}
+                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+                        </select>
+                      </div>
+                      <textarea value={editTaskData.notes} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={2} placeholder="Notes"
+                        style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical'}}/>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Checklist</div>
+                        {editTaskData.checklist.map(function(item,ci){
+                          return<div key={ci} style={{display:'flex',gap:5,alignItems:'center',marginBottom:3}}>
+                            <input value={item.text} onChange={function(e){var v=e.target.value;setEditTaskData(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}}
+                              style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'5px 7px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                            <button onClick={function(){setEditTaskData(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
+                              style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,width:24,height:24,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>×</button>
+                          </div>;
+                        })}
+                        <button onClick={function(){setEditTaskData(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
+                          style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,width:'100%',fontFamily:'inherit'}}>+ Add item</button>
+                      </div>
+                      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                        <button onClick={function(){setEditTaskId(null);}}
+                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>Cancel</button>
+                        <button onClick={function(){saveEditTask(row.id);}}
+                          style={{background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Save</button>
+                      </div>
+                    </div>}
+                  </div>}
                 </div>;
               })}
             </div>
