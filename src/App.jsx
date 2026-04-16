@@ -5493,7 +5493,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [loadingTasks,setLoadingTasks]=useState(false);
   var [toast,setToast]=useState(null);
   var [showAdd,setShowAdd]=useState(false);
-  var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:''});
+  var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[]});
   var [expTaskId,setExpTaskId]=useState(null);
   var [editTaskId,setEditTaskId]=useState(null);
   var [editTaskData,setEditTaskData]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',checklist:[]});
@@ -5575,14 +5575,19 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   }
 
   async function addSubtask(){
-    if(!newTask.title.trim()||!parentRow)return;
+    if(!newTask.title.trim()){showToast('Title is required','err');return;}
+    if(!parentRow){showToast('Parent row not loaded — try reselecting work type','err');return;}
     setSaving(true);
     var d={__title:newTask.title.trim()};
     if(newTask.priority)d.__priority=newTask.priority;
     if(newTask.notes.trim())d.__description=newTask.notes.trim();
     if(newTask.assignee)d.__assignee=newTask.assignee;
+    if(newTask.contact&&newTask.contact.trim())d.__contact=newTask.contact.trim();
+    var validCl=(newTask.checklist||[]).filter(function(c){return c.text&&c.text.trim();}).map(function(c){return{text:c.text.trim(),done:!!c.done};});
+    if(validCl.length>0)d.__checklist=validCl;
     var ins=await supabase.from('worksheet_rows').insert({worksheet_id:parentRow.worksheet_id,client_id:selClientId,org_id:org.id,parent_row_id:parentRow.id,data:d,due_date:newTask.due||null,status:'pending'}).select('*').single();
-    if(ins.data){setSubtasks(function(p){return[...p,ins.data];});setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:''});setShowAdd(false);showToast('Task added!');}
+    if(ins.error){showToast('Failed: '+ins.error.message,'err');setSaving(false);return;}
+    if(ins.data){setSubtasks(function(p){return[...p,ins.data];});setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[]});setShowAdd(false);showToast('Task added!');}
     setSaving(false);
   }
 
@@ -5842,10 +5847,25 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                     <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
                   </select>
                 </div>
-                <input value={newTask.notes} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{notes:e.target.value});});}} placeholder="Notes (optional)"
+                <input value={newTask.contact} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{contact:e.target.value});});}} placeholder="Contact person (optional)"
                   style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                <textarea value={newTask.notes} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={3} placeholder="Notes / description (optional)"
+                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical'}}/>
+                <div>
+                  <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Checklist (optional)</div>
+                  {newTask.checklist.map(function(item,ci){
+                    return<div key={ci} style={{display:'flex',gap:5,alignItems:'center',marginBottom:4}}>
+                      <input value={item.text} onChange={function(e){var v=e.target.value;setNewTask(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}} placeholder={'Item '+(ci+1)}
+                        style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                      <button onClick={function(){setNewTask(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
+                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,width:26,height:26,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>×</button>
+                    </div>;
+                  })}
+                  <button onClick={function(){setNewTask(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
+                    style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,width:'100%',fontFamily:'inherit'}}>+ Add checklist item</button>
+                </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                  <button onClick={function(){setShowAdd(false);setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',});}}
+                  <button onClick={function(){setShowAdd(false);setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[]});}}
                     style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>Cancel</button>
                   <button onClick={addSubtask} disabled={saving||!newTask.title.trim()}
                     style={{background:newTask.title.trim()?'linear-gradient(135deg,#f97316,#ea580c)':'var(--tf-border)',border:'none',borderRadius:6,padding:'6px 16px',color:'#fff',cursor:newTask.title.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700}}>
