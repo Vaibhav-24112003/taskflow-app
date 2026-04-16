@@ -5493,7 +5493,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [loadingTasks,setLoadingTasks]=useState(false);
   var [toast,setToast]=useState(null);
   var [showAdd,setShowAdd]=useState(false);
-  var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[]});
+  var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[],hierarchy:{}});
   var [expTaskId,setExpTaskId]=useState(null);
   var [editTaskId,setEditTaskId]=useState(null);
   var [editTaskData,setEditTaskData]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',checklist:[]});
@@ -5581,13 +5581,17 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     var d={__title:newTask.title.trim()};
     if(newTask.priority)d.__priority=newTask.priority;
     if(newTask.notes.trim())d.__description=newTask.notes.trim();
-    if(newTask.assignee)d.__assignee=newTask.assignee;
+    if(wfH.length>0){
+      Object.keys(newTask.hierarchy||{}).forEach(function(k){if(newTask.hierarchy[k])d['__h_'+k]=newTask.hierarchy[k];});
+      var firstLevel=wfH[0]&&newTask.hierarchy[wfH[0].key];
+      if(firstLevel)d.__assignee=firstLevel;
+    }else if(newTask.assignee){d.__assignee=newTask.assignee;}
     if(newTask.contact&&newTask.contact.trim())d.__contact=newTask.contact.trim();
     var validCl=(newTask.checklist||[]).filter(function(c){return c.text&&c.text.trim();}).map(function(c){return{text:c.text.trim(),done:!!c.done};});
     if(validCl.length>0)d.__checklist=validCl;
     var ins=await supabase.from('worksheet_rows').insert({worksheet_id:parentRow.worksheet_id,client_id:selClientId,org_id:org.id,parent_row_id:parentRow.id,data:d,due_date:newTask.due||null,status:'pending'}).select('*').single();
     if(ins.error){showToast('Failed: '+ins.error.message,'err');setSaving(false);return;}
-    if(ins.data){setSubtasks(function(p){return[...p,ins.data];});setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[]});setShowAdd(false);showToast('Task added!');}
+    if(ins.data){setSubtasks(function(p){return[...p,ins.data];});setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[],hierarchy:{}});setShowAdd(false);showToast('Task added!');}
     setSaving(false);
   }
 
@@ -5834,12 +5838,23 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 <input value={newTask.title} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task title (e.g. Bank Reco — HDFC) *"
                   style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                {wfH.length>0?<div>
+                  <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Workflow ({wfH.length} role{wfH.length!==1?'s':''})</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
+                    {wfH.map(function(h){return<select key={h.key} value={(newTask.hierarchy||{})[h.key]||''} onChange={function(e){var v=e.target.value;setNewTask(function(p){var nh=Object.assign({},p.hierarchy||{});nh[h.key]=v;return Object.assign({},p,{hierarchy:nh});});}}
+                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                      <option value="">— {h.label} —</option>
+                      {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                    </select>;})}
+                  </div>
+                </div>:<div style={{display:'grid',gridTemplateColumns:'1fr',gap:8}}>
                   <select value={newTask.assignee} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{assignee:e.target.value});});}}
                     style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
                     <option value="">— Assignee —</option>
                     {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
                   </select>
+                </div>}
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                   <input type="date" value={newTask.due} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{due:e.target.value});});}}
                     style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
                   <select value={newTask.priority} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{priority:e.target.value});});}}
@@ -5865,7 +5880,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                     style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,width:'100%',fontFamily:'inherit'}}>+ Add checklist item</button>
                 </div>
                 <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                  <button onClick={function(){setShowAdd(false);setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[]});}}
+                  <button onClick={function(){setShowAdd(false);setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[],hierarchy:{}});}}
                     style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>Cancel</button>
                   <button onClick={addSubtask} disabled={saving||!newTask.title.trim()}
                     style={{background:newTask.title.trim()?'linear-gradient(135deg,#f97316,#ea580c)':'var(--tf-border)',border:'none',borderRadius:6,padding:'6px 16px',color:'#fff',cursor:newTask.title.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700}}>
