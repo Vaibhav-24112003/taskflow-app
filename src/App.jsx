@@ -5477,24 +5477,45 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
 
 // ── Big Clients Module — project-style task boards for high-volume clients ──
 function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
+  var wfH=workflowHierarchy||[];
+  var hierarchyCols=wfH.length>0?wfH.map(function(h){return{key:'__h_'+h.key,label:h.label};}):([{key:'__assignee',label:'Assignee'}]);
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
+  var [orgMembers,setOrgMembers]=useState([]);
   var [selClientId,setSelClientId]=useState(null);
+  var [selWorkType,setSelWorkType]=useState('');
+  var [periodYear,setPeriodYear]=useState(new Date().getFullYear());
+  var [periodMonth,setPeriodMonth]=useState(new Date().getMonth()+1);
   var [search,setSearch]=useState('');
   var [showPicker,setShowPicker]=useState(false);
+  var [subtasks,setSubtasks]=useState([]);
+  var [parentRow,setParentRow]=useState(null);
+  var [loadingTasks,setLoadingTasks]=useState(false);
   var [toast,setToast]=useState(null);
+  var [showAdd,setShowAdd]=useState(false);
+  var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:''});
+  var [saving,setSaving]=useState(false);
+  var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
+  var PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
   function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
 
-  useEffect(function(){load();/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){load();},[org.id]);
 
   async function load(){
     setLoading(true);
     var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);
     setClients(r.data||[]);
+    var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(200);
+    var ids=(rm.data||[]).map(function(m){return m.user_id;});
+    if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);setOrgMembers(rp.data||[]);}
     setLoading(false);
   }
 
   function isBig(c){return c.custom_fields&&c.custom_fields.is_big_client===true;}
+  function getClientWorkTypes(c){
+    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
+    return wts;
+  }
 
   async function toggleBig(c,val){
     var cf=Object.assign({},c.custom_fields||{});
@@ -5507,46 +5528,106 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var bigClients=clients.filter(isBig);
   var filteredBig=bigClients.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);});
   var nonBig=clients.filter(function(c){return !isBig(c);});
-  var selClient=clients.find(function(c){return c.id===selClientId;});
+  var selClient=clients.find(function(c){return c.id===selClientId;})||null;
+  var selClientWTs=selClient?getClientWorkTypes(selClient):[];
+  var cfg=workTypeConfigs&&selWorkType?(workTypeConfigs.find(function(c){return c.name===selWorkType;})||null):null;
+  var freq=cfg?cfg.frequency:'monthly';
 
-  function getClientWorkTypes(c){
-    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
-    return wts;
+  var MONTHS=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+  var MONTH_NUMS=[4,5,6,7,8,9,10,11,12,1,2,3];
+  function periodLabel(){
+    if(freq==='yearly')return 'FY '+periodYear+'-'+(periodYear+1).toString().slice(2);
+    if(freq==='quarterly'){var q=Math.ceil(([4,5,6,7,8,9,10,11,12,1,2,3].indexOf(periodMonth)+1)/3);return 'Q'+q+' FY'+periodYear;}
+    return MONTHS[MONTH_NUMS.indexOf(periodMonth)]+' '+periodYear;
   }
+
+  useEffect(function(){
+    if(selClientId&&selWorkType){loadTasks();}
+    else{setSubtasks([]);setParentRow(null);}
+  },[selClientId,selWorkType,periodYear,periodMonth]);
+
+  async function loadTasks(){
+    if(!selClientId||!selWorkType)return;
+    setLoadingTasks(true);
+    var pl=periodLabel();
+    var rw=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type',selWorkType).eq('period_label',pl).maybeSingle();
+    var wsId=rw.data?rw.data.id:null;
+    if(!wsId){
+      var ins=await supabase.from('worksheets').insert({org_id:org.id,work_type:selWorkType,period_label:pl,period_year:periodYear,period_month:freq==='monthly'?periodMonth:null,frequency:freq,created_by:cu.id}).select('id').single();
+      wsId=ins.data?ins.data.id:null;
+    }
+    if(!wsId){setLoadingTasks(false);return;}
+    var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',wsId).eq('client_id',selClientId).is('parent_row_id',null).maybeSingle();
+    var pr=rr.data||null;
+    if(!pr){
+      var ins2=await supabase.from('worksheet_rows').insert({worksheet_id:wsId,client_id:selClientId,org_id:org.id,data:{__big_client_parent:true},status:'pending'}).select('*').single();
+      pr=ins2.data||null;
+    }
+    setParentRow(pr);
+    if(pr){
+      var rc=await supabase.from('worksheet_rows').select('*').eq('parent_row_id',pr.id).order('created_at').limit(200);
+      setSubtasks(rc.data||[]);
+    }
+    setLoadingTasks(false);
+  }
+
+  async function addSubtask(){
+    if(!newTask.title.trim()||!parentRow)return;
+    setSaving(true);
+    var d={__title:newTask.title.trim()};
+    if(newTask.priority)d.__priority=newTask.priority;
+    if(newTask.notes.trim())d.__description=newTask.notes.trim();
+    if(newTask.assignee)d.__assignee=newTask.assignee;
+    var ins=await supabase.from('worksheet_rows').insert({worksheet_id:parentRow.worksheet_id,client_id:selClientId,org_id:org.id,parent_row_id:parentRow.id,data:d,due_date:newTask.due||null,status:'pending'}).select('*').single();
+    if(ins.data){setSubtasks(function(p){return[...p,ins.data];});setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:''});setShowAdd(false);showToast('Task added!');}
+    setSaving(false);
+  }
+
+  async function updateTaskStatus(id,val){
+    await supabase.from('worksheet_rows').update({status:val}).eq('id',id);
+    setSubtasks(function(p){return p.map(function(r){return r.id===id?Object.assign({},r,{status:val}):r;});});
+  }
+
+  async function deleteTask(id){
+    await supabase.from('worksheet_rows').delete().eq('id',id);
+    setSubtasks(function(p){return p.filter(function(r){return r.id!==id;});});
+    showToast('Task removed');
+  }
+
+  var doneCnt=subtasks.filter(function(r){return r.status==='completed';}).length;
+  var pct=subtasks.length>0?Math.round(doneCnt/subtasks.length*100):0;
 
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>;
 
   return<div style={{display:'flex',gap:0,height:'calc(100vh - 180px)',minHeight:500,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-    {/* Left panel — big client list */}
-    <div style={{width:280,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)'}}>
-      <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+    {/* Left panel */}
+    <div style={{width:260,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)',flexShrink:0}}>
+      <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>⭐ Big Clients · {bigClients.length}</div>
-        <button onClick={function(){setShowPicker(true);}} title="Mark a client as Big"
-          style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+        <button onClick={function(){setShowPicker(true);}} style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
       </div>
       <div style={{padding:'8px 10px',borderBottom:'1px solid var(--tf-border)'}}>
-        <input type="text" value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..."
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..."
           style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
       </div>
       <div style={{flex:1,overflowY:'auto'}}>
         {filteredBig.length===0?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>
           <div style={{fontSize:24,marginBottom:8}}>⭐</div>
           <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No big clients yet</div>
-          <div style={{fontSize:11,lineHeight:1.5}}>Click + above to mark high-volume clients as "Big" and give them a project board.</div>
+          <div style={{fontSize:11,lineHeight:1.5}}>Click + to mark a high-volume client.</div>
         </div>:filteredBig.map(function(c){
           var wts=getClientWorkTypes(c);
           var isActive=selClientId===c.id;
-          return<div key={c.id} onClick={function(){setSelClientId(c.id);}}
-            style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(249,115,22,0.1)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#f97316':'transparent',transition:'all 0.12s'}}>
+          return<div key={c.id} onClick={function(){setSelClientId(c.id);setSelWorkType(wts[0]||'');}}
+            style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(249,115,22,0.1)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#f97316':'transparent'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
                 {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
-                {wts.length>0&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{wts.join(' · ')}</div>}
+                {wts.length>0&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:2}}>{wts.slice(0,3).join(' · ')}{wts.length>3?'…':''}</div>}
               </div>
-              <button onClick={function(e){e.stopPropagation();if(confirm('Remove "'+(c.display_name||c.name)+'" from Big Clients?'))toggleBig(c,false);}}
-                title="Remove from Big Clients"
-                style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.6}}>×</button>
+              <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove from Big Clients?'))toggleBig(c,false);}}
+                style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.5}}>×</button>
             </div>
           </div>;
         })}
@@ -5554,66 +5635,137 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     </div>
 
     {/* Right panel */}
-    <div style={{flex:1,overflowY:'auto',padding:'18px 22px'}}>
-      {!selClient?<div>
+    <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column'}}>
+      {!selClient?<div style={{padding:'24px 22px'}}>
         <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Big Clients</div>
-        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Project-style boards for your high-volume clients. Each big client gets a task board per work type per period with sub-tasks, assignees and checklists — instead of a single checkbox.</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:24}}>
-          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
-            <div style={{fontSize:22,fontWeight:800,color:'#f97316'}}>{bigClients.length}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Big Clients</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Project-style boards for high-volume clients. Each client gets a full sub-task board per work type per period — with assignees, due dates and checklists.</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10}}>
+          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#f97316'}}>{bigClients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Big Clients</div></div>
+          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#6b8cad'}}>{clients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Total Clients</div></div>
+        </div>
+      </div>:<div style={{flex:1,display:'flex',flexDirection:'column'}}>
+        {/* Client header */}
+        <div style={{padding:'14px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,fontWeight:700,color:'#f97316',textTransform:'uppercase',letterSpacing:'0.06em'}}>⭐ Big Client</div>
+            <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}</div>
           </div>
-          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
-            <div style={{fontSize:22,fontWeight:800,color:'#6b8cad'}}>{clients.length}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Total Clients</div>
+          {/* Period selector */}
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+            <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}}
+              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+              {MONTHS.map(function(m,i){return<option key={m} value={MONTH_NUMS[i]}>{m}</option>;})}
+            </select>
+            <select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}}
+              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+              {[2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{y}</option>;})}
+            </select>
           </div>
         </div>
-        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px'}}>
-          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>How it works</div>
-          <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.6}}>
-            <b>1.</b> Click <b>+</b> in the left panel to mark a client as "Big".<br/>
-            <b>2.</b> Select the client to open their project workspace.<br/>
-            <b>3.</b> For each work type (Accounting, Payroll, etc.), add sub-tasks with different assignees, due dates, priorities and checklists.<br/>
-            <b>4.</b> Each sub-task rolls up to your normal worksheet and appears on the assignee's dashboard.
-          </div>
-        </div>
-      </div>
-      :<div>
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:11,fontWeight:700,color:'#f97316',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>⭐ Big Client</div>
-          <h2 style={{margin:0,fontSize:22,fontWeight:800,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}</h2>
-          {selClient.pan&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:3,fontFamily:'monospace'}}>{selClient.pan}</div>}
-        </div>
-        <div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'32px 20px',textAlign:'center'}}>
-          <div style={{fontSize:36,marginBottom:10}}>🏗️</div>
-          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Project Board Coming in Next Phase</div>
-          <div style={{fontSize:12,color:'var(--tf-text-sub)',maxWidth:420,margin:'0 auto',lineHeight:1.5}}>
-            Next up: work type tabs, period selector and the sub-task board where you can add tasks like "Bank Reco HDFC", "Vendor Reco", "MIS Report" — each with its own assignee, due date and checklist.
-          </div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:14}}>Assigned work types: {getClientWorkTypes(selClient).join(', ')||'None yet'}</div>
+        {/* Work type tabs */}
+        {selClientWTs.length>0&&<div style={{display:'flex',gap:0,borderBottom:'1px solid var(--tf-border)',padding:'0 16px',overflowX:'auto'}}>
+          {selClientWTs.map(function(wt){
+            var isA=selWorkType===wt;
+            return<button key={wt} onClick={function(){setSelWorkType(wt);}}
+              style={{padding:'8px 14px',border:'none',borderBottom:'2px solid',borderBottomColor:isA?'#f97316':'transparent',background:'none',color:isA?'#f97316':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:isA?800:600,whiteSpace:'nowrap',fontFamily:'inherit'}}>
+              {wt}
+            </button>;
+          })}
+        </div>}
+        {/* Task board */}
+        <div style={{flex:1,padding:'16px 20px',overflowY:'auto'}}>
+          {!selWorkType?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:12}}>No work types assigned. Add work types in Client Master Data → edit client → Work Types tab.</div>
+          :loadingTasks?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading tasks...</div>
+          :<div>
+            {/* Progress bar */}
+            {subtasks.length>0&&<div style={{marginBottom:14}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)'}}>{doneCnt}/{subtasks.length} tasks done</span>
+                <span style={{fontSize:11,fontWeight:800,color:pct===100?'#22c55e':'#f97316'}}>{pct}%</span>
+              </div>
+              <div style={{height:6,background:'var(--tf-border)',borderRadius:4,overflow:'hidden'}}>
+                <div style={{height:'100%',width:pct+'%',background:pct===100?'#22c55e':'linear-gradient(90deg,#f97316,#ea580c)',borderRadius:4,transition:'width 0.3s'}}/>
+              </div>
+            </div>}
+            {/* Task list */}
+            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden',marginBottom:12}}>
+              {subtasks.length===0?<div style={{padding:'28px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>No sub-tasks yet for {selWorkType} · {periodLabel()}. Click "+ Add Task" below.</div>
+              :subtasks.map(function(row,idx){
+                var d=row.data||{};
+                var assignee=orgMembers.find(function(m){return m.id===d.__assignee;})||null;
+                var isOverdue=row.due_date&&row.due_date<new Date().toISOString().slice(0,10);
+                return<div key={row.id} style={{padding:'11px 14px',borderTop:idx===0?'none':'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:160}}>
+                    <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{d.__title||'Untitled'}</div>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:8,marginTop:2,flexWrap:'wrap'}}>
+                      {assignee&&<span>👤 {assignee.name||assignee.email}</span>}
+                      {row.due_date&&<span style={{color:isOverdue?'#ef4444':'var(--tf-text-sub)',fontWeight:isOverdue?700:400}}>{isOverdue?'Overdue · ':''}{new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
+                      {d.__description&&<span style={{fontStyle:'italic',opacity:0.7}}>{d.__description.slice(0,40)}{d.__description.length>40?'…':''}</span>}
+                    </div>
+                  </div>
+                  <select value={row.status||'pending'} onChange={function(e){updateTaskStatus(row.id,e.target.value);}}
+                    style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                    <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
+                  </select>
+                  <button onClick={function(){if(window.confirm('Remove this task?'))deleteTask(row.id);}}
+                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,padding:'2px 4px',opacity:0.5}} title="Remove">✕</button>
+                </div>;
+              })}
+            </div>
+            {/* Add task form */}
+            {showAdd?<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px',marginBottom:8}}>
+              <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>New Sub-task</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <input value={newTask.title} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task title (e.g. Bank Reco — HDFC) *"
+                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                  <select value={newTask.assignee} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{assignee:e.target.value});});}}
+                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                    <option value="">— Assignee —</option>
+                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                  </select>
+                  <input type="date" value={newTask.due} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{due:e.target.value});});}}
+                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                  <select value={newTask.priority} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{priority:e.target.value});});}}
+                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                    <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <input value={newTask.notes} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{notes:e.target.value});});}} placeholder="Notes (optional)"
+                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                  <button onClick={function(){setShowAdd(false);setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',});}}
+                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>Cancel</button>
+                  <button onClick={addSubtask} disabled={saving||!newTask.title.trim()}
+                    style={{background:newTask.title.trim()?'linear-gradient(135deg,#f97316,#ea580c)':'var(--tf-border)',border:'none',borderRadius:6,padding:'6px 16px',color:'#fff',cursor:newTask.title.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700}}>
+                    {saving?'Adding…':'Add Task'}</button>
+                </div>
+              </div>
+            </div>
+            :<button onClick={function(){setShowAdd(true);}}
+              style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'10px',width:'100%',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>+ Add Task</button>}
+          </div>}
         </div>
       </div>}
     </div>
 
-    {/* Mark-as-big picker modal */}
+    {/* Picker modal */}
     {showPicker&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)setShowPicker(false);}}>
-      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:12,width:'100%',maxWidth:460,maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:12,width:'100%',maxWidth:440,maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
         <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <h3 style={{margin:0,fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Mark Client as Big</h3>
           <button onClick={function(){setShowPicker(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18}}>×</button>
         </div>
         <div style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)'}}>
-          <input type="text" value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search clients..."
+          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search clients..."
             style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
         </div>
         <div style={{flex:1,overflowY:'auto'}}>
-          {nonBig.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q);}).map(function(c){
+          {nonBig.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);}).map(function(c){
             return<div key={c.id} style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
-                {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
-              </div>
-              <button onClick={function(){toggleBig(c,true);setShowPicker(false);}}
+              <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>{c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}</div>
+              <button onClick={function(){toggleBig(c,true);setShowPicker(false);setSelClientId(c.id);var wts=getClientWorkTypes(c);setSelWorkType(wts[0]||'');}}
                 style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
             </div>;
           })}
@@ -5625,6 +5777,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
   </div>;
 }
+
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
