@@ -4532,6 +4532,254 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 }
 
 // ══════════════════════════════════════════════════════════════════
+// ATTENDANCE MODULE — daily timesheet + attendance
+// ══════════════════════════════════════════════════════════════════
+
+function AttendanceModule({org,supabase,cu,workTypeConfigs}){
+  var [userId,setUserId]=useState(cu.id);
+  var [members,setMembers]=useState([]);
+  var [month,setMonth]=useState(new Date().getMonth()+1);
+  var [year,setYear]=useState(new Date().getFullYear());
+  var [entries,setEntries]=useState([]);
+  var [logs,setLogs]=useState([]);
+  var [clients,setClients]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  var [expDate,setExpDate]=useState(null);
+  var [newLog,setNewLog]=useState({client_id:'',work_type:'',hours:0,minutes:0,notes:''});
+  var [adminView,setAdminView]=useState(false);
+
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  var STATUS_OPTS=[
+    {v:'working',l:'Working',c:'#22c55e'},
+    {v:'half_day',l:'Half Day',c:'#f59e0b'},
+    {v:'leave',l:'Leave',c:'#ef4444'},
+    {v:'holiday',l:'Holiday',c:'#8b5cf6'},
+    {v:'sunday',l:'Sunday / Off',c:'#94a3b8'}
+  ];
+  var STATUS_MAP={};STATUS_OPTS.forEach(function(s){STATUS_MAP[s.v]=s;});
+
+  var MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var DAY_NAMES=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  useEffect(function(){loadMembers();},[org.id]);
+  useEffect(function(){load();},[org.id,userId,year,month]);
+
+  async function loadMembers(){
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var rows=rm.data||[];
+    var myRow=rows.find(function(r){return r.user_id===cu.id;});
+    if(myRow&&(myRow.role==='owner'||myRow.role==='admin'))setAdminView(true);
+    var ids=rows.map(function(r){return r.user_id;});
+    if(ids.length){
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      var mlist=(rp.data||[]).map(function(p){var mr=rows.find(function(r){return r.user_id===p.id;});return Object.assign({},p,{role:mr?mr.role:'member'});});
+      setMembers(mlist);
+    }
+  }
+
+  async function load(){
+    setLoading(true);
+    var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(1000);
+    setClients(rc.data||[]);
+    var start=year+'-'+String(month).padStart(2,'0')+'-01';
+    var lastDay=new Date(year,month,0).getDate();
+    var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+    var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);
+    setEntries(re.data||[]);
+    var rl=await supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).order('created_at').limit(1000);
+    setLogs(rl.data||[]);
+    setLoading(false);
+  }
+
+  var daysInMonth=new Date(year,month,0).getDate();
+  var days=[];
+  for(var d=1;d<=daysInMonth;d++){
+    var dateStr=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var dObj=new Date(year,month-1,d);
+    var dow=dObj.getDay();
+    var entry=entries.find(function(e){return e.date===dateStr;});
+    var defaultStatus=dow===0?'sunday':'working';
+    var status=entry?entry.status:defaultStatus;
+    var dayLogs=logs.filter(function(l){return l.date===dateStr;});
+    var totalMins=dayLogs.reduce(function(s,l){return s+((l.hours||0)*60+(l.minutes||0));},0);
+    var totalHrs=Math.round(totalMins/60*100)/100;
+    days.push({date:dateStr,d:d,dayName:DAY_NAMES[dow],dow:dow,status:status,logs:dayLogs,totalHrs:totalHrs,entryId:entry?entry.id:null});
+  }
+
+  async function setStatus(dateStr,newStatus){
+    var existing=entries.find(function(e){return e.date===dateStr;});
+    if(existing){
+      var up=await supabase.from('attendance_entries').update({status:newStatus}).eq('id',existing.id);
+      if(up.error){showToast('Failed: '+up.error.message,'err');return;}
+      setEntries(function(p){return p.map(function(e){return e.id===existing.id?Object.assign({},e,{status:newStatus}):e;});});
+    }else{
+      var ins=await supabase.from('attendance_entries').insert({org_id:org.id,user_id:userId,date:dateStr,status:newStatus}).select('*').single();
+      if(ins.error){showToast('Failed: '+ins.error.message,'err');return;}
+      if(ins.data)setEntries(function(p){return[].concat(p,[ins.data]);});
+    }
+  }
+
+  async function addLog(dateStr){
+    if(!newLog.client_id&&!newLog.work_type.trim()){showToast('Client or Work required','err');return;}
+    var hrs=Number(newLog.hours)||0;
+    var mins=Number(newLog.minutes)||0;
+    if(hrs===0&&mins===0){showToast('Enter time spent','err');return;}
+    var ins=await supabase.from('attendance_time_logs').insert({
+      org_id:org.id,user_id:userId,date:dateStr,
+      client_id:newLog.client_id||null,
+      work_type:newLog.work_type.trim()||null,
+      hours:hrs,minutes:mins,
+      notes:newLog.notes.trim()||null
+    }).select('*').single();
+    if(ins.error){showToast('Failed: '+ins.error.message,'err');return;}
+    if(ins.data){
+      setLogs(function(p){return[].concat(p,[ins.data]);});
+      setNewLog({client_id:'',work_type:'',hours:0,minutes:0,notes:''});
+      showToast('Entry added');
+    }
+  }
+
+  async function deleteLog(id){
+    await supabase.from('attendance_time_logs').delete().eq('id',id);
+    setLogs(function(p){return p.filter(function(l){return l.id!==id;});});
+  }
+
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+  var workingDays=days.filter(function(d){return d.status==='working';}).length;
+  var halfDays=days.filter(function(d){return d.status==='half_day';}).length;
+  var leaves=days.filter(function(d){return d.status==='leave';}).length;
+  var holidays=days.filter(function(d){return d.status==='holiday'||d.status==='sunday';}).length;
+  var totalMonthMins=days.reduce(function(s,d){return s+d.logs.reduce(function(ss,l){return ss+((l.hours||0)*60+(l.minutes||0));},0);},0);
+  var totalMonthHrs=Math.round(totalMonthMins/60*100)/100;
+
+  var workTypeNames=(workTypeConfigs||[]).map(function(c){return c.name;});
+
+  function gotoPrev(){if(month===1){setMonth(12);setYear(year-1);}else setMonth(month-1);}
+  function gotoNext(){if(month===12){setMonth(1);setYear(year+1);}else setMonth(month+1);}
+  function gotoToday(){var n=new Date();setMonth(n.getMonth()+1);setYear(n.getFullYear());}
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'};
+  var todayStr=(function(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');})();
+
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      <div>
+        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>Attendance & Timesheet</h2>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Track daily attendance and log time against clients & tasks</div>
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        {adminView&&<select value={userId} onChange={function(e){setUserId(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer',minWidth:140})}>
+          {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}{m.id===cu.id?' (me)':''}</option>;})}
+        </select>}
+        <button onClick={gotoPrev} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700})}>←</button>
+        <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)',minWidth:110,textAlign:'center'}}>{MONTH_NAMES[month-1]} {year}</div>
+        <button onClick={gotoNext} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700})}>→</button>
+        <button onClick={gotoToday} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#6b8cad'})}>Today</button>
+      </div>
+    </div>
+
+    {/* Summary cards */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:8,marginBottom:14}}>
+      {[
+        {l:'Working',v:workingDays,c:'#22c55e'},
+        {l:'Half Days',v:halfDays,c:'#f59e0b'},
+        {l:'Leaves',v:leaves,c:'#ef4444'},
+        {l:'Holidays/Off',v:holidays,c:'#94a3b8'},
+        {l:'Total Hrs',v:totalMonthHrs,c:'#6b8cad'}
+      ].map(function(k){return<div key={k.l} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 14px',textAlign:'center'}}>
+        <div style={{fontSize:20,fontWeight:800,color:k.c}}>{k.v}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>{k.l}</div>
+      </div>;})}
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead><tr style={{background:'rgba(107,140,173,0.04)'}}>
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',width:60}}>Total</th>
+          <th style={{padding:'9px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',width:80}}>Date</th>
+          <th style={{padding:'9px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',width:110}}>Day</th>
+          <th style={{padding:'9px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',width:140}}>Attendance</th>
+          <th style={{padding:'9px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Time Entries</th>
+        </tr></thead>
+        <tbody>
+          {days.map(function(day,di){
+            var isExp=expDate===day.date;
+            var isToday=day.date===todayStr;
+            var isWeekend=day.dow===0;
+            var bg=isToday?'rgba(107,140,173,0.08)':(di%2?'rgba(107,140,173,0.02)':'transparent');
+            var statusObj=STATUS_MAP[day.status]||STATUS_MAP.working;
+            return<React.Fragment key={day.date}>
+              <tr style={{borderBottom:'1px solid var(--tf-border)',background:bg,cursor:'pointer'}}
+                onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='BUTTON')return;setExpDate(isExp?null:day.date);}}>
+                <td style={{padding:'8px 10px',textAlign:'center',fontWeight:800,color:day.totalHrs>0?'#6b8cad':'var(--tf-text-sub)',fontSize:13}}>{day.totalHrs>0?day.totalHrs.toFixed(2):'—'}</td>
+                <td style={{padding:'8px 10px',color:isToday?'#6b8cad':'var(--tf-text)',fontWeight:isToday?800:600}}>{String(day.d).padStart(2,'0')}/{String(month).padStart(2,'0')}/{year}</td>
+                <td style={{padding:'8px 10px',color:isWeekend?'#94a3b8':'var(--tf-text)',fontWeight:600}}>{day.dayName}</td>
+                <td style={{padding:'6px 10px'}}>
+                  <select value={day.status} onChange={function(e){setStatus(day.date,e.target.value);}} onClick={function(e){e.stopPropagation();}}
+                    style={{background:'transparent',border:'1px solid',borderColor:statusObj.c,borderRadius:20,padding:'3px 10px',color:statusObj.c,fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',width:'100%'}}>
+                    {STATUS_OPTS.map(function(s){return<option key={s.v} value={s.v}>{s.l}</option>;})}
+                  </select>
+                </td>
+                <td style={{padding:'8px 10px',color:'var(--tf-text-sub)',fontSize:11}}>
+                  {day.logs.length===0?<span style={{fontStyle:'italic',opacity:0.6}}>No entries — click row to add</span>:
+                  <div style={{display:'flex',flexWrap:'wrap',gap:6}}>{day.logs.map(function(l){
+                    var cl=l.client_id?clientMap[l.client_id]:null;
+                    var lbl=(cl?(cl.display_name||cl.name):'')+(l.work_type?(cl?' · ':'')+l.work_type:'');
+                    var tm=(l.hours||0)+'h '+(l.minutes||0)+'m';
+                    return<span key={l.id} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:12,padding:'2px 8px',fontSize:10,color:'var(--tf-text)',fontWeight:600}}>{lbl||'(no client)'} · <span style={{color:'#6b8cad'}}>{tm}</span></span>;
+                  })}</div>}
+                </td>
+              </tr>
+              {isExp&&<tr style={{background:'rgba(107,140,173,0.03)',borderBottom:'1px solid var(--tf-border)'}}>
+                <td colSpan={5} style={{padding:'12px 18px'}}>
+                  {/* Existing entries */}
+                  {day.logs.length>0&&<div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Entries</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:5}}>{day.logs.map(function(l){
+                      var cl=l.client_id?clientMap[l.client_id]:null;
+                      return<div key={l.id} style={{display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px'}}>
+                        <div style={{flex:1,minWidth:0,fontSize:12,color:'var(--tf-text)'}}>
+                          <b>{cl?(cl.display_name||cl.name):<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>No client</span>}</b>
+                          {l.work_type&&<span style={{color:'var(--tf-text-sub)'}}> · {l.work_type}</span>}
+                          {l.notes&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic',marginTop:2}}>{l.notes}</div>}
+                        </div>
+                        <span style={{fontSize:12,fontWeight:700,color:'#6b8cad',whiteSpace:'nowrap'}}>{l.hours||0}h {l.minutes||0}m</span>
+                        <button onClick={function(){if(window.confirm('Delete this entry?'))deleteLog(l.id);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:14,padding:'2px 6px'}}>×</button>
+                      </div>;
+                    })}</div>
+                  </div>}
+                  {/* Add entry form */}
+                  <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:10}}>
+                    <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Add Time Entry</div>
+                    <div style={{display:'grid',gridTemplateColumns:'2fr 2fr 80px 80px auto',gap:6,alignItems:'center'}}>
+                      <select value={newLog.client_id} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{client_id:e.target.value});});}} style={Object.assign({},INP,{cursor:'pointer'})}>
+                        <option value="">— Client —</option>
+                        {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
+                      </select>
+                      <input list="wt_list" value={newLog.work_type} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{work_type:e.target.value});});}} placeholder="Work / Task" style={INP}/>
+                      <datalist id="wt_list">{workTypeNames.map(function(n){return<option key={n} value={n}/>;})}</datalist>
+                      <input type="number" min="0" max="12" value={newLog.hours} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{hours:e.target.value});});}} placeholder="Hrs" style={INP}/>
+                      <input type="number" min="0" max="59" step="5" value={newLog.minutes} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{minutes:e.target.value});});}} placeholder="Mins" style={INP}/>
+                      <button onClick={function(){addLog(day.date);}} style={{background:'linear-gradient(135deg,#f59e0b,#d97706)',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,whiteSpace:'nowrap'}}>+ Add</button>
+                    </div>
+                    <input value={newLog.notes} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{notes:e.target.value});});}} placeholder="Notes (optional)" style={Object.assign({},INP,{width:'100%',marginTop:6,boxSizing:'border-box'})}/>
+                  </div>
+                </td>
+              </tr>}
+            </React.Fragment>;
+          })}
+        </tbody>
+      </table></div>
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // CALENDAR VIEW
 // ══════════════════════════════════════════════════════════════════
 
@@ -6602,7 +6850,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
-      {orgModule==='hr'&&<ModulePlaceholder moduleLabel="HR" activeTab={tab} features={[
+      {orgModule==='hr'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='hr'&&tab!=='attendance'&&<ModulePlaceholder moduleLabel="HR" activeTab={tab} features={[
         {tab:'performance',title:'Performance',desc:'Track employee KPIs, reviews and goals across review cycles.'},
         {tab:'attendance',title:'Attendance',desc:'Daily check-in / check-out and monthly attendance summaries.'},
         {tab:'leaves',title:'Leaves',desc:'Apply, approve and track leave balances across leave types.'},
