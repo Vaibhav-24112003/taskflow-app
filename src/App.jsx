@@ -5663,7 +5663,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     // Load worksheets referenced by my rows
     if(myRows.length>0){
       var wsIds=Array.from(new Set(myRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
-      var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(500);
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds).limit(500);
       setWorksheets(rw.data||[]);
     }else{setWorksheets([]);}
     // Load org members (for hierarchy dropdowns in Create Task form)
@@ -5962,6 +5962,12 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   var isEditing=editingRow===row.id;
                   var clDone=(rd.__checklist||[]).filter(function(c){return c.done;}).length;
                   var clTotal=(rd.__checklist||[]).length;
+                  var wsFreq=ws&&ws.frequency;
+                  var isRecurring=wsFreq==='monthly'||wsFreq==='quarterly'||wsFreq==='yearly';
+                  var clientName=client?(client.display_name||client.name):'Unknown';
+                  var bigText=rowTitle?rowTitle:isRecurring?clientName:(row.due_label||wt);
+                  var dueTag=(!rowTitle&&isRecurring&&row.due_label&&row.due_label!=='Due')?row.due_label:'';
+                  var showClientSub=!!rowTitle||!isRecurring;
                   return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)'}}>
                     {/* Summary row */}
                     <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',cursor:'pointer',transition:'background 0.1s'}}
@@ -5972,10 +5978,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                       <div style={{width:8,height:8,borderRadius:'50%',background:PC[priority],flexShrink:0}} title={priority+' priority'}/>
                       <div style={{flex:1,minWidth:180}}>
                         <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',marginBottom:2,lineHeight:1.2}}>
-                          {rowTitle||row.due_label||wt}
+                          {bigText}
+                          {dueTag&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginLeft:6}}>· {dueTag}</span>}
                         </div>
                         <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-                          <span style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?(client.display_name||client.name):'Unknown'}</span>
+                          {showClientSub&&<span style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName}</span>}
                           {ws&&<span>{ws.period_label}</span>}
                           <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
                           {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
