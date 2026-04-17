@@ -3297,11 +3297,32 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
       // Update existing rows with correct due dates (fix stale dates)
       if(dueDateList.length===1&&cfg.frequency!=='once'){
         var dd0=dueDateList[0];
-        var toUpdate=existingRows.filter(function(r){return r.due_date!==dd0.date;});
+        var toUpdate=existingRows.filter(function(r){return r.due_date!==dd0.date||r.due_label!==dd0.label;});
         if(toUpdate.length>0){
           var updateIds=toUpdate.map(function(r){return r.id;});
           await supabase.from('worksheet_rows').update({due_date:dd0.date,due_label:dd0.label}).in('id',updateIds);
           existingRows=existingRows.map(function(r){return updateIds.includes(r.id)?Object.assign({},r,{due_date:dd0.date,due_label:dd0.label}):r;});
+        }
+      }else if(dueDateList.length>1&&cfg.frequency!=='once'){
+        var labelMap={};
+        dueDateList.forEach(function(dd){labelMap[dd.label]=dd.date;});
+        var toFix=existingRows.filter(function(r){
+          if(!r.due_label)return false;
+          var expected=labelMap[r.due_label];
+          return expected&&r.due_date!==expected;
+        });
+        if(toFix.length>0){
+          for(var fi=0;fi<toFix.length;fi++){
+            var fr=toFix[fi];
+            var newDate=labelMap[fr.due_label];
+            await supabase.from('worksheet_rows').update({due_date:newDate}).eq('id',fr.id);
+          }
+          existingRows=existingRows.map(function(r){
+            if(r.due_label&&labelMap[r.due_label]&&r.due_date!==labelMap[r.due_label]){
+              return Object.assign({},r,{due_date:labelMap[r.due_label]});
+            }
+            return r;
+          });
         }
       }
 
