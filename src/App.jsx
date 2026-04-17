@@ -5718,13 +5718,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     if(filter==='review'&&!isReview)return false;
     if(filter==='overdue'&&!(r.due_date&&r.due_date<todayStr))return false;
     if(filter==='today'&&r.due_date!==todayStr)return false;
-    // Date range filter from dropdown
-    if(dateFilter==='today'&&r.due_date!==todayStr)return false;
-    if(dateFilter==='overdue'&&!(r.due_date&&r.due_date<todayStr))return false;
-    if(dateFilter==='week'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=weekEndStr))return false;
-    if(dateFilter==='month'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=monthEndStr))return false;
-    if(dateFilter==='next7'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=next7Str))return false;
-    if(dateFilter==='next30'&&!(r.due_date&&r.due_date>=todayStr&&r.due_date<=next30Str))return false;
+    // Date range filter from dropdown — always include overdue tasks
+    var isOverdueTask=r.due_date&&r.due_date<todayStr&&r.status!=='completed';
+    if(dateFilter==='today'&&r.due_date!==todayStr&&!isOverdueTask)return false;
+    if(dateFilter==='overdue'&&!isOverdueTask)return false;
+    if(dateFilter==='week'&&!(isOverdueTask||(r.due_date&&r.due_date>=todayStr&&r.due_date<=weekEndStr)))return false;
+    if(dateFilter==='month'&&!(isOverdueTask||(r.due_date&&r.due_date>=todayStr&&r.due_date<=monthEndStr)))return false;
+    if(dateFilter==='next7'&&!(isOverdueTask||(r.due_date&&r.due_date>=todayStr&&r.due_date<=next7Str)))return false;
+    if(dateFilter==='next30'&&!(isOverdueTask||(r.due_date&&r.due_date>=todayStr&&r.due_date<=next30Str)))return false;
     if(dateFilter==='nodate'&&r.due_date)return false;
     return true;
   });
