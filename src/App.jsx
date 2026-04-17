@@ -4532,10 +4532,179 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// ATTENDANCE MODULE — daily timesheet + attendance
+// ATTENDANCE MODULE — slim status-only month grid
 // ══════════════════════════════════════════════════════════════════
 
-function AttendanceModule({org,supabase,cu,workTypeConfigs}){
+function AttendanceModule({org,supabase,cu}){
+  var [userId,setUserId]=useState(cu.id);
+  var [members,setMembers]=useState([]);
+  var [month,setMonth]=useState(new Date().getMonth()+1);
+  var [year,setYear]=useState(new Date().getFullYear());
+  var [entries,setEntries]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  var [adminView,setAdminView]=useState(false);
+
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  var STATUS_OPTS=[
+    {v:'working',l:'Working',c:'#22c55e'},
+    {v:'half_day',l:'Half',c:'#f59e0b'},
+    {v:'leave',l:'Leave',c:'#ef4444'},
+    {v:'holiday',l:'Holiday',c:'#8b5cf6'},
+    {v:'sunday',l:'Off',c:'#94a3b8'}
+  ];
+  var STATUS_MAP={};STATUS_OPTS.forEach(function(s){STATUS_MAP[s.v]=s;});
+  var MONTH_NAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var DAY_SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  useEffect(function(){loadMembers();},[org.id]);
+  useEffect(function(){load();},[org.id,userId,year,month]);
+
+  async function loadMembers(){
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var rows=rm.data||[];
+    var myRow=rows.find(function(r){return r.user_id===cu.id;});
+    if(myRow&&(myRow.role==='owner'||myRow.role==='admin'))setAdminView(true);
+    var ids=rows.map(function(r){return r.user_id;});
+    if(ids.length){
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      var mlist=(rp.data||[]).map(function(p){var mr=rows.find(function(r){return r.user_id===p.id;});return Object.assign({},p,{role:mr?mr.role:'member'});});
+      setMembers(mlist);
+    }
+  }
+
+  async function load(){
+    setLoading(true);
+    var start=year+'-'+String(month).padStart(2,'0')+'-01';
+    var lastDay=new Date(year,month,0).getDate();
+    var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
+    var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);
+    setEntries(re.data||[]);
+    setLoading(false);
+  }
+
+  var daysInMonth=new Date(year,month,0).getDate();
+  var days=[];
+  for(var d=1;d<=daysInMonth;d++){
+    var dateStr=year+'-'+String(month).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var dObj=new Date(year,month-1,d);
+    var dow=dObj.getDay();
+    var entry=entries.find(function(e){return e.date===dateStr;});
+    var defaultStatus=dow===0?'sunday':'working';
+    var status=entry?entry.status:defaultStatus;
+    days.push({date:dateStr,d:d,dayName:DAY_SHORT[dow],dow:dow,status:status,entryId:entry?entry.id:null});
+  }
+
+  async function setStatus(dateStr,newStatus){
+    var existing=entries.find(function(e){return e.date===dateStr;});
+    if(existing){
+      var up=await supabase.from('attendance_entries').update({status:newStatus}).eq('id',existing.id);
+      if(up.error){showToast('Failed: '+up.error.message,'err');return;}
+      setEntries(function(p){return p.map(function(e){return e.id===existing.id?Object.assign({},e,{status:newStatus}):e;});});
+    }else{
+      var ins=await supabase.from('attendance_entries').insert({org_id:org.id,user_id:userId,date:dateStr,status:newStatus}).select('*').single();
+      if(ins.error){showToast('Failed: '+ins.error.message,'err');return;}
+      if(ins.data)setEntries(function(p){return[].concat(p,[ins.data]);});
+    }
+  }
+
+  async function bulkSet(filterFn,newStatus){
+    var targets=days.filter(filterFn);
+    if(!targets.length)return;
+    var rows=targets.map(function(t){return{org_id:org.id,user_id:userId,date:t.date,status:newStatus};});
+    var up=await supabase.from('attendance_entries').upsert(rows,{onConflict:'org_id,user_id,date'}).select('*');
+    if(up.error){showToast('Bulk failed: '+up.error.message,'err');return;}
+    load();
+    showToast('Updated '+targets.length+' days');
+  }
+
+  var workingDays=days.filter(function(d){return d.status==='working';}).length;
+  var halfDays=days.filter(function(d){return d.status==='half_day';}).length;
+  var leaves=days.filter(function(d){return d.status==='leave';}).length;
+  var holidays=days.filter(function(d){return d.status==='holiday'||d.status==='sunday';}).length;
+
+  function gotoPrev(){if(month===1){setMonth(12);setYear(year-1);}else setMonth(month-1);}
+  function gotoNext(){if(month===12){setMonth(1);setYear(year+1);}else setMonth(month+1);}
+  function gotoToday(){var n=new Date();setMonth(n.getMonth()+1);setYear(n.getFullYear());}
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'};
+  var todayStr=(function(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');})();
+
+  // Build calendar-style grid (weeks × 7 days)
+  var firstDow=new Date(year,month-1,1).getDay();
+  var grid=[];
+  for(var i=0;i<firstDow;i++)grid.push(null);
+  days.forEach(function(dd){grid.push(dd);});
+  while(grid.length%7!==0)grid.push(null);
+
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      <div>
+        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>Attendance</h2>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Mark your daily attendance status — pulled into Logs automatically</div>
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        {adminView&&<select value={userId} onChange={function(e){setUserId(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer',minWidth:140})}>
+          {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}{m.id===cu.id?' (me)':''}</option>;})}
+        </select>}
+        <button onClick={gotoPrev} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700})}>←</button>
+        <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)',minWidth:110,textAlign:'center'}}>{MONTH_NAMES[month-1]} {year}</div>
+        <button onClick={gotoNext} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700})}>→</button>
+        <button onClick={gotoToday} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#6b8cad'})}>Today</button>
+      </div>
+    </div>
+
+    {/* Summary */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:8,marginBottom:14}}>
+      {[
+        {l:'Working',v:workingDays,c:'#22c55e'},
+        {l:'Half Days',v:halfDays,c:'#f59e0b'},
+        {l:'Leaves',v:leaves,c:'#ef4444'},
+        {l:'Holidays/Off',v:holidays,c:'#94a3b8'}
+      ].map(function(k){return<div key={k.l} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 14px',textAlign:'center'}}>
+        <div style={{fontSize:20,fontWeight:800,color:k.c}}>{k.v}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:700}}>{k.l}</div>
+      </div>;})}
+    </div>
+
+    {/* Bulk actions */}
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12,alignItems:'center'}}>
+      <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em'}}>Quick fill:</span>
+      <button onClick={function(){bulkSet(function(dd){return dd.dow!==0&&!entries.find(function(e){return e.date===dd.date;});},'working');}} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#22c55e'})}>Mark all weekdays Working</button>
+      <button onClick={function(){bulkSet(function(dd){return dd.dow===0;},'sunday');}} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#94a3b8'})}>Mark Sundays Off</button>
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:12}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:6}}>
+        {DAY_SHORT.map(function(n){return<div key={n} style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',textAlign:'center',padding:'4px 0'}}>{n}</div>;})}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6}}>
+        {grid.map(function(cell,ci){
+          if(!cell)return<div key={'e'+ci}/>;
+          var statusObj=STATUS_MAP[cell.status]||STATUS_MAP.working;
+          var isToday=cell.date===todayStr;
+          return<div key={cell.date} style={{background:'var(--tf-bg)',border:'1px solid',borderColor:isToday?'#6b8cad':'var(--tf-border)',borderRadius:8,padding:'8px 6px',textAlign:'center',position:'relative'}}>
+            <div style={{fontSize:13,fontWeight:800,color:isToday?'#6b8cad':'var(--tf-text)',marginBottom:4}}>{cell.d}</div>
+            <select value={cell.status} onChange={function(e){setStatus(cell.date,e.target.value);}}
+              style={{width:'100%',background:'transparent',border:'1px solid',borderColor:statusObj.c,borderRadius:12,padding:'2px 4px',color:statusObj.c,fontSize:10,fontWeight:700,cursor:'pointer',outline:'none'}}>
+              {STATUS_OPTS.map(function(s){return<option key={s.v} value={s.v}>{s.l}</option>;})}
+            </select>
+          </div>;
+        })}
+      </div>
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LOGS MODULE — full daily timesheet with attendance pulled in
+// ══════════════════════════════════════════════════════════════════
+
+function LogsModule({org,supabase,cu,workTypeConfigs}){
   var [userId,setUserId]=useState(cu.id);
   var [members,setMembers]=useState([]);
   var [month,setMonth]=useState(new Date().getMonth()+1);
@@ -4548,6 +4717,7 @@ function AttendanceModule({org,supabase,cu,workTypeConfigs}){
   var [expDate,setExpDate]=useState(null);
   var [newLog,setNewLog]=useState({client_id:'',work_type:'',hours:0,minutes:0,notes:''});
   var [adminView,setAdminView]=useState(false);
+  var [clientTasks,setClientTasks]=useState([]);
 
   function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
 
@@ -4565,6 +4735,18 @@ function AttendanceModule({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadMembers();},[org.id]);
   useEffect(function(){load();},[org.id,userId,year,month]);
+  useEffect(function(){
+    if(!newLog.client_id){setClientTasks([]);return;}
+    (async function(){
+      var r=await supabase.from('worksheet_rows').select('data,worksheet_id').eq('org_id',org.id).eq('client_id',newLog.client_id).limit(500);
+      var titles={};
+      (r.data||[]).forEach(function(row){
+        var t=row.data&&row.data.__title;
+        if(t&&typeof t==='string'&&t.trim())titles[t.trim()]=true;
+      });
+      setClientTasks(Object.keys(titles).sort());
+    })();
+  },[newLog.client_id,org.id]);
 
   async function loadMembers(){
     var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
@@ -4666,8 +4848,8 @@ function AttendanceModule({org,supabase,cu,workTypeConfigs}){
   return<div style={{padding:'0 0 60px'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
       <div>
-        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>Attendance & Timesheet</h2>
-        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Track daily attendance and log time against clients & tasks</div>
+        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>Daily Logs</h2>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Log time against clients & tasks. Attendance shown read-only (edit in Attendance tab).</div>
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
         {adminView&&<select value={userId} onChange={function(e){setUserId(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer',minWidth:140})}>
@@ -4718,10 +4900,7 @@ function AttendanceModule({org,supabase,cu,workTypeConfigs}){
                 <td style={{padding:'8px 10px',color:isToday?'#6b8cad':'var(--tf-text)',fontWeight:isToday?800:600}}>{String(day.d).padStart(2,'0')}/{String(month).padStart(2,'0')}/{year}</td>
                 <td style={{padding:'8px 10px',color:isWeekend?'#94a3b8':'var(--tf-text)',fontWeight:600}}>{day.dayName}</td>
                 <td style={{padding:'6px 10px'}}>
-                  <select value={day.status} onChange={function(e){setStatus(day.date,e.target.value);}} onClick={function(e){e.stopPropagation();}}
-                    style={{background:'transparent',border:'1px solid',borderColor:statusObj.c,borderRadius:20,padding:'3px 10px',color:statusObj.c,fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',width:'100%'}}>
-                    {STATUS_OPTS.map(function(s){return<option key={s.v} value={s.v}>{s.l}</option>;})}
-                  </select>
+                  <span style={{display:'inline-block',background:'transparent',border:'1px solid',borderColor:statusObj.c,borderRadius:20,padding:'3px 10px',color:statusObj.c,fontSize:11,fontWeight:700,textAlign:'center',minWidth:90}} title="Edit in Attendance tab">{statusObj.l}</span>
                 </td>
                 <td style={{padding:'8px 10px',color:'var(--tf-text-sub)',fontSize:11}}>
                   {day.logs.length===0?<span style={{fontStyle:'italic',opacity:0.6}}>No entries — click row to add</span>:
@@ -4759,8 +4938,11 @@ function AttendanceModule({org,supabase,cu,workTypeConfigs}){
                         <option value="">— Client —</option>
                         {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
                       </select>
-                      <input list="wt_list" value={newLog.work_type} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{work_type:e.target.value});});}} placeholder="Work / Task" style={INP}/>
-                      <datalist id="wt_list">{workTypeNames.map(function(n){return<option key={n} value={n}/>;})}</datalist>
+                      <input list={"ct_list_"+day.date} value={newLog.work_type} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{work_type:e.target.value});});}} placeholder={newLog.client_id?"Select or type task":"Work / Task"} style={INP}/>
+                      <datalist id={"ct_list_"+day.date}>
+                        {clientTasks.map(function(n){return<option key={'t_'+n} value={n}/>;})}
+                        {workTypeNames.filter(function(n){return clientTasks.indexOf(n)<0;}).map(function(n){return<option key={'w_'+n} value={n}/>;})}
+                      </datalist>
                       <input type="number" min="0" max="12" value={newLog.hours} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{hours:e.target.value});});}} placeholder="Hrs" style={INP}/>
                       <input type="number" min="0" max="59" step="5" value={newLog.minutes} onChange={function(e){setNewLog(function(p){return Object.assign({},p,{minutes:e.target.value});});}} placeholder="Mins" style={INP}/>
                       <button onClick={function(){addLog(day.date);}} style={{background:'linear-gradient(135deg,#f59e0b,#d97706)',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,whiteSpace:'nowrap'}}>+ Add</button>
@@ -5394,12 +5576,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                       {/* Priority dot */}
                       <div style={{width:8,height:8,borderRadius:'50%',background:PC[priority],flexShrink:0}} title={priority+' priority'}/>
                       <div style={{flex:1,minWidth:180}}>
-                        <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:3}}>
-                          {client?(client.display_name||client.name):'Unknown'}
-                          {rowTitle&&<span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:6,fontWeight:600}}>· {rowTitle}</span>}
-                          {!rowTitle&&row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,color:'#6b8cad',marginLeft:6,fontWeight:600}}>· {row.due_label}</span>}
+                        <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',marginBottom:2,lineHeight:1.2}}>
+                          {rowTitle||row.due_label||wt}
                         </div>
                         <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                          <span style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client?(client.display_name||client.name):'Unknown'}</span>
                           {ws&&<span>{ws.period_label}</span>}
                           <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
                           {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
@@ -6850,12 +7031,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
-      {orgModule==='hr'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='hr'&&tab!=='attendance'&&<ModulePlaceholder moduleLabel="HR" activeTab={tab} features={[
+      {orgModule==='hr'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='hr'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='hr'&&tab!=='attendance'&&tab!=='logs'&&<ModulePlaceholder moduleLabel="HR" activeTab={tab} features={[
         {tab:'performance',title:'Performance',desc:'Track employee KPIs, reviews and goals across review cycles.'},
-        {tab:'attendance',title:'Attendance',desc:'Daily check-in / check-out and monthly attendance summaries.'},
         {tab:'leaves',title:'Leaves',desc:'Apply, approve and track leave balances across leave types.'},
-        {tab:'logs',title:'Activity Logs',desc:'Employee activity trail and audit logs across the organisation.'},
       ]}/>}
       {orgModule==='billing'&&<ModulePlaceholder moduleLabel="Billing" activeTab={tab} features={[
         {tab:'invoices',title:'Invoices',desc:'Client-wise and work-wise invoicing with automatic totals and taxes.'},
