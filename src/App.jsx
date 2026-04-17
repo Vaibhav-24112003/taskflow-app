@@ -5691,6 +5691,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   // Expandable task detail state
   var [expandedRow,setExpandedRow]=useState(null);
   var [editingRow,setEditingRow]=useState(null);
+  var [expandedGroups,setExpandedGroups]=useState({});
   var [editData,setEditData]=useState({});
 
   function toggleExpand(rowId){setExpandedRow(function(p){return p===rowId?null:rowId;});setEditingRow(null);}
@@ -5882,7 +5883,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 {onOpenWorkType&&!isUnclassified&&<span style={{fontSize:10,fontWeight:700,opacity:0.7}}>Open worksheet →</span>}
               </button>
               <div style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isUnclassified?'rgba(245,158,11,0.4)':'var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-                {grouped[wt].map(function(row,idx){
+                {(expandedGroups[wt]?grouped[wt]:grouped[wt].slice(0,2)).map(function(row,idx){
                   var client=clientMap[row.client_id];
                   var ws=wsMap[row.worksheet_id];
                   var role=getRole(row);
@@ -6015,6 +6016,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                     </div>}
                   </div>;
                 })}
+                {grouped[wt].length>2&&<button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n[wt]=!n[wt];return n;});}}
+                  style={{width:'100%',background:'rgba(107,140,173,0.04)',border:'none',borderTop:'1px solid var(--tf-border)',padding:'8px 16px',color:'#6b8cad',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',textAlign:'center'}}>
+                  {expandedGroups[wt]?'Show less ▲':'Show '+(grouped[wt].length-2)+' more ▼'}
+                </button>}
               </div>
             </div>;
           })}
@@ -7247,6 +7252,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   // Worksheet navigation hint (set when user clicks a work type in Your Dashboard)
   const [wsInitWorkType,setWsInitWorkType]=useState(null);
   const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
+  const [sidebarOpen,setSidebarOpen]=useState(true);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
 
   useEffect(function(){loadWTC();loadMyRole();/* eslint-disable-next-line */},[org.id]);
@@ -7346,10 +7352,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     </div>;
   }
 
-  // Module content
-  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-    {header}
-    <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
+  // Module content with left sidebar
+  var sidebarW=sidebarOpen?210:48;
+  var moduleContent=<>
       {orgModule==='dashboard'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
@@ -7368,6 +7373,44 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
         {tab:'invoices',title:'Invoices',desc:'Client-wise and work-wise invoicing with automatic totals and taxes.'},
         {tab:'templates',title:'Templates',desc:'Reusable invoice templates for quick creation.'},
       ]}/>}
+  </>;
+
+  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+    {header}
+    <div style={{flex:1,display:'flex',minHeight:0}}>
+      {/* Left sidebar */}
+      <div style={{width:sidebarW,flexShrink:0,background:'var(--tf-panel)',borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
+        <div style={{padding:sidebarOpen?'10px 10px 6px':'10px 6px 6px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center'}}>
+          {sidebarOpen&&<span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Modules</span>}
+          <button onClick={function(){setSidebarOpen(!sidebarOpen);}} title={sidebarOpen?'Minimize sidebar':'Expand sidebar'}
+            style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:12,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:sidebarOpen?'0 6px 10px':'0 4px 10px'}}>
+          {MODULES.map(function(m){
+            var isActive=orgModule===m.id;
+            var hasTabs=m.tabs&&m.tabs.length>1;
+            return<div key={m.id}>
+              <button onClick={function(){openModule(m);}} title={sidebarOpen?'':m.label}
+                style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'8px 10px':'8px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
+                onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.06)';}}
+                onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+                <span style={{fontSize:16,flexShrink:0}}>{m.icon}</span>
+                {sidebarOpen&&<span style={{fontSize:12,fontWeight:isActive?700:500,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
+              </button>
+              {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:28,marginBottom:4}}>
+                {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);}}
+                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:tab===t.id?700:500,color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #6b8cad':'2px solid transparent',marginBottom:1}}>
+                  {t.label}
+                </button>;})}
+              </div>}
+            </div>;
+          })}
+        </div>
+      </div>
+      {/* Main content */}
+      <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px',minWidth:0}}>
+        {moduleContent}
+      </div>
     </div>
   </div>;
 }
