@@ -2531,7 +2531,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
   var [worksheetGroup,setWorksheetGroup]=useState(config?config.worksheet_group||'':'');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
-  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1}]:[]);
+  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1,monthly_map:d.monthly_map||null};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1,monthly_map:null}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
   var [sopSteps,setSopSteps]=useState(config&&config.sop_steps?config.sop_steps.map(function(s){return{title:s.title||'',description:s.description||'',link:s.link||''};}):[]);
   var [saving,setSaving]=useState(false);
@@ -2549,7 +2549,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     });});
   }
 
-  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:'',month_offset:1}];});}
+  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:'',month_offset:1,monthly_map:null}];});}
   function removeDueDate(idx){setDueDates(function(p){return p.filter(function(_,i){return i!==idx;});});}
   function updateDueDate(idx,field,val){setDueDates(function(p){return p.map(function(d,i){if(i!==idx)return d;var u=Object.assign({},d);u[field]=val;return u;});});}
 
@@ -2579,7 +2579,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
-      due_dates:dueDates.filter(function(d){return d.day;}).map(function(d){return{label:d.label||'Due',day:Number(d.day),month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1};}),
+      due_dates:dueDates.filter(function(d){return d.day||d.monthly_map;}).map(function(d){return{label:d.label||'Due',day:d.day?Number(d.day):null,month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1,monthly_map:d.monthly_map||null};}),
       client_fields:clientFields.filter(function(f){return f.label.trim();}).map(function(f){return{key:f.key,label:f.label.trim(),type:f.type,options:f.options||''};}),
       sop_steps:sopSteps.filter(function(s){return s.title.trim();}).map(function(s,i){return{step:i+1,title:s.title.trim(),description:s.description.trim(),link:s.link.trim()};}),
       is_active:config?config.is_active:true,
@@ -2660,27 +2660,80 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
             <label style={Object.assign({},LBL,{marginBottom:0})}>Due Dates</label>
             <button onClick={addDueDate} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Due Date</button>
           </div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Define one or more due dates per period. E.g. GSTR1 due 11th, GSTR3B due 20th.</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Define one or more due dates per period. For monthly work types, use the FY map to set different due dates per month.</div>
           {dueDates.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No due dates configured.</div>:
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
             {dueDates.map(function(dd,i){
-              return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',flexWrap:'wrap'}}>
-                <input value={dd.label} onChange={function(e){updateDueDate(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1,minWidth:120})} placeholder="Label (e.g. GSTR1 Due)"/>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
-                  <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="15"/>
+              var FY_MONTHS=[4,5,6,7,8,9,10,11,12,1,2,3];
+              var MNAMES={1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'};
+              var hasMap=!!dd.monthly_map;
+              function initMap(){
+                var m={};
+                FY_MONTHS.forEach(function(pm){
+                  var off=dd.month_offset!=null?Number(dd.month_offset):1;
+                  var dm=pm+off;if(dm>12)dm-=12;
+                  m[pm]={day:dd.day||7,due_month:dm};
+                });
+                updateDueDate(i,'monthly_map',m);
+              }
+              function clearMap(){updateDueDate(i,'monthly_map',null);}
+              function updateMap(pm,field,val){
+                var nm=Object.assign({},dd.monthly_map);
+                nm[pm]=Object.assign({},nm[pm]||{});
+                nm[pm][field]=val;
+                updateDueDate(i,'monthly_map',nm);
+              }
+              return<div key={i} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 12px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:hasMap&&frequency==='monthly'?10:0,flexWrap:'wrap'}}>
+                  <input value={dd.label} onChange={function(e){updateDueDate(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1,minWidth:120})} placeholder="Label (e.g. TDS Payment)"/>
+                  {frequency!=='monthly'&&<div style={{display:'flex',alignItems:'center',gap:4}}>
+                    <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
+                    <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="15"/>
+                  </div>}
+                  {frequency!=='monthly'&&(frequency==='quarterly'?<div style={{display:'flex',alignItems:'center',gap:4}}>
+                    <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
+                    <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:120,cursor:'pointer'})}>
+                      <option value={0}>Quarter end month</option>
+                      <option value={1}>Next month</option>
+                    </select>
+                  </div>:<div style={{display:'flex',alignItems:'center',gap:4}}>
+                    <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
+                    <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
+                  </div>)}
+                  {frequency==='monthly'&&!hasMap&&<>
+                    <div style={{display:'flex',alignItems:'center',gap:4}}>
+                      <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
+                      <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="7"/>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:4}}>
+                      <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
+                      <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:120,cursor:'pointer'})}>
+                        <option value={0}>Same month</option>
+                        <option value={1}>Next month</option>
+                      </select>
+                    </div>
+                  </>}
+                  {frequency==='monthly'&&<button onClick={hasMap?clearMap:initMap} style={{background:hasMap?'rgba(239,68,68,0.08)':'rgba(107,140,173,0.08)',border:'1px solid',borderColor:hasMap?'rgba(239,68,68,0.2)':'rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:hasMap?'#ef4444':'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{hasMap?'Simple mode':'FY Map'}</button>}
+                  <button onClick={function(){removeDueDate(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
                 </div>
-                {(frequency==='monthly'||frequency==='quarterly')?<div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
-                  <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:120,cursor:'pointer'})}>
-                    <option value={0}>{frequency==='quarterly'?'Quarter end month':'Same month'}</option>
-                    <option value={1}>Next month</option>
-                  </select>
-                </div>:<div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
-                  <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
+                {frequency==='monthly'&&hasMap&&<div style={{border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 80px 100px',background:'rgba(107,140,173,0.06)',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+                    <div style={{padding:'6px 10px'}}>Period Month</div>
+                    <div style={{padding:'6px 10px',textAlign:'center'}}>Due Day</div>
+                    <div style={{padding:'6px 10px',textAlign:'center'}}>Due In</div>
+                  </div>
+                  {FY_MONTHS.map(function(pm){
+                    var entry=(dd.monthly_map&&dd.monthly_map[pm])||{day:'',due_month:pm<12?pm+1:1};
+                    return<div key={pm} style={{display:'grid',gridTemplateColumns:'1fr 80px 100px',borderTop:'1px solid var(--tf-border)',alignItems:'center'}}>
+                      <div style={{padding:'5px 10px',fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{MNAMES[pm]}</div>
+                      <div style={{padding:'3px 6px'}}><input type="number" min="1" max="31" value={entry.day||''} onChange={function(e){updateMap(pm,'day',e.target.value?Number(e.target.value):'');}} style={Object.assign({},INP,{padding:'4px 6px',fontSize:12,textAlign:'center'})}/></div>
+                      <div style={{padding:'3px 6px'}}><select value={entry.due_month||''} onChange={function(e){updateMap(pm,'due_month',e.target.value?Number(e.target.value):'');}} style={Object.assign({},INP,{padding:'4px 6px',fontSize:12,cursor:'pointer'})}>
+                        <option value="">—</option>
+                        {[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m){return<option key={m} value={m}>{MNAMES[m]}</option>;})}
+                      </select></div>
+                    </div>;
+                  })}
                 </div>}
-                <button onClick={function(){removeDueDate(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1,flexShrink:0}}>×</button>
               </div>;
             })}
           </div>}
@@ -3220,8 +3273,20 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
       if(cfg.frequency!=='once'){
         if(cfg.due_dates&&cfg.due_dates.length>0){
           cfg.due_dates.forEach(function(dd){
-            var d=computeDueDate(dd.day,dd.month,cfg.frequency,dd.month_offset);
-            if(d)dueDateList.push({date:d,label:dd.label||'Due'});
+            if(dd.monthly_map&&cfg.frequency==='monthly'&&periodMonth){
+              var me=dd.monthly_map[periodMonth];
+              if(me&&me.day&&me.due_month){
+                var calY=periodMonth>=4?periodYear:periodYear+1;
+                var dueCalY=me.due_month>=4?periodYear:periodYear+1;
+                if(me.due_month<periodMonth&&periodMonth>=4&&me.due_month<=3)dueCalY=periodYear+1;
+                if(me.due_month>periodMonth&&periodMonth<=3&&me.due_month>=4)dueCalY=periodYear;
+                var ds=dueCalY+'-'+String(me.due_month).padStart(2,'0')+'-'+String(me.day).padStart(2,'0');
+                dueDateList.push({date:ds,label:dd.label||'Due'});
+              }
+            }else{
+              var d=computeDueDate(dd.day,dd.month,cfg.frequency,dd.month_offset);
+              if(d)dueDateList.push({date:d,label:dd.label||'Due'});
+            }
           });
         }else if(cfg.due_day){
           var d=computeDueDate(cfg.due_day,cfg.due_month,cfg.frequency);
