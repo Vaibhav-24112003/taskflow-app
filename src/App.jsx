@@ -4962,6 +4962,335 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
 }
 
 // ══════════════════════════════════════════════════════════════════
+// LEAVES MODULE — apply, approve/reject, balances
+// ══════════════════════════════════════════════════════════════════
+
+function LeavesModule({org,supabase,cu}){
+  var [userId,setUserId]=useState(cu.id);
+  var [members,setMembers]=useState([]);
+  var [requests,setRequests]=useState([]);
+  var [allRequests,setAllRequests]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  var [isAdmin,setIsAdmin]=useState(false);
+  var [showApply,setShowApply]=useState(false);
+  var [tab,setTab]=useState('my');
+  var [form,setForm]=useState({leave_type:'CL',start_date:'',end_date:'',reason:''});
+  var [saving,setSaving]=useState(false);
+
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  var LEAVE_TYPES=[
+    {v:'CL',l:'Casual Leave',c:'#6b8cad',max:12},
+    {v:'SL',l:'Sick Leave',c:'#f59e0b',max:6},
+    {v:'EL',l:'Earned Leave',c:'#22c55e',max:15},
+    {v:'CO',l:'Comp Off',c:'#8b5cf6',max:null},
+    {v:'LWP',l:'Leave Without Pay',c:'#ef4444',max:null}
+  ];
+  var LT_MAP={};LEAVE_TYPES.forEach(function(t){LT_MAP[t.v]=t;});
+
+  var fyStart=new Date().getMonth()>=3?new Date().getFullYear():new Date().getFullYear()-1;
+
+  useEffect(function(){loadMembers();},[org.id]);
+  useEffect(function(){load();},[org.id]);
+
+  async function loadMembers(){
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var rows=rm.data||[];
+    var myRow=rows.find(function(r){return r.user_id===cu.id;});
+    if(myRow&&(myRow.role==='owner'||myRow.role==='admin'))setIsAdmin(true);
+    var ids=rows.map(function(r){return r.user_id;});
+    if(ids.length){
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      setMembers(rp.data||[]);
+    }
+  }
+
+  async function load(){
+    setLoading(true);
+    var fyEnd=fyStart+1;
+    var startDate=fyStart+'-04-01';
+    var endDate=fyEnd+'-03-31';
+    var r=await supabase.from('leave_requests').select('*').eq('org_id',org.id).gte('start_date',startDate).lte('start_date',endDate).order('created_at',{ascending:false}).limit(500);
+    var all=r.data||[];
+    setAllRequests(all);
+    setRequests(all.filter(function(x){return x.user_id===cu.id;}));
+    setLoading(false);
+  }
+
+  function calcDays(s,e){
+    if(!s||!e)return 0;
+    var a=new Date(s),b=new Date(e);
+    if(b<a)return 0;
+    var count=0;
+    var cur=new Date(a);
+    while(cur<=b){if(cur.getDay()!==0)count++;cur.setDate(cur.getDate()+1);}
+    return count;
+  }
+
+  async function applyLeave(){
+    if(!form.start_date||!form.end_date){showToast('Select dates','err');return;}
+    if(!form.reason.trim()){showToast('Enter reason','err');return;}
+    var days=calcDays(form.start_date,form.end_date);
+    if(days<=0){showToast('Invalid date range','err');return;}
+    setSaving(true);
+    var ins=await supabase.from('leave_requests').insert({
+      org_id:org.id,user_id:cu.id,leave_type:form.leave_type,
+      start_date:form.start_date,end_date:form.end_date,days:days,
+      reason:form.reason.trim(),status:'pending'
+    }).select('*').single();
+    setSaving(false);
+    if(ins.error){showToast('Failed: '+ins.error.message,'err');return;}
+    showToast('Leave applied ('+days+' days)');
+    setForm({leave_type:'CL',start_date:'',end_date:'',reason:''});
+    setShowApply(false);
+    load();
+  }
+
+  async function reviewLeave(id,decision){
+    var up=await supabase.from('leave_requests').update({status:decision,reviewed_by:cu.id,reviewed_at:new Date().toISOString()}).eq('id',id);
+    if(up.error){showToast('Failed: '+up.error.message,'err');return;}
+    showToast('Leave '+decision);
+    load();
+  }
+
+  var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
+
+  var myApproved=requests.filter(function(r){return r.status==='approved';});
+  var balances=LEAVE_TYPES.map(function(lt){
+    var used=myApproved.filter(function(r){return r.leave_type===lt.v;}).reduce(function(s,r){return s+(r.days||0);},0);
+    return{type:lt.v,label:lt.l,color:lt.c,max:lt.max,used:used,bal:lt.max?lt.max-used:null};
+  });
+
+  var pendingAll=allRequests.filter(function(r){return r.status==='pending';});
+
+  var STATUS_C={pending:'#f59e0b',approved:'#22c55e',rejected:'#ef4444'};
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'};
+
+  var displayList=tab==='my'?requests:tab==='pending'?pendingAll:allRequests;
+
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      <div>
+        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>Leaves</h2>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>FY {fyStart}-{String(fyStart+1).slice(2)} · Apply and manage leave requests</div>
+      </div>
+      <button onClick={function(){setShowApply(!showApply);}} style={{background:'linear-gradient(135deg,#6b8cad,#4a6b8a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>{showApply?'Cancel':'+ Apply Leave'}</button>
+    </div>
+
+    {/* Balance cards */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8,marginBottom:14}}>
+      {balances.map(function(b){return<div key={b.type} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 14px',textAlign:'center'}}>
+        <div style={{fontSize:18,fontWeight:800,color:b.color}}>{b.bal!=null?b.bal:'—'}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.05em'}}>{b.label}</div>
+        <div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>{b.used} used{b.max?' / '+b.max:''}</div>
+      </div>;})}
+    </div>
+
+    {/* Apply form */}
+    {showApply&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:16,marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em'}}>Apply for Leave</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10,marginBottom:10}}>
+        <select value={form.leave_type} onChange={function(e){setForm(function(p){return Object.assign({},p,{leave_type:e.target.value});});}} style={Object.assign({},INP,{cursor:'pointer'})}>
+          {LEAVE_TYPES.map(function(t){return<option key={t.v} value={t.v}>{t.l}</option>;})}
+        </select>
+        <div><label style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:700}}>From</label><input type="date" value={form.start_date} onChange={function(e){setForm(function(p){return Object.assign({},p,{start_date:e.target.value});});}} style={Object.assign({},INP,{width:'100%',boxSizing:'border-box'})}/></div>
+        <div><label style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:700}}>To</label><input type="date" value={form.end_date} onChange={function(e){setForm(function(p){return Object.assign({},p,{end_date:e.target.value});});}} style={Object.assign({},INP,{width:'100%',boxSizing:'border-box'})}/></div>
+        <div style={{display:'flex',alignItems:'flex-end'}}><span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{calcDays(form.start_date,form.end_date)} day(s)</span></div>
+      </div>
+      <textarea value={form.reason} onChange={function(e){setForm(function(p){return Object.assign({},p,{reason:e.target.value});});}} placeholder="Reason for leave..." rows={2} style={Object.assign({},INP,{width:'100%',boxSizing:'border-box',resize:'vertical',marginBottom:10})}/>
+      <button onClick={applyLeave} disabled={saving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Applying...':'Submit Leave Request'}</button>
+    </div>}
+
+    {/* Tabs */}
+    <div style={{display:'flex',gap:0,marginBottom:14,borderBottom:'2px solid var(--tf-border)'}}>
+      {[{id:'my',l:'My Leaves'},{id:'pending',l:'Pending Approval ('+pendingAll.length+')'},{id:'all',l:'All Requests'}].filter(function(t){return t.id==='my'||isAdmin;}).map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);}} style={{background:'none',border:'none',borderBottom:'2px solid',borderColor:tab===t.id?'#6b8cad':'transparent',padding:'8px 16px',color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',fontSize:12,fontWeight:700,cursor:'pointer',marginBottom:-2}}>{t.l}</button>;})}
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    displayList.length===0?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',fontSize:13}}>No leave requests found</div>:
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {displayList.map(function(req){
+        var lt=LT_MAP[req.leave_type]||{l:req.leave_type,c:'#94a3b8'};
+        var user=memberMap[req.user_id];
+        var reviewer=req.reviewed_by?memberMap[req.reviewed_by]:null;
+        return<div key={req.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          <div style={{width:6,height:40,borderRadius:3,background:lt.c,flexShrink:0}}/>
+          <div style={{flex:1,minWidth:200}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>
+              {tab!=='my'&&user&&<span>{user.name||user.email} · </span>}
+              {lt.l} <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>({req.days} day{req.days>1?'s':''})</span>
+            </div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>
+              {new Date(req.start_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})} → {new Date(req.end_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+              {req.reason&&<span style={{marginLeft:8,fontStyle:'italic'}}>"{req.reason}"</span>}
+            </div>
+            {reviewer&&req.status!=='pending'&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Reviewed by {reviewer.name||reviewer.email} on {new Date(req.reviewed_at).toLocaleDateString('en-IN')}</div>}
+          </div>
+          <span style={{fontSize:11,fontWeight:700,color:STATUS_C[req.status]||'#94a3b8',background:STATUS_C[req.status]?STATUS_C[req.status]+'18':'transparent',padding:'3px 12px',borderRadius:20,textTransform:'capitalize',border:'1px solid',borderColor:STATUS_C[req.status]||'#94a3b8'}}>{req.status}</span>
+          {isAdmin&&req.status==='pending'&&req.user_id!==cu.id&&<div style={{display:'flex',gap:6}}>
+            <button onClick={function(){reviewLeave(req.id,'approved');}} style={{background:'#22c55e',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Approve</button>
+            <button onClick={function(){reviewLeave(req.id,'rejected');}} style={{background:'#ef4444',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Reject</button>
+          </div>}
+        </div>;
+      })}
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PERFORMANCE MODULE — minimal goals & reviews
+// ══════════════════════════════════════════════════════════════════
+
+function PerformanceModule({org,supabase,cu}){
+  var [members,setMembers]=useState([]);
+  var [reviews,setReviews]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  var [isAdmin,setIsAdmin]=useState(false);
+  var [selUser,setSelUser]=useState(cu.id);
+  var [showAdd,setShowAdd]=useState(false);
+  var [form,setForm]=useState({period:'',rating:3,strengths:'',improvements:'',goals:''});
+  var [saving,setSaving]=useState(false);
+
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  var fyStart=new Date().getMonth()>=3?new Date().getFullYear():new Date().getFullYear()-1;
+  var PERIODS=['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)','Annual'];
+
+  useEffect(function(){loadMembers();},[org.id]);
+  useEffect(function(){loadReviews();},[org.id,selUser]);
+
+  async function loadMembers(){
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var rows=rm.data||[];
+    var myRow=rows.find(function(r){return r.user_id===cu.id;});
+    if(myRow&&(myRow.role==='owner'||myRow.role==='admin'))setIsAdmin(true);
+    var ids=rows.map(function(r){return r.user_id;});
+    if(ids.length){
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      setMembers(rp.data||[]);
+    }
+  }
+
+  async function loadReviews(){
+    setLoading(true);
+    var r=await supabase.from('performance_reviews').select('*').eq('org_id',org.id).eq('user_id',selUser).order('created_at',{ascending:false}).limit(100);
+    setReviews(r.data||[]);
+    setLoading(false);
+  }
+
+  async function addReview(){
+    if(!form.period){showToast('Select period','err');return;}
+    setSaving(true);
+    var ins=await supabase.from('performance_reviews').insert({
+      org_id:org.id,user_id:selUser,reviewer_id:cu.id,
+      fy_year:fyStart,period:form.period,rating:Number(form.rating),
+      strengths:form.strengths.trim()||null,
+      improvements:form.improvements.trim()||null,
+      goals:form.goals.trim()||null
+    }).select('*').single();
+    setSaving(false);
+    if(ins.error){showToast('Failed: '+ins.error.message,'err');return;}
+    showToast('Review added');
+    setForm({period:'',rating:3,strengths:'',improvements:'',goals:''});
+    setShowAdd(false);
+    loadReviews();
+  }
+
+  async function deleteReview(id){
+    await supabase.from('performance_reviews').delete().eq('id',id);
+    setReviews(function(p){return p.filter(function(r){return r.id!==id;});});
+    showToast('Deleted');
+  }
+
+  var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'};
+  var STARS=['#ef4444','#f59e0b','#f59e0b','#22c55e','#22c55e'];
+
+  var avgRating=reviews.length>0?Math.round(reviews.reduce(function(s,r){return s+r.rating;},0)/reviews.length*10)/10:null;
+
+  return<div style={{padding:'0 0 60px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      <div>
+        <h2 style={{margin:0,fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>Performance</h2>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>FY {fyStart}-{String(fyStart+1).slice(2)} · Track goals, reviews & ratings</div>
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        {isAdmin&&<select value={selUser} onChange={function(e){setSelUser(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer',minWidth:140})}>
+          {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}{m.id===cu.id?' (me)':''}</option>;})}
+        </select>}
+        {isAdmin&&<button onClick={function(){setShowAdd(!showAdd);}} style={{background:'linear-gradient(135deg,#6b8cad,#4a6b8a)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>{showAdd?'Cancel':'+ Add Review'}</button>}
+      </div>
+    </div>
+
+    {/* Summary */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:8,marginBottom:14}}>
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 14px',textAlign:'center'}}>
+        <div style={{fontSize:22,fontWeight:800,color:avgRating?STARS[Math.round(avgRating)-1]:'var(--tf-text-sub)'}}>{avgRating||'—'}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,fontWeight:700,textTransform:'uppercase'}}>Avg Rating</div>
+      </div>
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 14px',textAlign:'center'}}>
+        <div style={{fontSize:22,fontWeight:800,color:'#6b8cad'}}>{reviews.length}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,fontWeight:700,textTransform:'uppercase'}}>Reviews</div>
+      </div>
+    </div>
+
+    {/* Add review form */}
+    {showAdd&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:16,marginBottom:14}}>
+      <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em'}}>Add Performance Review</div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+        <select value={form.period} onChange={function(e){setForm(function(p){return Object.assign({},p,{period:e.target.value});});}} style={Object.assign({},INP,{cursor:'pointer'})}>
+          <option value="">— Period —</option>
+          {PERIODS.map(function(p){return<option key={p} value={p}>{p}</option>;})}
+        </select>
+        <div>
+          <label style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:700}}>Rating</label>
+          <div style={{display:'flex',gap:4,marginTop:4}}>
+            {[1,2,3,4,5].map(function(n){return<button key={n} onClick={function(){setForm(function(p){return Object.assign({},p,{rating:n});});}} style={{background:n<=form.rating?STARS[n-1]:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,width:32,height:32,cursor:'pointer',fontSize:14,fontWeight:800,color:n<=form.rating?'#fff':'var(--tf-text-sub)'}}>{n}</button>;})}
+          </div>
+        </div>
+      </div>
+      <textarea value={form.strengths} onChange={function(e){setForm(function(p){return Object.assign({},p,{strengths:e.target.value});});}} placeholder="Strengths & achievements..." rows={2} style={Object.assign({},INP,{width:'100%',boxSizing:'border-box',resize:'vertical',marginBottom:8})}/>
+      <textarea value={form.improvements} onChange={function(e){setForm(function(p){return Object.assign({},p,{improvements:e.target.value});});}} placeholder="Areas for improvement..." rows={2} style={Object.assign({},INP,{width:'100%',boxSizing:'border-box',resize:'vertical',marginBottom:8})}/>
+      <textarea value={form.goals} onChange={function(e){setForm(function(p){return Object.assign({},p,{goals:e.target.value});});}} placeholder="Goals for next period..." rows={2} style={Object.assign({},INP,{width:'100%',boxSizing:'border-box',resize:'vertical',marginBottom:10})}/>
+      <button onClick={addReview} disabled={saving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Save Review'}</button>
+    </div>}
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    reviews.length===0?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',fontSize:13}}>No reviews yet{isAdmin?' — click "+ Add Review" to get started':''}</div>:
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      {reviews.map(function(rev){
+        var reviewer=memberMap[rev.reviewer_id];
+        var sc=STARS[Math.min(Math.max(rev.rating,1),5)-1];
+        return<div key={rev.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 18px'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexWrap:'wrap',gap:8}}>
+            <div>
+              <span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{rev.period}</span>
+              <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:8}}>FY {rev.fy_year}-{String(rev.fy_year+1).slice(2)}</span>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{display:'flex',gap:2}}>
+                {[1,2,3,4,5].map(function(n){return<span key={n} style={{fontSize:16,color:n<=rev.rating?sc:'var(--tf-border)'}}>★</span>;})}
+              </div>
+              {isAdmin&&<button onClick={function(){if(window.confirm('Delete this review?'))deleteReview(rev.id);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:14,padding:'2px 6px'}}>×</button>}
+            </div>
+          </div>
+          {rev.strengths&&<div style={{marginBottom:6}}><div style={{fontSize:10,fontWeight:700,color:'#22c55e',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:2}}>Strengths</div><div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5}}>{rev.strengths}</div></div>}
+          {rev.improvements&&<div style={{marginBottom:6}}><div style={{fontSize:10,fontWeight:700,color:'#f59e0b',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:2}}>Improvements</div><div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5}}>{rev.improvements}</div></div>}
+          {rev.goals&&<div style={{marginBottom:6}}><div style={{fontSize:10,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:2}}>Goals</div><div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5}}>{rev.goals}</div></div>}
+          {reviewer&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Reviewed by {reviewer.name||reviewer.email} · {new Date(rev.created_at).toLocaleDateString('en-IN')}</div>}
+        </div>;
+      })}
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // CALENDAR VIEW
 // ══════════════════════════════════════════════════════════════════
 
@@ -7033,10 +7362,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
       {orgModule==='hr'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='hr'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='hr'&&tab!=='attendance'&&tab!=='logs'&&<ModulePlaceholder moduleLabel="HR" activeTab={tab} features={[
-        {tab:'performance',title:'Performance',desc:'Track employee KPIs, reviews and goals across review cycles.'},
-        {tab:'leaves',title:'Leaves',desc:'Apply, approve and track leave balances across leave types.'},
-      ]}/>}
+      {orgModule==='hr'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='hr'&&tab==='performance'&&<PerformanceModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='billing'&&<ModulePlaceholder moduleLabel="Billing" activeTab={tab} features={[
         {tab:'invoices',title:'Invoices',desc:'Client-wise and work-wise invoicing with automatic totals and taxes.'},
         {tab:'templates',title:'Templates',desc:'Reusable invoice templates for quick creation.'},
