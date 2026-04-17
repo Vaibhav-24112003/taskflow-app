@@ -3277,9 +3277,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
               var me=dd.monthly_map[periodMonth];
               if(me&&me.day&&me.due_month){
                 var calY=periodMonth>=4?periodYear:periodYear+1;
-                var dueCalY=me.due_month>=4?periodYear:periodYear+1;
-                if(me.due_month<periodMonth&&periodMonth>=4&&me.due_month<=3)dueCalY=periodYear+1;
-                if(me.due_month>periodMonth&&periodMonth<=3&&me.due_month>=4)dueCalY=periodYear;
+                var dueCalY=calY;
+                if(me.due_month<periodMonth)dueCalY=calY+1;
                 var ds=dueCalY+'-'+String(me.due_month).padStart(2,'0')+'-'+String(me.day).padStart(2,'0');
                 dueDateList.push({date:ds,label:dd.label||'Due'});
               }
