@@ -6721,13 +6721,20 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [portalUsers,setPortalUsers]=useState([]);
   var [templates,setTemplates]=useState([]);
   var [toast,setToast]=useState(null);
-  var [activeTab,setActiveTab]=useState('bulk'); // 'bulk' | 'templates'
+  var [activeTab,setActiveTab]=useState('bulk'); // 'bulk' | 'single' | 'templates'
   // Bulk email state
   var [bulkSelIds,setBulkSelIds]=useState({});
   var [bulkFilterWT,setBulkFilterWT]=useState('');
   var [bulkSubject,setBulkSubject]=useState('');
   var [bulkBody,setBulkBody]=useState('');
+  var [bulkCC,setBulkCC]=useState('');
   var [clientSearch,setClientSearch]=useState('');
+  // Single email state
+  var [singleTo,setSingleTo]=useState('');
+  var [singleCC,setSingleCC]=useState('');
+  var [singleSubject,setSingleSubject]=useState('');
+  var [singleBody,setSingleBody]=useState('');
+  var [singleClientId,setSingleClientId]=useState('');
   // Template form
   var [tplName,setTplName]=useState('');
   var [tplSubject,setTplSubject]=useState('');
@@ -6783,6 +6790,35 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   }
   function editTemplate(t){setTplName(t.name);setTplSubject(t.subject);setTplBody(t.body||'');setEditTplId(t.id);}
 
+  function applyFormat(setter,getter,tag){
+    var ta=document.getElementById('comms_body_'+activeTab);
+    if(!ta)return;
+    var start=ta.selectionStart,end=ta.selectionEnd,val=getter;
+    var sel=val.substring(start,end);
+    var wrap='';
+    if(tag==='bold')wrap='**'+sel+'**';
+    else if(tag==='italic')wrap='_'+sel+'_';
+    else if(tag==='underline')wrap='<u>'+sel+'</u>';
+    else if(tag==='bullet')wrap='\n• '+sel;
+    else if(tag==='link')wrap='['+sel+'](url)';
+    else if(tag==='heading')wrap='\n### '+sel;
+    var nv=val.substring(0,start)+wrap+val.substring(end);
+    setter(nv);
+    setTimeout(function(){ta.focus();ta.selectionStart=start;ta.selectionEnd=start+wrap.length;},50);
+  }
+
+  function FormatBar({bodyId,setter,getter}){
+    var BT={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 8px',cursor:'pointer',fontSize:12,color:'var(--tf-text)',fontFamily:'inherit',lineHeight:1};
+    return<div style={{display:'flex',gap:4,marginBottom:6,flexWrap:'wrap'}}>
+      <button type="button" onClick={function(){applyFormat(setter,getter,'bold');}} style={Object.assign({},BT,{fontWeight:800})} title="Bold">B</button>
+      <button type="button" onClick={function(){applyFormat(setter,getter,'italic');}} style={Object.assign({},BT,{fontStyle:'italic'})} title="Italic">I</button>
+      <button type="button" onClick={function(){applyFormat(setter,getter,'underline');}} style={Object.assign({},BT,{textDecoration:'underline'})} title="Underline">U</button>
+      <button type="button" onClick={function(){applyFormat(setter,getter,'heading');}} style={BT} title="Heading">H</button>
+      <button type="button" onClick={function(){applyFormat(setter,getter,'bullet');}} style={BT} title="Bullet">•</button>
+      <button type="button" onClick={function(){applyFormat(setter,getter,'link');}} style={BT} title="Link">🔗</button>
+    </div>;
+  }
+
   function sendBulk(){
     var selCount=Object.keys(bulkSelIds).length;
     if(selCount===0){showToast('Select at least one client','err');return;}
@@ -6790,9 +6826,26 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     var emails=[];
     Object.keys(bulkSelIds).forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email&&emails.indexOf(c.email)===-1)emails.push(c.email);});
     if(emails.length===0){showToast('No emails found for selected clients','err');return;}
-    var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','))+'&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
+    var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','));
+    if(bulkCC.trim())mailto+='&cc='+encodeURIComponent(bulkCC.trim());
+    mailto+='&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
     window.open(mailto,'_blank');
     showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));
+  }
+
+  function sendSingle(){
+    var to=singleTo.trim()||'';
+    if(!to&&singleClientId){var c=emailClients.find(function(x){return x.id===singleClientId;});if(c)to=c.email||'';}
+    if(!to){showToast('Enter recipient email','err');return;}
+    if(!singleSubject.trim()){showToast('Subject required','err');return;}
+    var mailto='mailto:'+encodeURIComponent(to);
+    var params=[];
+    if(singleCC.trim())params.push('cc='+encodeURIComponent(singleCC.trim()));
+    params.push('subject='+encodeURIComponent(singleSubject));
+    params.push('body='+encodeURIComponent(singleBody));
+    mailto+='?'+params.join('&');
+    window.open(mailto,'_blank');
+    showToast('Email client opened');
   }
 
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'};
@@ -6804,7 +6857,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     <div style={{width:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0}}>
       <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
         <div style={{display:'flex',gap:4}}>
-          {[{id:'bulk',label:'Bulk Email',icon:'✉'},{id:'templates',label:'Templates',icon:'📧'}].map(function(t){
+          {[{id:'bulk',label:'Bulk',icon:'✉'},{id:'single',label:'Single',icon:'📨'},{id:'templates',label:'Templates',icon:'📧'}].map(function(t){
             var active=activeTab===t.id;
             return<button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{flex:1,padding:'8px 6px',border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',borderRadius:8,background:active?'rgba(107,140,173,0.1)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit',textAlign:'center'}}>{t.icon} {t.label}</button>;
           })}
@@ -6812,25 +6865,38 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
       </div>
       {/* Left body — client select for bulk, template list for templates */}
       <div style={{flex:1,overflowY:'auto',padding:'10px 0'}}>
-        {activeTab==='bulk'?<>
+        {(activeTab==='bulk'||activeTab==='single')?<>
           <div style={{padding:'0 12px 8px'}}>
             <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
-          <div style={{padding:'0 12px 6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          {activeTab==='bulk'&&<div style={{padding:'0 12px 6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)'}}>{Object.keys(bulkSelIds).length} selected</span>
             <div style={{display:'flex',gap:4}}>
               <button onClick={function(){var all={};filteredClients.forEach(function(c){if(c.email)all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>All</button>
               <span style={{color:'var(--tf-border)'}}>|</span>
               <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>Clear</button>
             </div>
-          </div>
-          {filteredClients.map(function(c){var checked=!!bulkSelIds[c.id];var hasEmail=!!c.email;return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:checked?'rgba(107,140,173,0.06)':'transparent',opacity:hasEmail?1:0.5}}>
-            <input type="checkbox" checked={checked} disabled={!hasEmail} onChange={function(){if(!hasEmail)return;setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad',flexShrink:0}}/>
-            <div style={{minWidth:0,flex:1}}>
-              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-              <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
-            </div>
-          </label>;})}
+          </div>}
+          {filteredClients.map(function(c){
+            var hasEmail=!!c.email;
+            if(activeTab==='single'){
+              var isSel=singleClientId===c.id;
+              return<button key={c.id} onClick={function(){if(!hasEmail)return;setSingleClientId(c.id);setSingleTo(c.email);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:isSel?'rgba(107,140,173,0.1)':'transparent',opacity:hasEmail?1:0.5,border:'none',fontFamily:'inherit',borderLeft:isSel?'3px solid #6b8cad':'3px solid transparent'}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,fontWeight:isSel?700:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                  <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
+                </div>
+              </button>;
+            }
+            var checked=!!bulkSelIds[c.id];
+            return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:checked?'rgba(107,140,173,0.06)':'transparent',opacity:hasEmail?1:0.5}}>
+              <input type="checkbox" checked={checked} disabled={!hasEmail} onChange={function(){if(!hasEmail)return;setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#6b8cad',flexShrink:0}}/>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
+              </div>
+            </label>;
+          })}
           {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients found.</div>}
         </>:
         /* Templates list in left panel */
@@ -6869,6 +6935,11 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
             </select>
           </div>
         </div>
+        {/* CC */}
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>CC (optional)</label>
+          <input value={bulkCC} onChange={function(e){setBulkCC(e.target.value);}} placeholder="email1@example.com, email2@example.com" style={INP}/>
+        </div>
         {/* Subject */}
         <div style={{marginBottom:12}}>
           <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject</label>
@@ -6877,7 +6948,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         {/* Body */}
         <div style={{marginBottom:16}}>
           <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
-          <textarea value={bulkBody} onChange={function(e){setBulkBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
+          <FormatBar bodyId={'comms_body_bulk'} setter={setBulkBody} getter={bulkBody}/>
+          <textarea id="comms_body_bulk" value={bulkBody} onChange={function(e){setBulkBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
         </div>
         {/* Recipient summary + Send */}
         <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 18px',marginBottom:16}}>
@@ -6891,6 +6963,37 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
           </div>}
         </div>
         <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0} style={{background:Object.keys(bulkSelIds).length>0?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
+      </>:activeTab==='single'?<>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Single Email</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Compose and send an email to a single client or any email address.</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>To</label>
+            <input value={singleTo} onChange={function(e){setSingleTo(e.target.value);}} placeholder="recipient@example.com" style={INP}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>CC (optional)</label>
+            <input value={singleCC} onChange={function(e){setSingleCC(e.target.value);}} placeholder="cc@example.com" style={INP}/>
+          </div>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject</label>
+          <input value={singleSubject} onChange={function(e){setSingleSubject(e.target.value);}} placeholder="Email subject line" style={INP}/>
+        </div>
+        {/* Template picker */}
+        <div style={{marginBottom:12}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Use Template</label>
+          <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t){setSingleSubject(t.subject);setSingleBody(t.body||'');}e.target.value='';}} style={INP}>
+            <option value="">— Pick a template —</option>
+            {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
+          </select>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
+          <FormatBar bodyId={'comms_body_single'} setter={setSingleBody} getter={singleBody}/>
+          <textarea id="comms_body_single" value={singleBody} onChange={function(e){setSingleBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
+        </div>
+        <button onClick={sendSingle} disabled={!singleTo.trim()} style={{background:singleTo.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:singleTo.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:singleTo.trim()?'#fff':'var(--tf-text-sub)',cursor:singleTo.trim()?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:singleTo.trim()?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send Email</button>
       </>:
       /* Templates tab — editor on right */
       <>
@@ -6904,7 +7007,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
           </div>
           <div style={{marginBottom:14}}>
             <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Body</label>
-            <textarea value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
+            <FormatBar bodyId={'comms_body_templates'} setter={setTplBody} getter={tplBody}/>
+            <textarea id="comms_body_templates" value={tplBody} onChange={function(e){setTplBody(e.target.value);}} rows={10} placeholder="Email body text..." style={Object.assign({},INP,{resize:'vertical'})}/>
           </div>
           <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
             {editTplId&&<button onClick={function(){setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>}
