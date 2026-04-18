@@ -6335,6 +6335,508 @@ function MiniCalendar({rows,clientMap,wsMap}){
   </div>;
 }
 
+// ── Invoice Form (separate component to keep BillingModule smaller) ──
+function InvoiceForm({inv,clients,org,supabase,onClose,onSaved,INP,LBL,BTN}){
+var [clientId,setClientId]=useState(inv?inv.client_id:'');
+var [invoiceNo,setInvoiceNo]=useState(inv?inv.invoice_no:'');
+var [invoiceDate,setInvoiceDate]=useState(inv?inv.invoice_date:new Date().toISOString().slice(0,10));
+var [dueDate,setDueDate]=useState(inv?inv.due_date||'':'');
+var [status,setStatus]=useState(inv?inv.status:'draft');
+var [taxPercent,setTaxPercent]=useState(inv?inv.tax_percent||'':'');
+var [notes,setNotes]=useState(inv?inv.notes||'':'');
+var [bankDetails,setBankDetails]=useState(inv?inv.bank_details||'':'');
+var [items,setItems]=useState(inv&&inv.items&&inv.items.length>0?inv.items:[{description:'',sac_code:'',qty:1,rate:''}]);
+var [saving,setSaving]=useState(false);
+
+function addItem(){setItems(function(p){return[...p,{description:'',sac_code:'',qty:1,rate:''}];});}
+function removeItem(i){setItems(function(p){return p.filter(function(_,x){return x!==i;});});}
+function updateItem(i,k,v){setItems(function(p){return p.map(function(it,x){if(x!==i)return it;var n=Object.assign({},it);n[k]=v;return n;});});}
+
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var tax=taxPercent?sub*(Number(taxPercent)/100):0;
+var total=sub+tax;
+
+async function save(){
+if(!clientId){alert('Select a client');return;}
+if(!invoiceNo.trim()){alert('Invoice number required');return;}
+if(items.filter(function(it){return it.description&&it.rate;}).length===0){alert('Add at least one line item');return;}
+setSaving(true);
+var payload={org_id:org.id,client_id:clientId,invoice_no:invoiceNo.trim(),invoice_date:invoiceDate||null,due_date:dueDate||null,status:status,tax_percent:taxPercent?Number(taxPercent):null,notes:notes.trim()||null,bank_details:bankDetails.trim()||null,items:items.filter(function(it){return it.description;}).map(function(it){return{description:it.description,sac_code:it.sac_code||'',qty:Number(it.qty)||1,rate:Number(it.rate)||0};}),total:total};
+var res;
+if(inv){res=await supabase.from('invoices').update(payload).eq('id',inv.id);}
+else{res=await supabase.from('invoices').insert(payload);}
+setSaving(false);
+if(res.error){alert(res.error.message);return;}
+onSaved();
+}
+
+return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20,marginBottom:16}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+<div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{inv?'Edit Invoice':'New Invoice'}</div>
+<button onClick={onClose} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444'})}>Cancel</button>
+</div>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
+<div><label style={LBL}>Client</label><select value={clientId} onChange={function(e){setClientId(e.target.value);}} style={INP}><option value="">Select client...</option>{clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}</select></div>
+<div><label style={LBL}>Invoice No</label><input value={invoiceNo} onChange={function(e){setInvoiceNo(e.target.value);}} style={INP} placeholder="INV-001"/></div>
+<div><label style={LBL}>Status</label><select value={status} onChange={function(e){setStatus(e.target.value);}} style={INP}><option value="draft">Draft</option><option value="sent">Sent</option><option value="paid">Paid</option><option value="partial">Partial</option><option value="overdue">Overdue</option><option value="cancelled">Cancelled</option></select></div>
+</div>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
+<div><label style={LBL}>Invoice Date</label><input type="date" value={invoiceDate} onChange={function(e){setInvoiceDate(e.target.value);}} style={INP}/></div>
+<div><label style={LBL}>Due Date</label><input type="date" value={dueDate} onChange={function(e){setDueDate(e.target.value);}} style={INP}/></div>
+<div><label style={LBL}>GST %</label><input type="number" value={taxPercent} onChange={function(e){setTaxPercent(e.target.value);}} style={INP} placeholder="18"/></div>
+</div>
+
+<div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.05em'}}>Line Items</div>
+<table style={{width:'100%',borderCollapse:'collapse',marginBottom:10}}>
+<thead><tr style={{borderBottom:'1px solid var(--tf-border)'}}>
+<th style={{textAlign:'left',padding:'6px 8px',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>Description</th>
+<th style={{textAlign:'left',padding:'6px 8px',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,width:100}}>SAC/HSN</th>
+<th style={{textAlign:'right',padding:'6px 8px',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,width:60}}>Qty</th>
+<th style={{textAlign:'right',padding:'6px 8px',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,width:100}}>Rate (₹)</th>
+<th style={{textAlign:'right',padding:'6px 8px',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,width:100}}>Amount</th>
+<th style={{width:36}}></th>
+</tr></thead>
+<tbody>{items.map(function(it,i){
+var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
+return<tr key={i} style={{borderBottom:'1px solid var(--tf-border)'}}>
+<td style={{padding:'4px 6px'}}><input value={it.description} onChange={function(e){updateItem(i,'description',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px'})} placeholder="Work description"/></td>
+<td style={{padding:'4px 6px'}}><input value={it.sac_code} onChange={function(e){updateItem(i,'sac_code',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px'})} placeholder="998231"/></td>
+<td style={{padding:'4px 6px'}}><input type="number" value={it.qty} onChange={function(e){updateItem(i,'qty',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px',textAlign:'right'})}/></td>
+<td style={{padding:'4px 6px'}}><input type="number" value={it.rate} onChange={function(e){updateItem(i,'rate',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px',textAlign:'right'})} placeholder="0"/></td>
+<td style={{padding:'4px 6px',textAlign:'right',fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>₹{amt.toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+<td style={{padding:'4px 2px'}}>{items.length>1&&<button onClick={function(){removeItem(i);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:14}}>✕</button>}</td>
+</tr>;
+})}</tbody>
+</table>
+<button onClick={addItem} style={Object.assign({},BTN,{background:'rgba(107,140,173,0.1)',color:'#6b8cad',fontSize:11,marginBottom:14})}>+ Add Line</button>
+
+<div style={{textAlign:'right',marginBottom:14}}>
+<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Subtotal: <b style={{color:'var(--tf-text)'}}>₹{sub.toLocaleString('en-IN',{minimumFractionDigits:2})}</b></div>
+{taxPercent&&<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>GST ({taxPercent}%): <b style={{color:'var(--tf-text)'}}>₹{tax.toLocaleString('en-IN',{minimumFractionDigits:2})}</b></div>}
+<div style={{fontSize:16,fontWeight:800,color:'#6b8cad',marginTop:4}}>Total: ₹{total.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
+</div>
+
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+<div><label style={LBL}>Notes</label><textarea value={notes} onChange={function(e){setNotes(e.target.value);}} style={Object.assign({},INP,{minHeight:60,resize:'vertical'})} placeholder="Payment terms, etc."/></div>
+<div><label style={LBL}>Bank Details</label><textarea value={bankDetails} onChange={function(e){setBankDetails(e.target.value);}} style={Object.assign({},INP,{minHeight:60,resize:'vertical'})} placeholder="Bank name, A/C, IFSC..."/></div>
+</div>
+
+<div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+<button onClick={onClose} style={Object.assign({},BTN,{background:'var(--tf-panel)',color:'var(--tf-text-sub)'})}>Cancel</button>
+<button onClick={save} disabled={saving} style={Object.assign({},BTN,{background:'#6b8cad',color:'#fff',opacity:saving?0.6:1})}>{saving?'Saving...':inv?'Update Invoice':'Create Invoice'}</button>
+</div>
+</div>;
+}
+
+// ── Proposal Form ──
+function ProposalForm({prop,clients,org,supabase,onClose,onSaved,INP,LBL,BTN}){
+var [clientId,setClientId]=useState(prop?prop.client_id:'');
+var [proposalNo,setProposalNo]=useState(prop?prop.proposal_no:'PROP-'+Date.now().toString(36).toUpperCase());
+var [proposalDate,setProposalDate]=useState(prop?prop.proposal_date:new Date().toISOString().slice(0,10));
+var [validUntil,setValidUntil]=useState(prop?prop.valid_until||'':'');
+var [status,setStatus]=useState(prop?prop.status:'draft');
+var [taxPercent,setTaxPercent]=useState(prop?prop.tax_percent||'':'');
+var [notes,setNotes]=useState(prop?prop.notes||'':'');
+var [items,setItems]=useState(prop&&prop.items&&prop.items.length>0?prop.items:[{description:'',qty:1,rate:''}]);
+var [saving,setSaving]=useState(false);
+function addItem(){setItems(function(p){return[...p,{description:'',qty:1,rate:''}];});}
+function removeItem(i){setItems(function(p){return p.filter(function(_,x){return x!==i;});});}
+function updateItem(i,k,v){setItems(function(p){return p.map(function(it,x){if(x!==i)return it;var n=Object.assign({},it);n[k]=v;return n;});});}
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var tax=taxPercent?sub*(Number(taxPercent)/100):0;
+var total=sub+tax;
+async function save(){
+if(!clientId||!proposalNo.trim()){alert('Client and proposal number required');return;}
+setSaving(true);
+var payload={org_id:org.id,client_id:clientId,proposal_no:proposalNo.trim(),proposal_date:proposalDate||null,valid_until:validUntil||null,status:status,tax_percent:taxPercent?Number(taxPercent):null,notes:notes.trim()||null,items:items.filter(function(it){return it.description;}),total:total};
+var res;if(prop){res=await supabase.from('proposals').update(payload).eq('id',prop.id);}else{res=await supabase.from('proposals').insert(payload);}
+setSaving(false);if(res.error){alert(res.error.message);return;}onSaved();}
+
+return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:20}}>
+<div style={{display:'flex',justifyContent:'space-between',marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{prop?'Edit Proposal':'New Proposal'}</div><button onClick={onClose} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444'})}>Cancel</button></div>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
+<div><label style={LBL}>Client</label><select value={clientId} onChange={function(e){setClientId(e.target.value);}} style={INP}><option value="">Select...</option>{clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}</select></div>
+<div><label style={LBL}>Proposal No</label><input value={proposalNo} onChange={function(e){setProposalNo(e.target.value);}} style={INP}/></div>
+<div><label style={LBL}>Status</label><select value={status} onChange={function(e){setStatus(e.target.value);}} style={INP}><option value="draft">Draft</option><option value="sent">Sent</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option></select></div>
+</div>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
+<div><label style={LBL}>Date</label><input type="date" value={proposalDate} onChange={function(e){setProposalDate(e.target.value);}} style={INP}/></div>
+<div><label style={LBL}>Valid Until</label><input type="date" value={validUntil} onChange={function(e){setValidUntil(e.target.value);}} style={INP}/></div>
+<div><label style={LBL}>GST %</label><input type="number" value={taxPercent} onChange={function(e){setTaxPercent(e.target.value);}} style={INP} placeholder="18"/></div>
+</div>
+<div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6,textTransform:'uppercase'}}>Services / Work Items</div>
+{items.map(function(it,i){return<div key={i} style={{display:'flex',gap:8,marginBottom:6,alignItems:'center'}}>
+<input value={it.description} onChange={function(e){updateItem(i,'description',e.target.value);}} style={Object.assign({},INP,{flex:3})} placeholder="Work description"/>
+<input type="number" value={it.qty} onChange={function(e){updateItem(i,'qty',e.target.value);}} style={Object.assign({},INP,{flex:0,width:60,textAlign:'right'})}/>
+<input type="number" value={it.rate} onChange={function(e){updateItem(i,'rate',e.target.value);}} style={Object.assign({},INP,{flex:0,width:100,textAlign:'right'})} placeholder="Rate"/>
+<span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',minWidth:80,textAlign:'right'}}>₹{((Number(it.qty)||1)*(Number(it.rate)||0)).toLocaleString('en-IN')}</span>
+{items.length>1&&<button onClick={function(){removeItem(i);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer'}}>✕</button>}
+</div>;})}
+<button onClick={addItem} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.1)',color:'#8b5cf6',fontSize:11,marginBottom:10})}>+ Add Item</button>
+<div><label style={LBL}>Notes / Scope</label><textarea value={notes} onChange={function(e){setNotes(e.target.value);}} style={Object.assign({},INP,{minHeight:60,resize:'vertical'})} placeholder="Scope of work, terms..."/></div>
+<div style={{textAlign:'right',margin:'10px 0'}}><span style={{fontSize:16,fontWeight:800,color:'#8b5cf6'}}>Total: ₹{total.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
+<div style={{display:'flex',justifyContent:'flex-end',gap:8}}><button onClick={onClose} style={Object.assign({},BTN,{background:'var(--tf-panel)',color:'var(--tf-text-sub)'})}>Cancel</button><button onClick={save} disabled={saving} style={Object.assign({},BTN,{background:'#8b5cf6',color:'#fff',opacity:saving?0.6:1})}>{saving?'Saving...':'Save Proposal'}</button></div>
+</div>;}
+
+// ── Billing Module ────────────────────────────────────────────────
+function BillingModule({org,supabase,cu,activeTab}){
+var tab=activeTab||'invoices';
+var [loading,setLoading]=useState(true);
+var [toast,setToast]=useState(null);
+var [clients,setClients]=useState([]);
+var [invoices,setInvoices]=useState([]);
+var [payments,setPayments]=useState([]);
+var [showForm,setShowForm]=useState(false);
+var [editInv,setEditInv]=useState(null);
+var [showProposalForm,setShowProposalForm]=useState(false);
+var [editProposal,setEditProposal]=useState(null);
+var [proposals,setProposals]=useState([]);
+var [showPayForm,setShowPayForm]=useState(false);
+var [stmtClientId,setStmtClientId]=useState('');
+var [stmtData,setStmtData]=useState(null);
+var [exportFmt,setExportFmt]=useState('pdf');
+
+function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+useEffect(function(){loadAll();},[org.id]);
+
+async function loadAll(){
+setLoading(true);
+var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);
+var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);
+var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);
+var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
+setClients(rc.data||[]);
+setInvoices(ri.data||[]);
+setPayments(rp.data||[]);
+setProposals(rpr.data||[]);
+setLoading(false);
+}
+
+var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+var TABS=[{id:'invoices',l:'Invoices'},{id:'proposals',l:'Proposals'},{id:'payments',l:'Payments'},{id:'statements',l:'Statements'},{id:'export',l:'Export'}];
+var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
+var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4,display:'block'};
+var BTN={padding:'7px 16px',borderRadius:8,border:'none',fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit'};
+
+if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading billing...</div>;
+
+return<div style={{padding:'0 0 60px'}}>
+{toast&&<div style={{position:'fixed',top:18,right:18,background:toast.kind==='err'?'#fee2e2':'#d1fae5',color:toast.kind==='err'?'#b91c1c':'#065f46',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999,boxShadow:'0 4px 20px rgba(0,0,0,0.15)'}}>{toast.msg}</div>}
+
+{tab==='invoices'&&renderInvoices()}
+{tab==='proposals'&&renderProposals()}
+{tab==='payments'&&renderPayments()}
+{tab==='statements'&&renderStatements()}
+{tab==='export'&&renderExport()}
+</div>;
+
+// ── PLACEHOLDER RENDERERS (will be filled in phases) ──
+function renderInvoices(){
+var filtered=invoices;
+function openNew(){setEditInv(null);setShowForm(true);}
+function openEdit(inv){setEditInv(inv);setShowForm(true);}
+async function delInv(id){if(!window.confirm('Delete this invoice?'))return;await supabase.from('invoice_items').delete().eq('invoice_id',id);await supabase.from('invoices').delete().eq('id',id);showToast('Invoice deleted');loadAll();}
+async function markStatus(id,st){await supabase.from('invoices').update({status:st}).eq('id',id);showToast('Status updated');loadAll();}
+
+function getInvTotal(inv){
+var items=inv.items||[];
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var tax=inv.tax_percent?sub*(Number(inv.tax_percent)/100):0;
+return{sub:sub,tax:tax,total:sub+tax};
+}
+
+function getPaid(invId){
+return payments.filter(function(p){return p.invoice_id===invId;}).reduce(function(s,p){return s+(Number(p.amount)||0);},0);
+}
+
+function generatePDF(inv){
+var c=clientMap[inv.client_id]||{};
+var t=getInvTotal(inv);
+var paid=getPaid(inv.id);
+var items=inv.items||[];
+var w=window.open('','_blank');
+w.document.write('<html><head><title>Invoice '+inv.invoice_no+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:8px 12px;border:1px solid #ddd;text-align:left;font-size:13px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}.head{display:flex;justify-content:space-between;margin-bottom:30px}.title{font-size:28px;font-weight:800;color:#6b8cad}@media print{body{margin:20px}}</style></head><body>');
+w.document.write('<div class="head"><div><div class="title">INVOICE</div><div style="margin-top:6px;font-size:13px;color:#666">'+org.name+'</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:700">'+inv.invoice_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(inv.invoice_date||'')+'</div>'+(inv.due_date?'<div style="font-size:12px;color:#666">Due: '+inv.due_date+'</div>':'')+'</div></div>');
+w.document.write('<div style="margin-bottom:20px"><div style="font-weight:700;font-size:13px;color:#666;margin-bottom:4px">Bill To:</div><div style="font-size:14px;font-weight:700">'+(c.display_name||c.name||'')+'</div>'+(c.gstin?'<div style="font-size:11px;color:#666">GSTIN: '+c.gstin+'</div>':'')+(c.city?'<div style="font-size:11px;color:#666">'+c.city+(c.state?', '+c.state:'')+'</div>':'')+'</div>');
+w.document.write('<table><thead><tr><th>#</th><th>Description</th><th>SAC/HSN</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead><tbody>');
+items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td>'+it.description+'</td><td>'+(it.sac_code||'')+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">'+Number(it.rate||0).toLocaleString('en-IN',{minimumFractionDigits:2})+'</td><td class="right">'+amt.toLocaleString('en-IN',{minimumFractionDigits:2})+'</td></tr>');});
+w.document.write('</tbody></table>');
+w.document.write('<div style="text-align:right;margin-top:10px"><div style="font-size:13px">Subtotal: <b>₹'+t.sub.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b></div>');
+if(inv.tax_percent)w.document.write('<div style="font-size:13px">GST ('+inv.tax_percent+'%): <b>₹'+t.tax.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b></div>');
+w.document.write('<div style="font-size:16px;font-weight:800;margin-top:6px;color:#6b8cad">Total: ₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2})+'</div>');
+if(paid>0)w.document.write('<div style="font-size:13px;margin-top:4px;color:#22c55e">Paid: ₹'+paid.toLocaleString('en-IN',{minimumFractionDigits:2})+'</div><div style="font-size:13px;color:'+(t.total-paid>0?'#ef4444':'#22c55e')+'">Balance: ₹'+(t.total-paid).toLocaleString('en-IN',{minimumFractionDigits:2})+'</div>');
+w.document.write('</div>');
+if(inv.notes)w.document.write('<div style="margin-top:24px;padding-top:14px;border-top:1px solid #ddd;font-size:12px;color:#666"><b>Notes:</b> '+inv.notes+'</div>');
+if(inv.bank_details)w.document.write('<div style="margin-top:12px;font-size:12px;color:#666"><b>Bank Details:</b> '+inv.bank_details+'</div>');
+w.document.write('</body></html>');
+w.document.close();
+setTimeout(function(){w.print();},400);
+}
+
+var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0b',overdue:'#ef4444',cancelled:'#6b7280'};
+
+return<div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>{filtered.length} invoice{filtered.length!==1?'s':''}</div>
+<button onClick={openNew} style={Object.assign({},BTN,{background:'#6b8cad',color:'#fff'})}>+ New Invoice</button>
+</div>
+{showForm&&<InvoiceForm inv={editInv} clients={clients} org={org} supabase={supabase} onClose={function(){setShowForm(false);}} onSaved={function(){setShowForm(false);loadAll();showToast(editInv?'Invoice updated':'Invoice created');}} INP={INP} LBL={LBL} BTN={BTN}/>}
+{filtered.length===0&&!showForm&&<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>No invoices yet. Create your first invoice.</div>}
+<div style={{display:'flex',flexDirection:'column',gap:8}}>
+{filtered.map(function(inv){
+var c=clientMap[inv.client_id]||{};
+var t=getInvTotal(inv);
+var paid=getPaid(inv.id);
+var bal=t.total-paid;
+var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
+return<div key={inv.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14}}>
+<div style={{flex:1}}>
+<div style={{display:'flex',alignItems:'center',gap:8}}>
+<span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{inv.invoice_no}</span>
+<span style={{fontSize:10,fontWeight:700,color:stColor,background:stColor+'18',padding:'2px 8px',borderRadius:10,textTransform:'uppercase'}}>{inv.status}</span>
+</div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{c.display_name||c.name||'—'} · {inv.invoice_date||''}</div>
+</div>
+<div style={{textAlign:'right',minWidth:100}}>
+<div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>₹{t.total.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
+{paid>0&&<div style={{fontSize:11,color:bal>0?'#f59e0b':'#22c55e'}}>Bal: ₹{bal.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>}
+</div>
+<div style={{display:'flex',gap:4}}>
+<button onClick={function(){generatePDF(inv);}} style={Object.assign({},BTN,{background:'rgba(107,140,173,0.12)',color:'#6b8cad',fontSize:11,padding:'5px 10px'})} title="Print/PDF">🖨</button>
+<button onClick={function(){openEdit(inv);}} style={Object.assign({},BTN,{background:'rgba(107,140,173,0.12)',color:'#6b8cad',fontSize:11,padding:'5px 10px'})} title="Edit">✎</button>
+{inv.status==='draft'&&<button onClick={function(){markStatus(inv.id,'sent');}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6',fontSize:11,padding:'5px 10px'})} title="Mark Sent">📤</button>}
+{(inv.status==='sent'||inv.status==='partial')&&<button onClick={function(){markStatus(inv.id,'paid');}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e',fontSize:11,padding:'5px 10px'})} title="Mark Paid">✓</button>}
+<button onClick={function(){delInv(inv.id);}} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.12)',color:'#ef4444',fontSize:11,padding:'5px 10px'})} title="Delete">✕</button>
+</div>
+</div>;
+})}
+</div>
+</div>;
+}
+function renderProposals(){
+function openNew(){setEditProposal(null);setShowProposalForm(true);}
+async function delProp(id){if(!window.confirm('Delete this proposal?'))return;await supabase.from('proposals').delete().eq('id',id);showToast('Proposal deleted');loadAll();}
+async function convertToInvoice(prop){
+var payload={org_id:org.id,client_id:prop.client_id,invoice_no:'INV-'+Date.now().toString(36).toUpperCase(),invoice_date:new Date().toISOString().slice(0,10),due_date:'',status:'draft',tax_percent:prop.tax_percent||null,notes:prop.notes||null,bank_details:'',items:prop.items||[],total:prop.total||0};
+var res=await supabase.from('invoices').insert(payload);
+if(res.error){showToast(res.error.message,'err');return;}
+await supabase.from('proposals').update({status:'converted'}).eq('id',prop.id);
+showToast('Converted to invoice');loadAll();
+}
+
+function generateProposalPDF(prop){
+var c=clientMap[prop.client_id]||{};
+var items=prop.items||[];
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var tax=prop.tax_percent?sub*(Number(prop.tax_percent)/100):0;
+var total=sub+tax;
+var w=window.open('','_blank');
+w.document.write('<html><head><title>Proposal '+prop.proposal_no+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:8px 12px;border:1px solid #ddd;text-align:left;font-size:13px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}@media print{body{margin:20px}}</style></head><body>');
+w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:30px"><div><div style="font-size:28px;font-weight:800;color:#8b5cf6">PROPOSAL</div><div style="margin-top:6px;font-size:13px;color:#666">'+org.name+'</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:700">'+prop.proposal_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(prop.proposal_date||'')+'</div>'+(prop.valid_until?'<div style="font-size:12px;color:#666">Valid until: '+prop.valid_until+'</div>':'')+'</div></div>');
+w.document.write('<div style="margin-bottom:20px"><div style="font-weight:700;font-size:13px;color:#666;margin-bottom:4px">Prepared For:</div><div style="font-size:14px;font-weight:700">'+(c.display_name||c.name||'')+'</div></div>');
+if(prop.notes)w.document.write('<div style="margin-bottom:18px;font-size:13px;color:#444;line-height:1.6">'+prop.notes.replace(/\n/g,'<br>')+'</div>');
+w.document.write('<table><thead><tr><th>#</th><th>Work / Service</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead><tbody>');
+items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td>'+it.description+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">₹'+Number(it.rate||0).toLocaleString('en-IN')+'</td><td class="right">₹'+amt.toLocaleString('en-IN')+'</td></tr>');});
+w.document.write('</tbody></table>');
+w.document.write('<div style="text-align:right"><div style="font-size:13px">Subtotal: ₹'+sub.toLocaleString('en-IN')+'</div>');
+if(prop.tax_percent)w.document.write('<div style="font-size:13px">GST ('+prop.tax_percent+'%): ₹'+tax.toLocaleString('en-IN')+'</div>');
+w.document.write('<div style="font-size:16px;font-weight:800;color:#8b5cf6;margin-top:6px">Total: ₹'+total.toLocaleString('en-IN')+'</div></div>');
+w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);
+}
+
+var PSTATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',accepted:'#22c55e',rejected:'#ef4444',converted:'#8b5cf6'};
+
+if(showProposalForm)return<ProposalForm prop={editProposal} clients={clients} org={org} supabase={supabase} onClose={function(){setShowProposalForm(false);}} onSaved={function(){setShowProposalForm(false);loadAll();showToast(editProposal?'Proposal updated':'Proposal created');}} INP={INP} LBL={LBL} BTN={BTN}/>;
+
+return<div>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>{proposals.length} proposal{proposals.length!==1?'s':''}</div>
+<button onClick={openNew} style={Object.assign({},BTN,{background:'#8b5cf6',color:'#fff'})}>+ New Proposal</button>
+</div>
+{proposals.length===0&&<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>No proposals yet.</div>}
+<div style={{display:'flex',flexDirection:'column',gap:8}}>
+{proposals.map(function(prop){
+var c=clientMap[prop.client_id]||{};
+var items=prop.items||[];
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var tax=prop.tax_percent?sub*(Number(prop.tax_percent)/100):0;
+var total=sub+tax;
+var stColor=PSTATUS_COLORS[prop.status]||'#94a3b8';
+return<div key={prop.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14}}>
+<div style={{flex:1}}>
+<div style={{display:'flex',alignItems:'center',gap:8}}>
+<span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{prop.proposal_no}</span>
+<span style={{fontSize:10,fontWeight:700,color:stColor,background:stColor+'18',padding:'2px 8px',borderRadius:10,textTransform:'uppercase'}}>{prop.status}</span>
+</div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{c.display_name||c.name||'—'} · {prop.proposal_date||''}</div>
+</div>
+<div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)',minWidth:100,textAlign:'right'}}>₹{total.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
+<div style={{display:'flex',gap:4}}>
+<button onClick={function(){generateProposalPDF(prop);}} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.12)',color:'#8b5cf6',fontSize:11,padding:'5px 10px'})}>🖨</button>
+{prop.status!=='converted'&&<button onClick={function(){setEditProposal(prop);setShowProposalForm(true);}} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.12)',color:'#8b5cf6',fontSize:11,padding:'5px 10px'})}>✎</button>}
+{(prop.status==='accepted'||prop.status==='sent')&&<button onClick={function(){convertToInvoice(prop);}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e',fontSize:11,padding:'5px 10px'})} title="Convert to Invoice">→ Inv</button>}
+<button onClick={function(){delProp(prop.id);}} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.12)',color:'#ef4444',fontSize:11,padding:'5px 10px'})}>✕</button>
+</div>
+</div>;
+})}
+</div>
+</div>;
+}
+function renderPayments(){
+var unpaidInvs=invoices.filter(function(i){return i.status!=='paid'&&i.status!=='cancelled';});
+async function addPayment(e){
+e.preventDefault();var form=e.target;var invId=form.invoice_id.value;var amt=Number(form.amount.value);var date=form.payment_date.value;var mode=form.mode.value;var ref=form.ref_no.value;
+if(!invId||!amt){showToast('Select invoice and amount','err');return;}
+var res=await supabase.from('payments').insert({org_id:org.id,invoice_id:invId,amount:amt,payment_date:date||new Date().toISOString().slice(0,10),mode:mode||'cash',ref_no:ref||null});
+if(res.error){showToast(res.error.message,'err');return;}
+var inv=invoices.find(function(i){return i.id===invId;});
+if(inv){var totalPaid=payments.filter(function(p){return p.invoice_id===invId;}).reduce(function(s,p){return s+Number(p.amount);},0)+amt;
+if(totalPaid>=inv.total)await supabase.from('invoices').update({status:'paid'}).eq('id',invId);
+else await supabase.from('invoices').update({status:'partial'}).eq('id',invId);}
+showToast('Payment recorded');form.reset();loadAll();}
+async function delPay(id){if(!window.confirm('Delete payment?'))return;await supabase.from('payments').delete().eq('id',id);showToast('Deleted');loadAll();}
+
+return<div>
+<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Record Payment</div>
+<form onSubmit={addPayment} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:8,alignItems:'end'}}>
+<div><label style={LBL}>Invoice</label><select name="invoice_id" style={INP}><option value="">Select...</option>{unpaidInvs.map(function(i){var c=clientMap[i.client_id]||{};return<option key={i.id} value={i.id}>{i.invoice_no} — {c.display_name||c.name||''}</option>;})}</select></div>
+<div><label style={LBL}>Amount (₹)</label><input name="amount" type="number" step="0.01" style={INP} placeholder="0"/></div>
+<div><label style={LBL}>Date</label><input name="payment_date" type="date" defaultValue={new Date().toISOString().slice(0,10)} style={INP}/></div>
+<div><label style={LBL}>Mode</label><select name="mode" style={INP}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank">Bank Transfer</option><option value="cheque">Cheque</option><option value="card">Card</option><option value="other">Other</option></select></div>
+<div><label style={LBL}>Ref No</label><input name="ref_no" style={INP} placeholder="Optional"/></div>
+<button type="submit" style={Object.assign({},BTN,{background:'#22c55e',color:'#fff',height:36})}>+ Add</button>
+</form>
+</div>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>{payments.length} payment{payments.length!==1?'s':''}</div>
+{payments.length===0&&<div style={{textAlign:'center',padding:30,color:'var(--tf-text-sub)',fontSize:13}}>No payments recorded.</div>}
+<div style={{display:'flex',flexDirection:'column',gap:6}}>
+{payments.map(function(p){
+var inv=invoices.find(function(i){return i.id===p.invoice_id;})||{};
+var c=clientMap[inv.client_id]||{};
+return<div key={p.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:12}}>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{inv.invoice_no||'—'} · {c.display_name||c.name||''}</div>
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{p.payment_date} · {p.mode}{p.ref_no?' · Ref: '+p.ref_no:''}</div>
+</div>
+<div style={{fontWeight:700,fontSize:14,color:'#22c55e'}}>₹{Number(p.amount).toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
+<button onClick={function(){delPay(p.id);}} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444',fontSize:11,padding:'4px 8px'})}>✕</button>
+</div>;})}
+</div>
+</div>;
+}
+function renderStatements(){
+function genStatement(){
+if(!stmtClientId){showToast('Select a client','err');return;}
+var c=clientMap[stmtClientId]||{};
+var cInvs=invoices.filter(function(i){return i.client_id===stmtClientId;}).sort(function(a,b){return(a.invoice_date||'').localeCompare(b.invoice_date||'');});
+var cPays=payments.filter(function(p){var inv=invoices.find(function(i){return i.id===p.invoice_id;});return inv&&inv.client_id===stmtClientId;});
+var totalInv=cInvs.reduce(function(s,i){return s+(Number(i.total)||0);},0);
+var totalPaid=cPays.reduce(function(s,p){return s+(Number(p.amount)||0);},0);
+setStmtData({client:c,invoices:cInvs,payments:cPays,totalInv:totalInv,totalPaid:totalPaid,balance:totalInv-totalPaid});}
+
+function printStatement(){
+if(!stmtData)return;var d=stmtData;
+var w=window.open('','_blank');
+w.document.write('<html><head><title>Statement — '+(d.client.display_name||d.client.name)+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{padding:7px 10px;border:1px solid #ddd;font-size:12px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}@media print{body{margin:20px}}</style></head><body>');
+w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:24px"><div><div style="font-size:24px;font-weight:800;color:#6b8cad">STATEMENT OF ACCOUNT</div><div style="font-size:13px;color:#666;margin-top:4px">'+org.name+'</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700">'+(d.client.display_name||d.client.name)+'</div><div style="font-size:12px;color:#666">As on '+new Date().toLocaleDateString('en-IN')+'</div></div></div>');
+w.document.write('<h3 style="font-size:14px;margin-bottom:4px">Invoices</h3><table><thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>');
+d.invoices.forEach(function(i){w.document.write('<tr><td>'+i.invoice_no+'</td><td>'+(i.invoice_date||'')+'</td><td>'+i.status+'</td><td class="right">₹'+Number(i.total||0).toLocaleString('en-IN')+'</td></tr>');});
+w.document.write('<tr style="font-weight:700"><td colspan="3">Total Invoiced</td><td class="right">₹'+d.totalInv.toLocaleString('en-IN')+'</td></tr></tbody></table>');
+w.document.write('<h3 style="font-size:14px;margin-bottom:4px">Payments</h3><table><thead><tr><th>Date</th><th>Mode</th><th>Ref</th><th class="right">Amount</th></tr></thead><tbody>');
+d.payments.forEach(function(p){w.document.write('<tr><td>'+p.payment_date+'</td><td>'+p.mode+'</td><td>'+(p.ref_no||'')+'</td><td class="right">₹'+Number(p.amount).toLocaleString('en-IN')+'</td></tr>');});
+w.document.write('<tr style="font-weight:700"><td colspan="3">Total Paid</td><td class="right">₹'+d.totalPaid.toLocaleString('en-IN')+'</td></tr></tbody></table>');
+w.document.write('<div style="text-align:right;font-size:18px;font-weight:800;color:'+(d.balance>0?'#ef4444':'#22c55e')+'">Balance Due: ₹'+d.balance.toLocaleString('en-IN')+'</div>');
+w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);}
+
+return<div>
+<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Generate Client Statement</div>
+<div style={{display:'flex',gap:10,alignItems:'end'}}>
+<div style={{flex:1}}><label style={LBL}>Client</label><select value={stmtClientId} onChange={function(e){setStmtClientId(e.target.value);setStmtData(null);}} style={INP}><option value="">Select...</option>{clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}</select></div>
+<button onClick={genStatement} style={Object.assign({},BTN,{background:'#6b8cad',color:'#fff',height:36})}>Generate</button>
+{stmtData&&<button onClick={printStatement} style={Object.assign({},BTN,{background:'rgba(107,140,173,0.12)',color:'#6b8cad',height:36})}>🖨 Print</button>}
+</div>
+</div>
+{stmtData&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16}}>
+<div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{stmtData.client.display_name||stmtData.client.name}</div>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,margin:'12px 0'}}>
+<div style={{background:'rgba(107,140,173,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Total Invoiced</div><div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>₹{stmtData.totalInv.toLocaleString('en-IN')}</div></div>
+<div style={{background:'rgba(34,197,94,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Total Paid</div><div style={{fontSize:18,fontWeight:800,color:'#22c55e'}}>₹{stmtData.totalPaid.toLocaleString('en-IN')}</div></div>
+<div style={{background:stmtData.balance>0?'rgba(239,68,68,0.08)':'rgba(34,197,94,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Balance</div><div style={{fontSize:18,fontWeight:800,color:stmtData.balance>0?'#ef4444':'#22c55e'}}>₹{stmtData.balance.toLocaleString('en-IN')}</div></div>
+</div>
+<div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6}}>INVOICES ({stmtData.invoices.length})</div>
+{stmtData.invoices.map(function(i){return<div key={i.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--tf-border)',fontSize:12}}><span style={{color:'var(--tf-text)'}}>{i.invoice_no} · {i.invoice_date} · <span style={{color:'#94a3b8'}}>{i.status}</span></span><span style={{fontWeight:600}}>₹{Number(i.total||0).toLocaleString('en-IN')}</span></div>;})}
+<div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginTop:14,marginBottom:6}}>PAYMENTS ({stmtData.payments.length})</div>
+{stmtData.payments.map(function(p){return<div key={p.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--tf-border)',fontSize:12}}><span style={{color:'var(--tf-text)'}}>{p.payment_date} · {p.mode}{p.ref_no?' · '+p.ref_no:''}</span><span style={{fontWeight:600,color:'#22c55e'}}>₹{Number(p.amount).toLocaleString('en-IN')}</span></div>;})}
+</div>}
+</div>;
+}
+function renderExport(){
+function downloadFile(name,content,type){var b=new Blob([content],{type:type});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+
+function exportTallyJSON(){
+var data=invoices.map(function(inv){
+var c=clientMap[inv.client_id]||{};
+var items=inv.items||[];
+return{VoucherTypeName:'Sales',Date:inv.invoice_date||'',PartyLedgerName:c.display_name||c.name||'',VoucherNumber:inv.invoice_no,Narration:inv.notes||'',IsInvoice:'Yes',GSTIN:c.gstin||'',Ledgers:items.map(function(it){return{LedgerName:it.description,Amount:(Number(it.qty)||1)*(Number(it.rate)||0),SACCode:it.sac_code||''};}),TaxAmount:inv.tax_percent?(inv.total||0)-(items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0)):0,TotalAmount:inv.total||0};});
+downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(data,null,2),'application/json');
+showToast('Tally JSON downloaded');}
+
+function exportZohoXLSX(){
+var header=['Invoice Number','Invoice Date','Due Date','Customer Name','Item Name','Quantity','Rate','Tax','Total'];
+var rows=[];
+invoices.forEach(function(inv){var c=clientMap[inv.client_id]||{};(inv.items||[]).forEach(function(it){rows.push([inv.invoice_no,inv.invoice_date||'',inv.due_date||'',c.display_name||c.name||'',it.description,(it.qty||1),it.rate||0,inv.tax_percent||0,inv.total||0]);});});
+var csv=header.join(',')+'\n'+rows.map(function(r){return r.map(function(v){return'"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+downloadFile('zohobooks_import_'+new Date().toISOString().slice(0,10)+'.csv',csv,'text/csv');
+showToast('Zoho Books CSV downloaded');}
+
+function exportAllPDF(){
+var w=window.open('','_blank');
+w.document.write('<html><head><title>All Invoices</title><style>body{font-family:Arial,sans-serif;margin:30px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:12px 0}th,td{padding:6px 10px;border:1px solid #ddd;font-size:12px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}.inv{page-break-after:always;margin-bottom:40px}@media print{body{margin:15px}}</style></head><body>');
+invoices.forEach(function(inv){
+var c=clientMap[inv.client_id]||{};var items=inv.items||[];
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+w.document.write('<div class="inv"><div style="display:flex;justify-content:space-between;margin-bottom:20px"><div><b style="font-size:20px">'+inv.invoice_no+'</b><div style="font-size:12px;color:#666">'+org.name+'</div></div><div style="text-align:right;font-size:12px"><div>Date: '+(inv.invoice_date||'')+'</div><div>Status: '+inv.status+'</div></div></div>');
+w.document.write('<div style="margin-bottom:14px"><b>'+(c.display_name||c.name||'')+'</b></div>');
+w.document.write('<table><tr><th>Description</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr>');
+items.forEach(function(it){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+it.description+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">₹'+Number(it.rate||0).toLocaleString('en-IN')+'</td><td class="right">₹'+amt.toLocaleString('en-IN')+'</td></tr>');});
+w.document.write('</table><div style="text-align:right;font-size:14px;font-weight:700">Total: ₹'+Number(inv.total||0).toLocaleString('en-IN')+'</div></div>');});
+w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);}
+
+function exportExcel(){
+var header=['Invoice No','Date','Due Date','Client','Status','Items','Subtotal','Tax %','Total','Paid','Balance'];
+var rows=invoices.map(function(inv){
+var c=clientMap[inv.client_id]||{};
+var paid=payments.filter(function(p){return p.invoice_id===inv.id;}).reduce(function(s,p){return s+Number(p.amount);},0);
+var itemsStr=(inv.items||[]).map(function(it){return it.description+' ('+it.qty+'x₹'+it.rate+')';}).join('; ');
+var sub=(inv.items||[]).reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+return[inv.invoice_no,inv.invoice_date||'',inv.due_date||'',c.display_name||c.name||'',inv.status,itemsStr,sub,inv.tax_percent||0,inv.total||0,paid,(inv.total||0)-paid];});
+var csv=header.join(',')+'\n'+rows.map(function(r){return r.map(function(v){return'"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
+downloadFile('invoices_'+new Date().toISOString().slice(0,10)+'.csv',csv,'text/csv');
+showToast('Excel CSV downloaded');}
+
+var FORMATS=[
+{id:'pdf',label:'All Invoices PDF',desc:'Print all invoices as PDF',icon:'📄',color:'#ef4444',fn:exportAllPDF},
+{id:'excel',label:'Invoices Excel/CSV',desc:'All invoices with items, payments, balance',icon:'📊',color:'#22c55e',fn:exportExcel},
+{id:'tally',label:'Tally JSON',desc:'Import-ready JSON for Tally ERP/Prime',icon:'📋',color:'#f59e0b',fn:exportTallyJSON},
+{id:'zoho',label:'Zoho Books CSV',desc:'CSV format compatible with Zoho Books import',icon:'📑',color:'#3b82f6',fn:exportZohoXLSX}];
+
+return<div>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>Export Data</div>
+<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+{FORMATS.map(function(f){return<div key={f.id} onClick={f.fn} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:18,cursor:'pointer',transition:'border-color 0.15s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor=f.color;}} onMouseLeave={function(e){e.currentTarget.style.borderColor='';}} >
+<div style={{fontSize:24,marginBottom:8}}>{f.icon}</div>
+<div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{f.label}</div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.4}}>{f.desc}</div>
+<div style={{marginTop:10,fontSize:11,fontWeight:700,color:f.color}}>{invoices.length} invoice{invoices.length!==1?'s':''} ready</div>
+</div>;})}
+</div>
+</div>;
+}
+}
+
 // ── Module Placeholder (HR / Billing — coming soon) ────────────────
 function ModulePlaceholder({moduleLabel,activeTab,features}){
   var active=features.find(function(f){return f.tab===activeTab;})||features[0];
@@ -7476,8 +7978,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   MODULES.push(
     {id:'portal',label:'Client Portal',icon:'🔗',desc:'Manage client access, requests, communication and data collection.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)'},
     {id:'comms',label:'Communications',icon:'✉',desc:'Bulk email clients, manage email templates and notifications.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)'},
-    {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}],soon:true},
-    {id:'billing',label:'Billing',icon:'💰',desc:'Client-wise and work-wise invoicing with reusable templates.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'templates',label:'Templates'}],soon:true},
+    {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}]},
+    {id:'billing',label:'Billing',icon:'💰',desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
   );
 
@@ -7566,10 +8068,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='hr'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='hr'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='hr'&&tab==='performance'&&<PerformanceModule org={org} supabase={supabase} cu={cu}/>}
-      {orgModule==='billing'&&<ModulePlaceholder moduleLabel="Billing" activeTab={tab} features={[
-        {tab:'invoices',title:'Invoices',desc:'Client-wise and work-wise invoicing with automatic totals and taxes.'},
-        {tab:'templates',title:'Templates',desc:'Reusable invoice templates for quick creation.'},
-      ]}/>}
+      {orgModule==='billing'&&<BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>}
   </>;
 
   return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
