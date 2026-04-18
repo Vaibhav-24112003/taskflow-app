@@ -5673,6 +5673,181 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
 }
 
 // ── Your Dashboard Module — personalised works + calendar sidebar ───
+// ── Team Dashboard — workload heatmap + member cards ──────────────
+function TeamDashboard({org,supabase,cu,workTypeConfigs}){
+var [loading,setLoading]=useState(true);
+var [members,setMembers]=useState([]);
+var [rows,setRows]=useState([]);
+var [worksheets,setWorksheets]=useState([]);
+var [clients,setClients]=useState([]);
+var [selMember,setSelMember]=useState(null);
+var [heatDays,setHeatDays]=useState(14);
+var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
+
+useEffect(function(){loadTeam();},[org.id]);
+
+async function loadTeam(){
+setLoading(true);
+var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+var mlist=rm.data||[];
+if(mlist.length>0){
+var ids=mlist.map(function(m){return m.user_id;});
+var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+var profiles=rp.data||[];
+var roleMap={};mlist.forEach(function(m){roleMap[m.user_id]=m.role;});
+setMembers(profiles.map(function(p){return Object.assign({},p,{role:roleMap[p.id]||'member'});}));
+}
+var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data').eq('org_id',org.id).limit(5000);
+setRows(rr.data||[]);
+var allRows=rr.data||[];
+if(allRows.length>0){
+var wsIds=Array.from(new Set(allRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+if(wsIds.length>0){var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds.slice(0,500)).limit(500);setWorksheets(rw.data||[]);}
+}
+var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
+setClients(rc.data||[]);
+setLoading(false);
+}
+
+var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+var wsMap={};worksheets.forEach(function(w){wsMap[w.id]=w;});
+var today=new Date().toISOString().slice(0,10);
+
+function getRowsForMember(uid){
+return rows.filter(function(r){
+var d=r.data||{};
+if(d.__assignee===uid)return true;
+var keys=Object.keys(d);
+for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===uid)return true;}
+return false;
+});
+}
+
+function getMemberStats(uid){
+var mr=getRowsForMember(uid);
+var active=mr.filter(function(r){return r.status!=='completed';});
+var completed=mr.filter(function(r){return r.status==='completed';});
+var overdue=active.filter(function(r){return r.due_date&&r.due_date<today;});
+var dueThisWeek=active.filter(function(r){if(!r.due_date)return false;var d=new Date();d.setDate(d.getDate()+7);return r.due_date>=today&&r.due_date<=d.toISOString().slice(0,10);});
+return{total:mr.length,active:active.length,completed:completed.length,overdue:overdue.length,dueThisWeek:dueThisWeek.length};
+}
+
+function getHeatmapData(uid){
+var mr=getRowsForMember(uid);
+var result=[];
+for(var i=0;i<heatDays;i++){
+var d=new Date();d.setDate(d.getDate()+i);
+var ds=d.toISOString().slice(0,10);
+var due=mr.filter(function(r){return r.due_date===ds&&r.status!=='completed';}).length;
+var overdue=i===0?mr.filter(function(r){return r.due_date&&r.due_date<ds&&r.status!=='completed';}).length:0;
+result.push({date:ds,day:d.toLocaleDateString('en-IN',{weekday:'short'}),dayNum:d.getDate(),count:due+overdue,due:due,overdue:overdue});
+}
+return result;
+}
+
+function heatColor(count){
+if(count===0)return'rgba(107,140,173,0.06)';
+if(count<=2)return'rgba(34,197,94,0.2)';
+if(count<=4)return'rgba(245,158,11,0.25)';
+return'rgba(239,68,68,0.3)';
+}
+
+function capacityPercent(active){
+var cap=15;
+return Math.min(100,Math.round((active/cap)*100));
+}
+
+if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading team data...</div>;
+
+var selRows=selMember?getRowsForMember(selMember).filter(function(r){return r.status!=='completed';}):[];
+selRows.sort(function(a,b){
+if(a.due_date&&!b.due_date)return-1;if(!a.due_date&&b.due_date)return 1;
+if(a.due_date&&b.due_date)return a.due_date.localeCompare(b.due_date);return 0;});
+
+return<div style={{padding:'0 0 60px'}}>
+
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+<div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>Team Workload</div>
+<div style={{display:'flex',gap:6,alignItems:'center'}}>
+<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Heatmap range:</span>
+{[7,14,30].map(function(d){return<button key={d} onClick={function(){setHeatDays(d);}} style={{padding:'3px 10px',borderRadius:6,border:'1px solid',borderColor:heatDays===d?'#6b8cad':'var(--tf-border)',background:heatDays===d?'rgba(107,140,173,0.12)':'transparent',color:heatDays===d?'#6b8cad':'var(--tf-text-sub)',fontSize:11,fontWeight:600,cursor:'pointer'}}>{d}d</button>;})}
+</div>
+</div>
+
+<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12,marginBottom:20}}>
+{members.map(function(m){
+var stats=getMemberStats(m.id);
+var heat=getHeatmapData(m.id);
+var cap=capacityPercent(stats.active);
+var isSel=selMember===m.id;
+var capColor=cap>80?'#ef4444':cap>50?'#f59e0b':'#22c55e';
+return<div key={m.id} onClick={function(){setSelMember(isSel?null:m.id);}} style={{background:'var(--tf-surface)',border:'2px solid',borderColor:isSel?'#6b8cad':'var(--tf-border)',borderRadius:12,padding:14,cursor:'pointer',transition:'border-color 0.15s'}}>
+<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+<div style={{width:36,height:36,borderRadius:18,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800,color:'#fff'}}>{(m.name||m.email||'?').charAt(0).toUpperCase()}</div>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{m.name||m.email}</div>
+<div style={{fontSize:10,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{m.role}</div>
+</div>
+<div style={{textAlign:'right'}}>
+<div style={{fontSize:18,fontWeight:800,color:stats.overdue>0?'#ef4444':'var(--tf-text)'}}>{stats.active}</div>
+<div style={{fontSize:9,color:'var(--tf-text-sub)'}}>active</div>
+</div>
+</div>
+
+<div style={{display:'flex',gap:8,marginBottom:8,fontSize:11}}>
+<span style={{color:'#22c55e',fontWeight:600}}>{stats.completed} done</span>
+<span style={{color:'#ef4444',fontWeight:600}}>{stats.overdue} overdue</span>
+<span style={{color:'#f59e0b',fontWeight:600}}>{stats.dueThisWeek} this week</span>
+</div>
+
+<div style={{marginBottom:8}}>
+<div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--tf-text-sub)',marginBottom:3}}><span>Capacity</span><span style={{color:capColor,fontWeight:700}}>{cap}%</span></div>
+<div style={{height:6,borderRadius:3,background:'var(--tf-border)',overflow:'hidden'}}><div style={{height:'100%',width:cap+'%',borderRadius:3,background:capColor,transition:'width 0.3s'}}></div></div>
+</div>
+
+<div style={{display:'flex',gap:2}}>
+{heat.map(function(h){return<div key={h.date} title={h.date+': '+h.count+' tasks'} style={{flex:1,height:24,borderRadius:3,background:heatColor(h.count),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:h.count>0?'var(--tf-text)':'var(--tf-text-sub)',fontWeight:h.count>0?700:400,cursor:'default'}}>{h.count>0?h.count:''}</div>;})}
+</div>
+<div style={{display:'flex',justifyContent:'space-between',marginTop:2}}>
+<span style={{fontSize:8,color:'var(--tf-text-sub)'}}>Today</span>
+<span style={{fontSize:8,color:'var(--tf-text-sub)'}}>+{heatDays}d</span>
+</div>
+</div>;
+})}
+</div>
+
+{selMember&&<div>
+<div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>
+{(members.find(function(m){return m.id===selMember;})||{}).name||'Member'} — Active Tasks ({selRows.length})
+</div>
+{selRows.length===0&&<div style={{textAlign:'center',padding:20,color:'var(--tf-text-sub)',fontSize:13}}>No active tasks.</div>}
+<div style={{display:'flex',flexDirection:'column',gap:6}}>
+{selRows.map(function(r){
+var ws=wsMap[r.worksheet_id]||{};
+var c=clientMap[r.client_id]||{};
+var d=r.data||{};
+var title=d.__title||r.due_label||ws.work_type||'Task';
+var isOverdue=r.due_date&&r.due_date<today;
+var priorityColors={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
+var pColor=priorityColors[d.__priority]||'#94a3b8';
+return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:12}}>
+<div style={{width:8,height:8,borderRadius:4,background:pColor,flexShrink:0}}></div>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{title}</div>
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{c.display_name||c.name||'—'} · {ws.work_type||''}{ws.period_label?' · '+ws.period_label:''}</div>
+</div>
+<div style={{textAlign:'right',flexShrink:0}}>
+{r.due_date&&<div style={{fontSize:11,fontWeight:600,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{isOverdue?'Overdue · ':''}{r.due_date}</div>}
+<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{r.status}</div>
+</div>
+</div>;
+})}
+</div>
+</div>}
+
+</div>;
+}
+
 function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
@@ -8197,7 +8372,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
 
   var MODULES=[
-    {id:'dashboard',label:'Your Dashboard',icon:'⚡',desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'}]},
+    {id:'dashboard',label:'Your Dashboard',icon:'⚡',desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'},{id:'team',label:'Team'}]},
     {id:'clients',label:'Clients & Worksheets',icon:'📇',desc:'Client master data, worksheets and project boards for big clients.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'}]},
   ];
   if(canSeeAnalytics){
@@ -8282,7 +8457,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   // Module content with left sidebar
   var sidebarW=sidebarOpen?210:48;
   var moduleContent=<>
-      {orgModule==='dashboard'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
+      {orgModule==='dashboard'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
+      {orgModule==='dashboard'&&tab==='team'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
