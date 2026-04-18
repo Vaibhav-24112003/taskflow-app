@@ -5816,25 +5816,70 @@ return<div key={m.id} onClick={function(){setSelMember(isSel?null:m.id);}} style
 })}
 </div>
 
-{selMember&&<div>
+{selMember&&function(){
+var memName=(members.find(function(m){return m.id===selMember;})||{}).name||'Member';
+var grouped={};var individual=[];
+selRows.forEach(function(r){
+var ws=wsMap[r.worksheet_id]||{};
+var d=r.data||{};
+var hasTitle=!!d.__title;
+if(hasTitle){individual.push(r);}
+else{var wt=ws.work_type||'Other';if(!grouped[wt])grouped[wt]=[];grouped[wt].push(r);}
+});
+var wtKeys=Object.keys(grouped).sort();
+return<div>
 <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>
-{(members.find(function(m){return m.id===selMember;})||{}).name||'Member'} — Active Tasks ({selRows.length})
+{memName} — Active Tasks ({selRows.length})
 </div>
 {selRows.length===0&&<div style={{textAlign:'center',padding:20,color:'var(--tf-text-sub)',fontSize:13}}>No active tasks.</div>}
-<div style={{display:'flex',flexDirection:'column',gap:6}}>
-{selRows.map(function(r){
+
+{wtKeys.map(function(wt){
+var wtRows=grouped[wt];
+var overdueCount=wtRows.filter(function(r){return r.due_date&&r.due_date<today;}).length;
+return<div key={wt} style={{marginBottom:14}}>
+<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{wt}</div>
+<span style={{fontSize:10,fontWeight:600,color:'var(--tf-text-sub)',background:'var(--tf-panel)',padding:'2px 8px',borderRadius:10}}>{wtRows.length}</span>
+{overdueCount>0&&<span style={{fontSize:10,fontWeight:600,color:'#ef4444',background:'rgba(239,68,68,0.08)',padding:'2px 8px',borderRadius:10}}>{overdueCount} overdue</span>}
+</div>
+<div style={{display:'flex',flexDirection:'column',gap:4}}>
+{wtRows.map(function(r){
+var ws=wsMap[r.worksheet_id]||{};
+var c=clientMap[r.client_id]||{};
+var isOverdue=r.due_date&&r.due_date<today;
+return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',display:'flex',alignItems:'center',gap:10}}>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name||'—'}</div>
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{r.due_label||'Due'}{ws.period_label?' · '+ws.period_label:''}</div>
+</div>
+<div style={{textAlign:'right',flexShrink:0}}>
+{r.due_date&&<div style={{fontSize:11,fontWeight:600,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{isOverdue?'Overdue · ':''}{r.due_date}</div>}
+<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{r.status}</div>
+</div>
+</div>;
+})}
+</div>
+</div>;
+})}
+
+{individual.length>0&&<div style={{marginBottom:14}}>
+<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Individual Tasks</div>
+<span style={{fontSize:10,fontWeight:600,color:'var(--tf-text-sub)',background:'var(--tf-panel)',padding:'2px 8px',borderRadius:10}}>{individual.length}</span>
+</div>
+<div style={{display:'flex',flexDirection:'column',gap:4}}>
+{individual.map(function(r){
 var ws=wsMap[r.worksheet_id]||{};
 var c=clientMap[r.client_id]||{};
 var d=r.data||{};
-var title=d.__title||r.due_label||ws.work_type||'Task';
 var isOverdue=r.due_date&&r.due_date<today;
 var priorityColors={high:'#ef4444',medium:'#f59e0b',low:'#22c55e'};
 var pColor=priorityColors[d.__priority]||'#94a3b8';
-return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:12}}>
+return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',display:'flex',alignItems:'center',gap:10}}>
 <div style={{width:8,height:8,borderRadius:4,background:pColor,flexShrink:0}}></div>
 <div style={{flex:1}}>
-<div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{title}</div>
-<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{c.display_name||c.name||'—'} · {ws.work_type||''}{ws.period_label?' · '+ws.period_label:''}</div>
+<div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{d.__title}</div>
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{c.display_name||c.name||'—'} · {ws.work_type||''}</div>
 </div>
 <div style={{textAlign:'right',flexShrink:0}}>
 {r.due_date&&<div style={{fontSize:11,fontWeight:600,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{isOverdue?'Overdue · ':''}{r.due_date}</div>}
@@ -5844,6 +5889,7 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 })}
 </div>
 </div>}
+</div>;}()}
 
 </div>;
 }
