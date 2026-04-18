@@ -1040,6 +1040,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
   const [orgs,setOrgs]=useState([])
   const [activeOrg,setActiveOrg]=useState(null)
+  const [restoringOrg,setRestoringOrg]=useState(true)
   const [showCreateOrg,setShowCreateOrg]=useState(false)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
@@ -1087,7 +1088,13 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
   useEffect(()=>{
     loadWS();
-    supabase.from('organizations').select('*').order('name').limit(100).then(function(r){if(r.data)setOrgs(r.data);});
+    supabase.from('organizations').select('*').order('name').limit(100).then(function(r){
+      if(r.data){setOrgs(r.data);
+        var lastOrgId=localStorage.getItem('tf_lastOrgId');
+        if(lastOrgId){var found=r.data.find(function(o){return o.id===lastOrgId;});if(found){setActiveOrg(found);setActiveWsId(null);}}
+      }
+      setRestoringOrg(false);
+    });
   },[cu.id])
 
   useEffect(()=>{
@@ -1314,7 +1321,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
@@ -1336,7 +1343,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>✦</div>
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
-      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
+      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
       {!activeOrg&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
       <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
@@ -1505,7 +1512,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
               {orgs.map(org=>{
                 const wsCount=workspaces.filter(w=>w.org_id===org.id).length;
-                return<div key={org.id} onClick={()=>setActiveOrg(org)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+                return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
                   <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
                   <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
                     <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(107,140,173,0.14)',border:'1px solid rgba(107,140,173,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#6b8cad'}}>{org.name.charAt(0).toUpperCase()}</div>
@@ -1523,54 +1530,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           }
         </div>
 
-        {/* QUICK ADD ONE-TIME TASK */}
-        {orgs.length>0&&<div style={{marginTop:40,paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-            <div>
-              <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>Quick Add Task</h2>
-              <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Generate one-time tasks by selecting organisation, work type, client &amp; assignee.</p>
-            </div>
-            <button onClick={()=>{setShowQuickAdd(v=>!v);if(!showQuickAdd&&orgs.length===1)qaLoadOrg(orgs[0].id);}} style={{background:showQuickAdd?'rgba(34,197,94,0.12)':'#6b8cad',border:showQuickAdd?'1px solid rgba(34,197,94,0.3)':'none',borderRadius:8,padding:'7px 16px',color:showQuickAdd?'#22c55e':'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>{showQuickAdd?'Close':'+ Add Task'}</button>
-          </div>
-          {showQuickAdd&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'18px 20px'}}>
-            <div style={{display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-end'}}>
-              {orgs.length>1&&<div style={{flex:1,minWidth:150}}>
-                <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4,letterSpacing:'0.06em'}}>Organisation</div>
-                <select value={qaOrgId} onChange={e=>qaLoadOrg(e.target.value)} style={{width:'100%',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-                  <option value="">— Select —</option>
-                  {orgs.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              </div>}
-              <div style={{flex:1,minWidth:150}}>
-                <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4,letterSpacing:'0.06em'}}>Work Type</div>
-                <select value={qaWorkType} onChange={e=>setQaWorkType(e.target.value)} disabled={!qaOrgId} style={{width:'100%',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit',opacity:qaOrgId?1:0.5}}>
-                  <option value="">— Select —</option>
-                  {qaWorkTypes.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
-                {qaOrgId&&qaWorkTypes.length===0&&<div style={{fontSize:10,color:'#f59e0b',marginTop:3}}>No one-time work types configured</div>}
-              </div>
-              <div style={{flex:1,minWidth:160}}>
-                <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4,letterSpacing:'0.06em'}}>Client</div>
-                <select value={qaClientId} onChange={e=>setQaClientId(e.target.value)} disabled={!qaWorkType} style={{width:'100%',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit',opacity:qaWorkType?1:0.5}}>
-                  <option value="">— Select —</option>
-                  {qaClients.map(c=><option key={c.id} value={c.id}>{c.name}{c.pan?' ('+c.pan+')':''}</option>)}
-                </select>
-              </div>
-              <div style={{flex:1,minWidth:140}}>
-                <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4,letterSpacing:'0.06em'}}>Assignee</div>
-                <select value={qaAssignee} onChange={e=>setQaAssignee(e.target.value)} disabled={!qaOrgId} style={{width:'100%',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit',opacity:qaOrgId?1:0.5}}>
-                  <option value="">— Optional —</option>
-                  {qaMembers.map(m=><option key={m.id} value={m.id}>{m.name||m.email}</option>)}
-                </select>
-              </div>
-              <div style={{minWidth:130}}>
-                <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:4,letterSpacing:'0.06em'}}>Due Date</div>
-                <input type="date" value={qaDueDate} onChange={e=>setQaDueDate(e.target.value)} style={{width:'100%',background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-              </div>
-              <button onClick={qaSubmit} disabled={!qaOrgId||!qaWorkType||!qaClientId||qaSaving} style={{background:qaOrgId&&qaWorkType&&qaClientId?'#22c55e':'#64748b',color:'#fff',border:'none',borderRadius:8,padding:'9px 22px',fontSize:13,fontWeight:700,cursor:qaOrgId&&qaWorkType&&qaClientId?'pointer':'not-allowed',opacity:qaOrgId&&qaWorkType&&qaClientId?1:0.5,whiteSpace:'nowrap'}}>{qaSaving?'Adding...':'Add Task'}</button>
-            </div>
-          </div>}
-        </div>}
 
         {/* CALENDAR - Due Dates */}
         {orgs.length>0&&<div style={{marginTop:40,paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
