@@ -6577,9 +6577,9 @@ var [validUntil,setValidUntil]=useState(prop?prop.valid_until||'':'');
 var [status,setStatus]=useState(prop?prop.status:'draft');
 var [taxPercent,setTaxPercent]=useState(prop?prop.tax_percent||'':'');
 var [notes,setNotes]=useState(prop?prop.notes||'':'');
-var [items,setItems]=useState(prop&&prop.items&&prop.items.length>0?prop.items:[{description:'',qty:1,rate:''}]);
+var [items,setItems]=useState(prop&&prop.items&&prop.items.length>0?prop.items:[{description:'',sub_description:'',qty:1,rate:''}]);
 var [saving,setSaving]=useState(false);
-function addItem(){setItems(function(p){return[...p,{description:'',qty:1,rate:''}];});}
+function addItem(){setItems(function(p){return[...p,{description:'',sub_description:'',qty:1,rate:''}];});}
 function removeItem(i){setItems(function(p){return p.filter(function(_,x){return x!==i;});});}
 function updateItem(i,k,v){setItems(function(p){return p.map(function(it,x){if(x!==i)return it;var n=Object.assign({},it);n[k]=v;return n;});});}
 var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
@@ -6605,12 +6605,15 @@ return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-bor
 <div><label style={LBL}>GST %</label><input type="number" value={taxPercent} onChange={function(e){setTaxPercent(e.target.value);}} style={INP} placeholder="18"/></div>
 </div>
 <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6,textTransform:'uppercase'}}>Services / Work Items</div>
-{items.map(function(it,i){return<div key={i} style={{display:'flex',gap:8,marginBottom:6,alignItems:'center'}}>
+{items.map(function(it,i){return<div key={i} style={{marginBottom:8,background:'var(--tf-bg)',borderRadius:8,padding:'8px 10px',border:'1px solid var(--tf-border)'}}>
+<div style={{display:'flex',gap:8,alignItems:'center'}}>
 <input value={it.description} onChange={function(e){updateItem(i,'description',e.target.value);}} style={Object.assign({},INP,{flex:3})} placeholder="Work description"/>
 <input type="number" value={it.qty} onChange={function(e){updateItem(i,'qty',e.target.value);}} style={Object.assign({},INP,{flex:0,width:60,textAlign:'right'})}/>
 <input type="number" value={it.rate} onChange={function(e){updateItem(i,'rate',e.target.value);}} style={Object.assign({},INP,{flex:0,width:100,textAlign:'right'})} placeholder="Rate"/>
 <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',minWidth:80,textAlign:'right'}}>₹{((Number(it.qty)||1)*(Number(it.rate)||0)).toLocaleString('en-IN')}</span>
 {items.length>1&&<button onClick={function(){removeItem(i);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer'}}>✕</button>}
+</div>
+<input value={it.sub_description||''} onChange={function(e){updateItem(i,'sub_description',e.target.value);}} style={Object.assign({},INP,{marginTop:4,fontSize:11,fontStyle:'italic',color:'var(--tf-text-sub)'})} placeholder="Sub-description (optional)"/>
 </div>;})}
 <button onClick={addItem} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.1)',color:'#8b5cf6',fontSize:11,marginBottom:10})}>+ Add Item</button>
 <div><label style={LBL}>Notes / Scope</label><textarea value={notes} onChange={function(e){setNotes(e.target.value);}} style={Object.assign({},INP,{minHeight:60,resize:'vertical'})} placeholder="Scope of work, terms..."/></div>
@@ -6631,6 +6634,7 @@ var [editInv,setEditInv]=useState(null);
 var [viewInv,setViewInv]=useState(null);
 var [showProposalForm,setShowProposalForm]=useState(false);
 var [editProposal,setEditProposal]=useState(null);
+var [viewProposal,setViewProposal]=useState(null);
 var [proposals,setProposals]=useState([]);
 var [showPayForm,setShowPayForm]=useState(false);
 var [stmtClientId,setStmtClientId]=useState('');
@@ -6781,12 +6785,17 @@ var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate
 var tax=prop.tax_percent?sub*(Number(prop.tax_percent)/100):0;
 var total=sub+tax;
 var w=window.open('','_blank');
+var logoHtml=org.logo_url?'<img src="'+org.logo_url+'" style="max-height:56px;max-width:180px;margin-bottom:8px;display:block" />':'';
+var logoLeft=org.logo_position!=='right';
+var orgBlock=logoHtml+'<div style="font-size:22px;font-weight:800">'+org.name+'</div>'+(org.address?'<div style="font-size:11px;color:#888;margin-top:4px;white-space:pre-line">'+org.address+'</div>':'')+(org.gstin?'<div style="font-size:11px;color:#888;margin-top:2px">GSTIN: '+org.gstin+'</div>':'');
+var propBlock='<div style="font-size:28px;font-weight:800;color:#8b5cf6;letter-spacing:1px">PROPOSAL</div><div style="font-size:16px;font-weight:700;margin-top:6px">'+prop.proposal_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(prop.proposal_date||'')+'</div>'+(prop.valid_until?'<div style="font-size:12px;color:#666">Valid until: '+prop.valid_until+'</div>':'');
 w.document.write('<html><head><title>Proposal '+prop.proposal_no+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:8px 12px;border:1px solid #ddd;text-align:left;font-size:13px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}@media print{body{margin:20px}}</style></head><body>');
-w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:30px"><div><div style="font-size:28px;font-weight:800;color:#8b5cf6">PROPOSAL</div><div style="margin-top:6px;font-size:13px;color:#666">'+org.name+'</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:700">'+prop.proposal_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(prop.proposal_date||'')+'</div>'+(prop.valid_until?'<div style="font-size:12px;color:#666">Valid until: '+prop.valid_until+'</div>':'')+'</div></div>');
-w.document.write('<div style="margin-bottom:20px"><div style="font-weight:700;font-size:13px;color:#666;margin-bottom:4px">Prepared For:</div><div style="font-size:14px;font-weight:700">'+(c.display_name||c.name||'')+'</div></div>');
+if(logoLeft){w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:30px"><div>'+orgBlock+'</div><div style="text-align:right">'+propBlock+'</div></div>');}
+else{w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:30px"><div>'+propBlock+'</div><div style="text-align:right">'+orgBlock+'</div></div>');}
+w.document.write('<div style="margin-bottom:20px;padding:12px 16px;background:#f8f9fa;border-radius:6px;border:1px solid #eee"><div style="font-size:11px;font-weight:700;color:#888;margin-bottom:4px">PREPARED FOR</div><div style="font-size:15px;font-weight:700">'+(c.display_name||c.name||'')+'</div>'+(c.email?'<div style="font-size:12px;color:#666">'+c.email+'</div>':'')+(c.gstin?'<div style="font-size:11px;color:#666">GSTIN: '+c.gstin+'</div>':'')+'</div>');
 if(prop.notes)w.document.write('<div style="margin-bottom:18px;font-size:13px;color:#444;line-height:1.6">'+prop.notes.replace(/\n/g,'<br>')+'</div>');
 w.document.write('<table><thead><tr><th>#</th><th>Work / Service</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead><tbody>');
-items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td>'+it.description+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">₹'+Number(it.rate||0).toLocaleString('en-IN')+'</td><td class="right">₹'+amt.toLocaleString('en-IN')+'</td></tr>');});
+items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td><b>'+it.description+'</b>'+(it.sub_description?'<div style="font-size:11px;color:#666;font-style:italic;margin-top:2px">'+it.sub_description+'</div>':'')+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">₹'+Number(it.rate||0).toLocaleString('en-IN')+'</td><td class="right">₹'+amt.toLocaleString('en-IN')+'</td></tr>');});
 w.document.write('</tbody></table>');
 w.document.write('<div style="text-align:right"><div style="font-size:13px">Subtotal: ₹'+sub.toLocaleString('en-IN')+'</div>');
 if(prop.tax_percent)w.document.write('<div style="font-size:13px">GST ('+prop.tax_percent+'%): ₹'+tax.toLocaleString('en-IN')+'</div>');
@@ -6796,7 +6805,73 @@ w.document.write('</body></html>');w.document.close();setTimeout(function(){w.pr
 
 var PSTATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',accepted:'#22c55e',rejected:'#ef4444',converted:'#8b5cf6'};
 
-if(showProposalForm)return<ProposalForm prop={editProposal} clients={clients} org={org} supabase={supabase} onClose={function(){setShowProposalForm(false);}} onSaved={function(){setShowProposalForm(false);loadAll();showToast(editProposal?'Proposal updated':'Proposal created');}} INP={INP} LBL={LBL} BTN={BTN}/>;
+if(showProposalForm)return<ProposalForm prop={editProposal} clients={clients} org={org} supabase={supabase} onClose={function(){setShowProposalForm(false);setViewProposal(null);}} onSaved={function(){setShowProposalForm(false);setViewProposal(null);loadAll();showToast(editProposal?'Proposal updated':'Proposal created');}} INP={INP} LBL={LBL} BTN={BTN}/>;
+
+if(viewProposal&&!showProposalForm){
+var vp=viewProposal;var vc=clientMap[vp.client_id]||{};
+var vpItems=vp.items||[];
+var vpSub=vpItems.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var vpTax=vp.tax_percent?vpSub*(Number(vp.tax_percent)/100):0;
+var vpTotal=vpSub+vpTax;
+var vpLogoLeft=org.logo_position!=='right';
+var vpStColor=PSTATUS_COLORS[vp.status]||'#94a3b8';
+function vpSendEmail(){var email=vc.email||'';var subject=encodeURIComponent('Proposal '+vp.proposal_no+' from '+org.name);var body=encodeURIComponent('Dear '+(vc.display_name||vc.name||'Client')+',\n\nPlease find the proposal '+vp.proposal_no+' for ₹'+vpTotal.toLocaleString('en-IN')+'.\n\nRegards,\n'+org.name);window.open('mailto:'+email+'?subject='+subject+'&body='+body,'_blank');}
+return<div style={{marginBottom:16}}>
+<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+<button onClick={function(){setViewProposal(null);}} style={Object.assign({},BTN,{background:'var(--tf-panel)',color:'var(--tf-text-sub)',fontSize:12})}>← Back</button>
+<div style={{flex:1}}></div>
+<button onClick={function(){setEditProposal(vp);setShowProposalForm(true);}} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.12)',color:'#8b5cf6'})}>✎ Edit</button>
+<button onClick={vpSendEmail} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>✉ Send</button>
+<button onClick={function(){generateProposalPDF(vp);}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>🖨 PDF / Print</button>
+{(vp.status==='accepted'||vp.status==='sent')&&<button onClick={function(){convertToInvoice(vp);setViewProposal(null);}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>→ Convert to Invoice</button>}
+</div>
+<div style={{background:'#fff',border:'1px solid #ddd',borderRadius:8,padding:'36px 40px',color:'#1a1a2e',fontFamily:'Arial,sans-serif',maxWidth:800,margin:'0 auto'}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28,flexDirection:vpLogoLeft?'row':'row-reverse'}}>
+<div style={{textAlign:vpLogoLeft?'left':'right'}}>
+{org.logo_url&&<img src={org.logo_url} style={{maxHeight:56,maxWidth:180,marginBottom:8,display:'block'}} alt="logo"/>}
+<div style={{fontSize:22,fontWeight:800}}>{org.name}</div>
+{org.address&&<div style={{fontSize:11,color:'#666',marginTop:4,whiteSpace:'pre-line',maxWidth:260}}>{org.address}</div>}
+{org.gstin&&<div style={{fontSize:11,color:'#666',marginTop:2}}>GSTIN: {org.gstin}</div>}
+</div>
+<div style={{textAlign:vpLogoLeft?'right':'left'}}>
+<div style={{fontSize:28,fontWeight:800,color:'#8b5cf6',letterSpacing:1}}>PROPOSAL</div>
+<div style={{fontSize:16,fontWeight:700,marginTop:6}}>{vp.proposal_no}</div>
+<div style={{fontSize:12,color:'#666',marginTop:4}}>Date: {vp.proposal_date||''}</div>
+{vp.valid_until&&<div style={{fontSize:12,color:'#666'}}>Valid until: {vp.valid_until}</div>}
+<div style={{marginTop:6}}><span style={{fontSize:10,fontWeight:700,color:vpStColor,background:vpStColor+'18',padding:'2px 10px',borderRadius:10,textTransform:'uppercase'}}>{vp.status}</span></div>
+</div>
+</div>
+<div style={{marginBottom:20,padding:'12px 16px',background:'#f8f9fa',borderRadius:6,border:'1px solid #eee'}}>
+<div style={{fontSize:11,fontWeight:700,color:'#888',marginBottom:4}}>PREPARED FOR</div>
+<div style={{fontSize:15,fontWeight:700}}>{vc.display_name||vc.name||''}</div>
+{vc.email&&<div style={{fontSize:12,color:'#666'}}>{vc.email}</div>}
+</div>
+{vp.notes&&<div style={{marginBottom:16,fontSize:13,color:'#444',lineHeight:1.6,whiteSpace:'pre-line'}}>{vp.notes}</div>}
+<table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
+<thead><tr style={{borderBottom:'2px solid #8b5cf6'}}>
+<th style={{textAlign:'left',padding:'8px 10px',fontSize:11,color:'#8b5cf6',fontWeight:700}}>#</th>
+<th style={{textAlign:'left',padding:'8px 10px',fontSize:11,color:'#8b5cf6',fontWeight:700}}>Work / Service</th>
+<th style={{textAlign:'right',padding:'8px 10px',fontSize:11,color:'#8b5cf6',fontWeight:700}}>Qty</th>
+<th style={{textAlign:'right',padding:'8px 10px',fontSize:11,color:'#8b5cf6',fontWeight:700}}>Rate</th>
+<th style={{textAlign:'right',padding:'8px 10px',fontSize:11,color:'#8b5cf6',fontWeight:700}}>Amount</th>
+</tr></thead>
+<tbody>{vpItems.map(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);return<tr key={i} style={{borderBottom:'1px solid #eee'}}>
+<td style={{padding:'10px',fontSize:13,color:'#666'}}>{i+1}</td>
+<td style={{padding:'10px'}}><div style={{fontSize:13,fontWeight:600}}>{it.description}</div>{it.sub_description&&<div style={{fontSize:11,color:'#888',fontStyle:'italic',marginTop:2}}>{it.sub_description}</div>}</td>
+<td style={{padding:'10px',fontSize:13,textAlign:'right'}}>{it.qty||1}</td>
+<td style={{padding:'10px',fontSize:13,textAlign:'right'}}>₹{Number(it.rate||0).toLocaleString('en-IN')}</td>
+<td style={{padding:'10px',fontSize:13,fontWeight:600,textAlign:'right'}}>₹{amt.toLocaleString('en-IN')}</td>
+</tr>;})}</tbody>
+</table>
+<div style={{display:'flex',justifyContent:'flex-end'}}>
+<div style={{minWidth:200}}>
+<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}><span style={{color:'#666'}}>Subtotal</span><span style={{fontWeight:600}}>₹{vpSub.toLocaleString('en-IN')}</span></div>
+{vp.tax_percent&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}><span style={{color:'#666'}}>GST ({vp.tax_percent}%)</span><span style={{fontWeight:600}}>₹{vpTax.toLocaleString('en-IN')}</span></div>}
+<div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:16,fontWeight:800,borderTop:'2px solid #1a1a2e',marginTop:4}}><span>Total</span><span style={{color:'#8b5cf6'}}>₹{vpTotal.toLocaleString('en-IN')}</span></div>
+</div>
+</div>
+</div>
+</div>;}
 
 return<div>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
@@ -6812,7 +6887,7 @@ var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate
 var tax=prop.tax_percent?sub*(Number(prop.tax_percent)/100):0;
 var total=sub+tax;
 var stColor=PSTATUS_COLORS[prop.status]||'#94a3b8';
-return<div key={prop.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14}}>
+return<div key={prop.id} onClick={function(){setViewProposal(prop);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14,cursor:'pointer',transition:'border-color 0.15s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#8b5cf6';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='';}}>
 <div style={{flex:1}}>
 <div style={{display:'flex',alignItems:'center',gap:8}}>
 <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{prop.proposal_no}</span>
@@ -6890,7 +6965,8 @@ function printStatement(){
 if(!stmtData)return;var d=stmtData;
 var w=window.open('','_blank');
 w.document.write('<html><head><title>Statement — '+(d.client.display_name||d.client.name)+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:14px 0}th,td{padding:7px 10px;border:1px solid #ddd;font-size:12px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}@media print{body{margin:20px}}</style></head><body>');
-w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:24px"><div><div style="font-size:24px;font-weight:800;color:#6b8cad">STATEMENT OF ACCOUNT</div><div style="font-size:13px;color:#666;margin-top:4px">'+org.name+'</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700">'+(d.client.display_name||d.client.name)+'</div><div style="font-size:12px;color:#666">As on '+new Date().toLocaleDateString('en-IN')+'</div></div></div>');
+var stLogoHtml=org.logo_url?'<img src="'+org.logo_url+'" style="max-height:50px;max-width:160px;margin-bottom:6px;display:block" />':'';
+w.document.write('<div style="display:flex;justify-content:space-between;margin-bottom:24px"><div>'+stLogoHtml+'<div style="font-size:24px;font-weight:800;color:#6b8cad">STATEMENT OF ACCOUNT</div><div style="font-size:14px;font-weight:700;margin-top:4px">'+org.name+'</div>'+(org.address?'<div style="font-size:11px;color:#888;margin-top:2px;white-space:pre-line">'+org.address+'</div>':'')+(org.gstin?'<div style="font-size:11px;color:#888">GSTIN: '+org.gstin+'</div>':'')+'</div><div style="text-align:right"><div style="font-size:14px;font-weight:700">'+(d.client.display_name||d.client.name)+'</div>'+(d.client.gstin?'<div style="font-size:11px;color:#666">GSTIN: '+d.client.gstin+'</div>':'')+'<div style="font-size:12px;color:#666;margin-top:4px">As on '+new Date().toLocaleDateString('en-IN')+'</div></div></div>');
 w.document.write('<h3 style="font-size:14px;margin-bottom:4px">Invoices</h3><table><thead><tr><th>Invoice</th><th>Date</th><th>Status</th><th class="right">Amount</th></tr></thead><tbody>');
 d.invoices.forEach(function(i){w.document.write('<tr><td>'+i.invoice_no+'</td><td>'+(i.invoice_date||'')+'</td><td>'+i.status+'</td><td class="right">₹'+Number(i.total||0).toLocaleString('en-IN')+'</td></tr>');});
 w.document.write('<tr style="font-weight:700"><td colspan="3">Total Invoiced</td><td class="right">₹'+d.totalInv.toLocaleString('en-IN')+'</td></tr></tbody></table>');
