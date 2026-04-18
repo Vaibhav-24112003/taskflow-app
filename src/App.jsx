@@ -2099,6 +2099,10 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   var [toast,setToast]=useState(null);
   var [orgName,setOrgName]=useState(org.name||'');
   var [orgDesc,setOrgDesc]=useState(org.description||'');
+  var [orgAddress,setOrgAddress]=useState(org.address||'');
+  var [orgGstin,setOrgGstin]=useState(org.gstin||'');
+  var [orgLogoUrl,setOrgLogoUrl]=useState(org.logo_url||'');
+  var [orgLogoPos,setOrgLogoPos]=useState(org.logo_position||'left');
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
@@ -2128,10 +2132,10 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   async function saveOrgInfo(){
     if(!orgName.trim()){showToast('Name required','err');return;}
     setSaving(true);
-    var res=await supabase.from('organizations').update({name:orgName.trim(),description:orgDesc.trim()||null}).eq('id',org.id);
+    var res=await supabase.from('organizations').update({name:orgName.trim(),description:orgDesc.trim()||null,address:orgAddress.trim()||null,gstin:orgGstin.trim().toUpperCase()||null,logo_url:orgLogoUrl.trim()||null,logo_position:orgLogoPos}).eq('id',org.id);
     setSaving(false);
     if(res.error){showToast(res.error.message,'err');return;}
-    org.name=orgName.trim();org.description=orgDesc.trim()||null;
+    org.name=orgName.trim();org.description=orgDesc.trim()||null;org.address=orgAddress.trim()||null;org.gstin=orgGstin.trim().toUpperCase()||null;org.logo_url=orgLogoUrl.trim()||null;org.logo_position=orgLogoPos;
     showToast('Organisation info saved!');
   }
 
@@ -2158,6 +2162,19 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
           <label style={LBL}>Description</label>
           <input value={orgDesc} onChange={function(e){setOrgDesc(e.target.value);}} style={INP} placeholder="e.g. CA Firm, Accounting Practice..."/>
         </div>
+        <div style={{marginBottom:14}}>
+          <label style={LBL}>Address</label>
+          <textarea value={orgAddress} onChange={function(e){setOrgAddress(e.target.value);}} style={Object.assign({},INP,{minHeight:50,resize:'vertical'})} placeholder="Office address for invoices & proposals"/>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
+          <div><label style={LBL}>GSTIN</label><input value={orgGstin} onChange={function(e){setOrgGstin(e.target.value.toUpperCase());}} style={Object.assign({},INP,{fontFamily:'monospace'})} placeholder="22ABCDE1234F1Z5"/></div>
+          <div><label style={LBL}>Logo URL</label><input value={orgLogoUrl} onChange={function(e){setOrgLogoUrl(e.target.value);}} style={INP} placeholder="https://... (image URL)"/></div>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={LBL}>Logo Position on Invoice</label>
+          <div style={{display:'flex',gap:8}}>{['left','right'].map(function(pos){return<button key={pos} onClick={function(){setOrgLogoPos(pos);}} style={{padding:'6px 18px',borderRadius:8,border:'1px solid',borderColor:orgLogoPos===pos?'#6b8cad':'var(--tf-border)',background:orgLogoPos===pos?'rgba(107,140,173,0.12)':'var(--tf-surface)',color:orgLogoPos===pos?'#6b8cad':'var(--tf-text-sub)',fontWeight:600,fontSize:12,cursor:'pointer',textTransform:'capitalize'}}>{pos}</button>;})}</div>
+        </div>
+        {orgLogoUrl&&<div style={{marginBottom:14,padding:10,background:'var(--tf-bg)',borderRadius:8,border:'1px solid var(--tf-border)'}}><div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:4}}>LOGO PREVIEW</div><img src={orgLogoUrl} style={{maxHeight:50,maxWidth:180}} alt="logo" onError={function(e){e.target.style.display='none';}}/></div>}
         <button onClick={saveOrgInfo} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>Save Info</button>
       </div>
     </div>
@@ -6335,6 +6352,102 @@ function MiniCalendar({rows,clientMap,wsMap}){
   </div>;
 }
 
+// ── Invoice View (preview with action bar) ──
+function InvoiceView({inv,org,clientMap,getInvTotal,getPaid,generatePDF,onClose,onEdit,onStatusChange,BTN}){
+var c=clientMap[inv.client_id]||{};
+var t=getInvTotal(inv);
+var paid=getPaid(inv.id);
+var bal=t.total-paid;
+var items=inv.items||[];
+var logoLeft=org.logo_position!=='right';
+var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0b',overdue:'#ef4444',cancelled:'#6b7280'};
+var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
+
+function sendEmail(){
+var clientEmail=c.email||'';
+var subject=encodeURIComponent('Invoice '+inv.invoice_no+' from '+org.name);
+var body=encodeURIComponent('Dear '+(c.display_name||c.name||'Client')+',\n\nPlease find attached Invoice '+inv.invoice_no+' dated '+(inv.invoice_date||'')+' for ₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2})+'.\n\n'+(inv.due_date?'Due Date: '+inv.due_date+'\n\n':'')+'Regards,\n'+org.name);
+window.open('mailto:'+clientEmail+'?subject='+subject+'&body='+body,'_blank');}
+
+function shareLink(){
+var text='Invoice '+inv.invoice_no+' | '+(c.display_name||c.name)+' | ₹'+t.total.toLocaleString('en-IN')+' | Status: '+inv.status;
+if(navigator.share){navigator.share({title:'Invoice '+inv.invoice_no,text:text});}
+else{navigator.clipboard.writeText(text);alert('Invoice details copied to clipboard');}}
+
+return<div style={{marginBottom:16}}>
+<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+<button onClick={onClose} style={Object.assign({},BTN,{background:'var(--tf-panel)',color:'var(--tf-text-sub)',fontSize:12})}>← Back</button>
+<div style={{flex:1}}></div>
+<button onClick={onEdit} style={Object.assign({},BTN,{background:'rgba(107,140,173,0.12)',color:'#6b8cad'})}>✎ Edit</button>
+<button onClick={function(){sendEmail();}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>✉ Send</button>
+<button onClick={function(){shareLink();}} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.12)',color:'#8b5cf6'})}>↗ Share</button>
+<button onClick={function(){generatePDF(inv);}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>🖨 PDF / Print</button>
+{inv.status==='draft'&&<button onClick={function(){onStatusChange('sent');}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>📤 Mark Sent</button>}
+{(inv.status==='sent'||inv.status==='partial')&&<button onClick={function(){onStatusChange('paid');}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>✓ Mark Paid</button>}
+</div>
+
+<div style={{background:'#fff',border:'1px solid #ddd',borderRadius:8,padding:'36px 40px',color:'#1a1a2e',fontFamily:'Arial,sans-serif',maxWidth:800,margin:'0 auto'}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28,flexDirection:logoLeft?'row':'row-reverse'}}>
+<div style={{textAlign:logoLeft?'left':'right'}}>
+{org.logo_url&&<img src={org.logo_url} style={{maxHeight:56,maxWidth:180,marginBottom:8,display:'block'}} alt="logo"/>}
+<div style={{fontSize:22,fontWeight:800,color:'#1a1a2e'}}>{org.name}</div>
+{org.address&&<div style={{fontSize:11,color:'#666',marginTop:4,whiteSpace:'pre-line',maxWidth:260}}>{org.address}</div>}
+{org.gstin&&<div style={{fontSize:11,color:'#666',marginTop:2}}>GSTIN: {org.gstin}</div>}
+</div>
+<div style={{textAlign:logoLeft?'right':'left'}}>
+<div style={{fontSize:28,fontWeight:800,color:'#6b8cad',letterSpacing:1}}>TAX INVOICE</div>
+<div style={{fontSize:16,fontWeight:700,marginTop:6}}>{inv.invoice_no}</div>
+<div style={{fontSize:12,color:'#666',marginTop:4}}>Date: {inv.invoice_date||''}</div>
+{inv.due_date&&<div style={{fontSize:12,color:'#666'}}>Due: {inv.due_date}</div>}
+<div style={{marginTop:6}}><span style={{fontSize:10,fontWeight:700,color:stColor,background:stColor+'18',padding:'2px 10px',borderRadius:10,textTransform:'uppercase'}}>{inv.status}</span></div>
+</div>
+</div>
+
+<div style={{marginBottom:20,padding:'12px 16px',background:'#f8f9fa',borderRadius:6,border:'1px solid #eee'}}>
+<div style={{fontSize:11,fontWeight:700,color:'#888',marginBottom:4}}>BILL TO</div>
+<div style={{fontSize:15,fontWeight:700}}>{c.display_name||c.name||''}</div>
+{c.email&&<div style={{fontSize:12,color:'#666'}}>{c.email}</div>}
+{c.gstin&&<div style={{fontSize:11,color:'#666'}}>GSTIN: {c.gstin}</div>}
+{c.city&&<div style={{fontSize:11,color:'#666'}}>{c.city}{c.state?', '+c.state:''}</div>}
+</div>
+
+<table style={{width:'100%',borderCollapse:'collapse',marginBottom:16}}>
+<thead><tr style={{borderBottom:'2px solid #6b8cad'}}>
+<th style={{textAlign:'left',padding:'8px 10px',fontSize:11,color:'#6b8cad',fontWeight:700}}>#</th>
+<th style={{textAlign:'left',padding:'8px 10px',fontSize:11,color:'#6b8cad',fontWeight:700}}>Item & Description</th>
+<th style={{textAlign:'left',padding:'8px 10px',fontSize:11,color:'#6b8cad',fontWeight:700}}>SAC/HSN</th>
+<th style={{textAlign:'right',padding:'8px 10px',fontSize:11,color:'#6b8cad',fontWeight:700}}>Qty</th>
+<th style={{textAlign:'right',padding:'8px 10px',fontSize:11,color:'#6b8cad',fontWeight:700}}>Rate</th>
+<th style={{textAlign:'right',padding:'8px 10px',fontSize:11,color:'#6b8cad',fontWeight:700}}>Amount</th>
+</tr></thead>
+<tbody>{items.map(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);return<tr key={i} style={{borderBottom:'1px solid #eee'}}>
+<td style={{padding:'10px',fontSize:13,color:'#666'}}>{i+1}</td>
+<td style={{padding:'10px'}}><div style={{fontSize:13,fontWeight:600}}>{it.description}</div>{it.sub_description&&<div style={{fontSize:11,color:'#888',fontStyle:'italic',marginTop:2}}>{it.sub_description}</div>}</td>
+<td style={{padding:'10px',fontSize:12,color:'#666'}}>{it.sac_code||''}</td>
+<td style={{padding:'10px',fontSize:13,textAlign:'right'}}>{it.qty||1}</td>
+<td style={{padding:'10px',fontSize:13,textAlign:'right'}}>₹{Number(it.rate||0).toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+<td style={{padding:'10px',fontSize:13,fontWeight:600,textAlign:'right'}}>₹{amt.toLocaleString('en-IN',{minimumFractionDigits:2})}</td>
+</tr>;})}</tbody>
+</table>
+
+<div style={{display:'flex',justifyContent:'flex-end'}}>
+<div style={{minWidth:220}}>
+<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}><span style={{color:'#666'}}>Subtotal</span><span style={{fontWeight:600}}>₹{t.sub.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
+{inv.tax_percent&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}><span style={{color:'#666'}}>GST ({inv.tax_percent}%)</span><span style={{fontWeight:600}}>₹{t.tax.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>}
+{inv.tds_percent&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}><span style={{color:'#666'}}>TDS ({inv.tds_percent}%)</span><span style={{fontWeight:600,color:'#ef4444'}}>- ₹{t.tds.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>}
+<div style={{display:'flex',justifyContent:'space-between',padding:'8px 0',fontSize:16,fontWeight:800,borderTop:'2px solid #1a1a2e',marginTop:4}}><span>Total</span><span style={{color:'#6b8cad'}}>₹{t.total.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>
+{paid>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'4px 0',fontSize:13}}><span style={{color:'#22c55e'}}>Paid</span><span style={{color:'#22c55e',fontWeight:600}}>₹{paid.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>}
+{paid>0&&<div style={{display:'flex',justifyContent:'space-between',padding:'6px 0',fontSize:14,fontWeight:800}}><span style={{color:bal>0?'#ef4444':'#22c55e'}}>Balance Due</span><span style={{color:bal>0?'#ef4444':'#22c55e'}}>₹{bal.toLocaleString('en-IN',{minimumFractionDigits:2})}</span></div>}
+</div>
+</div>
+
+{(inv.notes||inv.bank_details)&&<div style={{marginTop:24,paddingTop:16,borderTop:'1px solid #eee'}}>
+{inv.notes&&<div style={{fontSize:12,color:'#666',marginBottom:8}}><b>Notes:</b> {inv.notes}</div>}
+{inv.bank_details&&<div style={{fontSize:12,color:'#666'}}><b>Bank Details:</b> {inv.bank_details}</div>}
+</div>}
+</div>
+</div>;}
+
 // ── Invoice Form (separate component to keep BillingModule smaller) ──
 function InvoiceForm({inv,clients,org,supabase,onClose,onSaved,INP,LBL,BTN}){
 var [clientId,setClientId]=useState(inv?inv.client_id:'');
@@ -6492,6 +6605,7 @@ var [invoices,setInvoices]=useState([]);
 var [payments,setPayments]=useState([]);
 var [showForm,setShowForm]=useState(false);
 var [editInv,setEditInv]=useState(null);
+var [viewInv,setViewInv]=useState(null);
 var [showProposalForm,setShowProposalForm]=useState(false);
 var [editProposal,setEditProposal]=useState(null);
 var [proposals,setProposals]=useState([]);
@@ -6562,8 +6676,12 @@ var paid=getPaid(inv.id);
 var items=inv.items||[];
 var w=window.open('','_blank');
 w.document.write('<html><head><title>Invoice '+inv.invoice_no+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:8px 12px;border:1px solid #ddd;text-align:left;font-size:13px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}.head{display:flex;justify-content:space-between;margin-bottom:30px}.title{font-size:28px;font-weight:800;color:#6b8cad}@media print{body{margin:20px}}</style></head><body>');
-var logoHtml=org.logo_url?'<img src="'+org.logo_url+'" style="max-height:50px;max-width:160px;margin-bottom:6px" />':'';
-w.document.write('<div class="head"><div>'+logoHtml+'<div class="title">INVOICE</div><div style="margin-top:6px;font-size:13px;color:#666">'+org.name+'</div>'+(org.address?'<div style="font-size:11px;color:#888">'+org.address+'</div>':'')+(org.gstin?'<div style="font-size:11px;color:#888">GSTIN: '+org.gstin+'</div>':'')+'</div><div style="text-align:right"><div style="font-size:18px;font-weight:700">'+inv.invoice_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(inv.invoice_date||'')+'</div>'+(inv.due_date?'<div style="font-size:12px;color:#666">Due: '+inv.due_date+'</div>':'')+'</div></div>');
+var logoHtml=org.logo_url?'<img src="'+org.logo_url+'" style="max-height:56px;max-width:180px;margin-bottom:8px;display:block" />':'';
+var logoLeft=org.logo_position!=='right';
+var orgBlock=logoHtml+'<div style="font-size:22px;font-weight:800">'+org.name+'</div>'+(org.address?'<div style="font-size:11px;color:#888;margin-top:4px;white-space:pre-line">'+org.address+'</div>':'')+(org.gstin?'<div style="font-size:11px;color:#888;margin-top:2px">GSTIN: '+org.gstin+'</div>':'');
+var invBlock='<div style="font-size:28px;font-weight:800;color:#6b8cad;letter-spacing:1px">TAX INVOICE</div><div style="font-size:16px;font-weight:700;margin-top:6px">'+inv.invoice_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(inv.invoice_date||'')+'</div>'+(inv.due_date?'<div style="font-size:12px;color:#666">Due: '+inv.due_date+'</div>':'');
+if(logoLeft){w.document.write('<div class="head"><div>'+orgBlock+'</div><div style="text-align:right">'+invBlock+'</div></div>');}
+else{w.document.write('<div class="head"><div>'+invBlock+'</div><div style="text-align:right">'+orgBlock+'</div></div>');}
 w.document.write('<div style="margin-bottom:20px"><div style="font-weight:700;font-size:13px;color:#666;margin-bottom:4px">Bill To:</div><div style="font-size:14px;font-weight:700">'+(c.display_name||c.name||'')+'</div>'+(c.gstin?'<div style="font-size:11px;color:#666">GSTIN: '+c.gstin+'</div>':'')+(c.city?'<div style="font-size:11px;color:#666">'+c.city+(c.state?', '+c.state:'')+'</div>':'')+'</div>');
 w.document.write('<table><thead><tr><th>#</th><th>Description</th><th>SAC/HSN</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead><tbody>');
 items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td><b>'+it.description+'</b>'+(it.sub_description?'<div style="font-size:11px;color:#666;font-style:italic;margin-top:2px">'+it.sub_description+'</div>':'')+'</td><td>'+(it.sac_code||'')+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">'+Number(it.rate||0).toLocaleString('en-IN',{minimumFractionDigits:2})+'</td><td class="right">'+amt.toLocaleString('en-IN',{minimumFractionDigits:2})+'</td></tr>');});
@@ -6588,7 +6706,8 @@ return<div>
 <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>{filtered.length} invoice{filtered.length!==1?'s':''}</div>
 <button onClick={openNew} style={Object.assign({},BTN,{background:'#6b8cad',color:'#fff'})}>+ New Invoice</button>
 </div>
-{showForm&&<InvoiceForm inv={editInv} clients={clients} org={org} supabase={supabase} onClose={function(){setShowForm(false);}} onSaved={function(){setShowForm(false);loadAll();showToast(editInv?'Invoice updated':'Invoice created');}} INP={INP} LBL={LBL} BTN={BTN}/>}
+{showForm&&<InvoiceForm inv={editInv} clients={clients} org={org} supabase={supabase} onClose={function(){setShowForm(false);setViewInv(null);}} onSaved={function(){setShowForm(false);setViewInv(null);loadAll();showToast(editInv?'Invoice updated':'Invoice created');}} INP={INP} LBL={LBL} BTN={BTN}/>}
+{viewInv&&!showForm&&<InvoiceView inv={viewInv} org={org} clientMap={clientMap} getInvTotal={getInvTotal} getPaid={getPaid} generatePDF={generatePDF} onClose={function(){setViewInv(null);}} onEdit={function(){openEdit(viewInv);}} onStatusChange={function(st){markStatus(viewInv.id,st);setViewInv(null);}} BTN={BTN}/>}
 {filtered.length===0&&!showForm&&<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>No invoices yet. Create your first invoice.</div>}
 <div style={{display:'flex',flexDirection:'column',gap:8}}>
 {filtered.map(function(inv){
@@ -6597,7 +6716,7 @@ var t=getInvTotal(inv);
 var paid=getPaid(inv.id);
 var bal=t.total-paid;
 var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
-return<div key={inv.id} onClick={function(){openEdit(inv);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14,cursor:'pointer',transition:'border-color 0.15s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='';}}>
+return<div key={inv.id} onClick={function(){setViewInv(inv);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14,cursor:'pointer',transition:'border-color 0.15s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='';}}>
 <div style={{flex:1}}>
 <div style={{display:'flex',alignItems:'center',gap:8}}>
 <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{inv.invoice_no}</span>
