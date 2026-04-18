@@ -6345,23 +6345,25 @@ var [status,setStatus]=useState(inv?inv.status:'draft');
 var [taxPercent,setTaxPercent]=useState(inv?inv.tax_percent||'':'');
 var [notes,setNotes]=useState(inv?inv.notes||'':'');
 var [bankDetails,setBankDetails]=useState(inv?inv.bank_details||'':'');
-var [items,setItems]=useState(inv&&inv.items&&inv.items.length>0?inv.items:[{description:'',sac_code:'',qty:1,rate:''}]);
+var [items,setItems]=useState(inv&&inv.items&&inv.items.length>0?inv.items:[{description:'',sub_description:'',sac_code:'',qty:1,rate:''}]);
 var [saving,setSaving]=useState(false);
+var [tdsPercent,setTdsPercent]=useState(inv?inv.tds_percent||'':'');
 
-function addItem(){setItems(function(p){return[...p,{description:'',sac_code:'',qty:1,rate:''}];});}
+function addItem(){setItems(function(p){return[...p,{description:'',sub_description:'',sac_code:'',qty:1,rate:''}];});}
 function removeItem(i){setItems(function(p){return p.filter(function(_,x){return x!==i;});});}
 function updateItem(i,k,v){setItems(function(p){return p.map(function(it,x){if(x!==i)return it;var n=Object.assign({},it);n[k]=v;return n;});});}
 
 var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
 var tax=taxPercent?sub*(Number(taxPercent)/100):0;
-var total=sub+tax;
+var tds=tdsPercent?sub*(Number(tdsPercent)/100):0;
+var total=sub+tax-tds;
 
 async function save(){
 if(!clientId){alert('Select a client');return;}
 if(!invoiceNo.trim()){alert('Invoice number required');return;}
 if(items.filter(function(it){return it.description&&it.rate;}).length===0){alert('Add at least one line item');return;}
 setSaving(true);
-var payload={org_id:org.id,client_id:clientId,invoice_no:invoiceNo.trim(),invoice_date:invoiceDate||null,due_date:dueDate||null,status:status,tax_percent:taxPercent?Number(taxPercent):null,notes:notes.trim()||null,bank_details:bankDetails.trim()||null,items:items.filter(function(it){return it.description;}).map(function(it){return{description:it.description,sac_code:it.sac_code||'',qty:Number(it.qty)||1,rate:Number(it.rate)||0};}),total:total};
+var payload={org_id:org.id,client_id:clientId,invoice_no:invoiceNo.trim(),invoice_date:invoiceDate||null,due_date:dueDate||null,status:status,tax_percent:taxPercent?Number(taxPercent):null,tds_percent:tdsPercent?Number(tdsPercent):null,notes:notes.trim()||null,bank_details:bankDetails.trim()||null,items:items.filter(function(it){return it.description;}).map(function(it){return{description:it.description,sub_description:it.sub_description||'',sac_code:it.sac_code||'',qty:Number(it.qty)||1,rate:Number(it.rate)||0};}),total:total};
 var res;
 if(inv){res=await supabase.from('invoices').update(payload).eq('id',inv.id);}
 else{res=await supabase.from('invoices').insert(payload);}
@@ -6380,10 +6382,11 @@ return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-bor
 <div><label style={LBL}>Invoice No</label><input value={invoiceNo} onChange={function(e){setInvoiceNo(e.target.value);}} style={INP} placeholder="INV-001"/></div>
 <div><label style={LBL}>Status</label><select value={status} onChange={function(e){setStatus(e.target.value);}} style={INP}><option value="draft">Draft</option><option value="sent">Sent</option><option value="paid">Paid</option><option value="partial">Partial</option><option value="overdue">Overdue</option><option value="cancelled">Cancelled</option></select></div>
 </div>
-<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:14}}>
+<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:12,marginBottom:14}}>
 <div><label style={LBL}>Invoice Date</label><input type="date" value={invoiceDate} onChange={function(e){setInvoiceDate(e.target.value);}} style={INP}/></div>
 <div><label style={LBL}>Due Date</label><input type="date" value={dueDate} onChange={function(e){setDueDate(e.target.value);}} style={INP}/></div>
 <div><label style={LBL}>GST %</label><input type="number" value={taxPercent} onChange={function(e){setTaxPercent(e.target.value);}} style={INP} placeholder="18"/></div>
+<div><label style={LBL}>TDS %</label><input type="number" value={tdsPercent} onChange={function(e){setTdsPercent(e.target.value);}} style={INP} placeholder="10"/></div>
 </div>
 
 <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6,textTransform:'uppercase',letterSpacing:'.05em'}}>Line Items</div>
@@ -6399,7 +6402,7 @@ return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-bor
 <tbody>{items.map(function(it,i){
 var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
 return<tr key={i} style={{borderBottom:'1px solid var(--tf-border)'}}>
-<td style={{padding:'4px 6px'}}><input value={it.description} onChange={function(e){updateItem(i,'description',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px'})} placeholder="Work description"/></td>
+<td style={{padding:'4px 6px'}}><input value={it.description} onChange={function(e){updateItem(i,'description',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px'})} placeholder="Work description"/><input value={it.sub_description||''} onChange={function(e){updateItem(i,'sub_description',e.target.value);}} style={Object.assign({},INP,{padding:'4px 8px',fontSize:11,marginTop:2,color:'var(--tf-text-sub)',fontStyle:'italic'})} placeholder="Sub-description (optional)"/></td>
 <td style={{padding:'4px 6px'}}><input value={it.sac_code} onChange={function(e){updateItem(i,'sac_code',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px'})} placeholder="998231"/></td>
 <td style={{padding:'4px 6px'}}><input type="number" value={it.qty} onChange={function(e){updateItem(i,'qty',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px',textAlign:'right'})}/></td>
 <td style={{padding:'4px 6px'}}><input type="number" value={it.rate} onChange={function(e){updateItem(i,'rate',e.target.value);}} style={Object.assign({},INP,{padding:'6px 8px',textAlign:'right'})} placeholder="0"/></td>
@@ -6413,7 +6416,8 @@ return<tr key={i} style={{borderBottom:'1px solid var(--tf-border)'}}>
 <div style={{textAlign:'right',marginBottom:14}}>
 <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Subtotal: <b style={{color:'var(--tf-text)'}}>₹{sub.toLocaleString('en-IN',{minimumFractionDigits:2})}</b></div>
 {taxPercent&&<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>GST ({taxPercent}%): <b style={{color:'var(--tf-text)'}}>₹{tax.toLocaleString('en-IN',{minimumFractionDigits:2})}</b></div>}
-<div style={{fontSize:16,fontWeight:800,color:'#6b8cad',marginTop:4}}>Total: ₹{total.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
+{tdsPercent&&<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>TDS ({tdsPercent}%): <b style={{color:'#ef4444'}}>- ₹{tds.toLocaleString('en-IN',{minimumFractionDigits:2})}</b></div>}
+<div style={{fontSize:16,fontWeight:800,color:'#6b8cad',marginTop:4}}>Net Payable: ₹{total.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
 </div>
 
 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
@@ -6543,7 +6547,8 @@ function getInvTotal(inv){
 var items=inv.items||[];
 var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
 var tax=inv.tax_percent?sub*(Number(inv.tax_percent)/100):0;
-return{sub:sub,tax:tax,total:sub+tax};
+var tds=inv.tds_percent?sub*(Number(inv.tds_percent)/100):0;
+return{sub:sub,tax:tax,tds:tds,total:sub+tax-tds};
 }
 
 function getPaid(invId){
@@ -6557,14 +6562,16 @@ var paid=getPaid(inv.id);
 var items=inv.items||[];
 var w=window.open('','_blank');
 w.document.write('<html><head><title>Invoice '+inv.invoice_no+'</title><style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a2e}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:8px 12px;border:1px solid #ddd;text-align:left;font-size:13px}th{background:#f5f7fa;font-weight:700}.right{text-align:right}.head{display:flex;justify-content:space-between;margin-bottom:30px}.title{font-size:28px;font-weight:800;color:#6b8cad}@media print{body{margin:20px}}</style></head><body>');
-w.document.write('<div class="head"><div><div class="title">INVOICE</div><div style="margin-top:6px;font-size:13px;color:#666">'+org.name+'</div></div><div style="text-align:right"><div style="font-size:18px;font-weight:700">'+inv.invoice_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(inv.invoice_date||'')+'</div>'+(inv.due_date?'<div style="font-size:12px;color:#666">Due: '+inv.due_date+'</div>':'')+'</div></div>');
+var logoHtml=org.logo_url?'<img src="'+org.logo_url+'" style="max-height:50px;max-width:160px;margin-bottom:6px" />':'';
+w.document.write('<div class="head"><div>'+logoHtml+'<div class="title">INVOICE</div><div style="margin-top:6px;font-size:13px;color:#666">'+org.name+'</div>'+(org.address?'<div style="font-size:11px;color:#888">'+org.address+'</div>':'')+(org.gstin?'<div style="font-size:11px;color:#888">GSTIN: '+org.gstin+'</div>':'')+'</div><div style="text-align:right"><div style="font-size:18px;font-weight:700">'+inv.invoice_no+'</div><div style="font-size:12px;color:#666;margin-top:4px">Date: '+(inv.invoice_date||'')+'</div>'+(inv.due_date?'<div style="font-size:12px;color:#666">Due: '+inv.due_date+'</div>':'')+'</div></div>');
 w.document.write('<div style="margin-bottom:20px"><div style="font-weight:700;font-size:13px;color:#666;margin-bottom:4px">Bill To:</div><div style="font-size:14px;font-weight:700">'+(c.display_name||c.name||'')+'</div>'+(c.gstin?'<div style="font-size:11px;color:#666">GSTIN: '+c.gstin+'</div>':'')+(c.city?'<div style="font-size:11px;color:#666">'+c.city+(c.state?', '+c.state:'')+'</div>':'')+'</div>');
 w.document.write('<table><thead><tr><th>#</th><th>Description</th><th>SAC/HSN</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr></thead><tbody>');
-items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td>'+it.description+'</td><td>'+(it.sac_code||'')+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">'+Number(it.rate||0).toLocaleString('en-IN',{minimumFractionDigits:2})+'</td><td class="right">'+amt.toLocaleString('en-IN',{minimumFractionDigits:2})+'</td></tr>');});
+items.forEach(function(it,i){var amt=(Number(it.qty)||1)*(Number(it.rate)||0);w.document.write('<tr><td>'+(i+1)+'</td><td><b>'+it.description+'</b>'+(it.sub_description?'<div style="font-size:11px;color:#666;font-style:italic;margin-top:2px">'+it.sub_description+'</div>':'')+'</td><td>'+(it.sac_code||'')+'</td><td class="right">'+(it.qty||1)+'</td><td class="right">'+Number(it.rate||0).toLocaleString('en-IN',{minimumFractionDigits:2})+'</td><td class="right">'+amt.toLocaleString('en-IN',{minimumFractionDigits:2})+'</td></tr>');});
 w.document.write('</tbody></table>');
 w.document.write('<div style="text-align:right;margin-top:10px"><div style="font-size:13px">Subtotal: <b>₹'+t.sub.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b></div>');
 if(inv.tax_percent)w.document.write('<div style="font-size:13px">GST ('+inv.tax_percent+'%): <b>₹'+t.tax.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b></div>');
-w.document.write('<div style="font-size:16px;font-weight:800;margin-top:6px;color:#6b8cad">Total: ₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2})+'</div>');
+if(inv.tds_percent)w.document.write('<div style="font-size:13px;color:#ef4444">TDS ('+inv.tds_percent+'%): <b>- ₹'+t.tds.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b></div>');
+w.document.write('<div style="font-size:16px;font-weight:800;margin-top:6px;color:#6b8cad">Net Payable: ₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2})+'</div>');
 if(paid>0)w.document.write('<div style="font-size:13px;margin-top:4px;color:#22c55e">Paid: ₹'+paid.toLocaleString('en-IN',{minimumFractionDigits:2})+'</div><div style="font-size:13px;color:'+(t.total-paid>0?'#ef4444':'#22c55e')+'">Balance: ₹'+(t.total-paid).toLocaleString('en-IN',{minimumFractionDigits:2})+'</div>');
 w.document.write('</div>');
 if(inv.notes)w.document.write('<div style="margin-top:24px;padding-top:14px;border-top:1px solid #ddd;font-size:12px;color:#666"><b>Notes:</b> '+inv.notes+'</div>');
@@ -6590,7 +6597,7 @@ var t=getInvTotal(inv);
 var paid=getPaid(inv.id);
 var bal=t.total-paid;
 var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
-return<div key={inv.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14}}>
+return<div key={inv.id} onClick={function(){openEdit(inv);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'center',gap:14,cursor:'pointer',transition:'border-color 0.15s'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='';}}>
 <div style={{flex:1}}>
 <div style={{display:'flex',alignItems:'center',gap:8}}>
 <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{inv.invoice_no}</span>
@@ -6734,7 +6741,8 @@ var cInvs=invoices.filter(function(i){return i.client_id===stmtClientId;}).sort(
 var cPays=payments.filter(function(p){var inv=invoices.find(function(i){return i.id===p.invoice_id;});return inv&&inv.client_id===stmtClientId;});
 var totalInv=cInvs.reduce(function(s,i){return s+(Number(i.total)||0);},0);
 var totalPaid=cPays.reduce(function(s,p){return s+(Number(p.amount)||0);},0);
-setStmtData({client:c,invoices:cInvs,payments:cPays,totalInv:totalInv,totalPaid:totalPaid,balance:totalInv-totalPaid});}
+var totalTds=cInvs.reduce(function(s,i){if(!i.tds_percent)return s;var iSub=(i.items||[]).reduce(function(ss,it){return ss+(Number(it.qty)||1)*(Number(it.rate)||0);},0);return s+iSub*(Number(i.tds_percent)/100);},0);
+setStmtData({client:c,invoices:cInvs,payments:cPays,totalInv:totalInv,totalPaid:totalPaid,totalTds:totalTds,balance:totalInv-totalPaid});}
 
 function printStatement(){
 if(!stmtData)return;var d=stmtData;
@@ -6747,6 +6755,7 @@ w.document.write('<tr style="font-weight:700"><td colspan="3">Total Invoiced</td
 w.document.write('<h3 style="font-size:14px;margin-bottom:4px">Payments</h3><table><thead><tr><th>Date</th><th>Mode</th><th>Ref</th><th class="right">Amount</th></tr></thead><tbody>');
 d.payments.forEach(function(p){w.document.write('<tr><td>'+p.payment_date+'</td><td>'+p.mode+'</td><td>'+(p.ref_no||'')+'</td><td class="right">₹'+Number(p.amount).toLocaleString('en-IN')+'</td></tr>');});
 w.document.write('<tr style="font-weight:700"><td colspan="3">Total Paid</td><td class="right">₹'+d.totalPaid.toLocaleString('en-IN')+'</td></tr></tbody></table>');
+if(d.totalTds>0)w.document.write('<div style="text-align:right;font-size:14px;margin:8px 0;color:#f59e0b;font-weight:700">TDS Credit: ₹'+d.totalTds.toLocaleString('en-IN')+'</div>');
 w.document.write('<div style="text-align:right;font-size:18px;font-weight:800;color:'+(d.balance>0?'#ef4444':'#22c55e')+'">Balance Due: ₹'+d.balance.toLocaleString('en-IN')+'</div>');
 w.document.write('</body></html>');w.document.close();setTimeout(function(){w.print();},400);}
 
@@ -6761,9 +6770,10 @@ return<div>
 </div>
 {stmtData&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16}}>
 <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{stmtData.client.display_name||stmtData.client.name}</div>
-<div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,margin:'12px 0'}}>
+<div style={{display:'grid',gridTemplateColumns:stmtData.totalTds>0?'1fr 1fr 1fr 1fr':'1fr 1fr 1fr',gap:12,margin:'12px 0'}}>
 <div style={{background:'rgba(107,140,173,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Total Invoiced</div><div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>₹{stmtData.totalInv.toLocaleString('en-IN')}</div></div>
 <div style={{background:'rgba(34,197,94,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Total Paid</div><div style={{fontSize:18,fontWeight:800,color:'#22c55e'}}>₹{stmtData.totalPaid.toLocaleString('en-IN')}</div></div>
+{stmtData.totalTds>0&&<div style={{background:'rgba(245,158,11,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>TDS Credit</div><div style={{fontSize:18,fontWeight:800,color:'#f59e0b'}}>₹{stmtData.totalTds.toLocaleString('en-IN')}</div></div>}
 <div style={{background:stmtData.balance>0?'rgba(239,68,68,0.08)':'rgba(34,197,94,0.08)',borderRadius:8,padding:12,textAlign:'center'}}><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Balance</div><div style={{fontSize:18,fontWeight:800,color:stmtData.balance>0?'#ef4444':'#22c55e'}}>₹{stmtData.balance.toLocaleString('en-IN')}</div></div>
 </div>
 <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6}}>INVOICES ({stmtData.invoices.length})</div>
