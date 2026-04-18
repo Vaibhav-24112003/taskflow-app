@@ -2103,6 +2103,23 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   var [orgGstin,setOrgGstin]=useState(org.gstin||'');
   var [orgLogoUrl,setOrgLogoUrl]=useState(org.logo_url||'');
   var [orgLogoPos,setOrgLogoPos]=useState(org.logo_position||'left');
+  var [uploadingLogo,setUploadingLogo]=useState(false);
+
+  async function handleLogoUpload(e){
+    var file=e.target.files&&e.target.files[0];if(!file)return;
+    if(!file.type.startsWith('image/')){showToast('Please select an image file','err');return;}
+    if(file.size>2*1024*1024){showToast('Logo must be under 2MB','err');return;}
+    setUploadingLogo(true);
+    var ext=file.name.split('.').pop()||'png';
+    var path='org-logos/'+org.id+'/logo.'+ext;
+    var res=await supabase.storage.from('org-assets').upload(path,file,{upsert:true,contentType:file.type});
+    if(res.error){setUploadingLogo(false);showToast(res.error.message,'err');return;}
+    var pub=supabase.storage.from('org-assets').getPublicUrl(path);
+    var url=pub.data.publicUrl+'?v='+Date.now();
+    setOrgLogoUrl(url);
+    setUploadingLogo(false);
+    showToast('Logo uploaded!');
+  }
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
@@ -2168,7 +2185,13 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:14}}>
           <div><label style={LBL}>GSTIN</label><input value={orgGstin} onChange={function(e){setOrgGstin(e.target.value.toUpperCase());}} style={Object.assign({},INP,{fontFamily:'monospace'})} placeholder="22ABCDE1234F1Z5"/></div>
-          <div><label style={LBL}>Logo URL</label><input value={orgLogoUrl} onChange={function(e){setOrgLogoUrl(e.target.value);}} style={INP} placeholder="https://... (image URL)"/></div>
+          <div><label style={LBL}>Firm Logo</label>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <label style={{padding:'7px 14px',borderRadius:8,background:'rgba(107,140,173,0.12)',color:'#6b8cad',fontWeight:700,fontSize:12,cursor:uploadingLogo?'not-allowed':'pointer',opacity:uploadingLogo?0.6:1,whiteSpace:'nowrap'}}>{uploadingLogo?'Uploading...':'Upload Logo'}<input type="file" accept="image/*" onChange={handleLogoUpload} style={{display:'none'}} disabled={uploadingLogo}/></label>
+              {orgLogoUrl&&<button onClick={function(){setOrgLogoUrl('');}} style={{background:'rgba(239,68,68,0.1)',border:'none',borderRadius:6,padding:'6px 10px',color:'#ef4444',fontSize:11,cursor:'pointer',fontWeight:600}}>Remove</button>}
+            </div>
+            <input value={orgLogoUrl} onChange={function(e){setOrgLogoUrl(e.target.value);}} style={Object.assign({},INP,{marginTop:6,fontSize:11})} placeholder="Or paste URL..."/>
+          </div>
         </div>
         <div style={{marginBottom:14}}>
           <label style={LBL}>Logo Position on Invoice</label>
