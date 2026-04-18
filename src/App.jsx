@@ -6386,14 +6386,11 @@ var logoLeft=org.logo_position!=='right';
 var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0b',overdue:'#ef4444',cancelled:'#6b7280'};
 var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
 
-var [sendStep,setSendStep]=useState(0);
-function startSend(){generatePDF(inv);setSendStep(1);}
-function composeMail(){
+function sendEmail(){
 var clientEmail=c.email||'';
 var subject=encodeURIComponent('Invoice '+inv.invoice_no+' from '+org.name);
 var body=encodeURIComponent('Dear '+(c.display_name||c.name||'Client')+',\n\nPlease find attached Invoice '+inv.invoice_no+' dated '+(inv.invoice_date||'')+' for ₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2})+'.\n\n'+(inv.due_date?'Due Date: '+inv.due_date+'\n\n':'')+'Regards,\n'+org.name);
-window.open('mailto:'+clientEmail+'?subject='+subject+'&body='+body,'_blank');
-setSendStep(0);}
+window.open('mailto:'+clientEmail+'?subject='+subject+'&body='+body,'_blank');}
 
 function shareLink(){
 var text='Invoice '+inv.invoice_no+' | '+(c.display_name||c.name)+' | ₹'+t.total.toLocaleString('en-IN')+' | Status: '+inv.status;
@@ -6405,20 +6402,12 @@ return<div style={{marginBottom:16}}>
 <button onClick={onClose} style={Object.assign({},BTN,{background:'var(--tf-panel)',color:'var(--tf-text-sub)',fontSize:12})}>← Back</button>
 <div style={{flex:1}}></div>
 <button onClick={onEdit} style={Object.assign({},BTN,{background:'rgba(107,140,173,0.12)',color:'#6b8cad'})}>✎ Edit</button>
-<button onClick={function(){startSend();}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>✉ Send</button>
+<button onClick={function(){sendEmail();}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>✉ Send</button>
 <button onClick={function(){shareLink();}} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.12)',color:'#8b5cf6'})}>↗ Share</button>
 <button onClick={function(){generatePDF(inv);}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>🖨 PDF / Print</button>
 {inv.status==='draft'&&<button onClick={function(){onStatusChange('sent');}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>📤 Mark Sent</button>}
 {(inv.status==='sent'||inv.status==='partial')&&<button onClick={function(){onStatusChange('paid');}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>✓ Mark Paid</button>}
 </div>
-{sendStep===1&&<div style={{background:'rgba(59,130,246,0.06)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:10,padding:'12px 16px',marginBottom:12,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
-<div style={{flex:1}}>
-<div style={{fontSize:13,fontWeight:700,color:'#3b82f6',marginBottom:2}}>Send Invoice via Email</div>
-<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Step 1: Save the invoice as PDF from the print dialog that just opened. Step 2: Click "Compose Email" to open your email client and attach the saved PDF.</div>
-</div>
-<button onClick={composeMail} style={Object.assign({},BTN,{background:'#3b82f6',color:'#fff'})}>✉ Compose Email</button>
-<button onClick={function(){setSendStep(0);}} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444',fontSize:11})}>Cancel</button>
-</div>}
 
 <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:8,padding:'36px 40px',color:'#1a1a2e',fontFamily:'Arial,sans-serif',maxWidth:800,margin:'0 auto'}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28,flexDirection:logoLeft?'row':'row-reverse'}}>
