@@ -7088,7 +7088,7 @@ return<div key={prop.id} onClick={function(){setViewProposal(prop);}} style={{ba
 </div>;
 }
 function renderPayments(){
-var unpaidInvs=invoices.filter(function(i){return i.status!=='paid'&&i.status!=='cancelled';});
+var unpaidInvs=invoices.filter(function(i){return i.status!=='cancelled';});
 async function addPayment(e){
 e.preventDefault();var form=e.target;var invId=form.invoice_id.value;var amt=Number(form.amount.value);var date=form.payment_date.value;var mode=form.mode.value;var ref=form.ref_no.value;
 if(!invId||!amt){showToast('Select invoice and amount','err');return;}
@@ -7105,7 +7105,7 @@ return<div>
 <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
 <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Record Payment</div>
 <form onSubmit={addPayment} style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr auto',gap:8,alignItems:'end'}}>
-<div><label style={LBL}>Invoice</label><select name="invoice_id" style={INP}><option value="">Select...</option>{unpaidInvs.map(function(i){var c=clientMap[i.client_id]||{};return<option key={i.id} value={i.id}>{i.invoice_no} — {c.display_name||c.name||''}</option>;})}</select></div>
+<div><label style={LBL}>Invoice</label><select name="invoice_id" style={INP}><option value="">Select...</option>{unpaidInvs.map(function(i){var c=clientMap[i.client_id]||{};var tot=getInvTotal(i);var paid=payments.filter(function(p){return p.invoice_id===i.id;}).reduce(function(s,p){return s+Number(p.amount);},0);var bal=tot.total-paid;return<option key={i.id} value={i.id}>{i.invoice_no} — {c.display_name||c.name||''} — ₹{bal.toLocaleString('en-IN')}{i.status==='paid'?' (Paid)':i.status==='partial'?' (Partial)':' (Due)'}</option>;})}</select></div>
 <div><label style={LBL}>Amount (₹)</label><input name="amount" type="number" step="0.01" style={INP} placeholder="0"/></div>
 <div><label style={LBL}>Date</label><input name="payment_date" type="date" defaultValue={new Date().toISOString().slice(0,10)} style={INP}/></div>
 <div><label style={LBL}>Mode</label><select name="mode" style={INP}><option value="cash">Cash</option><option value="upi">UPI</option><option value="bank">Bank Transfer</option><option value="cheque">Cheque</option><option value="card">Card</option><option value="other">Other</option></select></div>
