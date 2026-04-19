@@ -7762,7 +7762,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     localStorage.removeItem('tf_gmailTokenExp_'+org.id);
     return null;
   });
-  var [gmailClientId,setGmailClientId]=useState(function(){return localStorage.getItem('tf_gmailClientId_'+org.id)||'';});
+  var [gmailClientId,setGmailClientId]=useState(function(){return localStorage.getItem('tf_gmailClientId')||'';});
   var [gmailClientIdInput,setGmailClientIdInput]=useState('');
   var [gmailThreads,setGmailThreads]=useState([]);
   var [gmailSelThread,setGmailSelThread]=useState(null);
@@ -7901,7 +7901,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
 
   function saveGmailClientId(){
     if(!gmailClientIdInput.trim())return;
-    localStorage.setItem('tf_gmailClientId_'+org.id,gmailClientIdInput.trim());
+    localStorage.setItem('tf_gmailClientId',gmailClientIdInput.trim());
     setGmailClientId(gmailClientIdInput.trim());
     showToast('Client ID saved');
   }
@@ -8070,7 +8070,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <button onClick={connectGmail} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',gap:6}}>
                 <span style={{fontSize:16}}>G</span> Sign in with Google
               </button>
-              <button onClick={function(){localStorage.removeItem('tf_gmailClientId_'+org.id);setGmailClientId('');}} style={{display:'block',margin:'10px auto 0',background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10}}>Change Client ID</button>
+              <button onClick={function(){localStorage.removeItem('tf_gmailClientId');setGmailClientId('');}} style={{display:'block',margin:'10px auto 0',background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10}}>Change Client ID</button>
             </div>}
           </div>:<>
             {/* Gmail folders/labels */}
