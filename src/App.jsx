@@ -1085,7 +1085,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false);if(notifRef.current&&!notifRef.current.contains(e.target))setShowNotif(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
 
-  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
+  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId&&!localStorage.getItem('tf_lastOrgId')){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
   useEffect(()=>{
     loadWS();
     supabase.from('organizations').select('*').order('name').limit(100).then(function(r){
@@ -1321,7 +1321,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
@@ -1343,7 +1343,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>✦</div>
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
-      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
+      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
       {!activeOrg&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
       <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
@@ -8352,8 +8352,8 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
-  const [orgModule,setOrgModule]=useState(null); // null=launcher | 'dashboard'|'clients'|'analytics'|'hr'|'billing'|'setup'
-  const [tab,setTab]=useState('');
+  const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'dashboard'|'clients'|'analytics'|'hr'|'billing'|'setup'
+  const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const [myRole,setMyRole]=useState('member');
   // Worksheet navigation hint (set when user clicks a work type in Your Dashboard)
@@ -8391,17 +8391,21 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
   );
 
-  function openModule(m){setOrgModule(m.id);setTab(m.tabs&&m.tabs[0]?m.tabs[0].id:'');}
-  function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);}
+  function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
+  function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}
   // Called from YourDashboard when a work type header is clicked
   function navigateToWorkType(wt){
     setWsInitWorkType(wt);
     setWsInitMineOnly(true);
     setOrgModule('clients');
     setTab('worksheets');
+    localStorage.setItem('tf_lastOrgModule','clients');
+    localStorage.setItem('tf_lastOrgTab','worksheets');
   }
 
   var currentModule=orgModule?MODULES.find(function(m){return m.id===orgModule;}):null;
+  if(orgModule&&!currentModule){setOrgModule(null);setTab('');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}
+  if(currentModule&&currentModule.tabs&&tab&&!currentModule.tabs.find(function(t){return t.id===tab;})){var ft=currentModule.tabs[0];setTab(ft?ft.id:'');if(ft)localStorage.setItem('tf_lastOrgTab',ft.id);}
   var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
 
   var header=<div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
@@ -8418,7 +8422,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     </div>
     {showSubTabs&&<div style={{display:'flex',gap:2,overflowX:'auto'}}>
       {currentModule.tabs.map(function(t){
-        return<button key={t.id} onClick={function(){setTab(t.id);}}
+        return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
           style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500,whiteSpace:'nowrap'}}>
           {t.label}
         </button>;
@@ -8503,7 +8507,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
                 {sidebarOpen&&<span style={{fontSize:12,fontWeight:isActive?700:500,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:28,marginBottom:4}}>
-                {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);}}
+                {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
                   style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:tab===t.id?700:500,color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #6b8cad':'2px solid transparent',marginBottom:1}}>
                   {t.label}
                 </button>;})}
