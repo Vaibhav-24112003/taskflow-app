@@ -7724,7 +7724,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [portalUsers,setPortalUsers]=useState([]);
   var [templates,setTemplates]=useState([]);
   var [toast,setToast]=useState(null);
-  var [activeTab,setActiveTab]=useState('bulk'); // 'bulk' | 'single' | 'templates'
+  var [activeTab,setActiveTab]=useState('trails'); // 'trails' | 'bulk' | 'single' | 'templates'
   // Bulk email state
   var [bulkSelIds,setBulkSelIds]=useState({});
   var [bulkFilterWT,setBulkFilterWT]=useState('');
@@ -7743,6 +7743,16 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [tplSubject,setTplSubject]=useState('');
   var [tplBody,setTplBody]=useState('');
   var [editTplId,setEditTplId]=useState(null);
+  // Trails state
+  var [commLogs,setCommLogs]=useState([]);
+  var [trailClientId,setTrailClientId]=useState(null);
+  var [trailSearch,setTrailSearch]=useState('');
+  var [showAddEntry,setShowAddEntry]=useState(false);
+  var [entryType,setEntryType]=useState('email_received');
+  var [entrySubject,setEntrySubject]=useState('');
+  var [entryBody,setEntryBody]=useState('');
+  var [entryFrom,setEntryFrom]=useState('');
+  var [replyToLog,setReplyToLog]=useState(null);
 
   function showToast(msg,kind){setToast({msg:msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
 
@@ -7753,9 +7763,11 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);
     var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);
     var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);
+    var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);
     setClients(rc.data||[]);
     setPortalUsers(ru.data||[]);
     setTemplates(rt.data||[]);
+    setCommLogs(rl.data||[]);
     setLoading(false);
   }
 
@@ -7822,21 +7834,30 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     </div>;
   }
 
+  async function logComm(clientId,type,subject,body,toEmail,cc,threadId){
+    var row={org_id:org.id,client_id:clientId||null,type:type||'email_sent',subject:subject||'',body:body||'',to_email:toEmail||'',cc:cc||'',thread_id:threadId||null,created_by:cu.id};
+    var res=await supabase.from('comm_logs').insert(row).select().single();
+    if(res.data)setCommLogs(function(p){return[res.data].concat(p);});
+    return res.data;
+  }
+
   function sendBulk(){
     var selCount=Object.keys(bulkSelIds).length;
     if(selCount===0){showToast('Select at least one client','err');return;}
     if(!bulkSubject.trim()){showToast('Subject required','err');return;}
     var emails=[];
-    Object.keys(bulkSelIds).forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email&&emails.indexOf(c.email)===-1)emails.push(c.email);});
+    var cids=Object.keys(bulkSelIds);
+    cids.forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email&&emails.indexOf(c.email)===-1)emails.push(c.email);});
     if(emails.length===0){showToast('No emails found for selected clients','err');return;}
     var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','));
     if(bulkCC.trim())mailto+='&cc='+encodeURIComponent(bulkCC.trim());
     mailto+='&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
     window.open(mailto,'_blank');
+    cids.forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email)logComm(cid,'email_sent',bulkSubject,bulkBody,c.email,bulkCC);});
     showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));
   }
 
-  function sendSingle(){
+  function sendSingle(threadId){
     var to=singleTo.trim()||'';
     if(!to&&singleClientId){var c=emailClients.find(function(x){return x.id===singleClientId;});if(c)to=c.email||'';}
     if(!to){showToast('Enter recipient email','err');return;}
@@ -7848,6 +7869,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     params.push('body='+encodeURIComponent(singleBody));
     mailto+='?'+params.join('&');
     window.open(mailto,'_blank');
+    logComm(singleClientId||null,'email_sent',singleSubject,singleBody,to,singleCC,threadId||null);
     showToast('Email client opened');
   }
 
@@ -7860,7 +7882,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     <div style={{width:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0}}>
       <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
         <div style={{display:'flex',gap:4}}>
-          {[{id:'bulk',label:'Bulk',icon:'✉'},{id:'single',label:'Single',icon:'📨'},{id:'templates',label:'Templates',icon:'📧'}].map(function(t){
+          {[{id:'trails',label:'Trails',icon:'💬'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'single',label:'Single',icon:'📨'},{id:'templates',label:'Templates',icon:'📧'}].map(function(t){
             var active=activeTab===t.id;
             return<button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{flex:1,padding:'8px 6px',border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',borderRadius:8,background:active?'rgba(107,140,173,0.1)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit',textAlign:'center'}}>{t.icon} {t.label}</button>;
           })}
@@ -7868,9 +7890,9 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
       </div>
       {/* Left body — client select for bulk, template list for templates */}
       <div style={{flex:1,overflowY:'auto',padding:'10px 0'}}>
-        {(activeTab==='bulk'||activeTab==='single')?<>
+        {(activeTab==='bulk'||activeTab==='single'||activeTab==='trails')?<>
           <div style={{padding:'0 12px 8px'}}>
-            <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            <input value={activeTab==='trails'?trailSearch:clientSearch} onChange={function(e){if(activeTab==='trails')setTrailSearch(e.target.value);else setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
           {activeTab==='bulk'&&<div style={{padding:'0 12px 6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)'}}>{Object.keys(bulkSelIds).length} selected</span>
@@ -7880,13 +7902,29 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>Clear</button>
             </div>
           </div>}
-          {filteredClients.map(function(c){
+          {(function(){
+            var listClients=filteredClients;
+            if(activeTab==='trails'){
+              var ts=trailSearch.toLowerCase();
+              listClients=emailClients.filter(function(c){return!ts||c.name.toLowerCase().includes(ts)||(c.pan||'').toLowerCase().includes(ts)||c.email.toLowerCase().includes(ts);});
+            }
+            return listClients.map(function(c){
             var hasEmail=!!c.email;
-            if(activeTab==='single'){
-              var isSel=singleClientId===c.id;
-              return<button key={c.id} onClick={function(){if(!hasEmail)return;setSingleClientId(c.id);setSingleTo(c.email);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:isSel?'rgba(107,140,173,0.1)':'transparent',opacity:hasEmail?1:0.5,border:'none',fontFamily:'inherit',borderLeft:isSel?'3px solid #6b8cad':'3px solid transparent'}}>
+            if(activeTab==='trails'){
+              var isSel=trailClientId===c.id;
+              var logCount=commLogs.filter(function(l){return l.client_id===c.id;}).length;
+              return<button key={c.id} onClick={function(){setTrailClientId(c.id);setShowAddEntry(false);setReplyToLog(null);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:isSel?'rgba(107,140,173,0.1)':'transparent',border:'none',fontFamily:'inherit',borderLeft:isSel?'3px solid #6b8cad':'3px solid transparent'}}>
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontSize:12,fontWeight:isSel?700:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+                  <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}{logCount>0?' · '+logCount+' log'+(logCount!==1?'s':''):''}</div>
+                </div>
+              </button>;
+            }
+            if(activeTab==='single'){
+              var isSel2=singleClientId===c.id;
+              return<button key={c.id} onClick={function(){if(!hasEmail)return;setSingleClientId(c.id);setSingleTo(c.email);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:isSel2?'rgba(107,140,173,0.1)':'transparent',opacity:hasEmail?1:0.5,border:'none',fontFamily:'inherit',borderLeft:isSel2?'3px solid #6b8cad':'3px solid transparent'}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontSize:12,fontWeight:isSel2?700:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                   <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
                 </div>
               </button>;
@@ -7899,8 +7937,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
                 <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
               </div>
             </label>;
-          })}
-          {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients found.</div>}
+          });})()}
+          {activeTab!=='trails'&&filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients found.</div>}
         </>:
         /* Templates list in left panel */
         <>
@@ -7918,7 +7956,116 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
 
     {/* RIGHT PANEL */}
     <div style={{flex:1,overflowY:'auto',padding:'20px 24px 60px'}}>
-      {activeTab==='bulk'?<>
+      {activeTab==='trails'?<>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Communication Trails</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>View email history and communication logs per client. All sent emails are auto-logged.</div>
+          </div>
+          {trailClientId&&<button onClick={function(){setShowAddEntry(true);setEntryType('email_received');setEntrySubject('');setEntryBody('');setEntryFrom('');setReplyToLog(null);}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,whiteSpace:'nowrap'}}>+ Add Entry</button>}
+        </div>
+        {!trailClientId?<div style={{textAlign:'center',padding:'80px 20px'}}>
+          <div style={{fontSize:40,marginBottom:12}}>💬</div>
+          <div style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>Select a client</div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Choose a client from the left panel to view their communication history.</div>
+        </div>:<>
+          {/* Add Entry Form */}
+          {showAddEntry&&<div style={{background:'var(--tf-surface)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:12,padding:16,marginBottom:20}}>
+            <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:12}}>{replyToLog?'Reply to: '+replyToLog.subject:'Log New Communication'}</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Type</label>
+                <select value={entryType} onChange={function(e){setEntryType(e.target.value);}} style={INP}>
+                  <option value="email_received">Email Received</option>
+                  <option value="email_sent">Email Sent</option>
+                  <option value="note">Note / Remark</option>
+                  <option value="call">Phone Call</option>
+                  <option value="meeting">Meeting</option>
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>{entryType==='email_received'?'From Email':'To Email'}</label>
+                <input value={entryFrom} onChange={function(e){setEntryFrom(e.target.value);}} placeholder={entryType==='email_received'?'sender@example.com':''} style={INP}/>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Subject</label>
+              <input value={entrySubject} onChange={function(e){setEntrySubject(e.target.value);}} placeholder="Subject or title" style={INP}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Details / Body</label>
+              <textarea value={entryBody} onChange={function(e){setEntryBody(e.target.value);}} rows={4} placeholder="Email content, call notes, meeting minutes..." style={Object.assign({},INP,{resize:'vertical'})}/>
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={function(){setShowAddEntry(false);setReplyToLog(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>
+              <button onClick={async function(){
+                if(!entrySubject.trim()&&!entryBody.trim()){showToast('Subject or body required','err');return;}
+                var toEmail=entryType==='email_received'?'':entryFrom;
+                var fromEmail=entryType==='email_received'?entryFrom:'';
+                await logComm(trailClientId,entryType,entrySubject,entryBody,entryType==='email_received'?'':entryFrom,'',replyToLog?replyToLog.id:null);
+                setShowAddEntry(false);setEntrySubject('');setEntryBody('');setEntryFrom('');setReplyToLog(null);
+                showToast('Entry logged');
+              }} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Save Entry</button>
+            </div>
+          </div>}
+          {/* Communication Timeline */}
+          {(function(){
+            var clientName=(emailClients.find(function(c){return c.id===trailClientId;})||{}).name||'Client';
+            var logs=commLogs.filter(function(l){return l.client_id===trailClientId;}).sort(function(a,b){return new Date(b.created_at)-new Date(a.created_at);});
+            var typeIcons={email_sent:'📤',email_received:'📥',note:'📝',call:'📞',meeting:'🤝'};
+            var typeLabels={email_sent:'Sent',email_received:'Received',note:'Note',call:'Call',meeting:'Meeting'};
+            var typeColors={email_sent:'#6366f1',email_received:'#10b981',note:'#f59e0b',call:'#06b6d4',meeting:'#ec4899'};
+            return<div>
+              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+                <span>{clientName}</span>
+                <span style={{fontSize:11,fontWeight:500,color:'var(--tf-text-sub)'}}>· {logs.length} communication{logs.length!==1?'s':''}</span>
+              </div>
+              {logs.length===0?<div style={{textAlign:'center',padding:'40px 20px',color:'var(--tf-text-sub)',fontSize:13}}>No communications logged yet. Send an email or add an entry manually.</div>:
+              <div style={{position:'relative',paddingLeft:28}}>
+                <div style={{position:'absolute',left:11,top:0,bottom:0,width:2,background:'var(--tf-border)'}}/>
+                {logs.map(function(log,idx){
+                  var icon=typeIcons[log.type]||'📄';
+                  var label=typeLabels[log.type]||log.type;
+                  var col=typeColors[log.type]||'#6b8cad';
+                  var dt=new Date(log.created_at);
+                  var dateStr=dt.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
+                  var timeStr=dt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+                  var isReply=!!log.thread_id;
+                  var parentLog=isReply?commLogs.find(function(l){return l.id===log.thread_id;}):null;
+                  return<div key={log.id} style={{position:'relative',marginBottom:16,paddingBottom:idx<logs.length-1?0:0}}>
+                    <div style={{position:'absolute',left:-22,top:4,width:24,height:24,borderRadius:'50%',background:'rgba('+(col==='#6366f1'?'99,102,241':col==='#10b981'?'16,185,129':col==='#f59e0b'?'245,158,11':col==='#06b6d4'?'6,182,212':'236,72,153')+',0.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,zIndex:1,border:'2px solid var(--tf-bg)'}}>{icon}</div>
+                    <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 14px',marginLeft:6}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                          <span style={{fontSize:10,fontWeight:700,color:col,background:'rgba('+(col==='#6366f1'?'99,102,241':col==='#10b981'?'16,185,129':col==='#f59e0b'?'245,158,11':col==='#06b6d4'?'6,182,212':'236,72,153')+',0.1)',border:'1px solid rgba('+(col==='#6366f1'?'99,102,241':col==='#10b981'?'16,185,129':col==='#f59e0b'?'245,158,11':col==='#06b6d4'?'6,182,212':'236,72,153')+',0.25)',borderRadius:4,padding:'2px 7px',textTransform:'uppercase'}}>{label}</span>
+                          {isReply&&<span style={{fontSize:10,color:'var(--tf-text-sub)',fontStyle:'italic'}}>↩ reply to: {parentLog?parentLog.subject:'...'}</span>}
+                        </div>
+                        <span style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap',flexShrink:0}}>{dateStr} {timeStr}</span>
+                      </div>
+                      {log.subject&&<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>{log.subject}</div>}
+                      {log.to_email&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:4}}>To: {log.to_email}{log.cc?' · CC: '+log.cc:''}</div>}
+                      {log.body&&<div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap',background:'var(--tf-bg)',borderRadius:6,padding:'8px 10px',marginTop:4,maxHeight:200,overflowY:'auto'}}>{log.body}</div>}
+                      <div style={{display:'flex',gap:6,marginTop:8}}>
+                        <button onClick={function(){setReplyToLog(log);setShowAddEntry(true);setEntrySubject('Re: '+(log.subject||''));setEntryBody('');setEntryFrom(log.to_email||'');setEntryType(log.type==='email_sent'?'email_received':'email_sent');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:10,fontWeight:600,color:'var(--tf-text-sub)'}}>↩ Reply</button>
+                        {(log.type==='email_received'||log.type==='email_sent')&&<button onClick={function(){
+                          var ec=emailClients.find(function(x){return x.id===trailClientId;});
+                          var to=log.type==='email_received'?(log.to_email||''):(ec?ec.email:'');
+                          var sub='Re: '+(log.subject||'');
+                          var body='\n\n---\nOn '+dateStr+', '+(log.type==='email_sent'?'you wrote':log.to_email+' wrote')+':\n'+(log.body||'');
+                          var mailto='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(sub)+'&body='+encodeURIComponent(body);
+                          window.open(mailto,'_blank');
+                          logComm(trailClientId,'email_sent',sub,'',to,'',log.id);
+                        }} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:10,fontWeight:600,color:'#6366f1'}}>✉ Send Reply</button>}
+                        <button onClick={async function(){if(!window.confirm('Delete this log entry?'))return;await supabase.from('comm_logs').delete().eq('id',log.id);setCommLogs(function(p){return p.filter(function(l){return l.id!==log.id;});});showToast('Entry deleted');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:10,fontWeight:600,color:'var(--tf-text-mut)',marginLeft:'auto'}}>🗑</button>
+                      </div>
+                    </div>
+                  </div>;
+                })}
+              </div>}
+            </div>;
+          })()}
+        </>}
+      </>:activeTab==='bulk'?<>
         <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Bulk Email</div>
         <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Compose and send emails to multiple clients. Recipients are BCC'd so they don't see each other.</div>
         {/* Filter + Template row */}
