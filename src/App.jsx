@@ -7754,7 +7754,14 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [entryFrom,setEntryFrom]=useState('');
   var [replyToLog,setReplyToLog]=useState(null);
   // Gmail integration state
-  var [gmailToken,setGmailToken]=useState(null);
+  var [gmailToken,setGmailToken]=useState(function(){
+    var saved=localStorage.getItem('tf_gmailToken_'+org.id);
+    var exp=localStorage.getItem('tf_gmailTokenExp_'+org.id);
+    if(saved&&exp&&Date.now()<Number(exp))return saved;
+    localStorage.removeItem('tf_gmailToken_'+org.id);
+    localStorage.removeItem('tf_gmailTokenExp_'+org.id);
+    return null;
+  });
   var [gmailClientId,setGmailClientId]=useState(function(){return localStorage.getItem('tf_gmailClientId_'+org.id)||'';});
   var [gmailClientIdInput,setGmailClientIdInput]=useState('');
   var [gmailThreads,setGmailThreads]=useState([]);
@@ -7778,6 +7785,14 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     document.head.appendChild(s);
   },[]);
 
+  // Auto-load inbox if token exists from localStorage
+  useEffect(function(){
+    if(gmailToken&&gmailThreads.length===0&&!gmailLoading){
+      fetchGmailProfile(gmailToken);
+      fetchGmailThreads(gmailToken,'INBOX');
+    }
+  },[]);
+
   function connectGmail(){
     if(!gmailClientId){showToast('Set Google Client ID first','err');return;}
     if(typeof google==='undefined'||!google.accounts){showToast('Google script loading...','err');return;}
@@ -7786,6 +7801,9 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
       scope:'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify',
       callback:function(resp){
         if(resp.error){showToast('Auth failed: '+resp.error,'err');return;}
+        var expMs=Date.now()+(resp.expires_in||3600)*1000;
+        localStorage.setItem('tf_gmailToken_'+org.id,resp.access_token);
+        localStorage.setItem('tf_gmailTokenExp_'+org.id,String(expMs));
         setGmailToken(resp.access_token);
         fetchGmailProfile(resp.access_token);
         fetchGmailThreads(resp.access_token,'INBOX');
@@ -7797,7 +7815,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   async function gmailApi(path,token,opts){
     var tk=token||gmailToken;if(!tk)return null;
     var res=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/'+path,Object.assign({headers:{Authorization:'Bearer '+tk}},opts||{}));
-    if(res.status===401){setGmailToken(null);showToast('Gmail session expired — reconnect','err');return null;}
+    if(res.status===401){setGmailToken(null);localStorage.removeItem('tf_gmailToken_'+org.id);localStorage.removeItem('tf_gmailTokenExp_'+org.id);showToast('Gmail session expired — reconnect','err');return null;}
     return res.json();
   }
 
@@ -8056,7 +8074,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
             <div style={{padding:'0 10px 6px'}}>
               <div style={{display:'flex',alignItems:'center',gap:6,padding:'2px 4px',marginBottom:6}}>
                 <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailProfile?gmailProfile.emailAddress:''}</span>
-                <button onClick={function(){setGmailToken(null);setGmailThreads([]);setGmailSelThread(null);setGmailProfile(null);}} style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10,flexShrink:0}} title="Disconnect">✕</button>
+                <button onClick={function(){setGmailToken(null);setGmailThreads([]);setGmailSelThread(null);setGmailProfile(null);localStorage.removeItem('tf_gmailToken_'+org.id);localStorage.removeItem('tf_gmailTokenExp_'+org.id);}} style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10,flexShrink:0}} title="Disconnect">✕</button>
               </div>
               {[{id:'INBOX',label:'Inbox',icon:'📥'},{id:'SENT',label:'Sent',icon:'📤'},{id:'STARRED',label:'Starred',icon:'⭐'},{id:'DRAFT',label:'Drafts',icon:'📝'},{id:'ALL',label:'All Mail',icon:'📬'}].map(function(f){
                 return<button key={f.id} onClick={function(){setGmailFolder(f.id);setGmailSelThread(null);fetchGmailThreads(gmailToken,f.id);}} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'6px 8px',border:'none',background:gmailFolder===f.id?'rgba(107,140,173,0.1)':'transparent',borderRadius:6,cursor:'pointer',fontFamily:'inherit',borderLeft:gmailFolder===f.id?'3px solid #4285f4':'3px solid transparent',color:gmailFolder===f.id?'#4285f4':'var(--tf-text-sub)',fontSize:11,fontWeight:gmailFolder===f.id?700:500}}>
