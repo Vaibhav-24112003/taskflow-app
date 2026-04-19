@@ -7753,8 +7753,152 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [entryBody,setEntryBody]=useState('');
   var [entryFrom,setEntryFrom]=useState('');
   var [replyToLog,setReplyToLog]=useState(null);
+  // Gmail integration state
+  var [gmailToken,setGmailToken]=useState(null);
+  var [gmailClientId,setGmailClientId]=useState(function(){return localStorage.getItem('tf_gmailClientId_'+org.id)||'';});
+  var [gmailClientIdInput,setGmailClientIdInput]=useState('');
+  var [gmailThreads,setGmailThreads]=useState([]);
+  var [gmailSelThread,setGmailSelThread]=useState(null);
+  var [gmailThreadMsgs,setGmailThreadMsgs]=useState([]);
+  var [gmailLoading,setGmailLoading]=useState(false);
+  var [gmailProfile,setGmailProfile]=useState(null);
+  var [gmailFolder,setGmailFolder]=useState('INBOX');
+  var [gmailSearch,setGmailSearch]=useState('');
+  var [gmailCompose,setGmailCompose]=useState(null);
+  var [gmailNextPage,setGmailNextPage]=useState(null);
+  var gmailScriptLoaded=useRef(false);
 
-  function showToast(msg,kind){setToast({msg:msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
+  // Load GIS script
+  useEffect(function(){
+    if(gmailScriptLoaded.current)return;
+    var s=document.createElement('script');
+    s.src='https://accounts.google.com/gsi/client';
+    s.async=true;
+    s.onload=function(){gmailScriptLoaded.current=true;};
+    document.head.appendChild(s);
+  },[]);
+
+  function connectGmail(){
+    if(!gmailClientId){showToast('Set Google Client ID first','err');return;}
+    if(typeof google==='undefined'||!google.accounts){showToast('Google script loading...','err');return;}
+    var client=google.accounts.oauth2.initTokenClient({
+      client_id:gmailClientId,
+      scope:'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify',
+      callback:function(resp){
+        if(resp.error){showToast('Auth failed: '+resp.error,'err');return;}
+        setGmailToken(resp.access_token);
+        fetchGmailProfile(resp.access_token);
+        fetchGmailThreads(resp.access_token,'INBOX');
+      }
+    });
+    client.requestAccessToken();
+  }
+
+  async function gmailApi(path,token,opts){
+    var tk=token||gmailToken;if(!tk)return null;
+    var res=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/'+path,Object.assign({headers:{Authorization:'Bearer '+tk}},opts||{}));
+    if(res.status===401){setGmailToken(null);showToast('Gmail session expired — reconnect','err');return null;}
+    return res.json();
+  }
+
+  async function fetchGmailProfile(token){
+    var d=await gmailApi('profile',token);
+    if(d)setGmailProfile(d);
+  }
+
+  async function fetchGmailThreads(token,label,query,pageToken){
+    setGmailLoading(true);
+    var q='';if(label&&label!=='ALL')q+='label:'+label;if(query)q+=(q?' ':'')+query;
+    var url='threads?maxResults=30';if(q)url+='&q='+encodeURIComponent(q);if(pageToken)url+='&pageToken='+pageToken;
+    var d=await gmailApi(url,token);
+    if(!d){setGmailLoading(false);return;}
+    setGmailNextPage(d.nextPageToken||null);
+    var threads=d.threads||[];
+    var details=await Promise.all(threads.map(function(t){return gmailApi('threads/'+t.id+'?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date&metadataHeaders=To',token);}));
+    var enriched=details.filter(Boolean).map(function(t){
+      var last=t.messages[t.messages.length-1];
+      var headers={};(last.payload.headers||[]).forEach(function(h){headers[h.name.toLowerCase()]=h.value;});
+      var first=t.messages[0];
+      var firstH={};(first.payload.headers||[]).forEach(function(h){firstH[h.name.toLowerCase()]=h.value;});
+      return{id:t.id,snippet:last.snippet,subject:firstH.subject||headers.subject||'(No Subject)',from:headers.from||'',date:headers.date||'',msgCount:t.messages.length,unread:last.labelIds&&last.labelIds.indexOf('UNREAD')!==-1,labelIds:last.labelIds||[]};
+    });
+    if(pageToken)setGmailThreads(function(p){return p.concat(enriched);});
+    else setGmailThreads(enriched);
+    setGmailLoading(false);
+  }
+
+  async function openGmailThread(threadId){
+    setGmailLoading(true);
+    var d=await gmailApi('threads/'+threadId+'?format=full');
+    if(!d){setGmailLoading(false);return;}
+    var msgs=d.messages.map(function(m){
+      var headers={};(m.payload.headers||[]).forEach(function(h){headers[h.name.toLowerCase()]=h.value;});
+      var body='';var html='';
+      function extractParts(part){
+        if(!part)return;
+        if(part.mimeType==='text/html'&&part.body&&part.body.data){html=atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));}
+        if(part.mimeType==='text/plain'&&part.body&&part.body.data){body=atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));}
+        if(part.parts)part.parts.forEach(extractParts);
+      }
+      extractParts(m.payload);
+      if(!html&&m.payload.body&&m.payload.body.data){
+        var raw=atob(m.payload.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+        if(m.payload.mimeType==='text/html')html=raw;else body=raw;
+      }
+      return{id:m.id,from:headers.from||'',to:headers.to||'',cc:headers.cc||'',date:headers.date||'',subject:headers.subject||'',body:body,html:html,labelIds:m.labelIds||[]};
+    });
+    setGmailThreadMsgs(msgs);
+    setGmailSelThread(threadId);
+    // Mark as read
+    var unreadMsg=d.messages.find(function(m){return m.labelIds&&m.labelIds.indexOf('UNREAD')!==-1;});
+    if(unreadMsg){
+      await gmailApi('messages/'+unreadMsg.id+'/modify',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({removeLabelIds:['UNREAD']})});
+      setGmailThreads(function(p){return p.map(function(t){return t.id===threadId?Object.assign({},t,{unread:false}):t;});});
+    }
+    setGmailLoading(false);
+  }
+
+  async function sendGmailReply(to,subject,bodyText,threadId,messageId){
+    if(!bodyText.trim()){showToast('Message body required','err');return;}
+    var boundary='boundary_'+Date.now();
+    var sub=subject.startsWith('Re:')?subject:'Re: '+subject;
+    var raw='MIME-Version: 1.0\r\nTo: '+to+'\r\nSubject: '+sub+'\r\nIn-Reply-To: '+messageId+'\r\nReferences: '+messageId+'\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText;
+    var encoded=btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded,threadId:threadId})});
+    if(res&&res.id){showToast('Reply sent!');openGmailThread(threadId);}
+    else{showToast('Send failed','err');}
+  }
+
+  async function sendGmailNew(to,subject,bodyText){
+    if(!to.trim()||!subject.trim()){showToast('To and Subject required','err');return;}
+    var raw='MIME-Version: 1.0\r\nTo: '+to+'\r\nSubject: '+subject+'\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText;
+    var encoded=btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
+    if(res&&res.id){showToast('Email sent!');setGmailCompose(null);fetchGmailThreads(gmailToken,gmailFolder);}
+    else{showToast('Send failed','err');}
+  }
+
+  function saveGmailClientId(){
+    if(!gmailClientIdInput.trim())return;
+    localStorage.setItem('tf_gmailClientId_'+org.id,gmailClientIdInput.trim());
+    setGmailClientId(gmailClientIdInput.trim());
+    showToast('Client ID saved');
+  }
+
+  function parseEmailName(fromStr){
+    var m=fromStr.match(/^(.+?)\s*<(.+?)>$/);
+    if(m)return{name:m[1].replace(/"/g,''),email:m[2]};
+    return{name:fromStr,email:fromStr};
+  }
+
+  function timeAgo(dateStr){
+    if(!dateStr)return'';
+    var d=new Date(dateStr);var now=new Date();var diff=now-d;
+    var mins=Math.floor(diff/60000);if(mins<60)return mins+'m';
+    var hrs=Math.floor(mins/60);if(hrs<24)return hrs+'h';
+    var days=Math.floor(hrs/24);if(days<7)return days+'d';
+    return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+  }
 
   useEffect(function(){loadData();},[org.id]);
 
@@ -7882,15 +8026,65 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     <div style={{width:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0}}>
       <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
         <div style={{display:'flex',gap:4}}>
-          {[{id:'trails',label:'Trails',icon:'💬'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'single',label:'Single',icon:'📨'},{id:'templates',label:'Templates',icon:'📧'}].map(function(t){
+          {[{id:'gmail',label:'Gmail',icon:'📧'},{id:'trails',label:'Trails',icon:'💬'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'single',label:'Single',icon:'📨'},{id:'templates',label:'Templates',icon:'📋'}].map(function(t){
             var active=activeTab===t.id;
             return<button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{flex:1,padding:'8px 6px',border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',borderRadius:8,background:active?'rgba(107,140,173,0.1)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit',textAlign:'center'}}>{t.icon} {t.label}</button>;
           })}
         </div>
       </div>
-      {/* Left body — client select for bulk, template list for templates */}
+      {/* Left body */}
       <div style={{flex:1,overflowY:'auto',padding:'10px 0'}}>
-        {(activeTab==='bulk'||activeTab==='single'||activeTab==='trails')?<>
+        {activeTab==='gmail'?<>
+          {!gmailToken?<div style={{padding:'12px 14px'}}>
+            {!gmailClientId?<div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6}}>SETUP</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>Enter your Google OAuth Client ID to connect Gmail.</div>
+              <input value={gmailClientIdInput} onChange={function(e){setGmailClientIdInput(e.target.value);}} placeholder="Google Client ID" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',marginBottom:6}}/>
+              <button onClick={saveGmailClientId} style={{width:'100%',background:'#6b8cad',border:'none',borderRadius:7,padding:'8px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Save Client ID</button>
+            </div>:
+            <div style={{textAlign:'center',padding:'20px 0'}}>
+              <div style={{fontSize:28,marginBottom:8}}>📧</div>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Connect Gmail</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:12}}>Sign in to view and send emails directly.</div>
+              <button onClick={connectGmail} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:16}}>G</span> Sign in with Google
+              </button>
+              <button onClick={function(){localStorage.removeItem('tf_gmailClientId_'+org.id);setGmailClientId('');}} style={{display:'block',margin:'10px auto 0',background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10}}>Change Client ID</button>
+            </div>}
+          </div>:<>
+            {/* Gmail folders/labels */}
+            <div style={{padding:'0 10px 6px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'2px 4px',marginBottom:6}}>
+                <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailProfile?gmailProfile.emailAddress:''}</span>
+                <button onClick={function(){setGmailToken(null);setGmailThreads([]);setGmailSelThread(null);setGmailProfile(null);}} style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10,flexShrink:0}} title="Disconnect">✕</button>
+              </div>
+              {[{id:'INBOX',label:'Inbox',icon:'📥'},{id:'SENT',label:'Sent',icon:'📤'},{id:'STARRED',label:'Starred',icon:'⭐'},{id:'DRAFT',label:'Drafts',icon:'📝'},{id:'ALL',label:'All Mail',icon:'📬'}].map(function(f){
+                return<button key={f.id} onClick={function(){setGmailFolder(f.id);setGmailSelThread(null);fetchGmailThreads(gmailToken,f.id);}} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'6px 8px',border:'none',background:gmailFolder===f.id?'rgba(107,140,173,0.1)':'transparent',borderRadius:6,cursor:'pointer',fontFamily:'inherit',borderLeft:gmailFolder===f.id?'3px solid #4285f4':'3px solid transparent',color:gmailFolder===f.id?'#4285f4':'var(--tf-text-sub)',fontSize:11,fontWeight:gmailFolder===f.id?700:500}}>
+                  <span>{f.icon}</span>{f.label}
+                </button>;
+              })}
+            </div>
+            <div style={{borderTop:'1px solid var(--tf-border)',margin:'4px 12px 6px'}}/>
+            <div style={{padding:'0 10px 6px'}}>
+              <button onClick={function(){setGmailCompose({to:'',subject:'',body:''});setGmailSelThread(null);}} style={{width:'100%',background:'rgba(66,133,244,0.08)',border:'1px dashed rgba(66,133,244,0.3)',borderRadius:8,padding:'8px',color:'#4285f4',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ Compose</button>
+            </div>
+            {/* Thread list */}
+            {gmailLoading&&gmailThreads.length===0?<div style={{textAlign:'center',padding:20,color:'var(--tf-text-sub)',fontSize:11}}>Loading...</div>:
+            gmailThreads.map(function(t){
+              var p=parseEmailName(t.from);
+              var active=gmailSelThread===t.id;
+              return<button key={t.id} onClick={function(){openGmailThread(t.id);}} style={{width:'100%',textAlign:'left',padding:'8px 12px',border:'none',background:active?'rgba(66,133,244,0.1)':t.unread?'rgba(66,133,244,0.04)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:active?'3px solid #4285f4':'3px solid transparent',display:'block'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:4}}>
+                  <div style={{fontSize:11,fontWeight:t.unread?800:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{p.name}{t.msgCount>1?' ('+t.msgCount+')':''}</div>
+                  <span style={{fontSize:9,color:'var(--tf-text-mut)',flexShrink:0}}>{timeAgo(t.date)}</span>
+                </div>
+                <div style={{fontSize:11,fontWeight:t.unread?700:500,color:t.unread?'var(--tf-text)':'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{t.subject}</div>
+                <div style={{fontSize:10,color:'var(--tf-text-mut)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{t.snippet}</div>
+              </button>;
+            })}
+            {gmailNextPage&&<button onClick={function(){fetchGmailThreads(gmailToken,gmailFolder,gmailSearch,gmailNextPage);}} style={{width:'100%',padding:'8px',border:'none',background:'rgba(66,133,244,0.06)',color:'#4285f4',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>Load More</button>}
+          </>}
+        </>:(activeTab==='bulk'||activeTab==='single'||activeTab==='trails')?<>
           <div style={{padding:'0 12px 8px'}}>
             <input value={activeTab==='trails'?trailSearch:clientSearch} onChange={function(e){if(activeTab==='trails')setTrailSearch(e.target.value);else setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
@@ -7956,7 +8150,84 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
 
     {/* RIGHT PANEL */}
     <div style={{flex:1,overflowY:'auto',padding:'20px 24px 60px'}}>
-      {activeTab==='trails'?<>
+      {activeTab==='gmail'?<>
+        {!gmailToken?<div style={{textAlign:'center',padding:'80px 20px'}}>
+          <div style={{fontSize:48,marginBottom:12}}>📧</div>
+          <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>Gmail Integration</div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',maxWidth:400,margin:'0 auto'}}>Connect your Google account to view, send, and reply to emails directly from TaskFlow. Set up your Client ID and sign in from the left panel.</div>
+        </div>:gmailCompose?<div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+            <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>New Email</div>
+            <button onClick={function(){setGmailCompose(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>
+          </div>
+          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16}}>
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>To</label>
+              <input value={gmailCompose.to} onChange={function(e){setGmailCompose(Object.assign({},gmailCompose,{to:e.target.value}));}} placeholder="recipient@example.com" style={INP}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Subject</label>
+              <input value={gmailCompose.subject} onChange={function(e){setGmailCompose(Object.assign({},gmailCompose,{subject:e.target.value}));}} placeholder="Subject" style={INP}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Message</label>
+              <textarea value={gmailCompose.body} onChange={function(e){setGmailCompose(Object.assign({},gmailCompose,{body:e.target.value}));}} rows={12} placeholder="Write your email..." style={Object.assign({},INP,{resize:'vertical'})}/>
+            </div>
+            <button onClick={function(){sendGmailNew(gmailCompose.to,gmailCompose.subject,gmailCompose.body);}} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'10px 24px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Send</button>
+          </div>
+        </div>:!gmailSelThread?<div style={{textAlign:'center',padding:'80px 20px'}}>
+          <div style={{fontSize:40,marginBottom:12}}>📬</div>
+          <div style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>Select a conversation</div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Choose an email thread from the left panel to read it.</div>
+        </div>:<div>
+          {/* Thread view header */}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+            <button onClick={function(){setGmailSelThread(null);setGmailThreadMsgs([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>← Back</button>
+            <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailThreadMsgs.length>0?gmailThreadMsgs[0].subject:'Loading...'}</div>
+            <span style={{fontSize:11,color:'var(--tf-text-sub)',flexShrink:0}}>{gmailThreadMsgs.length} message{gmailThreadMsgs.length!==1?'s':''}</span>
+          </div>
+          {/* Messages */}
+          {gmailThreadMsgs.map(function(msg,idx){
+            var from=parseEmailName(msg.from);
+            var dt=new Date(msg.date);
+            var dateStr=dt.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})+' '+dt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+            var expanded=idx===gmailThreadMsgs.length-1;
+            return<div key={msg.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,marginBottom:8,overflow:'hidden'}}>
+              <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={function(){
+                var el=document.getElementById('gmail_msg_'+msg.id);
+                if(el)el.style.display=el.style.display==='none'?'block':'none';
+              }}>
+                <div style={{width:36,height:36,borderRadius:'50%',background:'linear-gradient(135deg,#4285f4,#34a853)',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:14,fontWeight:700,flexShrink:0}}>{from.name.charAt(0).toUpperCase()}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
+                    <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{from.name}</span>
+                    <span style={{fontSize:10,color:'var(--tf-text-mut)',flexShrink:0}}>{dateStr}</span>
+                  </div>
+                  <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>to {msg.to.length>50?msg.to.substring(0,50)+'...':msg.to}{msg.cc?' · CC: '+(msg.cc.length>30?msg.cc.substring(0,30)+'...':msg.cc):''}</div>
+                </div>
+              </div>
+              <div id={'gmail_msg_'+msg.id} style={{display:expanded?'block':'none',padding:'0 16px 14px',borderTop:'1px solid var(--tf-border)'}}>
+                {msg.html?<iframe srcDoc={msg.html} style={{width:'100%',minHeight:300,border:'none',borderRadius:6,background:'#fff'}} sandbox="allow-same-origin"/>:
+                <div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap',padding:'12px 0'}}>{msg.body}</div>}
+              </div>
+            </div>;
+          })}
+          {/* Reply box */}
+          {gmailThreadMsgs.length>0&&(function(){
+            var lastMsg=gmailThreadMsgs[gmailThreadMsgs.length-1];
+            var replyTo=parseEmailName(lastMsg.from);
+            var replyAddr=replyTo.email===gmailProfile?.emailAddress?lastMsg.to.split(',')[0].trim():replyTo.email;
+            return<div style={{background:'var(--tf-surface)',border:'1px solid rgba(66,133,244,0.3)',borderRadius:10,padding:14,marginTop:8}}>
+              <div style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',marginBottom:6}}>Reply to {replyAddr}</div>
+              <textarea id="gmail_reply_box" rows={4} placeholder="Write your reply..." style={Object.assign({},INP,{resize:'vertical',marginBottom:8})}/>
+              <button onClick={function(){
+                var body=document.getElementById('gmail_reply_box').value;
+                sendGmailReply(replyAddr,lastMsg.subject,body,gmailSelThread,lastMsg.id);
+              }} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 20px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Send Reply</button>
+            </div>;
+          })()}
+        </div>}
+      </>:activeTab==='trails'?<>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
           <div>
             <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Communication Trails</div>
