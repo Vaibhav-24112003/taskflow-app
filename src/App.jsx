@@ -7863,7 +7863,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         var raw=atob(m.payload.body.data.replace(/-/g,'+').replace(/_/g,'/'));
         if(m.payload.mimeType==='text/html')html=raw;else body=raw;
       }
-      return{id:m.id,from:headers.from||'',to:headers.to||'',cc:headers.cc||'',date:headers.date||'',subject:headers.subject||'',body:body,html:html,labelIds:m.labelIds||[]};
+      return{id:m.id,messageId:headers['message-id']||'',from:headers.from||'',to:headers.to||'',cc:headers.cc||'',date:headers.date||'',subject:headers.subject||'',body:body,html:html,labelIds:m.labelIds||[]};
     });
     setGmailThreadMsgs(msgs);
     setGmailSelThread(threadId);
@@ -8240,7 +8240,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <textarea id="gmail_reply_box" rows={4} placeholder="Write your reply..." style={Object.assign({},INP,{resize:'vertical',marginBottom:8})}/>
               <button onClick={function(){
                 var body=document.getElementById('gmail_reply_box').value;
-                sendGmailReply(replyAddr,lastMsg.subject,body,gmailSelThread,lastMsg.id);
+                sendGmailReply(replyAddr,lastMsg.subject,body,gmailSelThread,lastMsg.messageId);
               }} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 20px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Send Reply</button>
             </div>;
           })()}
