@@ -3069,7 +3069,18 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       }
       var dueDates2=[];
       if(cfg2.due_dates&&cfg2.due_dates.length>0){
-        cfg2.due_dates.forEach(function(dd){var d3=calcDue(dd.day,dd.month,ws2.frequency,dd.month_offset);if(d3)dueDates2.push({date:d3,label:dd.label||'Due'});});
+        cfg2.due_dates.forEach(function(dd){
+            if(dd.quarterly_map&&ws2.frequency==='quarterly'&&ws2.period_quarter){
+              var qme2=dd.quarterly_map[String(ws2.period_quarter)]||dd.quarterly_map[ws2.period_quarter];
+              if(qme2&&qme2.day&&qme2.due_month){
+                var dueQY2=qme2.due_month>=4?ws2.period_year:ws2.period_year+1;
+                var dq2=dueQY2+'-'+String(qme2.due_month).padStart(2,'0')+'-'+String(qme2.day).padStart(2,'0');
+                dueDates2.push({date:dq2,label:dd.label||'Due'});
+              }
+              return;
+            }
+            var d3=calcDue(dd.day,dd.month,ws2.frequency,dd.month_offset);if(d3)dueDates2.push({date:d3,label:dd.label||'Due'});
+          });
       }else if(cfg2.due_day){
         var d3=calcDue(cfg2.due_day,cfg2.due_month,ws2.frequency);if(d3)dueDates2.push({date:d3,label:'Due'});
       }
@@ -3281,6 +3292,15 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                 if(me.due_month<periodMonth)dueCalY=calY+1;
                 var ds=dueCalY+'-'+String(me.due_month).padStart(2,'0')+'-'+String(me.day).padStart(2,'0');
                 dueDateList.push({date:ds,label:dd.label||'Due'});
+              }
+            }else if(dd.quarterly_map&&cfg.frequency==='quarterly'&&periodQuarter){
+              var qe=dd.quarterly_map[String(periodQuarter)]||dd.quarterly_map[periodQuarter];
+              if(qe&&qe.day&&qe.due_month){
+                // due_month is absolute calendar month; FY year logic:
+                // months Apr(4)-Dec(12) are in FY start year, Jan(1)-Mar(3) in FY start year+1
+                var dueCalYQ=qe.due_month>=4?periodYear:periodYear+1;
+                var dsQ=dueCalYQ+'-'+String(qe.due_month).padStart(2,'0')+'-'+String(qe.day).padStart(2,'0');
+                dueDateList.push({date:dsQ,label:dd.label||'Due'});
               }
             }else{
               var d=computeDueDate(dd.day,dd.month,cfg.frequency,dd.month_offset);
