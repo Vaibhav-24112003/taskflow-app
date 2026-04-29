@@ -2918,6 +2918,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [orgMembers,setOrgMembers]=useState([]);
   var [toast,setToast]=useState(null);
   var [showSop,setShowSop]=useState(false);
+var [showExportMenu,setShowExportMenu]=useState(false);
 
   // Column show/hide
   var [hiddenCols,setHiddenCols]=useState([]);
@@ -3153,7 +3154,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   }
 
   function setFilter(key,val){setFilters(function(p){var n=Object.assign({},p);if(!val||val==='all')delete n[key];else n[key]=val;return n;});}
-  function clearFilters(){setFilters({});setFilterClient('');setMineOnly(false);}
+  function clearFilters(){setFilters({});setFilterClient('');setMineOnly(false);setShowExportMenu(false);}
 
   async function loadClients(){
     setLoading(true);
@@ -3511,6 +3512,133 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
   }
 
+  function csvCell(v){if(v===null||v===undefined)return '';var s=String(v);if(s.includes(',')||s.includes('"')||s.includes('\n'))return '"'+s.replace(/"/g,'""')+'"';return s;}
+
+  function exportCurrentPeriod(){
+    setShowExportMenu(false);
+    var cfg2=WS_TYPE_CONFIGS[activeType]||{frequency:'monthly',cols:[]};
+    var headerCols=['Client Name','Display Name','PAN','GSTIN','Type'];
+    // Hierarchy cols
+    var hCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return h.label;}):['Assignee'];
+    headerCols=headerCols.concat(hCols);
+    // Work type cols
+    cfg2.cols.forEach(function(c){headerCols.push(c.label);});
+    headerCols=headerCols.concat(['Due Date','Status','Comments']);
+    var csvRows=[headerCols.map(csvCell).join(',')];
+    filteredRows.forEach(function(row){
+      var client=clientMap[row.client_id];
+      if(!client)return;
+      var d=row.data||{};
+      var rowData=[client.name,client.display_name||'',client.pan||'',client.gstin||'',client.client_type||''];
+      // Hierarchy values
+      if(wfHierarchy.length>0){
+        wfHierarchy.forEach(function(h){
+          var memberId=d['__h_'+h.key]||'';
+          var member=orgMembers.find(function(m){return m.id===memberId;});
+          rowData.push(member?member.name||member.email:'');
+        });
+      }else{
+        var assigneeId=d.__assignee||'';
+        var assignee=orgMembers.find(function(m){return m.id===assigneeId;});
+        rowData.push(assignee?assignee.name||assignee.email:'');
+      }
+      // Work type col values
+      cfg2.cols.forEach(function(c){
+        var ct=c.type||'checkbox';
+        if(ct==='checkbox')rowData.push(d[c.key]?'Yes':'No');
+        else rowData.push(d[c.key]||'');
+      });
+      rowData.push(row.due_date||'');
+      rowData.push(row.status||'pending');
+      rowData.push(row.comments||'');
+      csvRows.push(rowData.map(csvCell).join(','));
+    });
+    // Add summary row
+    csvRows.push('');
+    var summaryRow=['SUMMARY: '+filteredRows.length+' clients'];
+    cfg2.cols.forEach(function(c){
+      if(!c.type||c.type==='checkbox'){
+        var done=filteredRows.filter(function(r){return r.data&&r.data[c.key];}).length;
+        summaryRow.push(done+'/'+filteredRows.length+' done');
+      }else summaryRow.push('');
+    });
+    csvRows.push(summaryRow.map(csvCell).join(','));
+    var csv=csvRows.join('\n');
+    var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download=activeType.replace(/[^a-z0-9]/gi,'_')+'_'+periodLabel.replace(/[^a-z0-9]/gi,'_')+'_'+(org.name||'Export').replace(/[^a-z0-9]/gi,'_')+'.csv';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Exported '+filteredRows.length+' rows for '+periodLabel);
+  }
+
+  async function exportAllPeriods(){
+    setShowExportMenu(false);
+    showToast('Preparing export...');
+    try{
+      var cfg2=WS_TYPE_CONFIGS[activeType]||{frequency:'monthly',cols:[]};
+      // Fetch all worksheets for this work type
+      var rwAll=await supabase.from('worksheets').select('id,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).eq('work_type',activeType).order('period_year',{ascending:false}).order('period_month',{ascending:false}).limit(500);
+      var allWS=rwAll.data||[];
+      if(!allWS.length){showToast('No data found','err');return;}
+      // Build header
+      var headerCols=['Period','Client Name','Display Name','PAN','GSTIN','Type'];
+      var hCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return h.label;}):['Assignee'];
+      headerCols=headerCols.concat(hCols);
+      cfg2.cols.forEach(function(c){headerCols.push(c.label);});
+      headerCols=headerCols.concat(['Due Date','Due Label','Status','Comments']);
+      var csvRows=[headerCols.map(csvCell).join(',')];
+      // Fetch rows for each worksheet
+      for(var wi=0;wi<allWS.length;wi++){
+        var ws2=allWS[wi];
+        var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws2.id).limit(2000);
+        var wsRows=rr.data||[];
+        wsRows.forEach(function(row){
+          var client=clientMap[row.client_id];
+          if(!client)return;
+          var d=row.data||{};
+          var rowData=[ws2.period_label,client.name,client.display_name||'',client.pan||'',client.gstin||'',client.client_type||''];
+          if(wfHierarchy.length>0){
+            wfHierarchy.forEach(function(h){
+              var memberId=d['__h_'+h.key]||'';
+              var member=orgMembers.find(function(m){return m.id===memberId;});
+              rowData.push(member?member.name||member.email:'');
+            });
+          }else{
+            var assigneeId=d.__assignee||'';
+            var assignee=orgMembers.find(function(m){return m.id===assigneeId;});
+            rowData.push(assignee?assignee.name||assignee.email:'');
+          }
+          cfg2.cols.forEach(function(c){
+            var ct=c.type||'checkbox';
+            if(ct==='checkbox')rowData.push(d[c.key]?'Yes':'No');
+            else rowData.push(d[c.key]||'');
+          });
+          rowData.push(row.due_date||'');
+          rowData.push(row.due_label||'');
+          rowData.push(row.status||'pending');
+          rowData.push(row.comments||'');
+          csvRows.push(rowData.map(csvCell).join(','));
+        });
+        // Blank row between periods
+        if(wi<allWS.length-1)csvRows.push('');
+      }
+      var csv=csvRows.join('\n');
+      var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url;
+      a.download=activeType.replace(/[^a-z0-9]/gi,'_')+'_All_Periods_'+(org.name||'Export').replace(/[^a-z0-9]/gi,'_')+'.csv';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Exported '+allWS.length+' periods for '+activeType);
+    }catch(err){
+      showToast('Export failed: '+err.message,'err');
+    }
+  }
+
   var cfg=activeType&&WS_TYPE_CONFIGS[activeType]?WS_TYPE_CONFIGS[activeType]:{frequency:'monthly',cols:[]};
   var typeClients=clients.filter(function(c){
     var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
@@ -3583,6 +3711,27 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {allTypes.length} work types</div>
       </div>
       <button onClick={recalcAllDueDates} disabled={recalculating} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:8,padding:'7px 14px',color:'#6b8cad',cursor:recalculating?'not-allowed':'pointer',fontSize:12,fontWeight:600,opacity:recalculating?0.6:1}}>{recalculating?'Recalculating...':'Recalculate Due Dates'}</button>
+      {/* Export button */}
+      {activeType&&<div style={{position:'relative'}}>
+        <button onClick={function(){setShowExportMenu(!showExportMenu);}} style={{background:showExportMenu?'rgba(34,197,94,0.12)':'rgba(107,140,173,0.1)',border:'1px solid '+(showExportMenu?'rgba(34,197,94,0.3)':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 14px',color:showExportMenu?'#22c55e':'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
+          ⬇ Export ▾
+        </button>
+        {showExportMenu&&<>
+          <div onClick={function(){setShowExportMenu(false);}} style={{position:'fixed',inset:0,zIndex:99}}/>
+          <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,minWidth:220,boxShadow:'0 8px 24px rgba(0,0,0,0.25)',zIndex:100,overflow:'hidden'}}>
+            <div style={{padding:'8px 12px 6px',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'1px solid var(--tf-border)'}}>{activeType} Export</div>
+            <button onClick={exportCurrentPeriod} style={{display:'flex',flexDirection:'column',alignItems:'flex-start',width:'100%',padding:'10px 14px',background:'none',border:'none',cursor:'pointer',borderBottom:'1px solid var(--tf-border)',textAlign:'left'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='none';}}>
+              <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>📄 Current Period</span>
+              <span style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{periodLabel} · {filteredRows.length} rows</span>
+            </button>
+            <button onClick={exportAllPeriods} style={{display:'flex',flexDirection:'column',alignItems:'flex-start',width:'100%',padding:'10px 14px',background:'none',border:'none',cursor:'pointer',textAlign:'left'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='none';}}>
+              <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>📊 All Periods (History)</span>
+              <span style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>All {activeType} data across periods</span>
+            </button>
+          </div>
+        </>}
+      </div>}
+
     </div>
 
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
