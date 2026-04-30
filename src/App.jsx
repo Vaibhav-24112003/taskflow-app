@@ -1570,6 +1570,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{display:view==='board'?'none':'block',flex:1,overflow:'auto',padding:'22px 24px 60px'}}>
 
           {/* TEAM */}
+          {view==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={workspaces} allProfiles={allProfiles}/>}
+
           {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
 
           {/* RECURRING */}
@@ -9322,6 +9324,273 @@ function ClientPortal({supabase}){
       </>}
       <div style={{textAlign:'center',marginTop:40,fontSize:10,color:'var(--tf-text-mut)'}}>Powered by TaskFlow</div>
     </div>
+  </div>;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// PLAN MY DAY
+// ══════════════════════════════════════════════════════════════════
+function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
+  var today=new Date();
+  var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var [planDate,setPlanDate]=useState(todayStr);
+  var [plan,setPlan]=useState([]); // daily_plans rows joined with task data
+  var [allTasks,setAllTasks]=useState([]); // tasks available to add
+  var [loading,setLoading]=useState(true);
+  var [showPicker,setShowPicker]=useState(false);
+  var [search,setSearch]=useState('');
+  var [filterStatus,setFilterStatus]=useState('all');
+  var [filterPriority,setFilterPriority]=useState('all');
+  var [filterWs,setFilterWs]=useState('all');
+  var [toast,setToast]=useState(null);
+  var [dragIdx,setDragIdx]=useState(null);
+
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  useEffect(function(){loadPlan();loadTasks();},[planDate]);
+
+  async function loadPlan(){
+    setLoading(true);
+    // Load daily plan entries
+    var r=await supabase.from('daily_plans').select('*').eq('user_id',cu.id).eq('plan_date',planDate).order('sort_order');
+    var planRows=r.data||[];
+    if(planRows.length>0){
+      // Fetch task details
+      var taskIds=planRows.map(function(p){return p.task_id;});
+      var rt=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees').in('id',taskIds);
+      var taskMap={};(rt.data||[]).forEach(function(t){taskMap[t.id]=t;});
+      // Build ws map
+      var wsMap={};(workspaces||[]).forEach(function(w){wsMap[w.id]=w;});
+      planRows=planRows.map(function(p){return Object.assign({},p,{task:taskMap[p.task_id]||null,workspace:wsMap[(taskMap[p.task_id]||{}).workspace_id]||null});});
+    }
+    setPlan(planRows);
+    setLoading(false);
+  }
+
+  async function loadTasks(){
+    // Load all tasks where user is assignee or creator, not done
+    var r=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,created_by').order('priority').limit(500);
+    var tasks=(r.data||[]).filter(function(t){
+      return t.assignees&&t.assignees.includes(cu.id)||t.created_by===cu.id;
+    });
+    setAllTasks(tasks);
+  }
+
+  async function addToPlan(task){
+    // Check not already in plan
+    if(plan.find(function(p){return p.task_id===task.id;})){showToast('Already in today\'s plan','err');return;}
+    var maxOrder=plan.length>0?Math.max.apply(null,plan.map(function(p){return p.sort_order||0;})):0;
+    var r=await supabase.from('daily_plans').insert({user_id:cu.id,plan_date:planDate,task_id:task.id,sort_order:maxOrder+1}).select().single();
+    if(r.error){showToast(r.error.message,'err');return;}
+    var wsMap={};(workspaces||[]).forEach(function(w){wsMap[w.id]=w;});
+    var newEntry=Object.assign({},r.data,{task,workspace:wsMap[task.workspace_id]||null});
+    setPlan(function(p){return[...p,newEntry];});
+    showToast('Added to plan ✓');
+  }
+
+  async function removeFromPlan(planId){
+    await supabase.from('daily_plans').delete().eq('id',planId);
+    setPlan(function(p){return p.filter(function(r){return r.id!==planId;});});
+  }
+
+  async function toggleDone(planId,currentDone){
+    var newDone=!currentDone;
+    await supabase.from('daily_plans').update({done:newDone}).eq('id',planId);
+    setPlan(function(p){return p.map(function(r){return r.id===planId?Object.assign({},r,{done:newDone}):r;});});
+  }
+
+  async function updateNote(planId,note){
+    await supabase.from('daily_plans').update({note}).eq('id',planId);
+    setPlan(function(p){return p.map(function(r){return r.id===planId?Object.assign({},r,{note}):r;});});
+  }
+
+  async function updateTimeBlock(planId,time_block){
+    await supabase.from('daily_plans').update({time_block}).eq('id',planId);
+    setPlan(function(p){return p.map(function(r){return r.id===planId?Object.assign({},r,{time_block}):r;});});
+  }
+
+  // Drag to reorder
+  async function handleDrop(dropIdx){
+    if(dragIdx===null||dragIdx===dropIdx)return;
+    var newPlan=[...plan];
+    var item=newPlan.splice(dragIdx,1)[0];
+    newPlan.splice(dropIdx,0,item);
+    // Update sort_order
+    var updates=newPlan.map(function(p,i){return supabase.from('daily_plans').update({sort_order:i}).eq('id',p.id);});
+    await Promise.all(updates);
+    setPlan(newPlan.map(function(p,i){return Object.assign({},p,{sort_order:i});}));
+    setDragIdx(null);
+  }
+
+  var PRIORITY_COLOR={Urgent:'#ef4444',High:'#f59e0b',Medium:'#3b82f6',Low:'#94a3b8',urgent:'#ef4444',high:'#f59e0b',medium:'#3b82f6',low:'#94a3b8'};
+  var STATUS_COLOR={'Done':'#22c55e','Completed':'#22c55e','In Progress':'#3b82f6','In_Progress':'#3b82f6','Todo':'#94a3b8','Pending':'#94a3b8'};
+  var wsMap={};(workspaces||[]).forEach(function(w){wsMap[w.id]=w;});
+
+  // Filter tasks for picker
+  var planTaskIds=plan.map(function(p){return p.task_id;});
+  var filteredTasks=allTasks.filter(function(t){
+    if(filterStatus!=='all'&&t.status!==filterStatus)return false;
+    if(filterPriority!=='all'&&(t.priority||'').toLowerCase()!==(filterPriority||'').toLowerCase())return false;
+    if(filterWs!=='all'&&t.workspace_id!==filterWs)return false;
+    if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;
+    return true;
+  });
+
+  // Stats
+  var done=plan.filter(function(p){return p.done;}).length;
+  var total=plan.length;
+  var pct=total>0?Math.round(done/total*100):0;
+
+  // Today label
+  var dateLabel=planDate===todayStr?'Today':(function(){var d=new Date(planDate+'T00:00:00');return d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});})();
+
+  return<div style={{maxWidth:900,margin:'0 auto',padding:'0 0 60px'}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+      <div>
+        <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>🗓 Plan My Day</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Focus on what matters today</div>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        {/* Date nav */}
+        <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>‹</button>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{dateLabel}</div>
+          <input type="date" value={planDate} onChange={function(e){setPlanDate(e.target.value);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:11,cursor:'pointer',outline:'none',fontFamily:'inherit'}}/>
+        </div>
+        <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>›</button>
+        {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'6px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Today</button>}
+        <button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'#6b8cad':'rgba(107,140,173,0.1)',border:'1px solid '+(showPicker?'#6b8cad':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 16px',color:showPicker?'#fff':'#6b8cad',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>
+      </div>
+    </div>
+
+    {/* Progress bar */}
+    {total>0&&<div style={{marginBottom:20}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+        <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)'}}>{done}/{total} tasks done</span>
+        <span style={{fontSize:12,fontWeight:700,color:pct===100?'#22c55e':'#6b8cad'}}>{pct}%</span>
+      </div>
+      <div style={{height:6,background:'var(--tf-surface)',borderRadius:3,overflow:'hidden'}}>
+        <div style={{width:pct+'%',height:'100%',background:pct===100?'linear-gradient(90deg,#22c55e,#16a34a)':'linear-gradient(90deg,#6b8cad,#4a7a9b)',borderRadius:3,transition:'width 0.4s ease'}}/>
+      </div>
+    </div>}
+
+    <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+      {/* Plan list */}
+      <div style={{flex:1,minWidth:0}}>
+        {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:
+        plan.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
+          <div style={{fontSize:36,marginBottom:12}}>☀️</div>
+          <div style={{fontWeight:700,fontSize:16,color:'var(--tf-text)',marginBottom:6}}>No tasks planned for {dateLabel}</div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Add tasks from your backlog to focus on what matters today.</div>
+          <button onClick={function(){setShowPicker(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>
+        </div>:
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {plan.map(function(entry,idx){
+            var task=entry.task;
+            if(!task)return null;
+            var ws=entry.workspace;
+            var cl=task.checklist||[];
+            var clDone=cl.filter(function(c){return c.done;}).length;
+            var pColor=PRIORITY_COLOR[task.priority]||'#94a3b8';
+            return<div key={entry.id}
+              draggable
+              onDragStart={function(){setDragIdx(idx);}}
+              onDragOver={function(e){e.preventDefault();}}
+              onDrop={function(){handleDrop(idx);}}
+              style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)',borderRadius:12,padding:'12px 14px',transition:'all 0.15s',opacity:entry.done?0.75:1,cursor:'grab',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor)}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                {/* Drag handle */}
+                <div style={{color:'var(--tf-text-sub)',fontSize:14,paddingTop:2,cursor:'grab',userSelect:'none'}}>⠿</div>
+                {/* Done checkbox */}
+                <div onClick={function(){toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
+                  {entry.done&&<span style={{color:'#fff',fontSize:12,fontWeight:900,lineHeight:1}}>✓</span>}
+                </div>
+                {/* Content */}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
+                    <span style={{fontSize:14,fontWeight:600,color:entry.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:entry.done?'line-through':'none'}}>{task.title}</span>
+                    {/* Priority badge */}
+                    <span style={{fontSize:10,fontWeight:700,color:pColor,background:pColor+'18',borderRadius:4,padding:'1px 7px',textTransform:'capitalize'}}>{task.priority||'Medium'}</span>
+                    {/* Status badge */}
+                    <span style={{fontSize:10,fontWeight:600,color:STATUS_COLOR[task.status]||'#94a3b8',background:(STATUS_COLOR[task.status]||'#94a3b8')+'18',borderRadius:4,padding:'1px 7px'}}>{task.status}</span>
+                    {/* Workspace */}
+                    {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>{ws.icon} {ws.name}</span>}
+                    {/* Due date */}
+                    {task.due_date&&<span style={{fontSize:10,color:new Date(task.due_date)<new Date()?'#ef4444':'var(--tf-text-sub)'}}>{task.due_date<todayStr?'⚠ ':''}{new Date(task.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>}
+                    {/* Checklist */}
+                    {cl.length>0&&<span style={{fontSize:10,color:clDone===cl.length?'#22c55e':'var(--tf-text-sub)'}}>☑ {clDone}/{cl.length}</span>}
+                  </div>
+                  {/* Time block + note row */}
+                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <input value={entry.time_block||''} onChange={function(e){updateTimeBlock(entry.id,e.target.value);}} placeholder="Time (e.g. 10:00-11:00)" style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',width:140}}/>
+                    <input value={entry.note||''} onChange={function(e){updateNote(entry.id,e.target.value);}} placeholder="Add a note..." style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',flex:1,padding:'3px 0'}}/>
+                  </div>
+                </div>
+                {/* Remove */}
+                <button onClick={function(){removeFromPlan(entry.id);}} title="Remove from plan" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4,flexShrink:0}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+              </div>
+            </div>;
+          })}
+        </div>}
+      </div>
+
+      {/* Task Picker Panel */}
+      {showPicker&&<div style={{width:340,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--tf-border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Add Tasks to Plan</div>
+            <button onClick={function(){setShowPicker(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+          </div>
+          {/* Search */}
+          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search tasks..." style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box',marginBottom:8}}/>
+          {/* Filters */}
+          <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+            <select value={filterStatus} onChange={function(e){setFilterStatus(e.target.value);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',flex:1}}>
+              <option value="all">All Status</option>
+              <option value="Todo">Todo</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Done">Done</option>
+            </select>
+            <select value={filterPriority} onChange={function(e){setFilterPriority(e.target.value);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',flex:1}}>
+              <option value="all">All Priority</option>
+              <option value="Urgent">Urgent</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+            <select value={filterWs} onChange={function(e){setFilterWs(e.target.value);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',flex:1}}>
+              <option value="all">All Workspaces</option>
+              {(workspaces||[]).map(function(w){return<option key={w.id} value={w.id}>{w.name}</option>;})}
+            </select>
+          </div>
+        </div>
+        {/* Task list */}
+        <div style={{flex:1,overflowY:'auto'}}>
+          {filteredTasks.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:12}}>No tasks found</div>:
+          filteredTasks.map(function(task){
+            var inPlan=planTaskIds.includes(task.id);
+            var ws=wsMap[task.workspace_id];
+            var pColor=PRIORITY_COLOR[task.priority]||'#94a3b8';
+            return<div key={task.id} onClick={function(){if(!inPlan)addToPlan(task);}} style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:inPlan?'default':'pointer',opacity:inPlan?0.45:1,background:inPlan?'rgba(34,197,94,0.04)':'transparent',transition:'background 0.1s'}} onMouseEnter={function(e){if(!inPlan)e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background=inPlan?'rgba(34,197,94,0.04)':'transparent';}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+                <div style={{width:6,height:6,borderRadius:'50%',background:pColor,flexShrink:0}}/>
+                <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.title}</span>
+                {inPlan?<span style={{fontSize:10,color:'#22c55e',fontWeight:700,flexShrink:0}}>✓ Added</span>:<span style={{fontSize:16,color:'#6b8cad',fontWeight:700,flexShrink:0}}>+</span>}
+              </div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginLeft:12}}>
+                <span style={{fontSize:10,color:STATUS_COLOR[task.status]||'#94a3b8'}}>{task.status}</span>
+                {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{ws.icon} {ws.name}</span>}
+                {task.due_date&&<span style={{fontSize:10,color:task.due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>Due {task.due_date}</span>}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>}
+    </div>
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
   </div>;
 }
 
