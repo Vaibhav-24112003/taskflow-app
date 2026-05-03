@@ -9345,12 +9345,15 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   var [planDate,setPlanDate]=useState(todayStr);
   var [plan,setPlan]=useState([]);
   var [allTasks,setAllTasks]=useState([]);
+  var [wsRows,setWsRows]=useState([]); // worksheet rows assigned to user in org
+  var [worksheetMeta,setWorksheetMeta]=useState({}); // worksheet_id -> {work_type, period_label}
   var [loading,setLoading]=useState(true);
   var [showPicker,setShowPicker]=useState(false);
   var [search,setSearch]=useState('');
-  var [filterStatus,setFilterStatus]=useState('Todo');
+  var [filterStatus,setFilterStatus]=useState('all');
   var [filterPriority,setFilterPriority]=useState('all');
   var [filterWs,setFilterWs]=useState('all');
+  var [filterKind,setFilterKind]=useState('all'); // all | task | wsrow
   var [toast,setToast]=useState(null);
   var [dragIdx,setDragIdx]=useState(null);
   var [expandedId,setExpandedId]=useState(null);
@@ -9365,7 +9368,60 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
-  useEffect(function(){loadPlan();loadTasks();},[planDate]);
+  // Derive priority for worksheet rows from due date proximity
+  function derivePriority(dueDate){
+    if(!dueDate)return 'Low';
+    if(dueDate<todayStr)return 'Urgent';
+    if(dueDate===todayStr)return 'High';
+    var d=new Date(dueDate+'T00:00:00');var t=new Date(todayStr+'T00:00:00');
+    var diff=Math.round((d-t)/86400000);
+    if(diff<=3)return 'High';
+    if(diff<=7)return 'Medium';
+    return 'Low';
+  }
+  function normalizeWsStatus(s){if(s==='completed')return 'Done';if(s==='under_review')return 'In Progress';if(s==='in_progress')return 'In Progress';return 'Todo';}
+
+  // Build a unified item from a worksheet row
+  function buildWsItem(row, clientMap, wsMetaMap){
+    var d=row.data||{};
+    var client=clientMap[row.client_id];
+    var clientName=client?(client.display_name||client.name):'';
+    var meta=wsMetaMap[row.worksheet_id]||{};
+    var workType=meta.work_type||'';
+    var period=meta.period_label||'';
+    var title=(d.__title&&typeof d.__title==='string'&&d.__title.trim())||(workType+(clientName?' — '+clientName:''))||'Untitled';
+    return{
+      _kind:'wsrow',
+      _id:row.id,
+      _title:title,
+      _status:normalizeWsStatus(row.status),
+      _priority:d.__priority||derivePriority(row.due_date),
+      _due_date:row.due_date,
+      _client_id:row.client_id,
+      _client_name:clientName,
+      _work_type:workType,
+      _period:period,
+      _description:row.comments||'',
+      _checklist:null,
+      _raw:row
+    };
+  }
+  function buildTaskItem(t){
+    return{
+      _kind:'task',
+      _id:t.id,
+      _title:t.title,
+      _status:t.status||'Todo',
+      _priority:t.priority||'Medium',
+      _due_date:t.due_date,
+      _workspace_id:t.workspace_id,
+      _description:t.description||'',
+      _checklist:t.checklist||[],
+      _raw:t
+    };
+  }
+
+  useEffect(function(){loadPlan();loadTasks();if(org)loadWsRows();},[planDate,org&&org.id]);
   useEffect(function(){if(org)loadClients();},[org&&org.id]);
 
   async function loadClients(){
@@ -9373,22 +9429,81 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     setClients(r.data||[]);
   }
 
+  async function loadWsRows(){
+    if(!org)return;
+    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').eq('org_id',org.id).neq('status','completed').limit(2000);
+    var rows=(rr.data||[]).filter(function(r){
+      var d=r.data||{};
+      if(d.__assignee===cu.id)return true;
+      var keys=Object.keys(d);
+      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===cu.id)return true;}
+      return false;
+    });
+    setWsRows(rows);
+    // Load worksheet metadata for these rows
+    var wsIds=Array.from(new Set(rows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+    if(wsIds.length>0){
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds).limit(500);
+      var meta={};(rw.data||[]).forEach(function(w){meta[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
+      setWorksheetMeta(meta);
+    }
+  }
+
   async function loadPlan(){
     setLoading(true);
     var r=await supabase.from('daily_plans').select('*').eq('user_id',cu.id).eq('plan_date',planDate).order('sort_order');
     var planRows=r.data||[];
-    if(planRows.length>0){
-      var taskIds=planRows.map(function(p){return p.task_id;});
-      var rt=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,description').in('id',taskIds);
-      var taskMap={};(rt.data||[]).forEach(function(t){taskMap[t.id]=t;});
-      var wsMap={};(orgWs).forEach(function(w){wsMap[w.id]=w;});
-      planRows=planRows.map(function(p){return Object.assign({},p,{task:taskMap[p.task_id]||null,workspace:wsMap[(taskMap[p.task_id]||{}).workspace_id]||null});});
+    if(planRows.length===0){setPlan([]);setLoading(false);return;}
+    // Split by source_type (fallback to 'task' if null with task_id)
+    var taskSourceIds=[];var wsSourceIds=[];
+    planRows.forEach(function(p){
+      var st=p.source_type||(p.task_id?'task':null);
+      var sid=p.source_id||p.task_id;
+      if(!sid)return;
+      if(st==='task')taskSourceIds.push(sid);
+      else if(st==='worksheet_row')wsSourceIds.push(sid);
+    });
+    var taskMap={};var wsRowMap={};var clientMap={};var wsMetaLocal={};
+    if(taskSourceIds.length>0){
+      var rt=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,description').in('id',taskSourceIds);
+      (rt.data||[]).forEach(function(t){taskMap[t.id]=t;});
     }
+    if(wsSourceIds.length>0){
+      var rwr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').in('id',wsSourceIds);
+      (rwr.data||[]).forEach(function(w){wsRowMap[w.id]=w;});
+      // Need clients + worksheet meta for these rows
+      var clientIds=Array.from(new Set((rwr.data||[]).map(function(w){return w.client_id;}).filter(Boolean)));
+      var wsIds=Array.from(new Set((rwr.data||[]).map(function(w){return w.worksheet_id;}).filter(Boolean)));
+      if(clientIds.length>0){
+        var rc=await supabase.from('clients').select('id,name,display_name').in('id',clientIds);
+        (rc.data||[]).forEach(function(c){clientMap[c.id]=c;});
+      }
+      if(wsIds.length>0){
+        var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds);
+        (rw.data||[]).forEach(function(w){wsMetaLocal[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
+      }
+    }
+    var orgWsMap={};orgWs.forEach(function(w){orgWsMap[w.id]=w;});
+    var enriched=planRows.map(function(p){
+      var st=p.source_type||(p.task_id?'task':null);
+      var sid=p.source_id||p.task_id;
+      var item=null;var workspace=null;
+      if(st==='task'&&taskMap[sid]){
+        item=buildTaskItem(taskMap[sid]);
+        workspace=orgWsMap[item._workspace_id]||null;
+      }else if(st==='worksheet_row'&&wsRowMap[sid]){
+        item=buildWsItem(wsRowMap[sid],clientMap,wsMetaLocal);
+      }
+      return Object.assign({},p,{item:item,workspace:workspace});
+    }).filter(function(p){return p.item;});
     // Filter to org workspaces if org context
     if(org){
-      planRows=planRows.filter(function(p){return p.task&&orgWsIds.includes(p.task.workspace_id);});
+      enriched=enriched.filter(function(p){
+        if(p.item._kind==='task')return orgWsIds.includes(p.item._workspace_id);
+        return true; // worksheet rows already org-filtered
+      });
     }
-    setPlan(planRows);
+    setPlan(enriched);
     setLoading(false);
   }
 
@@ -9404,13 +9519,16 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     setAllTasks(tasks);
   }
 
-  async function addToPlan(task){
-    if(plan.find(function(p){return p.task_id===task.id;})){showToast('Already in plan','err');return;}
+  async function addToPlan(item){
+    var existing=plan.find(function(p){return p.item&&p.item._kind===item._kind&&p.item._id===item._id;});
+    if(existing){showToast('Already in plan','err');return;}
     var maxOrder=plan.length>0?Math.max.apply(null,plan.map(function(p){return p.sort_order||0;})):0;
-    var r=await supabase.from('daily_plans').insert({user_id:cu.id,plan_date:planDate,task_id:task.id,sort_order:maxOrder+1}).select().single();
+    var insertObj={user_id:cu.id,plan_date:planDate,sort_order:maxOrder+1,source_type:item._kind==='task'?'task':'worksheet_row',source_id:item._id};
+    if(item._kind==='task')insertObj.task_id=item._id;
+    var r=await supabase.from('daily_plans').insert(insertObj).select().single();
     if(r.error){showToast(r.error.message,'err');return;}
-    var wsMap={};orgWs.forEach(function(w){wsMap[w.id]=w;});
-    setPlan(function(p){return[...p,Object.assign({},r.data,{task,workspace:wsMap[task.workspace_id]||null})];});
+    var workspace=item._kind==='task'?(orgWs.find(function(w){return w.id===item._workspace_id;})||null):null;
+    setPlan(function(p){return[...p,Object.assign({},r.data,{item:item,workspace:workspace})];});
     showToast('Added to plan ✓');
   }
 
@@ -9438,11 +9556,11 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   }
 
   async function toggleChecklistItem(taskId,itemIdx,currentDone){
-    var entry=plan.find(function(p){return p.task&&p.task.id===taskId;});
-    if(!entry||!entry.task)return;
-    var newChecklist=(entry.task.checklist||[]).map(function(c,i){return i===itemIdx?Object.assign({},c,{done:!currentDone}):c;});
+    var entry=plan.find(function(p){return p.item&&p.item._kind==='task'&&p.item._id===taskId;});
+    if(!entry||!entry.item||entry.item._kind!=='task')return;
+    var newChecklist=(entry.item._checklist||[]).map(function(c,i){return i===itemIdx?Object.assign({},c,{done:!currentDone}):c;});
     await supabase.from('tasks').update({checklist:newChecklist}).eq('id',taskId);
-    setPlan(function(p){return p.map(function(r){return r.task&&r.task.id===taskId?Object.assign({},r,{task:Object.assign({},r.task,{checklist:newChecklist})}):r;});});
+    setPlan(function(p){return p.map(function(r){return r.item&&r.item._kind==='task'&&r.item._id===taskId?Object.assign({},r,{item:Object.assign({},r.item,{_checklist:newChecklist})}):r;});});
   }
 
   async function handleDrop(dropIdx){
@@ -9465,13 +9583,12 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     var r=await supabase.from('attendance_time_logs').insert({
       org_id:org.id,user_id:cu.id,date:planDate,
       client_id:logForm.client_id||null,
-      work_type:logForm.work_type.trim()||entry.task.title,
+      work_type:logForm.work_type.trim()||(entry.item&&entry.item._title)||'',
       hours:hrs,minutes:mins,
       notes:logForm.notes.trim()||entry.note||null
     }).select('id').single();
     setLoggingId(null);
     if(r.error){showToast('Log failed: '+r.error.message,'err');return;}
-    // Mark plan entry as logged
     await supabase.from('daily_plans').update({logged:true}).eq('id',entry.id);
     setPlan(function(p){return p.map(function(row){return row.id===entry.id?Object.assign({},row,{logged:true}):row;});});
     setLogEntryId(null);
@@ -9482,13 +9599,24 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   var PRIORITY_COLOR={Urgent:'#ef4444',High:'#f59e0b',Medium:'#3b82f6',Low:'#94a3b8',urgent:'#ef4444',high:'#f59e0b',medium:'#3b82f6',low:'#94a3b8'};
   var STATUS_COLOR={'Done':'#22c55e','Completed':'#22c55e','In Progress':'#3b82f6','In_Progress':'#3b82f6','Todo':'#94a3b8','Pending':'#94a3b8'};
   var wsMap={};orgWs.forEach(function(w){wsMap[w.id]=w;});
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
 
-  var planTaskIds=plan.map(function(p){return p.task_id;});
-  var filteredTasks=allTasks.filter(function(t){
-    if(filterStatus!=='all'&&t.status!==filterStatus)return false;
-    if(filterPriority!=='all'&&(t.priority||'').toLowerCase()!==(filterPriority||'').toLowerCase())return false;
-    if(filterWs!=='all'&&t.workspace_id!==filterWs)return false;
-    if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;
+  // In-plan keys for dedup: kind:id
+  var inPlanKeys={};plan.forEach(function(p){if(p.item)inPlanKeys[p.item._kind+':'+p.item._id]=true;});
+
+  // Build unified picker items (tasks + worksheet rows)
+  var pickerItems=[];
+  allTasks.forEach(function(t){pickerItems.push(buildTaskItem(t));});
+  if(org){
+    wsRows.forEach(function(r){pickerItems.push(buildWsItem(r,clientMap,worksheetMeta));});
+  }
+  var filteredTasks=pickerItems.filter(function(it){
+    if(filterKind!=='all'&&it._kind!==filterKind)return false;
+    if(filterStatus!=='all'&&it._status!==filterStatus)return false;
+    if(filterPriority!=='all'&&(it._priority||'').toLowerCase()!==(filterPriority||'').toLowerCase())return false;
+    if(filterWs!=='all'&&it._kind==='task'&&it._workspace_id!==filterWs)return false;
+    if(filterWs!=='all'&&it._kind!=='task')return false;
+    if(search&&!(it._title||'').toLowerCase().includes(search.toLowerCase()))return false;
     return true;
   });
 
@@ -9539,84 +9667,92 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
         </div>:
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {plan.map(function(entry,idx){
-            var task=entry.task;
-            if(!task)return null;
+            var item=entry.item;
+            if(!item)return null;
             var ws=entry.workspace;
-            var cl=task.checklist||[];
+            var cl=item._checklist||[];
             var clDone=cl.filter(function(c){return c.done;}).length;
-            var pColor=PRIORITY_COLOR[task.priority]||'#94a3b8';
+            var pColor=PRIORITY_COLOR[item._priority]||'#94a3b8';
             var isExpanded=expandedId===entry.id;
             var showLogForm=logEntryId===entry.id;
+            var isWsRow=item._kind==='wsrow';
             return<div key={entry.id}
               draggable={!isExpanded}
               onDragStart={function(){setDragIdx(idx);}}
               onDragOver={function(e){e.preventDefault();}}
               onDrop={function(){handleDrop(idx);}}
               style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)',borderRadius:12,padding:'12px 14px',transition:'all 0.15s',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor)}}>
-              {/* Main row */}
               <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
                 <div style={{color:'var(--tf-text-sub)',fontSize:14,paddingTop:2,cursor:'grab',userSelect:'none'}}>⠿</div>
-                {/* Done checkbox */}
                 <div onClick={function(){toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
                   {entry.done&&<span style={{color:'#fff',fontSize:12,fontWeight:900,lineHeight:1}}>✓</span>}
                 </div>
-                {/* Content */}
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
-                    <span style={{fontSize:14,fontWeight:600,color:entry.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:entry.done?'line-through':'none'}}>{task.title}</span>
-                    <span style={{fontSize:10,fontWeight:700,color:pColor,background:pColor+'18',borderRadius:4,padding:'1px 7px',textTransform:'capitalize'}}>{task.priority||'Medium'}</span>
-                    <span style={{fontSize:10,fontWeight:600,color:STATUS_COLOR[task.status]||'#94a3b8',background:(STATUS_COLOR[task.status]||'#94a3b8')+'18',borderRadius:4,padding:'1px 7px'}}>{task.status}</span>
+                    <span style={{fontSize:14,fontWeight:600,color:entry.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:entry.done?'line-through':'none'}}>{item._title}</span>
+                    {/* Source kind badge */}
+                    <span style={{fontSize:9,fontWeight:700,color:isWsRow?'#8b5cf6':'#3b82f6',background:isWsRow?'rgba(139,92,246,0.12)':'rgba(59,130,246,0.12)',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:'0.04em'}}>{isWsRow?'Worksheet':'Task'}</span>
+                    <span style={{fontSize:10,fontWeight:700,color:pColor,background:pColor+'18',borderRadius:4,padding:'1px 7px',textTransform:'capitalize'}}>{item._priority}</span>
+                    <span style={{fontSize:10,fontWeight:600,color:STATUS_COLOR[item._status]||'#94a3b8',background:(STATUS_COLOR[item._status]||'#94a3b8')+'18',borderRadius:4,padding:'1px 7px'}}>{item._status}</span>
                     {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>{ws.icon} {ws.name}</span>}
-                    {task.due_date&&<span style={{fontSize:10,color:task.due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>{task.due_date<todayStr?'⚠ ':''}{new Date(task.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>}
+                    {isWsRow&&item._client_name&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>👤 {item._client_name}</span>}
+                    {isWsRow&&item._work_type&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>📄 {item._work_type}{item._period?' · '+item._period:''}</span>}
+                    {item._due_date&&<span style={{fontSize:10,color:item._due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>{item._due_date<todayStr?'⚠ ':''}{new Date(item._due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>}
                     {cl.length>0&&<span onClick={function(){setExpandedId(isExpanded?null:entry.id);}} style={{fontSize:10,color:clDone===cl.length?'#22c55e':'#6b8cad',cursor:'pointer',background:clDone===cl.length?'rgba(34,197,94,0.1)':'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 7px',fontWeight:600}}>☑ {clDone}/{cl.length}</span>}
                     {entry.logged&&<span style={{fontSize:10,color:'#22c55e',fontWeight:700,background:'rgba(34,197,94,0.1)',borderRadius:4,padding:'1px 7px'}}>Logged ✓</span>}
                   </div>
-                  {/* Time + note */}
                   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={entry.time_block||''} onChange={function(e){updateTimeBlock(entry.id,e.target.value);}} placeholder="Time (e.g. 10:00-11:00)" style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',width:140}}/>
                     <input value={entry.note||''} onChange={function(e){updateNote(entry.id,e.target.value);}} placeholder="Add a note..." style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',flex:1,padding:'3px 0'}}/>
                   </div>
                 </div>
-                {/* Action buttons */}
                 <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                  {/* Expand */}
                   <button onClick={function(){setExpandedId(isExpanded?null:entry.id);if(showLogForm)setLogEntryId(null);}} title={isExpanded?'Collapse':'Expand'} style={{background:'none',border:'none',color:isExpanded?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 5px',borderRadius:4,fontWeight:600}}>{isExpanded?'▲':'▼'}</button>
-                  {/* Log */}
-                  {org&&<button onClick={function(){setLogEntryId(showLogForm?null:entry.id);setExpandedId(entry.id);setLogForm({client_id:'',work_type:task.title,hours:1,minutes:0,notes:entry.note||'',});}} title="Send to Log" style={{background:showLogForm?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLogForm?'#6b8cad':'var(--tf-border)'),color:showLogForm?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,padding:'2px 8px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>→ Log</button>}
-                  {/* Remove */}
+                  {org&&<button onClick={function(){setLogEntryId(showLogForm?null:entry.id);setExpandedId(entry.id);setLogForm({client_id:isWsRow?(item._client_id||''):'',work_type:isWsRow?(item._work_type||item._title):item._title,hours:1,minutes:0,notes:entry.note||'',});}} title="Send to Log" style={{background:showLogForm?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLogForm?'#6b8cad':'var(--tf-border)'),color:showLogForm?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,padding:'2px 8px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>→ Log</button>}
                   <button onClick={function(){removeFromPlan(entry.id);}} title="Remove" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
                 </div>
               </div>
 
-              {/* Expanded section: checklist + description */}
+              {/* Expanded section */}
               {isExpanded&&<div style={{marginTop:12,marginLeft:30,borderTop:'1px solid var(--tf-border)',paddingTop:12}}>
-                {task.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:10,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{task.description}</div>}
+                {item._description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:10,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{item._description}</div>}
 
-                {/* Checklist */}
+                {/* Worksheet row data fields */}
+                {isWsRow&&item._raw&&item._raw.data&&<div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Details</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                    {Object.keys(item._raw.data).filter(function(k){return !k.startsWith('__');}).slice(0,8).map(function(k){
+                      var v=item._raw.data[k];
+                      if(v===null||v===undefined||v==='')return null;
+                      return<div key={k} style={{fontSize:11,color:'var(--tf-text-sub)'}}><span style={{fontWeight:600,color:'var(--tf-text)'}}>{k}:</span> {String(v)}</div>;
+                    })}
+                  </div>
+                </div>}
+
                 {cl.length>0&&<div style={{marginBottom:showLogForm?12:0}}>
                   <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Checklist — {clDone}/{cl.length}</div>
                   <div style={{height:3,background:'var(--tf-surface-hov)',borderRadius:2,marginBottom:8,overflow:'hidden'}}>
                     <div style={{width:(cl.length>0?Math.round(clDone/cl.length*100):0)+'%',height:'100%',background:'#22c55e',transition:'width 0.3s'}}/>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                    {cl.map(function(item,i){
-                      return<div key={i} onClick={function(){toggleChecklistItem(task.id,i,item.done);}} style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'4px 6px',borderRadius:6,transition:'background 0.1s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                        <div style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
-                          {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
+                    {cl.map(function(citem,i){
+                      return<div key={i} onClick={function(){toggleChecklistItem(item._id,i,citem.done);}} style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'4px 6px',borderRadius:6,transition:'background 0.1s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                        <div style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:citem.done?'#22c55e':'var(--tf-border)',background:citem.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
+                          {citem.done&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
                         </div>
-                        <span style={{fontSize:13,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none',flex:1,lineHeight:1.4}}>{item.text||item.title||item.label||String(item)}</span>
+                        <span style={{fontSize:13,color:citem.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:citem.done?'line-through':'none',flex:1,lineHeight:1.4}}>{citem.text||citem.title||citem.label||String(citem)}</span>
                       </div>;
                     })}
                   </div>
                 </div>}
-                {cl.length===0&&!task.description&&!showLogForm&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No checklist items.</div>}
+                {cl.length===0&&!item._description&&!showLogForm&&!isWsRow&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No checklist items.</div>}
 
                 {/* Log form */}
                 {showLogForm&&<div style={{background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:10,padding:'12px 14px',marginTop:cl.length>0?12:0}}>
                   <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>→ Send to Daily Log</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
                     {clients.length>0&&<div style={{gridColumn:'1/-1'}}>
-                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Client</div>
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Client{isWsRow&&item._client_id?<span style={{color:'#8b5cf6',fontWeight:600}}> (auto from worksheet)</span>:null}</div>
                       <select value={logForm.client_id} onChange={function(e){setLogForm(function(f){return Object.assign({},f,{client_id:e.target.value});});}} style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer'}}>
                         <option value="">No client</option>
                         {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
@@ -9651,13 +9787,19 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
       </div>
 
       {/* Task Picker Panel */}
-      {showPicker&&<div style={{width:340,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+      {showPicker&&<div style={{width:360,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--tf-border)'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Add Tasks to Plan</div>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Add to Plan</div>
             <button onClick={function(){setShowPicker(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
           </div>
-          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search tasks..." style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box',marginBottom:8}}/>
+          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search tasks & worksheets..." style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box',marginBottom:8}}/>
+          {/* Kind tabs */}
+          {org&&<div style={{display:'flex',gap:4,marginBottom:8}}>
+            {[{v:'all',l:'All'},{v:'task',l:'Tasks'},{v:'wsrow',l:'Worksheets'}].map(function(k){
+              return<button key={k.v} onClick={function(){setFilterKind(k.v);}} style={{flex:1,background:filterKind===k.v?'#6b8cad':'var(--tf-bg)',border:'1px solid '+(filterKind===k.v?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'4px 6px',color:filterKind===k.v?'#fff':'var(--tf-text-sub)',fontSize:11,cursor:'pointer',fontWeight:600}}>{k.l}</button>;
+            })}
+          </div>}
           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
             <select value={filterStatus} onChange={function(e){setFilterStatus(e.target.value);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',flex:1}}>
               <option value="all">All Status</option>
@@ -9679,23 +9821,27 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
           </div>
         </div>
         <div style={{flex:1,overflowY:'auto'}}>
-          {filteredTasks.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:12}}>No tasks found</div>:
-          filteredTasks.map(function(task){
-            var inPlan=planTaskIds.includes(task.id);
-            var ws=wsMap[task.workspace_id];
-            var pColor=PRIORITY_COLOR[task.priority]||'#94a3b8';
-            var cl=task.checklist||[];
+          {filteredTasks.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:12}}>No items found</div>:
+          filteredTasks.map(function(it){
+            var inPlan=!!inPlanKeys[it._kind+':'+it._id];
+            var ws=it._kind==='task'?wsMap[it._workspace_id]:null;
+            var pColor=PRIORITY_COLOR[it._priority]||'#94a3b8';
+            var cl=it._checklist||[];
             var clDone=cl.filter(function(c){return c.done;}).length;
-            return<div key={task.id} onClick={function(){if(!inPlan)addToPlan(task);}} style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:inPlan?'default':'pointer',opacity:inPlan?0.45:1,background:inPlan?'rgba(34,197,94,0.04)':'transparent',transition:'background 0.1s'}} onMouseEnter={function(e){if(!inPlan)e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background=inPlan?'rgba(34,197,94,0.04)':'transparent';}}>
+            var isWsRow=it._kind==='wsrow';
+            return<div key={it._kind+':'+it._id} onClick={function(){if(!inPlan)addToPlan(it);}} style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:inPlan?'default':'pointer',opacity:inPlan?0.45:1,background:inPlan?'rgba(34,197,94,0.04)':'transparent',transition:'background 0.1s'}} onMouseEnter={function(e){if(!inPlan)e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background=inPlan?'rgba(34,197,94,0.04)':'transparent';}}>
               <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
                 <div style={{width:6,height:6,borderRadius:'50%',background:pColor,flexShrink:0}}/>
-                <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.title}</span>
-                {inPlan?<span style={{fontSize:10,color:'#22c55e',fontWeight:700,flexShrink:0}}>✓ Added</span>:<span style={{fontSize:16,color:'#6b8cad',fontWeight:700,flexShrink:0}}>+</span>}
+                <span style={{fontSize:9,fontWeight:700,color:isWsRow?'#8b5cf6':'#3b82f6',background:isWsRow?'rgba(139,92,246,0.12)':'rgba(59,130,246,0.12)',borderRadius:3,padding:'1px 5px',textTransform:'uppercase',flexShrink:0}}>{isWsRow?'WS':'TSK'}</span>
+                <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it._title}</span>
+                {inPlan?<span style={{fontSize:10,color:'#22c55e',fontWeight:700,flexShrink:0}}>✓</span>:<span style={{fontSize:16,color:'#6b8cad',fontWeight:700,flexShrink:0}}>+</span>}
               </div>
-              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginLeft:12}}>
-                <span style={{fontSize:10,color:STATUS_COLOR[task.status]||'#94a3b8'}}>{task.status}</span>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap',marginLeft:18}}>
+                <span style={{fontSize:10,color:STATUS_COLOR[it._status]||'#94a3b8'}}>{it._status}</span>
                 {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{ws.icon} {ws.name}</span>}
-                {task.due_date&&<span style={{fontSize:10,color:task.due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>Due {task.due_date}</span>}
+                {isWsRow&&it._client_name&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>👤 {it._client_name}</span>}
+                {isWsRow&&it._work_type&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{it._work_type}{it._period?' · '+it._period:''}</span>}
+                {it._due_date&&<span style={{fontSize:10,color:it._due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>Due {it._due_date}</span>}
                 {cl.length>0&&<span style={{fontSize:10,color:clDone===cl.length?'#22c55e':'var(--tf-text-sub)'}}>☑ {clDone}/{cl.length}</span>}
               </div>
             </div>;
