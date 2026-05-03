@@ -8960,7 +8960,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var moduleContent=<>
       {orgModule==='dashboard'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
       {orgModule==='dashboard'&&tab==='team'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} allProfiles={[]}/>}
+      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
@@ -9339,67 +9339,86 @@ function ClientPortal({supabase}){
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
 // ══════════════════════════════════════════════════════════════════
-function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
+function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   var today=new Date();
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var [planDate,setPlanDate]=useState(todayStr);
-  var [plan,setPlan]=useState([]); // daily_plans rows joined with task data
-  var [allTasks,setAllTasks]=useState([]); // tasks available to add
+  var [plan,setPlan]=useState([]);
+  var [allTasks,setAllTasks]=useState([]);
   var [loading,setLoading]=useState(true);
   var [showPicker,setShowPicker]=useState(false);
   var [search,setSearch]=useState('');
-  var [filterStatus,setFilterStatus]=useState('all');
+  var [filterStatus,setFilterStatus]=useState('Todo');
   var [filterPriority,setFilterPriority]=useState('all');
   var [filterWs,setFilterWs]=useState('all');
   var [toast,setToast]=useState(null);
   var [dragIdx,setDragIdx]=useState(null);
+  var [expandedId,setExpandedId]=useState(null);
+  var [logEntryId,setLogEntryId]=useState(null);
+  var [logForm,setLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
+  var [clients,setClients]=useState([]);
+  var [loggingId,setLoggingId]=useState(null);
+
+  // Org workspaces only when org context is provided
+  var orgWs=org?(workspaces||[]).filter(function(w){return w.org_id===org.id;}):(workspaces||[]);
+  var orgWsIds=orgWs.map(function(w){return w.id;});
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
   useEffect(function(){loadPlan();loadTasks();},[planDate]);
+  useEffect(function(){if(org)loadClients();},[org&&org.id]);
+
+  async function loadClients(){
+    var r=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(500);
+    setClients(r.data||[]);
+  }
 
   async function loadPlan(){
     setLoading(true);
-    // Load daily plan entries
     var r=await supabase.from('daily_plans').select('*').eq('user_id',cu.id).eq('plan_date',planDate).order('sort_order');
     var planRows=r.data||[];
     if(planRows.length>0){
-      // Fetch task details
       var taskIds=planRows.map(function(p){return p.task_id;});
-      var rt=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees').in('id',taskIds);
+      var rt=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,description').in('id',taskIds);
       var taskMap={};(rt.data||[]).forEach(function(t){taskMap[t.id]=t;});
-      // Build ws map
-      var wsMap={};(workspaces||[]).forEach(function(w){wsMap[w.id]=w;});
+      var wsMap={};(orgWs).forEach(function(w){wsMap[w.id]=w;});
       planRows=planRows.map(function(p){return Object.assign({},p,{task:taskMap[p.task_id]||null,workspace:wsMap[(taskMap[p.task_id]||{}).workspace_id]||null});});
+    }
+    // Filter to org workspaces if org context
+    if(org){
+      planRows=planRows.filter(function(p){return p.task&&orgWsIds.includes(p.task.workspace_id);});
     }
     setPlan(planRows);
     setLoading(false);
   }
 
   async function loadTasks(){
-    // Load all tasks where user is assignee or creator, not done
-    var r=await supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,created_by').order('priority').limit(500);
+    var q=supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,created_by,description').order('priority').limit(500);
+    if(org&&orgWsIds.length>0){
+      q=q.in('workspace_id',orgWsIds);
+    }
+    var r=await q;
     var tasks=(r.data||[]).filter(function(t){
-      return t.assignees&&t.assignees.includes(cu.id)||t.created_by===cu.id;
+      return (t.assignees&&t.assignees.includes(cu.id))||t.created_by===cu.id;
     });
     setAllTasks(tasks);
   }
 
   async function addToPlan(task){
-    // Check not already in plan
-    if(plan.find(function(p){return p.task_id===task.id;})){showToast('Already in today\'s plan','err');return;}
+    if(plan.find(function(p){return p.task_id===task.id;})){showToast('Already in plan','err');return;}
     var maxOrder=plan.length>0?Math.max.apply(null,plan.map(function(p){return p.sort_order||0;})):0;
     var r=await supabase.from('daily_plans').insert({user_id:cu.id,plan_date:planDate,task_id:task.id,sort_order:maxOrder+1}).select().single();
     if(r.error){showToast(r.error.message,'err');return;}
-    var wsMap={};(workspaces||[]).forEach(function(w){wsMap[w.id]=w;});
-    var newEntry=Object.assign({},r.data,{task,workspace:wsMap[task.workspace_id]||null});
-    setPlan(function(p){return[...p,newEntry];});
+    var wsMap={};orgWs.forEach(function(w){wsMap[w.id]=w;});
+    setPlan(function(p){return[...p,Object.assign({},r.data,{task,workspace:wsMap[task.workspace_id]||null})];});
     showToast('Added to plan ✓');
   }
 
   async function removeFromPlan(planId){
     await supabase.from('daily_plans').delete().eq('id',planId);
     setPlan(function(p){return p.filter(function(r){return r.id!==planId;});});
+    if(expandedId===planId)setExpandedId(null);
+    if(logEntryId===planId)setLogEntryId(null);
   }
 
   async function toggleDone(planId,currentDone){
@@ -9418,24 +9437,52 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
     setPlan(function(p){return p.map(function(r){return r.id===planId?Object.assign({},r,{time_block}):r;});});
   }
 
-  // Drag to reorder
+  async function toggleChecklistItem(taskId,itemIdx,currentDone){
+    var entry=plan.find(function(p){return p.task&&p.task.id===taskId;});
+    if(!entry||!entry.task)return;
+    var newChecklist=(entry.task.checklist||[]).map(function(c,i){return i===itemIdx?Object.assign({},c,{done:!currentDone}):c;});
+    await supabase.from('tasks').update({checklist:newChecklist}).eq('id',taskId);
+    setPlan(function(p){return p.map(function(r){return r.task&&r.task.id===taskId?Object.assign({},r,{task:Object.assign({},r.task,{checklist:newChecklist})}):r;});});
+  }
+
   async function handleDrop(dropIdx){
     if(dragIdx===null||dragIdx===dropIdx)return;
     var newPlan=[...plan];
     var item=newPlan.splice(dragIdx,1)[0];
     newPlan.splice(dropIdx,0,item);
-    // Update sort_order
     var updates=newPlan.map(function(p,i){return supabase.from('daily_plans').update({sort_order:i}).eq('id',p.id);});
     await Promise.all(updates);
     setPlan(newPlan.map(function(p,i){return Object.assign({},p,{sort_order:i});}));
     setDragIdx(null);
   }
 
+  async function sendToLog(entry){
+    if(!org){showToast('Log only available in org context','err');return;}
+    if(!logForm.work_type.trim()&&!logForm.client_id){showToast('Enter work type or client','err');return;}
+    var hrs=Number(logForm.hours)||0;var mins=Number(logForm.minutes)||0;
+    if(hrs===0&&mins===0){showToast('Enter time spent','err');return;}
+    setLoggingId(entry.id);
+    var r=await supabase.from('attendance_time_logs').insert({
+      org_id:org.id,user_id:cu.id,date:planDate,
+      client_id:logForm.client_id||null,
+      work_type:logForm.work_type.trim()||entry.task.title,
+      hours:hrs,minutes:mins,
+      notes:logForm.notes.trim()||entry.note||null
+    }).select('id').single();
+    setLoggingId(null);
+    if(r.error){showToast('Log failed: '+r.error.message,'err');return;}
+    // Mark plan entry as logged
+    await supabase.from('daily_plans').update({logged:true}).eq('id',entry.id);
+    setPlan(function(p){return p.map(function(row){return row.id===entry.id?Object.assign({},row,{logged:true}):row;});});
+    setLogEntryId(null);
+    setLogForm({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
+    showToast('Logged ✓');
+  }
+
   var PRIORITY_COLOR={Urgent:'#ef4444',High:'#f59e0b',Medium:'#3b82f6',Low:'#94a3b8',urgent:'#ef4444',high:'#f59e0b',medium:'#3b82f6',low:'#94a3b8'};
   var STATUS_COLOR={'Done':'#22c55e','Completed':'#22c55e','In Progress':'#3b82f6','In_Progress':'#3b82f6','Todo':'#94a3b8','Pending':'#94a3b8'};
-  var wsMap={};(workspaces||[]).forEach(function(w){wsMap[w.id]=w;});
+  var wsMap={};orgWs.forEach(function(w){wsMap[w.id]=w;});
 
-  // Filter tasks for picker
   var planTaskIds=plan.map(function(p){return p.task_id;});
   var filteredTasks=allTasks.filter(function(t){
     if(filterStatus!=='all'&&t.status!==filterStatus)return false;
@@ -9445,23 +9492,19 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
     return true;
   });
 
-  // Stats
   var done=plan.filter(function(p){return p.done;}).length;
   var total=plan.length;
   var pct=total>0?Math.round(done/total*100):0;
-
-  // Today label
   var dateLabel=planDate===todayStr?'Today':(function(){var d=new Date(planDate+'T00:00:00');return d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});})();
 
-  return<div style={{maxWidth:900,margin:'0 auto',padding:'0 0 60px'}}>
+  return<div style={{maxWidth:960,margin:'0 auto',padding:'0 0 60px'}}>
     {/* Header */}
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
       <div>
         <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>🗓 Plan My Day</h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Focus on what matters today</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Focus on what matters today{org?' · '+org.name:''}</div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
-        {/* Date nav */}
         <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>‹</button>
         <div style={{textAlign:'center'}}>
           <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{dateLabel}</div>
@@ -9502,14 +9545,16 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
             var cl=task.checklist||[];
             var clDone=cl.filter(function(c){return c.done;}).length;
             var pColor=PRIORITY_COLOR[task.priority]||'#94a3b8';
+            var isExpanded=expandedId===entry.id;
+            var showLogForm=logEntryId===entry.id;
             return<div key={entry.id}
-              draggable
+              draggable={!isExpanded}
               onDragStart={function(){setDragIdx(idx);}}
               onDragOver={function(e){e.preventDefault();}}
               onDrop={function(){handleDrop(idx);}}
-              style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)',borderRadius:12,padding:'12px 14px',transition:'all 0.15s',opacity:entry.done?0.75:1,cursor:'grab',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor)}}>
+              style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)',borderRadius:12,padding:'12px 14px',transition:'all 0.15s',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor)}}>
+              {/* Main row */}
               <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                {/* Drag handle */}
                 <div style={{color:'var(--tf-text-sub)',fontSize:14,paddingTop:2,cursor:'grab',userSelect:'none'}}>⠿</div>
                 {/* Done checkbox */}
                 <div onClick={function(){toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
@@ -9519,26 +9564,87 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
                     <span style={{fontSize:14,fontWeight:600,color:entry.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:entry.done?'line-through':'none'}}>{task.title}</span>
-                    {/* Priority badge */}
                     <span style={{fontSize:10,fontWeight:700,color:pColor,background:pColor+'18',borderRadius:4,padding:'1px 7px',textTransform:'capitalize'}}>{task.priority||'Medium'}</span>
-                    {/* Status badge */}
                     <span style={{fontSize:10,fontWeight:600,color:STATUS_COLOR[task.status]||'#94a3b8',background:(STATUS_COLOR[task.status]||'#94a3b8')+'18',borderRadius:4,padding:'1px 7px'}}>{task.status}</span>
-                    {/* Workspace */}
                     {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>{ws.icon} {ws.name}</span>}
-                    {/* Due date */}
-                    {task.due_date&&<span style={{fontSize:10,color:new Date(task.due_date)<new Date()?'#ef4444':'var(--tf-text-sub)'}}>{task.due_date<todayStr?'⚠ ':''}{new Date(task.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>}
-                    {/* Checklist */}
-                    {cl.length>0&&<span style={{fontSize:10,color:clDone===cl.length?'#22c55e':'var(--tf-text-sub)'}}>☑ {clDone}/{cl.length}</span>}
+                    {task.due_date&&<span style={{fontSize:10,color:task.due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>{task.due_date<todayStr?'⚠ ':''}{new Date(task.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>}
+                    {cl.length>0&&<span onClick={function(){setExpandedId(isExpanded?null:entry.id);}} style={{fontSize:10,color:clDone===cl.length?'#22c55e':'#6b8cad',cursor:'pointer',background:clDone===cl.length?'rgba(34,197,94,0.1)':'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 7px',fontWeight:600}}>☑ {clDone}/{cl.length}</span>}
+                    {entry.logged&&<span style={{fontSize:10,color:'#22c55e',fontWeight:700,background:'rgba(34,197,94,0.1)',borderRadius:4,padding:'1px 7px'}}>Logged ✓</span>}
                   </div>
-                  {/* Time block + note row */}
+                  {/* Time + note */}
                   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                     <input value={entry.time_block||''} onChange={function(e){updateTimeBlock(entry.id,e.target.value);}} placeholder="Time (e.g. 10:00-11:00)" style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',width:140}}/>
                     <input value={entry.note||''} onChange={function(e){updateNote(entry.id,e.target.value);}} placeholder="Add a note..." style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',flex:1,padding:'3px 0'}}/>
                   </div>
                 </div>
-                {/* Remove */}
-                <button onClick={function(){removeFromPlan(entry.id);}} title="Remove from plan" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4,flexShrink:0}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+                {/* Action buttons */}
+                <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                  {/* Expand */}
+                  <button onClick={function(){setExpandedId(isExpanded?null:entry.id);if(showLogForm)setLogEntryId(null);}} title={isExpanded?'Collapse':'Expand'} style={{background:'none',border:'none',color:isExpanded?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 5px',borderRadius:4,fontWeight:600}}>{isExpanded?'▲':'▼'}</button>
+                  {/* Log */}
+                  {org&&<button onClick={function(){setLogEntryId(showLogForm?null:entry.id);setExpandedId(entry.id);setLogForm({client_id:'',work_type:task.title,hours:1,minutes:0,notes:entry.note||'',});}} title="Send to Log" style={{background:showLogForm?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLogForm?'#6b8cad':'var(--tf-border)'),color:showLogForm?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,padding:'2px 8px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>→ Log</button>}
+                  {/* Remove */}
+                  <button onClick={function(){removeFromPlan(entry.id);}} title="Remove" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+                </div>
               </div>
+
+              {/* Expanded section: checklist + description */}
+              {isExpanded&&<div style={{marginTop:12,marginLeft:30,borderTop:'1px solid var(--tf-border)',paddingTop:12}}>
+                {task.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:10,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{task.description}</div>}
+
+                {/* Checklist */}
+                {cl.length>0&&<div style={{marginBottom:showLogForm?12:0}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Checklist — {clDone}/{cl.length}</div>
+                  <div style={{height:3,background:'var(--tf-surface-hov)',borderRadius:2,marginBottom:8,overflow:'hidden'}}>
+                    <div style={{width:(cl.length>0?Math.round(clDone/cl.length*100):0)+'%',height:'100%',background:'#22c55e',transition:'width 0.3s'}}/>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                    {cl.map(function(item,i){
+                      return<div key={i} onClick={function(){toggleChecklistItem(task.id,i,item.done);}} style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'4px 6px',borderRadius:6,transition:'background 0.1s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                        <div style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
+                          {item.done&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
+                        </div>
+                        <span style={{fontSize:13,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none',flex:1,lineHeight:1.4}}>{item.text||item.title||item.label||String(item)}</span>
+                      </div>;
+                    })}
+                  </div>
+                </div>}
+                {cl.length===0&&!task.description&&!showLogForm&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No checklist items.</div>}
+
+                {/* Log form */}
+                {showLogForm&&<div style={{background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:10,padding:'12px 14px',marginTop:cl.length>0?12:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>→ Send to Daily Log</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8}}>
+                    {clients.length>0&&<div style={{gridColumn:'1/-1'}}>
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Client</div>
+                      <select value={logForm.client_id} onChange={function(e){setLogForm(function(f){return Object.assign({},f,{client_id:e.target.value});});}} style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer'}}>
+                        <option value="">No client</option>
+                        {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
+                      </select>
+                    </div>}
+                    <div style={{gridColumn:'1/-1'}}>
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Work Type / Task</div>
+                      <input value={logForm.work_type} onChange={function(e){setLogForm(function(f){return Object.assign({},f,{work_type:e.target.value});});}} placeholder="e.g. ITR Filing, Meeting..." style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Hours</div>
+                      <input type="number" min="0" max="24" value={logForm.hours} onChange={function(e){setLogForm(function(f){return Object.assign({},f,{hours:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Minutes</div>
+                      <input type="number" min="0" max="59" value={logForm.minutes} onChange={function(e){setLogForm(function(f){return Object.assign({},f,{minutes:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                    </div>
+                    <div style={{gridColumn:'1/-1'}}>
+                      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:3}}>Notes</div>
+                      <textarea value={logForm.notes} onChange={function(e){setLogForm(function(f){return Object.assign({},f,{notes:e.target.value});});}} placeholder="What did you do?" rows={2} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical'}}/>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={function(){sendToLog(entry);}} disabled={loggingId===entry.id} style={{background:'#6b8cad',border:'none',borderRadius:7,padding:'7px 18px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,opacity:loggingId===entry.id?0.6:1}}>{loggingId===entry.id?'Logging...':'Save to Log'}</button>
+                    <button onClick={function(){setLogEntryId(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12}}>Cancel</button>
+                  </div>
+                </div>}
+              </div>}
             </div>;
           })}
         </div>}
@@ -9551,9 +9657,7 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
             <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Add Tasks to Plan</div>
             <button onClick={function(){setShowPicker(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
           </div>
-          {/* Search */}
           <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search tasks..." style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box',marginBottom:8}}/>
-          {/* Filters */}
           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
             <select value={filterStatus} onChange={function(e){setFilterStatus(e.target.value);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',flex:1}}>
               <option value="all">All Status</option>
@@ -9570,19 +9674,20 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
             </select>
             <select value={filterWs} onChange={function(e){setFilterWs(e.target.value);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',flex:1}}>
               <option value="all">All Workspaces</option>
-              {(workspaces||[]).map(function(w){return<option key={w.id} value={w.id}>{w.name}</option>;})}
+              {orgWs.map(function(w){return<option key={w.id} value={w.id}>{w.name}</option>;})}
             </select>
           </div>
         </div>
-        {/* Task list */}
         <div style={{flex:1,overflowY:'auto'}}>
           {filteredTasks.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:12}}>No tasks found</div>:
           filteredTasks.map(function(task){
             var inPlan=planTaskIds.includes(task.id);
             var ws=wsMap[task.workspace_id];
             var pColor=PRIORITY_COLOR[task.priority]||'#94a3b8';
+            var cl=task.checklist||[];
+            var clDone=cl.filter(function(c){return c.done;}).length;
             return<div key={task.id} onClick={function(){if(!inPlan)addToPlan(task);}} style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:inPlan?'default':'pointer',opacity:inPlan?0.45:1,background:inPlan?'rgba(34,197,94,0.04)':'transparent',transition:'background 0.1s'}} onMouseEnter={function(e){if(!inPlan)e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background=inPlan?'rgba(34,197,94,0.04)':'transparent';}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:2}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
                 <div style={{width:6,height:6,borderRadius:'50%',background:pColor,flexShrink:0}}/>
                 <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{task.title}</span>
                 {inPlan?<span style={{fontSize:10,color:'#22c55e',fontWeight:700,flexShrink:0}}>✓ Added</span>:<span style={{fontSize:16,color:'#6b8cad',fontWeight:700,flexShrink:0}}>+</span>}
@@ -9591,6 +9696,7 @@ function PlanMyDayView({cu, supabase, workspaces, allProfiles}){
                 <span style={{fontSize:10,color:STATUS_COLOR[task.status]||'#94a3b8'}}>{task.status}</span>
                 {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{ws.icon} {ws.name}</span>}
                 {task.due_date&&<span style={{fontSize:10,color:task.due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>Due {task.due_date}</span>}
+                {cl.length>0&&<span style={{fontSize:10,color:clDone===cl.length?'#22c55e':'var(--tf-text-sub)'}}>☑ {clDone}/{cl.length}</span>}
               </div>
             </div>;
           })}
