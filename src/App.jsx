@@ -9710,7 +9710,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
               style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)',borderRadius:12,padding:'12px 14px',transition:'all 0.15s',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor)}}>
               <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
                 <div style={{color:'var(--tf-text-sub)',fontSize:14,paddingTop:2,cursor:'grab',userSelect:'none'}}>⠿</div>
-                <div onClick={function(){toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
+                <div onClick={function(){if(!isReadOnly)toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:isReadOnly?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
                   {entry.done&&<span style={{color:'#fff',fontSize:12,fontWeight:900,lineHeight:1}}>✓</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
@@ -9734,8 +9734,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
                 </div>
                 <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
                   <button onClick={function(){setExpandedId(isExpanded?null:entry.id);if(showLogForm)setLogEntryId(null);}} title={isExpanded?'Collapse':'Expand'} style={{background:'none',border:'none',color:isExpanded?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 5px',borderRadius:4,fontWeight:600}}>{isExpanded?'▲':'▼'}</button>
-                  {org&&<button onClick={function(){setLogEntryId(showLogForm?null:entry.id);setExpandedId(entry.id);setLogForm({client_id:isWsRow?(item._client_id||''):'',work_type:isWsRow?(item._work_type||item._title):item._title,hours:1,minutes:0,notes:entry.note||'',});}} title="Send to Log" style={{background:showLogForm?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLogForm?'#6b8cad':'var(--tf-border)'),color:showLogForm?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,padding:'2px 8px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>→ Log</button>}
-                  <button onClick={function(){removeFromPlan(entry.id);}} title="Remove" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+                  {org&&!isReadOnly&&<button onClick={function(){setLogEntryId(showLogForm?null:entry.id);setExpandedId(entry.id);setLogForm({client_id:isWsRow?(item._client_id||''):'',work_type:isWsRow?(item._work_type||item._title):item._title,hours:1,minutes:0,notes:entry.note||'',});}} title="Send to Log" style={{background:showLogForm?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLogForm?'#6b8cad':'var(--tf-border)'),color:showLogForm?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,padding:'2px 8px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>→ Log</button>}
+                  {!isReadOnly&&<button onClick={function(){removeFromPlan(entry.id);}} title="Remove" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>}
                 </div>
               </div>
 
@@ -9813,7 +9813,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
       </div>
 
       {/* Task Picker Panel */}
-      {showPicker&&<div style={{width:360,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+      {showPicker&&!isReadOnly&&<div style={{width:360,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--tf-border)'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Add to Plan</div>
