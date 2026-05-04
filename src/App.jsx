@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -8895,18 +8896,18 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
 
   var MODULES=[
-    {id:'dashboard',label:'Your Dashboard',icon:'⚡',desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'},{id:'team',label:'Team'},{id:'plan',label:'🗓 Plan My Day'}]},
-    {id:'clients',label:'Clients & Worksheets',icon:'📇',desc:'Client master data, worksheets and project boards for big clients.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'}]},
+    {id:'dashboard',label:'Your Dashboard',icon:LayoutDashboard,desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'},{id:'team',label:'Team'},{id:'plan',label:'Plan My Day'}]},
+    {id:'clients',label:'Clients & Worksheets',icon:BookUser,desc:'Client master data, worksheets and project boards for big clients.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'}]},
   ];
   if(canSeeAnalytics){
-    MODULES.push({id:'analytics',label:'Analytics',icon:'📊',desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
+    MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
   MODULES.push(
-    {id:'portal',label:'Client Portal',icon:'🔗',desc:'Manage client access, requests, communication and data collection.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)'},
-    {id:'comms',label:'Communications',icon:'✉',desc:'Bulk email clients, manage email templates and notifications.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)'},
-    {id:'hr',label:'HR',icon:'👥',desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}]},
-    {id:'billing',label:'Billing',icon:'💰',desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
-    {id:'setup',label:'Setup',icon:'⚙️',desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
+    {id:'portal',label:'Client Portal',icon:Globe,desc:'Manage client access, requests, communication and data collection.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)'},
+    {id:'comms',label:'Communications',icon:Mail,desc:'Bulk email clients, manage email templates and notifications.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)'},
+    {id:'hr',label:'HR',icon:Users,desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}]},
+    {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
+    {id:'setup',label:'Setup',icon:Settings,desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -8956,7 +8957,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
                 style={{textAlign:'left',padding:20,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,cursor:'pointer',position:'relative',transition:'transform 0.16s, border-color 0.16s, box-shadow 0.16s',fontFamily:'inherit'}}
                 onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.boxShadow='0 10px 30px rgba(0,0,0,0.12)';}}
                 onMouseLeave={function(e){e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}>
-                <div style={{width:48,height:48,borderRadius:12,background:m.gradient,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,marginBottom:14}}>{m.icon}</div>
+                <div style={{width:46,height:46,borderRadius:12,background:m.gradient,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><m.icon size={22} strokeWidth={1.8} color="#fff"/></div>
                 <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
                   {m.label}
                   {m.soon&&<span style={{fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:3,padding:'1px 5px',letterSpacing:'0.06em'}}>PREVIEW</span>}
@@ -9014,8 +9015,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
                 style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'8px 10px':'8px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
                 onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.06)';}}
                 onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-                <span style={{fontSize:16,flexShrink:0}}>{m.icon}</span>
-                {sidebarOpen&&<span style={{fontSize:12,fontWeight:isActive?700:500,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
+                <m.icon size={16} strokeWidth={isActive?2.2:1.8} style={{flexShrink:0,color:isActive?'#6b8cad':'var(--tf-text-sub)'}}/>
+                {sidebarOpen&&<span style={{fontSize:12,fontWeight:isActive?600:400,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:28,marginBottom:4}}>
                 {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
