@@ -32,8 +32,8 @@ const G = {
   blur:'blur(18px)', blurSm:'blur(10px)',
   radius:'14px', radiusMd:'10px', radiusSm:'7px', radiusXs:'5px',
   trans:'all 0.18s cubic-bezier(0.4,0,0.2,1)', transSnap:'all 0.09s ease',
-  font:"'DM Sans','Helvetica Neue',system-ui,sans-serif",
-  fontDisplay:"'Bricolage Grotesque','DM Sans',system-ui,sans-serif",
+  font:"'Inter','Helvetica Neue',system-ui,sans-serif",
+  fontDisplay:"'Inter','Helvetica Neue',system-ui,sans-serif",
   shadow:'0 4px 24px var(--tf-shadow)', shadowLg:'0 20px 64px var(--tf-shadow-lg)',
 }
 // Raw resolved values for hexRgb operations (always dark values for accents)
@@ -70,7 +70,7 @@ function GlobalStyle({ lightMode }) {
   useEffect(() => {
     // Fonts
     const lf=document.getElementById('tf-font')
-    if(!lf){const l=document.createElement('link');l.id='tf-font';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Bricolage+Grotesque:wght@500;600;700;800&display=swap';document.head.appendChild(l)}
+    if(!lf){const l=document.createElement('link');l.id='tf-font';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap';document.head.appendChild(l)}
     // CSS vars + scrollbars
     const id='tf-gs';if(document.getElementById(id))return
     const s=document.createElement('style');s.id=id
@@ -8927,25 +8927,17 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
 
   var header=<div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:16,paddingBottom:showSubTabs?12:16}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:14,paddingBottom:14}}>
       <button onClick={orgModule?backToLauncher:onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>&#x2190; {orgModule?'Modules':'Back'}</button>
-      <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
+      <div style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
       <div>
-        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>
+        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.01em'}}>
           {org.name}
-          {currentModule&&<span style={{color:'var(--tf-text-sub)',fontWeight:500}}> · {currentModule.label}</span>}
+          {currentModule&&<span style={{color:'var(--tf-text-sub)',fontWeight:400}}> · {currentModule.label}</span>}
         </div>
         <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div>
       </div>
     </div>
-    {showSubTabs&&<div style={{display:'flex',gap:2,overflowX:'auto'}}>
-      {currentModule.tabs.map(function(t){
-        return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
-          style={{padding:'8px 14px',border:'none',borderBottom:tab===t.id?'2px solid #6b8cad':'2px solid transparent',background:'none',color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:tab===t.id?700:500,whiteSpace:'nowrap'}}>
-          {t.label}
-        </button>;
-      })}
-    </div>}
   </div>;
 
   // Module launcher view
