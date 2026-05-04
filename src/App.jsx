@@ -9518,7 +9518,10 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
       (rt.data||[]).forEach(function(t){taskMap[t.id]=t;});
     }
     if(wsSourceIds.length>0){
-      var rwr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').in('id',wsSourceIds);
+      // Filter wsRows by org to prevent cross-org data leaking through daily_plans
+      var rwrQ=supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').in('id',wsSourceIds);
+      if(org)rwrQ=rwrQ.eq('org_id',org.id);
+      var rwr=await rwrQ;
       (rwr.data||[]).forEach(function(w){wsRowMap[w.id]=w;});
       // Need clients + worksheet meta for these rows
       var clientIds=Array.from(new Set((rwr.data||[]).map(function(w){return w.client_id;}).filter(Boolean)));
@@ -9532,7 +9535,17 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
         (rw.data||[]).forEach(function(w){wsMetaLocal[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
       }
     }
+    // Build workspace map by fetching from DB so we include all org workspaces
+    // (not just the ones the current user is a member of — needed for viewing other members)
     var orgWsMap={};orgWs.forEach(function(w){orgWsMap[w.id]=w;});
+    if(org&&taskSourceIds.length>0){
+      var taskWsIds=Array.from(new Set(Object.values(taskMap).map(function(t){return t.workspace_id;}).filter(Boolean)));
+      var missingWsIds=taskWsIds.filter(function(id){return!orgWsMap[id];});
+      if(missingWsIds.length>0){
+        var rwsp=await supabase.from('workspaces').select('id,name,color,org_id').in('id',missingWsIds);
+        (rwsp.data||[]).forEach(function(w){orgWsMap[w.id]=w;});
+      }
+    }
     var enriched=planRows.map(function(p){
       var st=p.source_type||(p.task_id?'task':null);
       var sid=p.source_id||p.task_id;
@@ -9545,11 +9558,12 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
       }
       return Object.assign({},p,{item:item,workspace:workspace});
     }).filter(function(p){return p.item;});
-    // Filter to org workspaces if org context
+    // Filter to current org only — use workspace.org_id for tasks, org_id field for wsRows
     if(org){
       enriched=enriched.filter(function(p){
-        if(p.item._kind==='task')return orgWsIds.includes(p.item._workspace_id);
-        return true; // worksheet rows already org-filtered
+        if(p.item._kind==='task'){var ws=orgWsMap[p.item._workspace_id];return ws&&ws.org_id===org.id;}
+        if(p.item._kind==='wsrow')return p.item._raw&&p.item._raw.org_id===org.id;
+        return true;
       });
     }
     setPlan(enriched);
