@@ -9387,6 +9387,15 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   var [logForm,setLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
   var [clients,setClients]=useState([]);
   var [loggingId,setLoggingId]=useState(null);
+  var [orgMembers,setOrgMembers]=useState([]); // [{id,name,email,role}]
+  var [orgRole,setOrgRole]=useState('member'); // current user's role in org
+  var [viewingMember,setViewingMember]=useState(null); // null = own plan, {id,name} = admin viewing another
+
+  // Read-only when admin is viewing another member's plan
+  var isReadOnly=viewingMember!==null;
+  // The user whose plan we load
+  var planUserId=viewingMember?viewingMember.id:cu.id;
+  var canViewOthers=org&&(orgRole==='admin'||orgRole==='owner');
 
   // Org workspaces only when org context is provided
   var orgWs=org?(workspaces||[]).filter(function(w){return w.org_id===org.id;}):(workspaces||[]);
@@ -9447,8 +9456,22 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     };
   }
 
-  useEffect(function(){loadPlan();loadTasks();if(org)loadWsRows();},[planDate,org&&org.id]);
+  useEffect(function(){loadPlan();loadTasks();if(org)loadWsRows();},[planDate,org&&org.id,planUserId]);
   useEffect(function(){if(org)loadClients();},[org&&org.id]);
+  useEffect(function(){if(org)loadOrgMembers();},[org&&org.id]);
+
+  async function loadOrgMembers(){
+    if(!org)return;
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var mlist=rm.data||[];
+    var myMem=mlist.find(function(m){return m.user_id===cu.id;});
+    setOrgRole(myMem?myMem.role:'member');
+    if(mlist.length>0){
+      var ids=mlist.map(function(m){return m.user_id;});
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+      setOrgMembers((rp.data||[]).map(function(p){var mem=mlist.find(function(m){return m.user_id===p.id;})||{};return Object.assign({},p,{role:mem.role||'member'});}));
+    }
+  }
 
   async function loadClients(){
     var r=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(500);
@@ -9460,9 +9483,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').eq('org_id',org.id).neq('status','completed').limit(2000);
     var rows=(rr.data||[]).filter(function(r){
       var d=r.data||{};
-      if(d.__assignee===cu.id)return true;
+      if(d.__assignee===planUserId)return true;
       var keys=Object.keys(d);
-      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===cu.id)return true;}
+      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===planUserId)return true;}
       return false;
     });
     setWsRows(rows);
@@ -9477,7 +9500,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
 
   async function loadPlan(){
     setLoading(true);
-    var r=await supabase.from('daily_plans').select('*').eq('user_id',cu.id).eq('plan_date',planDate).order('sort_order');
+    var r=await supabase.from('daily_plans').select('*').eq('user_id',planUserId).eq('plan_date',planDate).order('sort_order');
     var planRows=r.data||[];
     if(planRows.length===0){setPlan([]);setLoading(false);return;}
     // Split by source_type (fallback to 'task' if null with task_id)
@@ -9540,7 +9563,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     }
     var r=await q;
     var tasks=(r.data||[]).filter(function(t){
-      return (t.assignees&&t.assignees.includes(cu.id))||t.created_by===cu.id;
+      return (t.assignees&&t.assignees.includes(planUserId))||t.created_by===planUserId;
     });
     setAllTasks(tasks);
   }
@@ -9656,9 +9679,13 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
       <div>
         <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>🗓 Plan My Day</h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Focus on what matters today{org?' · '+org.name:''}</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{isReadOnly?'Viewing '+viewingMember.name+"'s plan (read-only)":'Focus on what matters today'}{org?' · '+org.name:''}</div>
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:10}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        {canViewOthers&&orgMembers.length>0&&<select value={viewingMember?viewingMember.id:''} onChange={function(e){var uid=e.target.value;if(!uid){setViewingMember(null);}else{var m=orgMembers.find(function(x){return x.id===uid;});setViewingMember(m?{id:m.id,name:m.name||m.email}:null);}setShowPicker(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',maxWidth:160}}>
+          <option value="">My Plan</option>
+          {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+        </select>}
         <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>‹</button>
         <div style={{textAlign:'center'}}>
           <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{dateLabel}</div>
@@ -9666,7 +9693,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
         </div>
         <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>›</button>
         {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'6px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Today</button>}
-        <button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'#6b8cad':'rgba(107,140,173,0.1)',border:'1px solid '+(showPicker?'#6b8cad':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 16px',color:showPicker?'#fff':'#6b8cad',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>
+        {!isReadOnly&&<button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'#6b8cad':'rgba(107,140,173,0.1)',border:'1px solid '+(showPicker?'#6b8cad':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 16px',color:showPicker?'#fff':'#6b8cad',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>}
       </div>
     </div>
 
@@ -9688,8 +9715,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
         plan.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
           <div style={{fontSize:36,marginBottom:12}}>☀️</div>
           <div style={{fontWeight:700,fontSize:16,color:'var(--tf-text)',marginBottom:6}}>No tasks planned for {dateLabel}</div>
-          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Add tasks from your backlog to focus on what matters today.</div>
-          <button onClick={function(){setShowPicker(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>{isReadOnly?'No tasks planned for this day.':'Add tasks from your backlog to focus on what matters today.'}</div>
+          {!isReadOnly&&<button onClick={function(){setShowPicker(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>}
         </div>:
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {plan.map(function(entry,idx){
