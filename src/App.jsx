@@ -7488,34 +7488,38 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
 
 // ── Big Clients Module — project-style task boards for high-volume clients ──
 function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
-  var wfH=workflowHierarchy||[];
-  var hierarchyCols=wfH.length>0?wfH.map(function(h){return{key:'__h_'+h.key,label:h.label};}):([{key:'__assignee',label:'Assignee'}]);
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
   var [orgMembers,setOrgMembers]=useState([]);
   var [selClientId,setSelClientId]=useState(null);
-  var [selWorkType,setSelWorkType]=useState('');
-  var [periodYear,setPeriodYear]=useState(new Date().getFullYear());
-  var [periodMonth,setPeriodMonth]=useState(new Date().getMonth()+1);
   var [search,setSearch]=useState('');
   var [showPicker,setShowPicker]=useState(false);
-  var [subtasks,setSubtasks]=useState([]);
-  var [parentRow,setParentRow]=useState(null);
-  var [loadingTasks,setLoadingTasks]=useState(false);
+  var [mode,setMode]=useState('work');
+  var [sections,setSections]=useState([]);
+  var [statuses,setStatuses]=useState({});
+  var [periodYear,setPeriodYear]=useState(new Date().getFullYear());
+  var [periodMonth,setPeriodMonth]=useState(new Date().getMonth()+1);
   var [toast,setToast]=useState(null);
-  var [showAdd,setShowAdd]=useState(false);
-  var [newTask,setNewTask]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[],hierarchy:{}});
-  var [expTaskId,setExpTaskId]=useState(null);
-  var [editTaskId,setEditTaskId]=useState(null);
-  var [editTaskData,setEditTaskData]=useState({title:'',assignee:'',due:'',priority:'medium',notes:'',checklist:[]});
-  var [saving,setSaving]=useState(false);
+  var [editingSectionId,setEditingSectionId]=useState(null);
+  var [editingTaskId,setEditingTaskId]=useState(null);
+  var [showAddSection,setShowAddSection]=useState(false);
+  var [showAddTask,setShowAddTask]=useState(null);
+  var [newSectionTitle,setNewSectionTitle]=useState('');
+  var [newTaskData,setNewTaskData]=useState({title:'',frequency:'monthly',due_day:'',roles:{}});
+  var [editTaskData,setEditTaskData]=useState({title:'',frequency:'monthly',due_day:'',roles:{}});
   var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
-  var PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
+  var MONTHS=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+  var MONTH_NUMS=[4,5,6,7,8,9,10,11,12,1,2,3];
+  var FREQ_LABELS={monthly:'Monthly',fortnightly:'Fortnightly',quarterly:'Quarterly',yearly:'Yearly',weekly:'Weekly',once:'One-time'};
+  var STATUS_CFG={
+    executor:{not_started:{label:'To Do',bg:'#f1f5f9',color:'#64748b',next:'in_progress'},in_progress:{label:'In Progress',bg:'#fef3c7',color:'#d97706',next:'done'},done:{label:'Done',bg:'#dcfce7',color:'#16a34a',next:'not_started'}},
+    reviewer:{not_started:{label:'Review',bg:'#f1f5f9',color:'#64748b',next:'reviewing'},reviewing:{label:'Reviewing',bg:'#ede9fe',color:'#7c3aed',next:'approved'},approved:{label:'Approved',bg:'#dcfce7',color:'#16a34a',next:'not_started'}}
+  };
   function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
 
-  useEffect(function(){load();},[org.id]);
+  useEffect(function(){loadClients();},[org.id]);
 
-  async function load(){
+  async function loadClients(){
     setLoading(true);
     var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);
     setClients(r.data||[]);
@@ -7525,11 +7529,109 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     setLoading(false);
   }
 
-  function isBig(c){return c.custom_fields&&c.custom_fields.is_big_client===true;}
-  function getClientWorkTypes(c){
-    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
-    return wts;
+  var periodKey=periodYear+'-'+String(periodMonth).padStart(2,'0');
+
+  useEffect(function(){
+    if(selClientId){loadTemplate(selClientId);loadStatuses(selClientId,periodKey);}
+    else{setSections([]);setStatuses({});}
+  },[selClientId]);
+
+  useEffect(function(){
+    if(selClientId)loadStatuses(selClientId,periodKey);
+  },[periodKey]);
+
+  async function loadTemplate(clientId){
+    var rs=await supabase.from('bc_sections').select('*').eq('org_id',org.id).eq('client_id',clientId).order('position');
+    var secs=rs.data||[];
+    if(secs.length>0){
+      var secIds=secs.map(function(s){return s.id;});
+      var rt=await supabase.from('bc_tasks').select('*').in('section_id',secIds).order('position');
+      var tasks=rt.data||[];
+      setSections(secs.map(function(s){return Object.assign({},s,{tasks:tasks.filter(function(t){return t.section_id===s.id;})});}));
+    }else{setSections([]);}
   }
+
+  async function loadStatuses(clientId,pk){
+    var rt=await supabase.from('bc_tasks').select('id').eq('org_id',org.id).eq('client_id',clientId);
+    var tids=(rt.data||[]).map(function(t){return t.id;});
+    if(!tids.length){setStatuses({});return;}
+    var rs=await supabase.from('bc_task_statuses').select('*').in('task_id',tids).eq('period_key',pk);
+    var map={};
+    (rs.data||[]).forEach(function(s){if(!map[s.task_id])map[s.task_id]={};map[s.task_id][s.user_id]={role:s.role,status:s.status,id:s.id};});
+    setStatuses(map);
+  }
+
+  async function cycleStatus(taskId,userId,role,currentStatus){
+    if(userId!==cu.id)return;
+    var cfg=(STATUS_CFG[role]||STATUS_CFG.executor);
+    var nextStatus=(cfg[currentStatus]||cfg.not_started).next;
+    var existing=statuses[taskId]&&statuses[taskId][userId];
+    if(existing&&existing.id){
+      await supabase.from('bc_task_statuses').update({status:nextStatus,updated_at:new Date().toISOString()}).eq('id',existing.id);
+    }else{
+      await supabase.from('bc_task_statuses').insert({task_id:taskId,period_key:periodKey,user_id:userId,role:role,status:nextStatus});
+    }
+    setStatuses(function(prev){
+      var n=Object.assign({},prev);
+      n[taskId]=Object.assign({},n[taskId]||{});
+      n[taskId][userId]=Object.assign({},n[taskId][userId]||{},{role:role,status:nextStatus});
+      return n;
+    });
+  }
+
+  async function addSection(){
+    if(!newSectionTitle.trim())return;
+    var pos=sections.length>0?Math.max.apply(null,sections.map(function(s){return s.position;}))+1:0;
+    var r=await supabase.from('bc_sections').insert({org_id:org.id,client_id:selClientId,title:newSectionTitle.trim(),position:pos,color:'#1e40af'}).select('*').single();
+    if(r.data)setSections(function(p){return p.concat([Object.assign({},r.data,{tasks:[]})]);});
+    setNewSectionTitle('');setShowAddSection(false);
+  }
+
+  async function updateSection(id,data){
+    await supabase.from('bc_sections').update(data).eq('id',id);
+    setSections(function(p){return p.map(function(s){return s.id===id?Object.assign({},s,data):s;});});
+    setEditingSectionId(null);
+  }
+
+  async function deleteSection(id){
+    if(!window.confirm('Delete this section and all its tasks?'))return;
+    await supabase.from('bc_sections').delete().eq('id',id);
+    setSections(function(p){return p.filter(function(s){return s.id!==id;});});
+  }
+
+  async function addTask(sectionId,taskData){
+    if(!taskData.title.trim())return;
+    var sec=sections.find(function(s){return s.id===sectionId;});
+    var pos=sec&&sec.tasks&&sec.tasks.length>0?Math.max.apply(null,sec.tasks.map(function(t){return t.position;}))+1:0;
+    var roles=Object.entries(taskData.roles||{}).filter(function(e){return e[1];}).map(function(e){return{user_id:e[0],role:e[1]};});
+    var r=await supabase.from('bc_tasks').insert({section_id:sectionId,org_id:org.id,client_id:selClientId,title:taskData.title.trim(),frequency:taskData.frequency||'monthly',due_day:taskData.due_day?Number(taskData.due_day):null,roles:roles,position:pos}).select('*').single();
+    if(r.data){
+      setSections(function(p){return p.map(function(s){return s.id===sectionId?Object.assign({},s,{tasks:(s.tasks||[]).concat([r.data])}):s;});});
+      setNewTaskData({title:'',frequency:'monthly',due_day:'',roles:{}});
+      setShowAddTask(null);
+    }
+  }
+
+  async function updateTask(taskId,data){
+    var roles=Object.entries(data.roles||{}).filter(function(e){return e[1];}).map(function(e){return{user_id:e[0],role:e[1]};});
+    var upd={title:data.title,frequency:data.frequency,due_day:data.due_day?Number(data.due_day):null,roles:roles};
+    await supabase.from('bc_tasks').update(upd).eq('id',taskId);
+    setSections(function(p){return p.map(function(s){return Object.assign({},s,{tasks:(s.tasks||[]).map(function(t){return t.id===taskId?Object.assign({},t,upd):t;})});});});
+    setEditingTaskId(null);
+    showToast('Task updated');
+  }
+
+  async function deleteTask(sectionId,taskId){
+    if(!window.confirm('Delete this task?'))return;
+    await supabase.from('bc_tasks').delete().eq('id',taskId);
+    setSections(function(p){return p.map(function(s){return s.id===sectionId?Object.assign({},s,{tasks:(s.tasks||[]).filter(function(t){return t.id!==taskId;})}):s;});});
+  }
+
+  function isBig(c){return c.custom_fields&&c.custom_fields.is_big_client===true;}
+  var bigClients=clients.filter(isBig);
+  var filteredBig=bigClients.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);});
+  var nonBig=clients.filter(function(c){return !isBig(c);});
+  var selClient=clients.find(function(c){return c.id===selClientId;})||null;
 
   async function toggleBig(c,val){
     var cf=Object.assign({},c.custom_fields||{});
@@ -7539,371 +7641,104 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     showToast(val?'Marked as Big Client':'Removed from Big Clients');
   }
 
-  var bigClients=clients.filter(isBig);
-  var filteredBig=bigClients.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);});
-  var nonBig=clients.filter(function(c){return !isBig(c);});
-  var selClient=clients.find(function(c){return c.id===selClientId;})||null;
-  var selClientWTs=selClient?getClientWorkTypes(selClient):[];
-  var cfg=workTypeConfigs&&selWorkType?(workTypeConfigs.find(function(c){return c.name===selWorkType;})||null):null;
-  var freq=cfg?cfg.frequency:'monthly';
-
-  var MONTHS=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
-  var MONTH_NUMS=[4,5,6,7,8,9,10,11,12,1,2,3];
-  function periodLabel(){
-    if(freq==='yearly')return 'FY '+periodYear+'-'+(periodYear+1).toString().slice(2);
-    if(freq==='quarterly'){var q=Math.ceil(([4,5,6,7,8,9,10,11,12,1,2,3].indexOf(periodMonth)+1)/3);return 'Q'+q+' FY'+periodYear;}
-    return MONTHS[MONTH_NUMS.indexOf(periodMonth)]+' '+periodYear;
+  function getColumns(){
+    var ids=new Set();
+    sections.forEach(function(s){(s.tasks||[]).forEach(function(t){(t.roles||[]).forEach(function(r){ids.add(r.user_id);});});});
+    return Array.from(ids).map(function(id){return orgMembers.find(function(m){return m.id===id;})||{id:id,name:'Unknown'};});
   }
 
-  useEffect(function(){
-    if(selClientId&&selWorkType){loadTasks();}
-    else{setSubtasks([]);setParentRow(null);}
-  },[selClientId,selWorkType,periodYear,periodMonth]);
-
-  async function loadTasks(){
-    if(!selClientId||!selWorkType)return;
-    setLoadingTasks(true);
-    var pl=periodLabel();
-    var rw=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type',selWorkType).eq('period_label',pl).maybeSingle();
-    var wsId=rw.data?rw.data.id:null;
-    if(!wsId){
-      var ins=await supabase.from('worksheets').insert({org_id:org.id,work_type:selWorkType,period_label:pl,period_year:periodYear,period_month:freq==='monthly'?periodMonth:null,frequency:freq,created_by:cu.id}).select('id').single();
-      wsId=ins.data?ins.data.id:null;
-    }
-    if(!wsId){setLoadingTasks(false);return;}
-    var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',wsId).eq('client_id',selClientId).is('parent_row_id',null).maybeSingle();
-    var pr=rr.data||null;
-    if(!pr){
-      var ins2=await supabase.from('worksheet_rows').insert({worksheet_id:wsId,client_id:selClientId,org_id:org.id,data:{__big_client_parent:true},status:'pending'}).select('*').single();
-      pr=ins2.data||null;
-    }
-    setParentRow(pr);
-    if(pr){
-      var rc=await supabase.from('worksheet_rows').select('*').eq('parent_row_id',pr.id).order('created_at').limit(200);
-      setSubtasks(rc.data||[]);
-    }
-    setLoadingTasks(false);
+  function sectionProgress(sec){
+    var tasks=sec.tasks||[];
+    if(!tasks.length)return null;
+    var done=tasks.filter(function(t){
+      var ts=statuses[t.id]||{};
+      var roles=t.roles||[];
+      var execs=roles.filter(function(r){return r.role==='executor';});
+      var revs=roles.filter(function(r){return r.role==='reviewer';});
+      var allExec=execs.length===0||execs.every(function(r){return(ts[r.user_id]||{}).status==='done';});
+      var allRev=revs.length===0||revs.every(function(r){return(ts[r.user_id]||{}).status==='approved';});
+      return allExec&&allRev;
+    }).length;
+    return{done:done,total:tasks.length,pct:Math.round(done/tasks.length*100)};
   }
-
-  async function addSubtask(){
-    if(!newTask.title.trim()){showToast('Title is required','err');return;}
-    if(!parentRow){showToast('Parent row not loaded — try reselecting work type','err');return;}
-    setSaving(true);
-    var d={__title:newTask.title.trim()};
-    if(newTask.priority)d.__priority=newTask.priority;
-    if(newTask.notes.trim())d.__description=newTask.notes.trim();
-    if(wfH.length>0){
-      Object.keys(newTask.hierarchy||{}).forEach(function(k){if(newTask.hierarchy[k])d['__h_'+k]=newTask.hierarchy[k];});
-      var firstLevel=wfH[0]&&newTask.hierarchy[wfH[0].key];
-      if(firstLevel)d.__assignee=firstLevel;
-    }else if(newTask.assignee){d.__assignee=newTask.assignee;}
-    if(newTask.contact&&newTask.contact.trim())d.__contact=newTask.contact.trim();
-    var validCl=(newTask.checklist||[]).filter(function(c){return c.text&&c.text.trim();}).map(function(c){return{text:c.text.trim(),done:!!c.done};});
-    if(validCl.length>0)d.__checklist=validCl;
-    var ins=await supabase.from('worksheet_rows').insert({worksheet_id:parentRow.worksheet_id,client_id:selClientId,org_id:org.id,parent_row_id:parentRow.id,data:d,due_date:newTask.due||null,status:'pending'}).select('*').single();
-    if(ins.error){showToast('Failed: '+ins.error.message,'err');setSaving(false);return;}
-    if(ins.data){setSubtasks(function(p){return[...p,ins.data];});setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[],hierarchy:{}});setShowAdd(false);showToast('Task added!');}
-    setSaving(false);
-  }
-
-  async function updateTaskStatus(id,val){
-    await supabase.from('worksheet_rows').update({status:val}).eq('id',id);
-    setSubtasks(function(p){return p.map(function(r){return r.id===id?Object.assign({},r,{status:val}):r;});});
-  }
-
-  async function deleteTask(id){
-    await supabase.from('worksheet_rows').delete().eq('id',id);
-    setSubtasks(function(p){return p.filter(function(r){return r.id!==id;});});
-    showToast('Task removed');
-  }
-
-  function toggleExpTask(id){setExpTaskId(function(p){return p===id?null:id;});setEditTaskId(null);}
-  function startEditTask(row){
-    var d=row.data||{};
-    setEditTaskId(row.id);
-    setEditTaskData({
-      title:d.__title||'',
-      assignee:d.__assignee||'',
-      due:row.due_date||'',
-      priority:d.__priority||'medium',
-      notes:d.__description||'',
-      checklist:d.__checklist?d.__checklist.map(function(c){return{text:c.text||'',done:!!c.done};}):[]
-    });
-  }
-  async function saveEditTask(id){
-    var row=subtasks.find(function(r){return r.id===id;});
-    if(!row)return;
-    var d=Object.assign({},row.data||{});
-    if(editTaskData.title.trim())d.__title=editTaskData.title.trim();else delete d.__title;
-    if(editTaskData.assignee)d.__assignee=editTaskData.assignee;else delete d.__assignee;
-    d.__priority=editTaskData.priority||'medium';
-    if(editTaskData.notes.trim())d.__description=editTaskData.notes.trim();else delete d.__description;
-    var validCl=editTaskData.checklist.filter(function(c){return c.text&&c.text.trim();});
-    if(validCl.length>0)d.__checklist=validCl;else delete d.__checklist;
-    var dueVal=editTaskData.due||null;
-    await supabase.from('worksheet_rows').update({data:d,due_date:dueVal}).eq('id',id);
-    setSubtasks(function(p){return p.map(function(r){return r.id===id?Object.assign({},r,{data:d,due_date:dueVal}):r;});});
-    setEditTaskId(null);
-    showToast('Task updated!');
-  }
-  async function toggleTaskChecklist(id,idx){
-    var row=subtasks.find(function(r){return r.id===id;});
-    if(!row)return;
-    var d=Object.assign({},row.data||{});
-    var cl=(d.__checklist||[]).map(function(c,i){return i===idx?{text:c.text,done:!c.done}:c;});
-    d.__checklist=cl;
-    await supabase.from('worksheet_rows').update({data:d}).eq('id',id);
-    setSubtasks(function(p){return p.map(function(r){return r.id===id?Object.assign({},r,{data:d}):r;});});
-  }
-
-  var doneCnt=subtasks.filter(function(r){return r.status==='completed';}).length;
-  var pct=subtasks.length>0?Math.round(doneCnt/subtasks.length*100):0;
 
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>;
 
+  var cols=selClient?getColumns():[];
+
   return<div style={{display:'flex',gap:0,height:'calc(100vh - 180px)',minHeight:500,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
     {/* Left panel */}
-    <div style={{width:260,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)',flexShrink:0}}>
+    <div style={{width:240,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)',flexShrink:0}}>
       <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>⭐ Big Clients · {bigClients.length}</div>
-        <button onClick={function(){setShowPicker(true);}} style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Big Clients · {bigClients.length}</div>
+        <button onClick={function(){setShowPicker(true);}} style={{background:'#1e40af',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:16,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>
       </div>
       <div style={{padding:'8px 10px',borderBottom:'1px solid var(--tf-border)'}}>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..."
           style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
       </div>
       <div style={{flex:1,overflowY:'auto'}}>
-        {filteredBig.length===0?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>
-          <div style={{fontSize:24,marginBottom:8}}>⭐</div>
-          <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No big clients yet</div>
-          <div style={{fontSize:11,lineHeight:1.5}}>Click + to mark a high-volume client.</div>
-        </div>:filteredBig.map(function(c){
-          var wts=getClientWorkTypes(c);
-          var isActive=selClientId===c.id;
-          return<div key={c.id} onClick={function(){setSelClientId(c.id);setSelWorkType(wts[0]||'');}}
-            style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(249,115,22,0.1)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#f97316':'transparent'}}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
-                {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
-                {wts.length>0&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:2}}>{wts.slice(0,3).join(' · ')}{wts.length>3?'…':''}</div>}
+        {filteredBig.length===0
+          ?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>
+            <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>★</div>
+            <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No big clients yet</div>
+            <div style={{fontSize:11,lineHeight:1.5}}>Click + to mark a high-volume client.</div>
+          </div>
+          :filteredBig.map(function(c){
+            var isActive=selClientId===c.id;
+            return<div key={c.id} onClick={function(){setSelClientId(c.id);setMode('work');}}
+              style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(30,64,175,0.07)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#1e40af':'transparent'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
+                  {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
+                </div>
+                <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove from Big Clients?'))toggleBig(c,false);}}
+                  style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.5}}>×</button>
               </div>
-              <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove from Big Clients?'))toggleBig(c,false);}}
-                style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.5}}>×</button>
-            </div>
-          </div>;
-        })}
+            </div>;
+          })}
       </div>
     </div>
 
     {/* Right panel */}
-    <div style={{flex:1,overflowY:'auto',display:'flex',flexDirection:'column'}}>
-      {!selClient?<div style={{padding:'24px 22px'}}>
-        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Big Clients</div>
-        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Project-style boards for high-volume clients. Each client gets a full sub-task board per work type per period — with assignees, due dates and checklists.</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10}}>
-          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#f97316'}}>{bigClients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Big Clients</div></div>
-          <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#6b8cad'}}>{clients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Total Clients</div></div>
-        </div>
-      </div>:<div style={{flex:1,display:'flex',flexDirection:'column'}}>
-        {/* Client header */}
-        <div style={{padding:'14px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:10,fontWeight:700,color:'#f97316',textTransform:'uppercase',letterSpacing:'0.06em'}}>⭐ Big Client</div>
-            <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}</div>
-          </div>
-          {/* Period selector */}
-          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-            <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}}
-              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-              {MONTHS.map(function(m,i){return<option key={m} value={MONTH_NUMS[i]}>{m}</option>;})}
-            </select>
-            <select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}}
-              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-              {[2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{y}</option>;})}
-            </select>
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {!selClient
+        ?<div style={{padding:'32px 28px'}}>
+          <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>Big Clients Tracker</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16,lineHeight:1.6}}>Select a big client to view their work tracker — a live spreadsheet showing every recurring task, who does it, and the current period's status.</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10}}>
+            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:14,textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#1e40af'}}>{bigClients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Big Clients</div></div>
+            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:14,textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#64748b'}}>{clients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Total Clients</div></div>
           </div>
         </div>
-        {/* Work type tabs */}
-        {selClientWTs.length>0&&<div style={{display:'flex',gap:0,borderBottom:'1px solid var(--tf-border)',padding:'0 16px',overflowX:'auto'}}>
-          {selClientWTs.map(function(wt){
-            var isA=selWorkType===wt;
-            return<button key={wt} onClick={function(){setSelWorkType(wt);}}
-              style={{padding:'8px 14px',border:'none',borderBottom:'2px solid',borderBottomColor:isA?'#f97316':'transparent',background:'none',color:isA?'#f97316':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:isA?800:600,whiteSpace:'nowrap',fontFamily:'inherit'}}>
-              {wt}
-            </button>;
-          })}
-        </div>}
-        {/* Task board */}
-        <div style={{flex:1,padding:'16px 20px',overflowY:'auto'}}>
-          {!selWorkType?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:12}}>No work types assigned. Add work types in Client Master Data → edit client → Work Types tab.</div>
-          :loadingTasks?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading tasks...</div>
-          :<div>
-            {/* Progress bar */}
-            {subtasks.length>0&&<div style={{marginBottom:14}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)'}}>{doneCnt}/{subtasks.length} tasks done</span>
-                <span style={{fontSize:11,fontWeight:800,color:pct===100?'#22c55e':'#f97316'}}>{pct}%</span>
-              </div>
-              <div style={{height:6,background:'var(--tf-border)',borderRadius:4,overflow:'hidden'}}>
-                <div style={{height:'100%',width:pct+'%',background:pct===100?'#22c55e':'linear-gradient(90deg,#f97316,#ea580c)',borderRadius:4,transition:'width 0.3s'}}/>
-              </div>
+        :<div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          {/* Header */}
+          <div style={{padding:'12px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',background:'var(--tf-bg)',flexShrink:0}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:10,fontWeight:700,color:'#1e40af',textTransform:'uppercase',letterSpacing:'0.06em'}}>Big Client</div>
+              <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{selClient.display_name||selClient.name}</div>
+            </div>
+            {mode==='work'&&<div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0}}>
+              <select value={periodMonth} onChange={function(e){setPeriodMonth(Number(e.target.value));}}
+                style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                {MONTHS.map(function(m,i){return<option key={m} value={MONTH_NUMS[i]}>{m}</option>;})}
+              </select>
+              <select value={periodYear} onChange={function(e){setPeriodYear(Number(e.target.value));}}
+                style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                {[2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{y}</option>;})}
+              </select>
             </div>}
-            {/* Task list */}
-            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden',marginBottom:12}}>
-              {subtasks.length===0?<div style={{padding:'28px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>No sub-tasks yet for {selWorkType} · {periodLabel()}. Click "+ Add Task" below.</div>
-              :subtasks.map(function(row,idx){
-                var d=row.data||{};
-                var assignee=orgMembers.find(function(m){return m.id===d.__assignee;})||null;
-                var isOverdue=row.due_date&&row.due_date<new Date().toISOString().slice(0,10);
-                var isExp=expTaskId===row.id;
-                var isEdit=editTaskId===row.id;
-                var clDone=(d.__checklist||[]).filter(function(c){return c.done;}).length;
-                var clTotal=(d.__checklist||[]).length;
-                return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)'}}>
-                  <div style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',cursor:'pointer'}}
-                    onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='BUTTON')return;toggleExpTask(row.id);}}>
-                    <div style={{width:8,height:8,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0}}/>
-                    <div style={{flex:1,minWidth:160}}>
-                      <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{d.__title||'Untitled'}</div>
-                      <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:8,marginTop:2,flexWrap:'wrap'}}>
-                        {assignee&&<span>👤 {assignee.name||assignee.email}</span>}
-                        {row.due_date&&<span style={{color:isOverdue?'#ef4444':'var(--tf-text-sub)',fontWeight:isOverdue?700:400}}>{isOverdue?'Overdue · ':''}{new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
-                        {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
-                      </div>
-                    </div>
-                    <select value={row.status||'pending'} onChange={function(e){updateTaskStatus(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}}
-                      style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
-                      <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
-                    </select>
-                    <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove this task?'))deleteTask(row.id);}}
-                      style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,padding:'2px 4px',opacity:0.5}} title="Remove">✕</button>
-                    <span style={{fontSize:9,color:'var(--tf-text-sub)',transform:isExp?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
-                  </div>
-                  {isExp&&<div style={{padding:'2px 14px 14px 30px',background:'rgba(107,140,173,0.03)'}}>
-                    {!isEdit?<div>
-                      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:8}}>
-                        <span style={{fontSize:10,fontWeight:800,color:PC[d.__priority||'medium'],background:'rgba(59,130,246,0.08)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{d.__priority||'medium'}</span>
-                        <button onClick={function(){startEditTask(row);}}
-                          style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit</button>
-                      </div>
-                      {d.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{d.__description}</div>}
-                      {clTotal>0&&<div>
-                        <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Checklist ({clDone}/{clTotal})</div>
-                        {d.__checklist.map(function(item,ci){
-                          return<div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:3,cursor:'pointer'}} onClick={function(){toggleTaskChecklist(row.id,ci);}}>
-                            <div style={{width:15,height:15,borderRadius:3,border:'1.5px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                              {item.done&&<span style={{color:'#fff',fontSize:9,fontWeight:900}}>✓</span>}
-                            </div>
-                            <span style={{fontSize:12,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none'}}>{item.text}</span>
-                          </div>;
-                        })}
-                      </div>}
-                      {!d.__description&&clTotal===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No notes or checklist. Click Edit to add.</div>}
-                    </div>
-                    :<div style={{display:'flex',flexDirection:'column',gap:8}}>
-                      <input value={editTaskData.title} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Title"
-                        style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-                        <select value={editTaskData.assignee} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{assignee:e.target.value});});}}
-                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                          <option value="">— Assignee —</option>
-                          {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-                        </select>
-                        <input type="date" value={editTaskData.due} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{due:e.target.value});});}}
-                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                        <select value={editTaskData.priority} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{priority:e.target.value});});}}
-                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                          <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
-                        </select>
-                      </div>
-                      <textarea value={editTaskData.notes} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={2} placeholder="Notes"
-                        style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical'}}/>
-                      <div>
-                        <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:3}}>Checklist</div>
-                        {editTaskData.checklist.map(function(item,ci){
-                          return<div key={ci} style={{display:'flex',gap:5,alignItems:'center',marginBottom:3}}>
-                            <input value={item.text} onChange={function(e){var v=e.target.value;setEditTaskData(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}}
-                              style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'5px 7px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                            <button onClick={function(){setEditTaskData(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
-                              style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,width:24,height:24,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>×</button>
-                          </div>;
-                        })}
-                        <button onClick={function(){setEditTaskData(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
-                          style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,width:'100%',fontFamily:'inherit'}}>+ Add item</button>
-                      </div>
-                      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                        <button onClick={function(){setEditTaskId(null);}}
-                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>Cancel</button>
-                        <button onClick={function(){saveEditTask(row.id);}}
-                          style={{background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Save</button>
-                      </div>
-                    </div>}
-                  </div>}
-                </div>;
-              })}
+            <div style={{display:'flex',gap:6,flexShrink:0}}>
+              <button onClick={function(){setMode('work');}} style={{padding:'6px 14px',border:'1px solid var(--tf-border)',borderRadius:6,background:mode==='work'?'#1e40af':'var(--tf-surface)',color:mode==='work'?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Work View</button>
+              <button onClick={function(){setMode('template');}} style={{padding:'6px 14px',border:'1px solid var(--tf-border)',borderRadius:6,background:mode==='template'?'#1e40af':'var(--tf-surface)',color:mode==='template'?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Edit Template</button>
             </div>
-            {/* Add task form */}
-            {showAdd?<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px',marginBottom:8}}>
-              <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>New Sub-task</div>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                <input value={newTask.title} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task title (e.g. Bank Reco — HDFC) *"
-                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
-                {wfH.length>0?<div>
-                  <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Workflow ({wfH.length} role{wfH.length!==1?'s':''})</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:8}}>
-                    {wfH.map(function(h){return<select key={h.key} value={(newTask.hierarchy||{})[h.key]||''} onChange={function(e){var v=e.target.value;setNewTask(function(p){var nh=Object.assign({},p.hierarchy||{});nh[h.key]=v;return Object.assign({},p,{hierarchy:nh});});}}
-                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                      <option value="">— {h.label} —</option>
-                      {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-                    </select>;})}
-                  </div>
-                </div>:<div style={{display:'grid',gridTemplateColumns:'1fr',gap:8}}>
-                  <select value={newTask.assignee} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{assignee:e.target.value});});}}
-                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                    <option value="">— Assignee —</option>
-                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-                  </select>
-                </div>}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                  <input type="date" value={newTask.due} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{due:e.target.value});});}}
-                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                  <select value={newTask.priority} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{priority:e.target.value});});}}
-                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                    <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <input value={newTask.contact} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{contact:e.target.value});});}} placeholder="Contact person (optional)"
-                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                <textarea value={newTask.notes} onChange={function(e){setNewTask(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={3} placeholder="Notes / description (optional)"
-                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical'}}/>
-                <div>
-                  <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Checklist (optional)</div>
-                  {newTask.checklist.map(function(item,ci){
-                    return<div key={ci} style={{display:'flex',gap:5,alignItems:'center',marginBottom:4}}>
-                      <input value={item.text} onChange={function(e){var v=e.target.value;setNewTask(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}} placeholder={'Item '+(ci+1)}
-                        style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                      <button onClick={function(){setNewTask(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
-                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,width:26,height:26,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700}}>×</button>
-                    </div>;
-                  })}
-                  <button onClick={function(){setNewTask(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
-                    style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,width:'100%',fontFamily:'inherit'}}>+ Add checklist item</button>
-                </div>
-                <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                  <button onClick={function(){setShowAdd(false);setNewTask({title:'',assignee:'',due:'',priority:'medium',notes:'',contact:'',checklist:[],hierarchy:{}});}}
-                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>Cancel</button>
-                  <button onClick={addSubtask} disabled={saving||!newTask.title.trim()}
-                    style={{background:newTask.title.trim()?'linear-gradient(135deg,#f97316,#ea580c)':'var(--tf-border)',border:'none',borderRadius:6,padding:'6px 16px',color:'#fff',cursor:newTask.title.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700}}>
-                    {saving?'Adding…':'Add Task'}</button>
-                </div>
-              </div>
-            </div>
-            :<button onClick={function(){setShowAdd(true);}}
-              style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'10px',width:'100%',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>+ Add Task</button>}
-          </div>}
-        </div>
-      </div>}
+          </div>
+          {/* Content */}
+          <div style={{flex:1,overflow:'auto'}}>
+            {mode==='work'?renderWorkView():renderTemplateView()}
+          </div>
+        </div>}
     </div>
 
     {/* Picker modal */}
@@ -7921,8 +7756,8 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
           {nonBig.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);}).map(function(c){
             return<div key={c.id} style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
               <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>{c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}</div>
-              <button onClick={function(){toggleBig(c,true);setShowPicker(false);setSelClientId(c.id);var wts=getClientWorkTypes(c);setSelWorkType(wts[0]||'');}}
-                style={{background:'linear-gradient(135deg,#f97316,#ea580c)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
+              <button onClick={function(){toggleBig(c,true);setShowPicker(false);setSelClientId(c.id);setMode('work');}}
+                style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
             </div>;
           })}
           {nonBig.length===0&&<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>All clients are already marked as Big.</div>}
@@ -7932,6 +7767,245 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
   </div>;
+
+  function renderWorkView(){
+    if(sections.length===0){
+      return<div style={{padding:48,textAlign:'center',color:'var(--tf-text-sub)'}}>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>No template set up yet</div>
+        <div style={{fontSize:12,marginBottom:20,lineHeight:1.6}}>Switch to "Edit Template" to add sections (e.g. GST, TDS, Finalisation) and assign team members to each task.</div>
+        <button onClick={function(){setMode('template');}} style={{background:'#1e40af',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>Edit Template</button>
+      </div>;
+    }
+    return<table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+      <thead>
+        <tr style={{background:'#1e3a8a',color:'#fff',position:'sticky',top:0,zIndex:2}}>
+          <th style={{padding:'10px 14px',textAlign:'left',fontWeight:700,width:50}}>#</th>
+          <th style={{padding:'10px 14px',textAlign:'left',fontWeight:700}}>Particulars</th>
+          <th style={{padding:'10px 14px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',width:100}}>Frequency</th>
+          <th style={{padding:'10px 14px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',width:80}}>Due Day</th>
+          {cols.map(function(m){
+            var ini=(m.name||m.email||'?').charAt(0).toUpperCase();
+            return<th key={m.id} style={{padding:'10px 12px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',minWidth:96}}>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                <div style={{width:24,height:24,borderRadius:'50%',background:'rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800}}>{ini}</div>
+                <span style={{fontSize:10}}>{(m.name||m.email||'').split(' ')[0]}</span>
+              </div>
+            </th>;
+          })}
+        </tr>
+      </thead>
+      <tbody>
+        {sections.map(function(sec,si){
+          var prog=sectionProgress(sec);
+          var rows=[];
+          rows.push(
+            <tr key={'sec-'+sec.id} style={{background:'rgba(30,64,175,0.06)',borderTop:'2px solid rgba(30,64,175,0.14)'}}>
+              <td colSpan={4+cols.length} style={{padding:'9px 14px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{width:4,height:16,borderRadius:2,background:sec.color||'#1e40af',flexShrink:0}}/>
+                  <span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{si+1}. {sec.title}</span>
+                  {prog&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{height:4,width:80,background:'var(--tf-border)',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:prog.pct+'%',background:prog.pct===100?'#16a34a':'#1e40af',borderRadius:3,transition:'width 0.3s'}}/>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:prog.pct===100?'#16a34a':'var(--tf-text-sub)'}}>{prog.done}/{prog.total}</span>
+                  </div>}
+                </div>
+              </td>
+            </tr>
+          );
+          (sec.tasks||[]).forEach(function(task,ti){
+            var ts=statuses[task.id]||{};
+            var roleMap={};(task.roles||[]).forEach(function(r){roleMap[r.user_id]=r.role;});
+            rows.push(
+              <tr key={task.id} style={{background:ti%2===0?'transparent':'rgba(0,0,0,0.015)',borderBottom:'1px solid var(--tf-border)'}}>
+                <td style={{padding:'8px 14px',color:'var(--tf-text-sub)',fontSize:11,whiteSpace:'nowrap'}}>{si+1}.{ti+1}</td>
+                <td style={{padding:'8px 14px',fontWeight:500,color:'var(--tf-text)'}}>{task.title}</td>
+                <td style={{padding:'8px 14px',textAlign:'center'}}>
+                  <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{FREQ_LABELS[task.frequency]||task.frequency||'—'}</span>
+                </td>
+                <td style={{padding:'8px 14px',textAlign:'center',fontSize:11,color:'var(--tf-text-sub)'}}>{task.due_day?task.due_day+'th':'—'}</td>
+                {cols.map(function(m){
+                  var role=roleMap[m.id];
+                  if(!role)return<td key={m.id} style={{padding:'8px 12px',textAlign:'center'}}><span style={{color:'var(--tf-border)'}}>—</span></td>;
+                  var st=(ts[m.id]||{}).status||'not_started';
+                  var scfg=((STATUS_CFG[role]||STATUS_CFG.executor)[st])||(STATUS_CFG[role]||STATUS_CFG.executor).not_started;
+                  var isMe=m.id===cu.id;
+                  return<td key={m.id} style={{padding:'6px 8px',textAlign:'center'}}>
+                    <button onClick={function(){if(isMe)cycleStatus(task.id,m.id,role,st);}}
+                      title={isMe?'Click to update your status':''}
+                      style={{background:scfg.bg,color:scfg.color,border:'none',borderRadius:20,padding:'4px 10px',fontSize:11,fontWeight:700,cursor:isMe?'pointer':'default',whiteSpace:'nowrap',fontFamily:'inherit',opacity:isMe?1:0.7,minWidth:72}}>
+                      {scfg.label}
+                    </button>
+                  </td>;
+                })}
+              </tr>
+            );
+          });
+          return rows;
+        })}
+      </tbody>
+    </table>;
+  }
+
+  function renderTemplateView(){
+    return<div style={{padding:'16px 20px',maxWidth:920}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)'}}>Template Editor</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Define sections, tasks, frequency and role assignments. Changes take effect immediately in Work View.</div>
+        </div>
+        <button onClick={function(){setShowAddSection(true);setNewSectionTitle('');}}
+          style={{background:'#1e40af',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>+ Add Section</button>
+      </div>
+
+      {showAddSection&&<div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'12px',marginBottom:12}}>
+        <div style={{fontSize:10,fontWeight:700,color:'#1e40af',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.05em'}}>New Section</div>
+        <div style={{display:'flex',gap:8}}>
+          <input value={newSectionTitle} onChange={function(e){setNewSectionTitle(e.target.value);}} placeholder="Section name (e.g. GST Compliance)"
+            autoFocus
+            style={{flex:1,background:'#fff',border:'1px solid #bfdbfe',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}
+            onKeyDown={function(e){if(e.key==='Enter')addSection();if(e.key==='Escape'){setShowAddSection(false);setNewSectionTitle('');}}}/>
+          <button onClick={addSection} style={{background:'#1e40af',border:'none',borderRadius:6,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Add</button>
+          <button onClick={function(){setShowAddSection(false);setNewSectionTitle('');}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+        </div>
+      </div>}
+
+      {sections.length===0&&!showAddSection&&<div style={{padding:'40px',textAlign:'center',color:'var(--tf-text-sub)',border:'2px dashed var(--tf-border)',borderRadius:10}}>
+        <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>No sections yet</div>
+        <div style={{fontSize:11}}>Add sections like "GST Compliance", "TDS", "Finalisation"</div>
+      </div>}
+
+      {sections.map(function(sec,si){
+        var isEditSec=editingSectionId===sec.id;
+        return<div key={sec.id} style={{marginBottom:14,border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden'}}>
+          <div style={{background:'rgba(30,64,175,0.06)',padding:'9px 14px',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid var(--tf-border)'}}>
+            <div style={{width:4,height:16,borderRadius:2,background:sec.color||'#1e40af',flexShrink:0}}/>
+            {isEditSec
+              ?<div style={{display:'flex',gap:6,flex:1}}>
+                <input defaultValue={sec.title} id={'sec-inp-'+sec.id}
+                  autoFocus
+                  style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 8px',color:'var(--tf-text)',fontSize:13,fontWeight:700,outline:'none',fontFamily:'inherit'}}
+                  onKeyDown={function(e){if(e.key==='Enter'){var v=document.getElementById('sec-inp-'+sec.id).value;updateSection(sec.id,{title:v});}if(e.key==='Escape')setEditingSectionId(null);}}/>
+                <button onClick={function(){var v=document.getElementById('sec-inp-'+sec.id).value;updateSection(sec.id,{title:v});}}
+                  style={{background:'#1e40af',border:'none',borderRadius:5,padding:'4px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
+                <button onClick={function(){setEditingSectionId(null);}}
+                  style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+              </div>
+              :<span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)',flex:1}}>{si+1}. {sec.title}</span>}
+            <span style={{fontSize:11,color:'var(--tf-text-sub)',flexShrink:0}}>{(sec.tasks||[]).length} tasks</span>
+            {!isEditSec&&<>
+              <button onClick={function(){setEditingSectionId(sec.id);}}
+                style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Rename</button>
+              <button onClick={function(){deleteSection(sec.id);}}
+                style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Delete</button>
+            </>}
+          </div>
+
+          <div>
+            {(sec.tasks||[]).map(function(task){
+              var isEditTask=editingTaskId===task.id;
+              var roleMap={};(task.roles||[]).forEach(function(r){roleMap[r.user_id]=r.role;});
+              return<div key={task.id} style={{borderBottom:'1px solid var(--tf-border)',padding:'10px 14px'}}>
+                {!isEditTask
+                  ?<div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:5}}>{task.title}</div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                        <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'1px 8px'}}>{FREQ_LABELS[task.frequency]||task.frequency}</span>
+                        {task.due_day&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>Due: {task.due_day}th</span>}
+                        {(task.roles||[]).map(function(r){
+                          var m=orgMembers.find(function(x){return x.id===r.user_id;})||{name:'Unknown'};
+                          return<span key={r.user_id} style={{fontSize:10,fontWeight:700,padding:'1px 8px',borderRadius:20,background:r.role==='reviewer'?'#ede9fe':'#dbeafe',color:r.role==='reviewer'?'#7c3aed':'#1e40af'}}>{(m.name||m.email||'?').split(' ')[0]} · {r.role}</span>;
+                        })}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:4,flexShrink:0}}>
+                      <button onClick={function(){
+                        var rm={};(task.roles||[]).forEach(function(r){rm[r.user_id]=r.role;});
+                        setEditTaskData({title:task.title,frequency:task.frequency||'monthly',due_day:task.due_day||'',roles:rm});
+                        setEditingTaskId(task.id);
+                      }} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Edit</button>
+                      <button onClick={function(){deleteTask(sec.id,task.id);}}
+                        style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>✕</button>
+                    </div>
+                  </div>
+                  :<div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    <input value={editTaskData.title} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task title"
+                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                      <select value={editTaskData.frequency} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{frequency:e.target.value});});}}
+                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                        <option value="monthly">Monthly</option><option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="once">One-time</option>
+                      </select>
+                      <input value={editTaskData.due_day} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{due_day:e.target.value});});}} placeholder="Due day of month (e.g. 20)"
+                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Role Assignments</div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:6}}>
+                        {orgMembers.map(function(m){
+                          return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
+                            <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
+                            <select value={editTaskData.roles[m.id]||''} onChange={function(e){var v=e.target.value;setEditTaskData(function(p){var nr=Object.assign({},p.roles);if(v)nr[m.id]=v;else delete nr[m.id];return Object.assign({},p,{roles:nr});});}}
+                              style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
+                              <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
+                            </select>
+                          </div>;
+                        })}
+                      </div>
+                    </div>
+                    <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                      <button onClick={function(){setEditingTaskId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+                      <button onClick={function(){updateTask(task.id,editTaskData);}} style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
+                    </div>
+                  </div>}
+              </div>;
+            })}
+
+            {showAddTask===sec.id
+              ?<div style={{padding:'12px 14px',background:'rgba(30,64,175,0.03)',borderTop:'1px solid var(--tf-border)'}}>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  <input value={newTaskData.title} onChange={function(e){setNewTaskData(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task name (e.g. Prepare GSTR-3B and file)"
+                    autoFocus
+                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                    <select value={newTaskData.frequency} onChange={function(e){setNewTaskData(function(p){return Object.assign({},p,{frequency:e.target.value});});}}
+                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                      <option value="monthly">Monthly</option><option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="once">One-time</option>
+                    </select>
+                    <input value={newTaskData.due_day} onChange={function(e){setNewTaskData(function(p){return Object.assign({},p,{due_day:e.target.value});});}} placeholder="Due day of month (e.g. 20)"
+                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Role Assignments</div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:6}}>
+                      {orgMembers.map(function(m){
+                        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
+                          <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
+                          <select value={newTaskData.roles[m.id]||''} onChange={function(e){var v=e.target.value;setNewTaskData(function(p){var nr=Object.assign({},p.roles||{});if(v)nr[m.id]=v;else delete nr[m.id];return Object.assign({},p,{roles:nr});});}}
+                            style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
+                            <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
+                          </select>
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+                    <button onClick={function(){setShowAddTask(null);setNewTaskData({title:'',frequency:'monthly',due_day:'',roles:{}});}}
+                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+                    <button onClick={function(){addTask(sec.id,newTaskData);}}
+                      style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Add Task</button>
+                  </div>
+                </div>
+              </div>
+              :<button onClick={function(){setShowAddTask(sec.id);setNewTaskData({title:'',frequency:'monthly',due_day:'',roles:{}});}}
+                style={{display:'block',width:'100%',padding:'9px 14px',border:'none',borderTop:(sec.tasks&&sec.tasks.length>0)?'1px dashed var(--tf-border)':'none',background:'transparent',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',textAlign:'left'}}>+ Add Task</button>}
+          </div>
+        </div>;
+      })}
+    </div>;
+  }
 }
 
 
