@@ -5104,6 +5104,31 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
   function gotoNext(){if(month===12){setMonth(1);setYear(year+1);}else setMonth(month+1);}
   function gotoToday(){var n=new Date();setMonth(n.getMonth()+1);setYear(n.getFullYear());}
 
+  function exportCSV(){
+    var cMap={};clients.forEach(function(c){cMap[c.id]=c;});
+    var memberName=(function(){var m=members.find(function(m){return m.id===userId;});return m?(m.name||m.email):'Member';})();
+    var rows=[['Date','Day','Member Name','Client Name','Work Type','Hours','Minutes','Total Hrs','Notes','Attendance Status']];
+    days.forEach(function(day){
+      var statusObj=STATUS_MAP[day.status]||STATUS_MAP.working;
+      if(day.logs.length===0){
+        rows.push([day.date,day.dayName,memberName,'','',0,0,'0.00','',statusObj.l]);
+      }else{
+        day.logs.forEach(function(l){
+          var cl=cMap[l.client_id];
+          var clientName=cl?(cl.display_name||cl.name):'';
+          var entryHrs=Math.round(((l.hours||0)*60+(l.minutes||0))/60*100)/100;
+          rows.push([day.date,day.dayName,memberName,clientName,l.work_type||'',l.hours||0,l.minutes||0,entryHrs.toFixed(2),l.notes||'',statusObj.l]);
+        });
+      }
+    });
+    var csv=rows.map(function(row){return row.map(function(v){var s=String(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?'"'+s.replace(/"/g,'\"\"')+'"':s;}).join(',');}).join('\r\n');
+    var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='attendance-log-'+memberName.replace(/\s+/g,'-')+'-'+MONTH_NAMES[month-1]+'-'+year+'.csv';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  }
+
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'};
   var todayStr=(function(){var n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');})();
 
@@ -5121,6 +5146,7 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
         <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)',minWidth:110,textAlign:'center'}}>{MONTH_NAMES[month-1]} {year}</div>
         <button onClick={gotoNext} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700})}>→</button>
         <button onClick={gotoToday} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#6b8cad'})}>Today</button>
+        <button onClick={exportCSV} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,background:'#22c55e',color:'#fff',border:'none',padding:'6px 14px',borderRadius:6})}>⬇ Export CSV</button>
       </div>
     </div>
 
