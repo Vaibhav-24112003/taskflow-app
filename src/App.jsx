@@ -2705,7 +2705,16 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
                       <option value={0}>Quarter end month</option>
                       <option value={1}>Next month</option>
                     </select>
-                  </div>:<div style={{display:'flex',alignItems:'center',gap:4}}>
+                  </div>:frequency==='yearly'?<><div style={{display:'flex',alignItems:'center',gap:4}}>
+                    <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
+                    <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
+                  </div><div style={{display:'flex',alignItems:'center',gap:4}}>
+                    <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
+                    <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:150,cursor:'pointer'})}>
+                      <option value={0}>Same year (FY start)</option>
+                      <option value={1}>Next year (FY end +1)</option>
+                    </select>
+                  </div></>:<div style={{display:'flex',alignItems:'center',gap:4}}>
                     <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
                     <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
                   </div>)}
@@ -3072,7 +3081,10 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           return dY+'-'+String(dM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='yearly'){
           var dm2=month||7;
-          var dueCalY2=dm2>=4?ws2.period_year:ws2.period_year+1;
+          // month_offset doubles as year_offset for yearly: 0=same year, 1=next year
+          // If not explicitly set (null), fall back to legacy month-based inference
+          var yearOff2=(monthOffset!=null)?Number(monthOffset):(dm2>=4?0:1);
+          var dueCalY2=ws2.period_year+yearOff2;
           return dueCalY2+'-'+String(dm2).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }
         return null;
@@ -3281,9 +3293,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           if(month){dueM=month;} // absolute month override
           return dueY+'-'+String(dueM).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }else if(freq==='yearly'){
-          // periodYear = FY start year. Due dates fall in FY year or year+1
           var dm=month||7;
-          var dueCalY=dm>=4?periodYear:periodYear+1;
+          // month_offset doubles as year_offset: 0=same year, 1=next year (FY end+1)
+          // null = legacy fallback using month-based inference
+          var yearOff=(monthOffset!=null)?Number(monthOffset):(dm>=4?0:1);
+          var dueCalY=periodYear+yearOff;
           return dueCalY+'-'+String(dm).padStart(2,'0')+'-'+String(day).padStart(2,'0');
         }
         return null;
