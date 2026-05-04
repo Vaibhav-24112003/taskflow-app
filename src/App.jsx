@@ -7500,20 +7500,36 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [periodYear,setPeriodYear]=useState(new Date().getFullYear());
   var [periodMonth,setPeriodMonth]=useState(new Date().getMonth()+1);
   var [toast,setToast]=useState(null);
+  // template editing
   var [editingSectionId,setEditingSectionId]=useState(null);
   var [editingTaskId,setEditingTaskId]=useState(null);
   var [showAddSection,setShowAddSection]=useState(false);
   var [showAddTask,setShowAddTask]=useState(null);
   var [newSectionTitle,setNewSectionTitle]=useState('');
-  var [newTaskData,setNewTaskData]=useState({title:'',frequency:'monthly',due_day:'',roles:{}});
-  var [editTaskData,setEditTaskData]=useState({title:'',frequency:'monthly',due_day:'',roles:{}});
-  var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
+  var [newTaskData,setNewTaskData]=useState({title:'',frequency:'monthly',due_days:'',roles:{}});
+  var [editTaskData,setEditTaskData]=useState({title:'',frequency:'monthly',due_days:'',roles:{}});
+  // work view filter/search
+  var [taskSearch,setTaskSearch]=useState('');
+  var [colFilters,setColFilters]=useState({}); // {userId: status_value|'all'}
+  var [openFilterCol,setOpenFilterCol]=useState(null);
+  // inline notes
+  var [openNote,setOpenNote]=useState(null); // {taskId, userId}
+  var [noteText,setNoteText]=useState('');
+
   var MONTHS=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
   var MONTH_NUMS=[4,5,6,7,8,9,10,11,12,1,2,3];
   var FREQ_LABELS={monthly:'Monthly',fortnightly:'Fortnightly',quarterly:'Quarterly',yearly:'Yearly',weekly:'Weekly',once:'One-time'};
   var STATUS_CFG={
-    executor:{not_started:{label:'To Do',bg:'#f1f5f9',color:'#64748b',next:'in_progress'},in_progress:{label:'In Progress',bg:'#fef3c7',color:'#d97706',next:'done'},done:{label:'Done',bg:'#dcfce7',color:'#16a34a',next:'not_started'}},
-    reviewer:{not_started:{label:'Review',bg:'#f1f5f9',color:'#64748b',next:'reviewing'},reviewing:{label:'Reviewing',bg:'#ede9fe',color:'#7c3aed',next:'approved'},approved:{label:'Approved',bg:'#dcfce7',color:'#16a34a',next:'not_started'}}
+    executor:{
+      not_started:{label:'To Do',bg:'#f1f5f9',color:'#64748b',next:'in_progress'},
+      in_progress:{label:'In Progress',bg:'#fef3c7',color:'#d97706',next:'done'},
+      done:{label:'Done',bg:'#dcfce7',color:'#16a34a',next:'not_started'}
+    },
+    reviewer:{
+      not_started:{label:'Review',bg:'#f1f5f9',color:'#64748b',next:'reviewing'},
+      reviewing:{label:'Reviewing',bg:'#ede9fe',color:'#7c3aed',next:'approved'},
+      approved:{label:'Approved',bg:'#dcfce7',color:'#16a34a',next:'not_started'}
+    }
   };
   function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
 
@@ -7557,19 +7573,22 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     if(!tids.length){setStatuses({});return;}
     var rs=await supabase.from('bc_task_statuses').select('*').in('task_id',tids).eq('period_key',pk);
     var map={};
-    (rs.data||[]).forEach(function(s){if(!map[s.task_id])map[s.task_id]={};map[s.task_id][s.user_id]={role:s.role,status:s.status,id:s.id};});
+    (rs.data||[]).forEach(function(s){
+      if(!map[s.task_id])map[s.task_id]={};
+      map[s.task_id][s.user_id]={role:s.role,status:s.status,note:s.note||'',id:s.id};
+    });
     setStatuses(map);
   }
 
   async function cycleStatus(taskId,userId,role,currentStatus){
     if(userId!==cu.id)return;
-    var cfg=(STATUS_CFG[role]||STATUS_CFG.executor);
+    var cfg=STATUS_CFG[role]||STATUS_CFG.executor;
     var nextStatus=(cfg[currentStatus]||cfg.not_started).next;
     var existing=statuses[taskId]&&statuses[taskId][userId];
     if(existing&&existing.id){
       await supabase.from('bc_task_statuses').update({status:nextStatus,updated_at:new Date().toISOString()}).eq('id',existing.id);
     }else{
-      await supabase.from('bc_task_statuses').insert({task_id:taskId,period_key:periodKey,user_id:userId,role:role,status:nextStatus});
+      await supabase.from('bc_task_statuses').insert({task_id:taskId,period_key:periodKey,user_id:userId,role:role,status:nextStatus,note:''});
     }
     setStatuses(function(prev){
       var n=Object.assign({},prev);
@@ -7577,6 +7596,40 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       n[taskId][userId]=Object.assign({},n[taskId][userId]||{},{role:role,status:nextStatus});
       return n;
     });
+  }
+
+  async function saveNote(taskId,userId,role,text){
+    var existing=statuses[taskId]&&statuses[taskId][userId];
+    if(existing&&existing.id){
+      await supabase.from('bc_task_statuses').update({note:text,updated_at:new Date().toISOString()}).eq('id',existing.id);
+    }else{
+      var st=(statuses[taskId]&&statuses[taskId][userId]&&statuses[taskId][userId].status)||'not_started';
+      await supabase.from('bc_task_statuses').insert({task_id:taskId,period_key:periodKey,user_id:userId,role:role,status:st,note:text});
+    }
+    setStatuses(function(prev){
+      var n=Object.assign({},prev);
+      n[taskId]=Object.assign({},n[taskId]||{});
+      n[taskId][userId]=Object.assign({},n[taskId][userId]||{},{role:role,note:text});
+      return n;
+    });
+    setOpenNote(null);
+    showToast('Note saved');
+  }
+
+  // Parse "2" or "2, 16" -> {due_day, due_day_2}
+  function parseDueDays(str){
+    var parts=(str||'').split(',').map(function(s){return parseInt(s.trim(),10);}).filter(function(n){return !isNaN(n)&&n>=1&&n<=31;});
+    return{due_day:parts[0]||null,due_day_2:parts[1]||null};
+  }
+  function dueDayStr(task){
+    if(!task.due_day)return'—';
+    var s=task.due_day+'th';
+    if(task.due_day_2)s+=' & '+task.due_day_2+'th';
+    return s;
+  }
+  function taskDueDaysInput(task){
+    if(!task.due_day)return'';
+    return task.due_day_2?task.due_day+', '+task.due_day_2:String(task.due_day);
   }
 
   async function addSection(){
@@ -7604,17 +7657,19 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     var sec=sections.find(function(s){return s.id===sectionId;});
     var pos=sec&&sec.tasks&&sec.tasks.length>0?Math.max.apply(null,sec.tasks.map(function(t){return t.position;}))+1:0;
     var roles=Object.entries(taskData.roles||{}).filter(function(e){return e[1];}).map(function(e){return{user_id:e[0],role:e[1]};});
-    var r=await supabase.from('bc_tasks').insert({section_id:sectionId,org_id:org.id,client_id:selClientId,title:taskData.title.trim(),frequency:taskData.frequency||'monthly',due_day:taskData.due_day?Number(taskData.due_day):null,roles:roles,position:pos}).select('*').single();
+    var dd=parseDueDays(taskData.due_days);
+    var r=await supabase.from('bc_tasks').insert({section_id:sectionId,org_id:org.id,client_id:selClientId,title:taskData.title.trim(),frequency:taskData.frequency||'monthly',due_day:dd.due_day,due_day_2:dd.due_day_2,roles:roles,position:pos}).select('*').single();
     if(r.data){
       setSections(function(p){return p.map(function(s){return s.id===sectionId?Object.assign({},s,{tasks:(s.tasks||[]).concat([r.data])}):s;});});
-      setNewTaskData({title:'',frequency:'monthly',due_day:'',roles:{}});
+      setNewTaskData({title:'',frequency:'monthly',due_days:'',roles:{}});
       setShowAddTask(null);
     }
   }
 
   async function updateTask(taskId,data){
     var roles=Object.entries(data.roles||{}).filter(function(e){return e[1];}).map(function(e){return{user_id:e[0],role:e[1]};});
-    var upd={title:data.title,frequency:data.frequency,due_day:data.due_day?Number(data.due_day):null,roles:roles};
+    var dd=parseDueDays(data.due_days);
+    var upd={title:data.title,frequency:data.frequency,due_day:dd.due_day,due_day_2:dd.due_day_2,roles:roles};
     await supabase.from('bc_tasks').update(upd).eq('id',taskId);
     setSections(function(p){return p.map(function(s){return Object.assign({},s,{tasks:(s.tasks||[]).map(function(t){return t.id===taskId?Object.assign({},t,upd):t;})});});});
     setEditingTaskId(null);
@@ -7674,7 +7729,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         <button onClick={function(){setShowPicker(true);}} style={{background:'#1e40af',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:16,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>
       </div>
       <div style={{padding:'8px 10px',borderBottom:'1px solid var(--tf-border)'}}>
-        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..."
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search clients..."
           style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
       </div>
       <div style={{flex:1,overflowY:'auto'}}>
@@ -7686,7 +7741,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
           </div>
           :filteredBig.map(function(c){
             var isActive=selClientId===c.id;
-            return<div key={c.id} onClick={function(){setSelClientId(c.id);setMode('work');}}
+            return<div key={c.id} onClick={function(){setSelClientId(c.id);setMode('work');setTaskSearch('');setColFilters({});}}
               style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(30,64,175,0.07)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#1e40af':'transparent'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
                 <div style={{flex:1,minWidth:0}}>
@@ -7706,11 +7761,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       {!selClient
         ?<div style={{padding:'32px 28px'}}>
           <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>Big Clients Tracker</div>
-          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16,lineHeight:1.6}}>Select a big client to view their work tracker — a live spreadsheet showing every recurring task, who does it, and the current period's status.</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10}}>
-            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:14,textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#1e40af'}}>{bigClients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Big Clients</div></div>
-            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:14,textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:'#64748b'}}>{clients.length}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Total Clients</div></div>
-          </div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.6}}>Select a big client from the left to open their live work tracker.</div>
         </div>
         :<div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
           {/* Header */}
@@ -7734,14 +7785,12 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
               <button onClick={function(){setMode('template');}} style={{padding:'6px 14px',border:'1px solid var(--tf-border)',borderRadius:6,background:mode==='template'?'#1e40af':'var(--tf-surface)',color:mode==='template'?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Edit Template</button>
             </div>
           </div>
-          {/* Content */}
           <div style={{flex:1,overflow:'auto'}}>
             {mode==='work'?renderWorkView():renderTemplateView()}
           </div>
         </div>}
     </div>
 
-    {/* Picker modal */}
     {showPicker&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)setShowPicker(false);}}>
       <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:12,width:'100%',maxWidth:440,maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
         <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -7760,7 +7809,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                 style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
             </div>;
           })}
-          {nonBig.length===0&&<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>All clients are already marked as Big.</div>}
+          {nonBig.length===0&&<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>All clients already marked as Big.</div>}
         </div>
       </div>
     </div>}
@@ -7771,81 +7820,208 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   function renderWorkView(){
     if(sections.length===0){
       return<div style={{padding:48,textAlign:'center',color:'var(--tf-text-sub)'}}>
-        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>No template set up yet</div>
-        <div style={{fontSize:12,marginBottom:20,lineHeight:1.6}}>Switch to "Edit Template" to add sections (e.g. GST, TDS, Finalisation) and assign team members to each task.</div>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>No template yet</div>
+        <div style={{fontSize:12,marginBottom:16}}>Switch to "Edit Template" to add sections and tasks.</div>
         <button onClick={function(){setMode('template');}} style={{background:'#1e40af',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>Edit Template</button>
       </div>;
     }
-    return<table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
-      <thead>
-        <tr style={{background:'#1e3a8a',color:'#fff',position:'sticky',top:0,zIndex:2}}>
-          <th style={{padding:'10px 14px',textAlign:'left',fontWeight:700,width:50}}>#</th>
-          <th style={{padding:'10px 14px',textAlign:'left',fontWeight:700}}>Particulars</th>
-          <th style={{padding:'10px 14px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',width:100}}>Frequency</th>
-          <th style={{padding:'10px 14px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',width:80}}>Due Day</th>
-          {cols.map(function(m){
-            var ini=(m.name||m.email||'?').charAt(0).toUpperCase();
-            return<th key={m.id} style={{padding:'10px 12px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',minWidth:96}}>
-              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-                <div style={{width:24,height:24,borderRadius:'50%',background:'rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800}}>{ini}</div>
-                <span style={{fontSize:10}}>{(m.name||m.email||'').split(' ')[0]}</span>
-              </div>
-            </th>;
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {sections.map(function(sec,si){
-          var prog=sectionProgress(sec);
-          var rows=[];
-          rows.push(
-            <tr key={'sec-'+sec.id} style={{background:'rgba(30,64,175,0.06)',borderTop:'2px solid rgba(30,64,175,0.14)'}}>
-              <td colSpan={4+cols.length} style={{padding:'9px 14px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <div style={{width:4,height:16,borderRadius:2,background:sec.color||'#1e40af',flexShrink:0}}/>
-                  <span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{si+1}. {sec.title}</span>
-                  {prog&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{height:4,width:80,background:'var(--tf-border)',borderRadius:3,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:prog.pct+'%',background:prog.pct===100?'#16a34a':'#1e40af',borderRadius:3,transition:'width 0.3s'}}/>
-                    </div>
-                    <span style={{fontSize:11,fontWeight:700,color:prog.pct===100?'#16a34a':'var(--tf-text-sub)'}}>{prog.done}/{prog.total}</span>
+
+    // compute filtered sections
+    var q=taskSearch.trim().toLowerCase();
+    var filteredSections=sections.map(function(sec){
+      var tasks=(sec.tasks||[]).filter(function(t){
+        // search filter
+        if(q&&!(t.title||'').toLowerCase().includes(q))return false;
+        // column status filters
+        var ts=statuses[t.id]||{};
+        var roleMap={};(t.roles||[]).forEach(function(r){roleMap[r.user_id]=r.role;});
+        var passCol=Object.entries(colFilters).every(function(e){
+          var uid=e[0];var fval=e[1];
+          if(!fval||fval==='all')return true;
+          var role=roleMap[uid];if(!role)return fval==='none';
+          var st=(ts[uid]||{}).status||'not_started';
+          return st===fval;
+        });
+        return passCol;
+      });
+      return Object.assign({},sec,{tasks:tasks});
+    });
+
+    var activeFiltersCount=Object.values(colFilters).filter(function(v){return v&&v!=='all';}).length+(q?1:0);
+
+    return<div style={{display:'flex',flexDirection:'column',height:'100%'}}>
+      {/* Search + filter bar */}
+      <div style={{padding:'8px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:8,alignItems:'center',background:'var(--tf-bg)',flexShrink:0}}>
+        <input value={taskSearch} onChange={function(e){setTaskSearch(e.target.value);}} placeholder="Search tasks..."
+          style={{flex:1,maxWidth:260,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+        {activeFiltersCount>0&&<button onClick={function(){setTaskSearch('');setColFilters({});}}
+          style={{background:'#fee2e2',border:'none',borderRadius:6,padding:'4px 10px',color:'#dc2626',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Clear filters ({activeFiltersCount})</button>}
+        <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:'auto'}}>Click column header to filter by status</span>
+      </div>
+      {/* Table */}
+      <div style={{flex:1,overflow:'auto',position:'relative'}} onClick={function(){setOpenFilterCol(null);}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead>
+            <tr style={{background:'#1e3a8a',color:'#fff',position:'sticky',top:0,zIndex:3}}>
+              <th style={{padding:'10px 14px',textAlign:'left',fontWeight:700,width:50}}>#</th>
+              <th style={{padding:'10px 14px',textAlign:'left',fontWeight:700}}>Particulars</th>
+              <th style={{padding:'10px 14px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',width:100}}>Frequency</th>
+              <th style={{padding:'10px 14px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',width:100}}>Due Day</th>
+              {cols.map(function(m){
+                var ini=(m.name||m.email||'?').charAt(0).toUpperCase();
+                var activeFilter=colFilters[m.id]&&colFilters[m.id]!=='all'?colFilters[m.id]:null;
+                var isOpen=openFilterCol===m.id;
+                return<th key={m.id} style={{padding:'8px 10px',textAlign:'center',fontWeight:700,whiteSpace:'nowrap',minWidth:110,position:'relative',cursor:'pointer',userSelect:'none'}}
+                  onClick={function(e){e.stopPropagation();setOpenFilterCol(function(prev){return prev===m.id?null:m.id;});}}>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                    <div style={{width:26,height:26,borderRadius:'50%',background:activeFilter?'#f59e0b':'rgba(255,255,255,0.18)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800}}>{ini}</div>
+                    <span style={{fontSize:10}}>{(m.name||m.email||'').split(' ')[0]}</span>
+                    {activeFilter&&<span style={{fontSize:9,background:'#f59e0b',color:'#fff',borderRadius:3,padding:'1px 4px',whiteSpace:'nowrap'}}>{activeFilter.replace('_',' ')}</span>}
+                    <span style={{fontSize:9,opacity:0.6}}>▾</span>
+                  </div>
+                  {isOpen&&<div style={{position:'absolute',top:'100%',right:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.18)',zIndex:10,minWidth:150,padding:4}}
+                    onClick={function(e){e.stopPropagation();}}>
+                    {['all','not_started','in_progress','done','reviewing','approved','none'].map(function(val){
+                      var label={all:'All',not_started:'To Do',in_progress:'In Progress',done:'Done',reviewing:'Reviewing',approved:'Approved',none:'Not Assigned'}[val];
+                      var isSel=(colFilters[m.id]||'all')===val;
+                      return<div key={val} onClick={function(){setColFilters(function(p){var n=Object.assign({},p);n[m.id]=val;return n;});setOpenFilterCol(null);}}
+                        style={{padding:'7px 12px',cursor:'pointer',borderRadius:5,background:isSel?'#dbeafe':'transparent',color:isSel?'#1e40af':'var(--tf-text)',fontSize:12,fontWeight:isSel?700:400}}>
+                        {label}
+                      </div>;
+                    })}
                   </div>}
-                </div>
-              </td>
+                </th>;
+              })}
             </tr>
-          );
-          (sec.tasks||[]).forEach(function(task,ti){
-            var ts=statuses[task.id]||{};
-            var roleMap={};(task.roles||[]).forEach(function(r){roleMap[r.user_id]=r.role;});
-            rows.push(
-              <tr key={task.id} style={{background:ti%2===0?'transparent':'rgba(0,0,0,0.015)',borderBottom:'1px solid var(--tf-border)'}}>
-                <td style={{padding:'8px 14px',color:'var(--tf-text-sub)',fontSize:11,whiteSpace:'nowrap'}}>{si+1}.{ti+1}</td>
-                <td style={{padding:'8px 14px',fontWeight:500,color:'var(--tf-text)'}}>{task.title}</td>
-                <td style={{padding:'8px 14px',textAlign:'center'}}>
-                  <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{FREQ_LABELS[task.frequency]||task.frequency||'—'}</span>
-                </td>
-                <td style={{padding:'8px 14px',textAlign:'center',fontSize:11,color:'var(--tf-text-sub)'}}>{task.due_day?task.due_day+'th':'—'}</td>
-                {cols.map(function(m){
-                  var role=roleMap[m.id];
-                  if(!role)return<td key={m.id} style={{padding:'8px 12px',textAlign:'center'}}><span style={{color:'var(--tf-border)'}}>—</span></td>;
-                  var st=(ts[m.id]||{}).status||'not_started';
-                  var scfg=((STATUS_CFG[role]||STATUS_CFG.executor)[st])||(STATUS_CFG[role]||STATUS_CFG.executor).not_started;
-                  var isMe=m.id===cu.id;
-                  return<td key={m.id} style={{padding:'6px 8px',textAlign:'center'}}>
-                    <button onClick={function(){if(isMe)cycleStatus(task.id,m.id,role,st);}}
-                      title={isMe?'Click to update your status':''}
-                      style={{background:scfg.bg,color:scfg.color,border:'none',borderRadius:20,padding:'4px 10px',fontSize:11,fontWeight:700,cursor:isMe?'pointer':'default',whiteSpace:'nowrap',fontFamily:'inherit',opacity:isMe?1:0.7,minWidth:72}}>
-                      {scfg.label}
-                    </button>
-                  </td>;
-                })}
-              </tr>
-            );
-          });
-          return rows;
-        })}
-      </tbody>
-    </table>;
+          </thead>
+          <tbody>
+            {filteredSections.map(function(sec,si){
+              var prog=sectionProgress(sec);
+              var originalIdx=sections.findIndex(function(s){return s.id===sec.id;});
+              var rows=[];
+              rows.push(
+                <tr key={'sec-'+sec.id} style={{background:'rgba(30,64,175,0.06)',borderTop:'2px solid rgba(30,64,175,0.14)'}}>
+                  <td colSpan={4+cols.length} style={{padding:'9px 14px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:4,height:16,borderRadius:2,background:sec.color||'#1e40af',flexShrink:0}}/>
+                      <span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{originalIdx+1}. {sec.title}</span>
+                      {sec.tasks&&sec.tasks.length===0&&q&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>no matches</span>}
+                      {prog&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+                        <div style={{height:4,width:80,background:'var(--tf-border)',borderRadius:3,overflow:'hidden'}}>
+                          <div style={{height:'100%',width:prog.pct+'%',background:prog.pct===100?'#16a34a':'#1e40af',borderRadius:3,transition:'width 0.3s'}}/>
+                        </div>
+                        <span style={{fontSize:11,fontWeight:700,color:prog.pct===100?'#16a34a':'var(--tf-text-sub)'}}>{prog.done}/{prog.total}</span>
+                      </div>}
+                    </div>
+                  </td>
+                </tr>
+              );
+              (sec.tasks||[]).forEach(function(task,ti){
+                var ts=statuses[task.id]||{};
+                var roleMap={};(task.roles||[]).forEach(function(r){roleMap[r.user_id]=r.role;});
+                var isNoteOpen=openNote&&openNote.taskId===task.id;
+                rows.push(
+                  <tr key={task.id} style={{background:ti%2===0?'transparent':'rgba(0,0,0,0.015)',borderBottom:'1px solid var(--tf-border)'}}>
+                    <td style={{padding:'8px 14px',color:'var(--tf-text-sub)',fontSize:11,whiteSpace:'nowrap'}}>{originalIdx+1}.{ti+1}</td>
+                    <td style={{padding:'8px 14px',fontWeight:500,color:'var(--tf-text)'}}>{task.title}</td>
+                    <td style={{padding:'8px 14px',textAlign:'center'}}>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'2px 8px',whiteSpace:'nowrap'}}>{FREQ_LABELS[task.frequency]||task.frequency||'—'}</span>
+                    </td>
+                    <td style={{padding:'8px 14px',textAlign:'center',fontSize:11,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{dueDayStr(task)}</td>
+                    {cols.map(function(m){
+                      var role=roleMap[m.id];
+                      if(!role)return<td key={m.id} style={{padding:'6px 8px',textAlign:'center'}}><span style={{color:'var(--tf-border)'}}>—</span></td>;
+                      var st=(ts[m.id]||{}).status||'not_started';
+                      var hasNote=!!(ts[m.id]&&ts[m.id].note);
+                      var scfg=((STATUS_CFG[role]||STATUS_CFG.executor)[st])||(STATUS_CFG[role]||STATUS_CFG.executor).not_started;
+                      var isMe=m.id===cu.id;
+                      var isThisNoteOpen=isNoteOpen&&openNote.userId===m.id;
+                      return<td key={m.id} style={{padding:'4px 6px',textAlign:'center',verticalAlign:'top'}}>
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                          <button onClick={function(){if(isMe)cycleStatus(task.id,m.id,role,st);}}
+                            title={isMe?'Click to update status':''}
+                            style={{background:scfg.bg,color:scfg.color,border:'none',borderRadius:20,padding:'4px 10px',fontSize:11,fontWeight:700,cursor:isMe?'pointer':'default',whiteSpace:'nowrap',fontFamily:'inherit',opacity:isMe?1:0.7,minWidth:74}}>
+                            {scfg.label}
+                          </button>
+                          <button onClick={function(){
+                            if(isThisNoteOpen){setOpenNote(null);}
+                            else{setOpenNote({taskId:task.id,userId:m.id,role:role});setNoteText((ts[m.id]&&ts[m.id].note)||'');}
+                          }}
+                            title="Note / comment"
+                            style={{background:'none',border:'none',cursor:'pointer',fontSize:11,opacity:hasNote?1:0.35,padding:'1px 4px',color:hasNote?'#1e40af':'var(--tf-text-sub)',fontFamily:'inherit'}}>
+                            {hasNote?'✎ note':'✎'}
+                          </button>
+                        </div>
+                      </td>;
+                    })}
+                  </tr>
+                );
+                // inline note row
+                if(isNoteOpen){
+                  rows.push(
+                    <tr key={task.id+'-note'} style={{background:'#eff6ff',borderBottom:'1px solid #bfdbfe'}}>
+                      <td colSpan={4+cols.length} style={{padding:'8px 14px 10px 40px'}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'#1e40af',marginBottom:4}}>
+                          Note from {(orgMembers.find(function(m){return m.id===openNote.userId;})||{}).name||'you'} — {task.title}
+                        </div>
+                        <div style={{display:'flex',gap:8}}>
+                          <textarea value={noteText} onChange={function(e){setNoteText(e.target.value);}} rows={2} placeholder="Add a note or comment for this task this period..."
+                            style={{flex:1,background:'#fff',border:'1px solid #bfdbfe',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical'}}/>
+                          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                            <button onClick={function(){saveNote(task.id,openNote.userId,openNote.role,noteText);}}
+                              style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
+                            <button onClick={function(){setOpenNote(null);}}
+                              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
+              });
+              return rows;
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>;
+  }
+
+  function renderRoleAssignmentGrid(roles,onChange){
+    return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:6}}>
+      {orgMembers.map(function(m){
+        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
+          <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
+          <select value={roles[m.id]||''} onChange={function(e){var v=e.target.value;onChange(m.id,v);}}
+            style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
+            <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
+          </select>
+        </div>;
+      })}
+    </div>;
+  }
+
+  function renderTaskForm(data,onChange,onSave,onCancel,submitLabel){
+    return<div style={{display:'flex',flexDirection:'column',gap:8}}>
+      <input value={data.title} onChange={function(e){onChange('title',e.target.value);}} placeholder="Task name"
+        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        <select value={data.frequency} onChange={function(e){onChange('frequency',e.target.value);}}
+          style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+          <option value="monthly">Monthly</option><option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="once">One-time</option>
+        </select>
+        <input value={data.due_days||''} onChange={function(e){onChange('due_days',e.target.value);}} placeholder="Due day(s) e.g. 20 or 2, 16"
+          style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+      </div>
+      <div>
+        <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Role Assignments</div>
+        {renderRoleAssignmentGrid(data.roles||{},function(uid,val){var nr=Object.assign({},data.roles||{});if(val)nr[uid]=val;else delete nr[uid];onChange('roles',nr);})}
+      </div>
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <button onClick={onCancel} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+        <button onClick={onSave} style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{submitLabel}</button>
+      </div>
+    </div>;
   }
 
   function renderTemplateView(){
@@ -7853,7 +8029,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
         <div>
           <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)'}}>Template Editor</div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Define sections, tasks, frequency and role assignments. Changes take effect immediately in Work View.</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Define sections, tasks, frequency and role assignments. Fortnightly tasks support two due days (e.g. "2, 16").</div>
         </div>
         <button onClick={function(){setShowAddSection(true);setNewSectionTitle('');}}
           style={{background:'#1e40af',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>+ Add Section</button>
@@ -7862,7 +8038,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       {showAddSection&&<div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'12px',marginBottom:12}}>
         <div style={{fontSize:10,fontWeight:700,color:'#1e40af',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.05em'}}>New Section</div>
         <div style={{display:'flex',gap:8}}>
-          <input value={newSectionTitle} onChange={function(e){setNewSectionTitle(e.target.value);}} placeholder="Section name (e.g. GST Compliance)"
+          <input value={newSectionTitle} onChange={function(e){setNewSectionTitle(e.target.value);}} placeholder="e.g. GST Compliance"
             autoFocus
             style={{flex:1,background:'#fff',border:'1px solid #bfdbfe',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}
             onKeyDown={function(e){if(e.key==='Enter')addSection();if(e.key==='Escape'){setShowAddSection(false);setNewSectionTitle('');}}}/>
@@ -7883,25 +8059,19 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
             <div style={{width:4,height:16,borderRadius:2,background:sec.color||'#1e40af',flexShrink:0}}/>
             {isEditSec
               ?<div style={{display:'flex',gap:6,flex:1}}>
-                <input defaultValue={sec.title} id={'sec-inp-'+sec.id}
-                  autoFocus
+                <input defaultValue={sec.title} id={'sec-inp-'+sec.id} autoFocus
                   style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 8px',color:'var(--tf-text)',fontSize:13,fontWeight:700,outline:'none',fontFamily:'inherit'}}
                   onKeyDown={function(e){if(e.key==='Enter'){var v=document.getElementById('sec-inp-'+sec.id).value;updateSection(sec.id,{title:v});}if(e.key==='Escape')setEditingSectionId(null);}}/>
-                <button onClick={function(){var v=document.getElementById('sec-inp-'+sec.id).value;updateSection(sec.id,{title:v});}}
-                  style={{background:'#1e40af',border:'none',borderRadius:5,padding:'4px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
-                <button onClick={function(){setEditingSectionId(null);}}
-                  style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+                <button onClick={function(){var v=document.getElementById('sec-inp-'+sec.id).value;updateSection(sec.id,{title:v});}} style={{background:'#1e40af',border:'none',borderRadius:5,padding:'4px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
+                <button onClick={function(){setEditingSectionId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
               </div>
               :<span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)',flex:1}}>{si+1}. {sec.title}</span>}
             <span style={{fontSize:11,color:'var(--tf-text-sub)',flexShrink:0}}>{(sec.tasks||[]).length} tasks</span>
             {!isEditSec&&<>
-              <button onClick={function(){setEditingSectionId(sec.id);}}
-                style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Rename</button>
-              <button onClick={function(){deleteSection(sec.id);}}
-                style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Delete</button>
+              <button onClick={function(){setEditingSectionId(sec.id);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Rename</button>
+              <button onClick={function(){deleteSection(sec.id);}} style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Delete</button>
             </>}
           </div>
-
           <div>
             {(sec.tasks||[]).map(function(task){
               var isEditTask=editingTaskId===task.id;
@@ -7913,7 +8083,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                       <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:5}}>{task.title}</div>
                       <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                         <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'1px 8px'}}>{FREQ_LABELS[task.frequency]||task.frequency}</span>
-                        {task.due_day&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>Due: {task.due_day}th</span>}
+                        {task.due_day&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>Due: {dueDayStr(task)}</span>}
                         {(task.roles||[]).map(function(r){
                           var m=orgMembers.find(function(x){return x.id===r.user_id;})||{name:'Unknown'};
                           return<span key={r.user_id} style={{fontSize:10,fontWeight:700,padding:'1px 8px',borderRadius:20,background:r.role==='reviewer'?'#ede9fe':'#dbeafe',color:r.role==='reviewer'?'#7c3aed':'#1e40af'}}>{(m.name||m.email||'?').split(' ')[0]} · {r.role}</span>;
@@ -7923,83 +8093,32 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                     <div style={{display:'flex',gap:4,flexShrink:0}}>
                       <button onClick={function(){
                         var rm={};(task.roles||[]).forEach(function(r){rm[r.user_id]=r.role;});
-                        setEditTaskData({title:task.title,frequency:task.frequency||'monthly',due_day:task.due_day||'',roles:rm});
+                        setEditTaskData({title:task.title,frequency:task.frequency||'monthly',due_days:taskDueDaysInput(task),roles:rm});
                         setEditingTaskId(task.id);
                       }} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Edit</button>
-                      <button onClick={function(){deleteTask(sec.id,task.id);}}
-                        style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>✕</button>
+                      <button onClick={function(){deleteTask(sec.id,task.id);}} style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>✕</button>
                     </div>
                   </div>
-                  :<div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    <input value={editTaskData.title} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task title"
-                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                      <select value={editTaskData.frequency} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{frequency:e.target.value});});}}
-                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                        <option value="monthly">Monthly</option><option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="once">One-time</option>
-                      </select>
-                      <input value={editTaskData.due_day} onChange={function(e){setEditTaskData(function(p){return Object.assign({},p,{due_day:e.target.value});});}} placeholder="Due day of month (e.g. 20)"
-                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Role Assignments</div>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:6}}>
-                        {orgMembers.map(function(m){
-                          return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
-                            <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
-                            <select value={editTaskData.roles[m.id]||''} onChange={function(e){var v=e.target.value;setEditTaskData(function(p){var nr=Object.assign({},p.roles);if(v)nr[m.id]=v;else delete nr[m.id];return Object.assign({},p,{roles:nr});});}}
-                              style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
-                              <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
-                            </select>
-                          </div>;
-                        })}
-                      </div>
-                    </div>
-                    <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                      <button onClick={function(){setEditingTaskId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
-                      <button onClick={function(){updateTask(task.id,editTaskData);}} style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
-                    </div>
-                  </div>}
+                  :renderTaskForm(
+                    editTaskData,
+                    function(k,v){setEditTaskData(function(p){return Object.assign({},p,Object.fromEntries([[k,v]]));});},
+                    function(){updateTask(task.id,editTaskData);},
+                    function(){setEditingTaskId(null);},
+                    'Save Changes'
+                  )}
               </div>;
             })}
-
             {showAddTask===sec.id
               ?<div style={{padding:'12px 14px',background:'rgba(30,64,175,0.03)',borderTop:'1px solid var(--tf-border)'}}>
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  <input value={newTaskData.title} onChange={function(e){setNewTaskData(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="Task name (e.g. Prepare GSTR-3B and file)"
-                    autoFocus
-                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
-                    <select value={newTaskData.frequency} onChange={function(e){setNewTaskData(function(p){return Object.assign({},p,{frequency:e.target.value});});}}
-                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                      <option value="monthly">Monthly</option><option value="fortnightly">Fortnightly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option><option value="weekly">Weekly</option><option value="once">One-time</option>
-                    </select>
-                    <input value={newTaskData.due_day} onChange={function(e){setNewTaskData(function(p){return Object.assign({},p,{due_day:e.target.value});});}} placeholder="Due day of month (e.g. 20)"
-                      style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:6}}>Role Assignments</div>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:6}}>
-                      {orgMembers.map(function(m){
-                        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
-                          <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
-                          <select value={newTaskData.roles[m.id]||''} onChange={function(e){var v=e.target.value;setNewTaskData(function(p){var nr=Object.assign({},p.roles||{});if(v)nr[m.id]=v;else delete nr[m.id];return Object.assign({},p,{roles:nr});});}}
-                            style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
-                            <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
-                          </select>
-                        </div>;
-                      })}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-                    <button onClick={function(){setShowAddTask(null);setNewTaskData({title:'',frequency:'monthly',due_day:'',roles:{}});}}
-                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
-                    <button onClick={function(){addTask(sec.id,newTaskData);}}
-                      style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Add Task</button>
-                  </div>
-                </div>
+                {renderTaskForm(
+                  newTaskData,
+                  function(k,v){setNewTaskData(function(p){return Object.assign({},p,Object.fromEntries([[k,v]]));});},
+                  function(){addTask(sec.id,newTaskData);},
+                  function(){setShowAddTask(null);setNewTaskData({title:'',frequency:'monthly',due_days:'',roles:{}});},
+                  'Add Task'
+                )}
               </div>
-              :<button onClick={function(){setShowAddTask(sec.id);setNewTaskData({title:'',frequency:'monthly',due_day:'',roles:{}});}}
+              :<button onClick={function(){setShowAddTask(sec.id);setNewTaskData({title:'',frequency:'monthly',due_days:'',roles:{}});}}
                 style={{display:'block',width:'100%',padding:'9px 14px',border:'none',borderTop:(sec.tasks&&sec.tasks.length>0)?'1px dashed var(--tf-border)':'none',background:'transparent',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',textAlign:'left'}}>+ Add Task</button>}
           </div>
         </div>;
@@ -8007,6 +8126,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     </div>;
   }
 }
+
 
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
@@ -9454,6 +9574,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var [allTasks,setAllTasks]=useState([]);
   var [wsRows,setWsRows]=useState([]); // worksheet rows assigned to user in org
   var [worksheetMeta,setWorksheetMeta]=useState({}); // worksheet_id -> {work_type, period_label}
+  var [bcTasks,setBcTasks]=useState([]); // big-client tasks due today
   var [loading,setLoading]=useState(true);
   var [showPicker,setShowPicker]=useState(false);
   var [search,setSearch]=useState('');
@@ -9552,7 +9673,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     };
   }
 
-  useEffect(function(){loadPlan();loadTasks();if(org)loadWsRows();},[planDate,org&&org.id,planUserId]);
+  useEffect(function(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();}},[planDate,org&&org.id,planUserId]);
   useEffect(function(){if(org)loadClients();},[org&&org.id]);
   useEffect(function(){if(org)loadOrgMembers();},[org&&org.id]);
 
@@ -9633,6 +9754,64 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       var meta={};(rw.data||[]).forEach(function(w){meta[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
       setWorksheetMeta(meta);
     }
+  }
+
+  async function loadBcTasks(){
+    if(!org)return;
+    var planDateObj=new Date(planDate+'T00:00:00');
+    var dayOfMonth=planDateObj.getDate();
+    var pk=planDate.slice(0,7); // YYYY-MM
+    // Fetch all bc_tasks for this org and filter client-side for this user + due day match
+    var rt=await supabase.from('bc_tasks').select('*').eq('org_id',org.id);
+    var allOrgTasks=rt.data||[];
+    var myTasks=allOrgTasks.filter(function(t){
+      var roles=t.roles||[];
+      var hasRole=roles.some(function(r){return r.user_id===planUserId;});
+      if(!hasRole)return false;
+      var matchDay=t.due_day===dayOfMonth||t.due_day_2===dayOfMonth;
+      return matchDay;
+    });
+    if(!myTasks.length){setBcTasks([]);return;}
+    // Fetch section titles
+    var secIds=Array.from(new Set(myTasks.map(function(t){return t.section_id;}).filter(Boolean)));
+    var secMap={};
+    if(secIds.length){
+      var rs=await supabase.from('bc_sections').select('id,title,client_id').in('id',secIds);
+      (rs.data||[]).forEach(function(s){secMap[s.id]=s;});
+    }
+    // Fetch client names
+    var clientIds=Array.from(new Set(myTasks.map(function(t){return t.client_id;}).filter(Boolean)));
+    var clientMap={};
+    if(clientIds.length){
+      var rc=await supabase.from('clients').select('id,name,display_name').in('id',clientIds);
+      (rc.data||[]).forEach(function(c){clientMap[c.id]=c;});
+    }
+    // Fetch statuses for this period
+    var tids=myTasks.map(function(t){return t.id;});
+    var statusMap={};
+    var rstt=await supabase.from('bc_task_statuses').select('*').in('task_id',tids).eq('period_key',pk).eq('user_id',planUserId);
+    (rstt.data||[]).forEach(function(s){statusMap[s.task_id]=s;});
+    // Build items
+    var items=myTasks.map(function(t){
+      var sec=secMap[t.section_id]||{};
+      var client=clientMap[t.client_id]||{};
+      var myRole=(t.roles||[]).find(function(r){return r.user_id===planUserId;});
+      var st=statusMap[t.id]||{};
+      return{task:t,section:sec,client:client,role:myRole?myRole.role:'executor',status:st.status||'not_started',statusId:st.id||null,note:st.note||''};
+    });
+    setBcTasks(items);
+  }
+
+  async function cycleBcStatus(item){
+    var STATUS_NEXT={executor:{not_started:'in_progress',in_progress:'done',done:'not_started'},reviewer:{not_started:'reviewing',reviewing:'approved',approved:'not_started'}};
+    var next=(STATUS_NEXT[item.role]||STATUS_NEXT.executor)[item.status]||'not_started';
+    var pk=planDate.slice(0,7);
+    if(item.statusId){
+      await supabase.from('bc_task_statuses').update({status:next,updated_at:new Date().toISOString()}).eq('id',item.statusId);
+    }else{
+      await supabase.from('bc_task_statuses').insert({task_id:item.task.id,period_key:pk,user_id:planUserId,role:item.role,status:next,note:''});
+    }
+    setBcTasks(function(prev){return prev.map(function(x){return x.task.id===item.task.id?Object.assign({},x,{status:next,statusId:x.statusId||'_'}):x;});});
   }
 
   async function loadPlan(){
@@ -9994,6 +10173,37 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
               </div>}
             </div>;
           })}
+        </div>}
+        {/* Big Client Tasks due today */}
+        {bcTasks.length>0&&<div style={{marginTop:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <div style={{fontSize:11,fontWeight:800,color:'#1e40af',textTransform:'uppercase',letterSpacing:'0.07em'}}>Big Client Tasks — Today</div>
+            <span style={{fontSize:10,background:'#dbeafe',color:'#1e40af',borderRadius:20,padding:'1px 7px',fontWeight:700}}>{bcTasks.length}</span>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {bcTasks.map(function(item){
+              var BC_STATUS={executor:{not_started:{label:'To Do',bg:'#f1f5f9',color:'#64748b'},in_progress:{label:'In Progress',bg:'#fef3c7',color:'#d97706'},done:{label:'Done',bg:'#dcfce7',color:'#16a34a'}},reviewer:{not_started:{label:'Review',bg:'#f1f5f9',color:'#64748b'},reviewing:{label:'Reviewing',bg:'#ede9fe',color:'#7c3aed'},approved:{label:'Approved',bg:'#dcfce7',color:'#16a34a'}}};
+              var scfg=((BC_STATUS[item.role]||BC_STATUS.executor)[item.status])||(BC_STATUS[item.role]||BC_STATUS.executor).not_started;
+              var dueParts=[item.task.due_day,item.task.due_day_2].filter(Boolean);
+              return<div key={item.task.id} style={{background:'var(--tf-surface)',border:'1px solid #bfdbfe',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+                <div style={{width:4,height:36,borderRadius:2,background:'#1e40af',flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.task.title}</div>
+                  <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>
+                    <span style={{fontWeight:700,color:'#1e40af'}}>{(item.client.display_name||item.client.name||'')}</span>
+                    {item.section.title&&<span> · {item.section.title}</span>}
+                    {dueParts.length>0&&<span> · Due {dueParts.join(' & ')}th</span>}
+                    <span style={{marginLeft:6,fontSize:9,background:item.role==='reviewer'?'#ede9fe':'#dbeafe',color:item.role==='reviewer'?'#7c3aed':'#1e40af',borderRadius:10,padding:'1px 6px',fontWeight:700,textTransform:'uppercase'}}>{item.role}</span>
+                  </div>
+                </div>
+                <button onClick={function(){if(!isReadOnly)cycleBcStatus(item);}}
+                  disabled={isReadOnly}
+                  style={{background:scfg.bg,color:scfg.color,border:'none',borderRadius:20,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:isReadOnly?'default':'pointer',whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0}}>
+                  {scfg.label}
+                </button>
+              </div>;
+            })}
+          </div>
         </div>}
       </div>
 
