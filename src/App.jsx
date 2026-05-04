@@ -8978,7 +8978,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var moduleContent=<>
       {orgModule==='dashboard'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
       {orgModule==='dashboard'&&tab==='team'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]}/>}
+      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
       {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
@@ -9357,7 +9357,7 @@ function ClientPortal({supabase}){
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
 // ══════════════════════════════════════════════════════════════════
-function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
+function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy}){
   var today=new Date();
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var [planDate,setPlanDate]=useState(todayStr);
@@ -9379,6 +9379,21 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   var [logForm,setLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
   var [clients,setClients]=useState([]);
   var [loggingId,setLoggingId]=useState(null);
+  // Create Task modal
+  var [showCreate,setShowCreate]=useState(false);
+  var [ctClientId,setCtClientId]=useState('');
+  var [ctWorkType,setCtWorkType]=useState('');
+  var [ctTitle,setCtTitle]=useState('');
+  var [ctDesc,setCtDesc]=useState('');
+  var [ctPriority,setCtPriority]=useState('medium');
+  var [ctDueDate,setCtDueDate]=useState('');
+  var [ctContact,setCtContact]=useState('');
+  var [ctHierarchy,setCtHierarchy]=useState({});
+  var [ctChecklist,setCtChecklist]=useState([]);
+  var [ctSaving,setCtSaving]=useState(false);
+  var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
+  var wfHierarchy=workflowHierarchy||[];
+  var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):[{key:'__assignee',label:'Assignee'}];
   var [orgMembers,setOrgMembers]=useState([]); // [{id,name,email,role}]
   var [orgRole,setOrgRole]=useState('member'); // current user's role in org
   var [viewingMember,setViewingMember]=useState(null); // null = own plan, {id,name} = admin viewing another
@@ -9466,8 +9481,49 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   }
 
   async function loadClients(){
-    var r=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(500);
+    var r=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(500);
     setClients(r.data||[]);
+  }
+
+  function resetCreateForm(){setCtClientId('');setCtWorkType('');setCtTitle('');setCtDesc('');setCtPriority('medium');setCtDueDate('');setCtContact('');setCtHierarchy({});setCtChecklist([]);setShowCreate(false);}
+
+  async function resolveWorksheet(wtName){
+    var cfg=wtName?activeConfigs.find(function(c){return c.name===wtName;}):null;
+    var freq=cfg?cfg.frequency:'once';
+    var effectiveName=wtName||'Unclassified';
+    var p=getCurrentPeriod(freq);
+    var label=getPeriodLabel(freq,p.year,p.month,p.quarter);
+    var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',effectiveName).eq('period_label',label).maybeSingle();
+    if(rw.data)return rw.data;
+    var ins=await supabase.from('worksheets').insert({org_id:org.id,work_type:effectiveName,period_label:label,period_year:p.year,period_month:freq==='monthly'?p.month:null,period_quarter:freq==='quarterly'?p.quarter:null,frequency:freq,created_by:cu.id}).select().single();
+    return ins.data;
+  }
+
+  async function submitCreateTask(){
+    if(!ctClientId){showToast('Please select a client','err');return;}
+    setCtSaving(true);
+    try{
+      var ws=await resolveWorksheet(ctWorkType);
+      if(!ws){showToast('Failed to resolve worksheet','err');setCtSaving(false);return;}
+      var rowData={};
+      var hKeys=Object.keys(ctHierarchy);
+      for(var hi=0;hi<hKeys.length;hi++){if(ctHierarchy[hKeys[hi]])rowData[hKeys[hi]]=ctHierarchy[hKeys[hi]];}
+      if(hierarchyCols.length>0&&rowData[hierarchyCols[0].key])rowData.__assignee=rowData[hierarchyCols[0].key];
+      var anyAssigned=Object.keys(rowData).length>0;
+      if(!anyAssigned){rowData[hierarchyCols[0]?hierarchyCols[0].key:'__assignee']=cu.id;rowData.__assignee=cu.id;}
+      if(ctTitle.trim())rowData.__title=ctTitle.trim();
+      if(ctDesc.trim())rowData.__description=ctDesc.trim();
+      if(ctPriority)rowData.__priority=ctPriority;
+      if(ctContact.trim())rowData.__contact=ctContact.trim();
+      var validCl=ctChecklist.filter(function(c){return c.text&&c.text.trim();});
+      if(validCl.length>0)rowData.__checklist=validCl;
+      var ins=await supabase.from('worksheet_rows').insert({worksheet_id:ws.id,client_id:ctClientId,org_id:org.id,data:rowData,due_date:ctDueDate||null,due_label:ctTitle.trim()||(ctWorkType?'Task':'Unclassified'),status:'pending'}).select().single();
+      if(ins.error){showToast('Failed to create task','err');setCtSaving(false);return;}
+      showToast('Task created!');
+      resetCreateForm();
+      loadWsRows();
+    }catch(e){showToast('Error: '+(e.message||'unknown'),'err');}
+    setCtSaving(false);
   }
 
   async function loadWsRows(){
@@ -9680,37 +9736,44 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
   var pct=total>0?Math.round(done/total*100):0;
   var dateLabel=planDate===todayStr?'Today':(function(){var d=new Date(planDate+'T00:00:00');return d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});})();
 
-  return<div style={{maxWidth:960,margin:'0 auto',padding:'0 0 60px'}}>
+  return<div style={{maxWidth:1020,margin:'0 auto',padding:'0 0 60px'}}>
     {/* Header */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:10,paddingBottom:16,borderBottom:'1px solid var(--tf-border)'}}>
       <div>
-        <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>🗓 Plan My Day</h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{isReadOnly?'Viewing '+viewingMember.name+"'s plan (read-only)":'Focus on what matters today'}{org?' · '+org.name:''}</div>
+        <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}>Daily Planner</div>
+        <h2 style={{fontSize:20,fontWeight:700,color:'var(--tf-text)',margin:0,letterSpacing:'-0.01em'}}>Plan My Day{org&&<span style={{fontWeight:400,color:'var(--tf-text-sub)'}}> · {org.name}</span>}</h2>
+        {isReadOnly&&<div style={{fontSize:12,color:'#f59e0b',marginTop:2,fontWeight:500}}>Viewing {viewingMember.name}'s plan (read-only)</div>}
       </div>
-      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-        {canViewOthers&&orgMembers.length>0&&<select value={viewingMember?viewingMember.id:''} onChange={function(e){var uid=e.target.value;if(!uid){setViewingMember(null);}else{var m=orgMembers.find(function(x){return x.id===uid;});setViewingMember(m?{id:m.id,name:m.name||m.email}:null);}setShowPicker(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',maxWidth:160}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {canViewOthers&&orgMembers.length>0&&<select value={viewingMember?viewingMember.id:''} onChange={function(e){var uid=e.target.value;if(!uid){setViewingMember(null);}else{var m=orgMembers.find(function(x){return x.id===uid;});setViewingMember(m?{id:m.id,name:m.name||m.email}:null);}setShowPicker(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',maxWidth:170,fontFamily:'inherit'}}>
           <option value="">My Plan</option>
           {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
         </select>}
-        <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>‹</button>
-        <div style={{textAlign:'center'}}>
-          <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{dateLabel}</div>
-          <input type="date" value={planDate} onChange={function(e){setPlanDate(e.target.value);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:11,cursor:'pointer',outline:'none',fontFamily:'inherit'}}/>
+        {/* Date nav */}
+        <div style={{display:'flex',alignItems:'center',gap:4,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'3px 4px'}}>
+          <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>‹</button>
+          <div style={{textAlign:'center',minWidth:90}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{dateLabel}</div>
+            <input type="date" value={planDate} onChange={function(e){setPlanDate(e.target.value);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:10,cursor:'pointer',outline:'none',fontFamily:'inherit',display:'block',width:'100%',textAlign:'center'}}/>
+          </div>
+          <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>›</button>
         </div>
-        <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14}}>›</button>
-        {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'6px 12px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Today</button>}
-        {!isReadOnly&&<button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'#6b8cad':'rgba(107,140,173,0.1)',border:'1px solid '+(showPicker?'#6b8cad':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 16px',color:showPicker?'#fff':'#6b8cad',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>}
+        {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>Today</button>}
+        {!isReadOnly&&<button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(showPicker?'#6b8cad':'var(--tf-border)'),borderRadius:7,padding:'6px 12px',color:showPicker?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>Add to Plan</button>}
+        {!isReadOnly&&org&&<button onClick={function(){setShowCreate(true);}} style={{background:'#1e40af',border:'none',borderRadius:7,padding:'7px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+          <span style={{fontSize:15,lineHeight:1}}>+</span>Create Task
+        </button>}
       </div>
     </div>
 
     {/* Progress bar */}
-    {total>0&&<div style={{marginBottom:20}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
-        <span style={{fontSize:12,fontWeight:600,color:'var(--tf-text-sub)'}}>{done}/{total} tasks done</span>
-        <span style={{fontSize:12,fontWeight:700,color:pct===100?'#22c55e':'#6b8cad'}}>{pct}%</span>
+    {total>0&&<div style={{marginBottom:18}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+        <span style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>{done} of {total} completed</span>
+        <span style={{fontSize:11,fontWeight:700,color:pct===100?'#16a34a':'#6b8cad'}}>{pct}%</span>
       </div>
-      <div style={{height:6,background:'var(--tf-surface)',borderRadius:3,overflow:'hidden'}}>
-        <div style={{width:pct+'%',height:'100%',background:pct===100?'linear-gradient(90deg,#22c55e,#16a34a)':'linear-gradient(90deg,#6b8cad,#4a7a9b)',borderRadius:3,transition:'width 0.4s ease'}}/>
+      <div style={{height:4,background:'var(--tf-surface)',borderRadius:2,overflow:'hidden',border:'1px solid var(--tf-border)'}}>
+        <div style={{width:pct+'%',height:'100%',background:pct===100?'#16a34a':'#1e40af',borderRadius:2,transition:'width 0.4s ease'}}/>
       </div>
     </div>}
 
@@ -9909,7 +9972,91 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles}){
       </div>}
     </div>
 
-    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999,boxShadow:'0 4px 16px rgba(0,0,0,0.18)'}}>{toast.msg}</div>}
+
+    {/* Create Task Modal */}
+    {showCreate&&org&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'36px 16px',overflowY:'auto'}} onClick={function(e){if(e.target===e.currentTarget)resetCreateForm();}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:620,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',fontFamily:'inherit'}}>
+        <div style={{padding:'18px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:'#1e40af',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:2}}>New Task</div>
+            <h3 style={{margin:0,fontSize:17,fontWeight:700,color:'var(--tf-text)'}}>Create Input Task</h3>
+          </div>
+          <button onClick={resetCreateForm} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,width:30,height:30,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+        </div>
+        <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:14}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Client *</label>
+              <select value={ctClientId} onChange={function(e){setCtClientId(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}>
+                <option value="">— Select a client —</option>
+                {clients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}{c.pan?' ('+c.pan+')':''}</option>;})}
+              </select>
+            </div>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Work Type</label>
+              <select value={ctWorkType} onChange={function(e){setCtWorkType(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}>
+                <option value="">— Unclassified (classify later) —</option>
+                {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Task Title</label>
+            <input type="text" value={ctTitle} onChange={function(e){setCtTitle(e.target.value);}} placeholder="e.g., Scrutiny Notice reply" style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Description</label>
+            <textarea value={ctDesc} onChange={function(e){setCtDesc(e.target.value);}} rows={2} placeholder="Add any details, context or instructions…" style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Assign To</label>
+            <div style={{display:'grid',gridTemplateColumns:hierarchyCols.length>1?'repeat(auto-fit,minmax(160px,1fr))':'1fr',gap:8}}>
+              {hierarchyCols.map(function(h){return<div key={h.key}>
+                <div style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:600,marginBottom:3}}>{h.label}</div>
+                <select value={ctHierarchy[h.key]||''} onChange={function(e){var v=e.target.value;setCtHierarchy(function(p){var n=Object.assign({},p);if(v)n[h.key]=v;else delete n[h.key];return n;});}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}>
+                  <option value="">— Unassigned —</option>
+                  {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                </select>
+              </div>;})}
+            </div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4,fontStyle:'italic'}}>Leave all blank to auto-assign yourself.</div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Priority</label>
+              <select value={ctPriority} onChange={function(e){setCtPriority(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}>
+                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Due Date</label>
+              <input type="date" value={ctDueDate} onChange={function(e){setCtDueDate(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            </div>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Contact Person</label>
+            <input type="text" value={ctContact} onChange={function(e){setCtContact(e.target.value);}} placeholder="e.g., Mr. Sharma (+91 98xxx xxxxx)" style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Checklist</label>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {ctChecklist.map(function(item,idx){return<div key={idx} style={{display:'flex',gap:6,alignItems:'center'}}>
+                <input type="text" value={item.text} onChange={function(e){var v=e.target.value;setCtChecklist(function(p){return p.map(function(x,i){return i===idx?Object.assign({},x,{text:v}):x;});});}} placeholder={'Item '+(idx+1)} style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+                <button onClick={function(){setCtChecklist(function(p){return p.filter(function(_,i){return i!==idx;});});}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,width:30,height:30,color:'#ef4444',cursor:'pointer',fontSize:14,flexShrink:0}}>×</button>
+              </div>;})}
+              <button onClick={function(){setCtChecklist(function(p){return[...p,{text:'',done:false}];});}} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit',textAlign:'left'}}>+ Add checklist item</button>
+            </div>
+          </div>
+        </div>
+        <div style={{padding:'14px 22px',borderTop:'1px solid var(--tf-border)',display:'flex',justifyContent:'flex-end',gap:8}}>
+          <button onClick={resetCreateForm} disabled={ctSaving} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>Cancel</button>
+          <button onClick={submitCreateTask} disabled={ctSaving||!ctClientId} style={{background:(ctSaving||!ctClientId)?'var(--tf-surface)':'#1e40af',border:'1px solid',borderColor:(ctSaving||!ctClientId)?'var(--tf-border)':'#1e40af',borderRadius:8,padding:'8px 18px',color:(ctSaving||!ctClientId)?'var(--tf-text-sub)':'#fff',cursor:(ctSaving||!ctClientId)?'not-allowed':'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>
+            {ctSaving?'Creating…':'Create Task'}
+          </button>
+        </div>
+      </div>
+    </div>}
   </div>;
 }
 
