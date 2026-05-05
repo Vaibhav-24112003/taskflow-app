@@ -3049,6 +3049,11 @@ function getDefaultPeriod(freq, cfg){
     if(q<1){q=4;yq-=1;}
     return {year:yq,month:null,quarter:q};
   }
+  if(freq==='yearly'){
+    // Due date spills into next calendar year (year_offset>=1), so we're still
+    // working on the previous FY — go back one FY year.
+    return {year:p.year-1,month:null,quarter:null};
+  }
   return p;
 }
 
