@@ -2061,6 +2061,165 @@ function OrgFormModal({org,cu,supabase,onClose,onSaved}){
 }
 
 
+// ── Org Groups Panel — define teams/departments and assign members ──
+
+function OrgGroupsPanel({org,cu,supabase}){
+  var [groups,setGroups]=useState([]);
+  var [memberships,setMemberships]=useState([]); // [{group_id, user_id}]
+  var [orgMembers,setOrgMembers]=useState([]); // [{id, name, email}]
+  var [loading,setLoading]=useState(true);
+  var [editingGroupId,setEditingGroupId]=useState(null);
+  var [showAddGroup,setShowAddGroup]=useState(false);
+  var [newGroupName,setNewGroupName]=useState('');
+  var [editGroupName,setEditGroupName]=useState('');
+  var [saving,setSaving]=useState(false);
+  var [toast,setToast]=useState(null);
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  var GROUP_COLORS=['#1e40af','#059669','#d97706','#dc2626','#7c3aed','#0891b2','#be185d','#64748b'];
+
+  useEffect(function(){load();},[org.id]);
+
+  async function load(){
+    setLoading(true);
+    var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');
+    setGroups(rg.data||[]);
+    var gids=(rg.data||[]).map(function(g){return g.id;});
+    if(gids.length){
+      var rm=await supabase.from('org_group_members').select('*').in('group_id',gids);
+      setMemberships(rm.data||[]);
+    }
+    var rme=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+    var uids=(rme.data||[]).map(function(m){return m.user_id;});
+    if(uids.length){
+      var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(200);
+      setOrgMembers(rp.data||[]);
+    }
+    setLoading(false);
+  }
+
+  async function addGroup(){
+    if(!newGroupName.trim())return;
+    var pos=groups.length>0?Math.max.apply(null,groups.map(function(g){return g.position;}))+1:0;
+    var color=GROUP_COLORS[groups.length%GROUP_COLORS.length];
+    var r=await supabase.from('org_groups').insert({org_id:org.id,name:newGroupName.trim(),position:pos,color:color}).select('*').single();
+    if(r.error){showToast(r.error.message,'err');return;}
+    setGroups(function(p){return p.concat([r.data]);});
+    setNewGroupName('');setShowAddGroup(false);
+    showToast('Group created');
+  }
+
+  async function renameGroup(id){
+    if(!editGroupName.trim())return;
+    await supabase.from('org_groups').update({name:editGroupName.trim()}).eq('id',id);
+    setGroups(function(p){return p.map(function(g){return g.id===id?Object.assign({},g,{name:editGroupName.trim()}):g;});});
+    setEditingGroupId(null);
+    showToast('Renamed');
+  }
+
+  async function deleteGroup(id){
+    if(!window.confirm('Delete this group? Members will be unassigned.'))return;
+    await supabase.from('org_groups').delete().eq('id',id);
+    setGroups(function(p){return p.filter(function(g){return g.id!==id;});});
+    setMemberships(function(p){return p.filter(function(m){return m.group_id!==id;});});
+    showToast('Group deleted');
+  }
+
+  async function toggleMember(groupId,userId,currentlyIn){
+    if(currentlyIn){
+      await supabase.from('org_group_members').delete().eq('group_id',groupId).eq('user_id',userId);
+      setMemberships(function(p){return p.filter(function(m){return!(m.group_id===groupId&&m.user_id===userId);});});
+    }else{
+      var r=await supabase.from('org_group_members').insert({group_id:groupId,user_id:userId}).select('*').single();
+      if(r.data)setMemberships(function(p){return p.concat([r.data]);});
+    }
+  }
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>;
+
+  var ungroupedMembers=orgMembers.filter(function(m){return!memberships.some(function(mb){return mb.user_id===m.id;});});
+
+  return<div style={{maxWidth:800,padding:'20px 24px'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Groups & Teams</h2>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Organise members into teams or departments. Groups appear as categories in all member dropdowns across the app.</p>
+      </div>
+      <button onClick={function(){setShowAddGroup(true);setNewGroupName('');}} style={{background:'#1e40af',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',flexShrink:0}}>+ Add Group</button>
+    </div>
+
+    {showAddGroup&&<div style={{background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,padding:'12px',marginBottom:14}}>
+      <div style={{display:'flex',gap:8}}>
+        <input value={newGroupName} onChange={function(e){setNewGroupName(e.target.value);}} placeholder="Group name (e.g. Fin Staff, Anulom Team)"
+          autoFocus
+          style={{flex:1,background:'#fff',border:'1px solid #bfdbfe',borderRadius:6,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}
+          onKeyDown={function(e){if(e.key==='Enter')addGroup();if(e.key==='Escape'){setShowAddGroup(false);setNewGroupName('');}}}/>
+        <button onClick={addGroup} style={{background:'#1e40af',border:'none',borderRadius:6,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Create</button>
+        <button onClick={function(){setShowAddGroup(false);setNewGroupName('');}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+      </div>
+    </div>}
+
+    {groups.length===0&&!showAddGroup&&<div style={{padding:'40px',textAlign:'center',color:'var(--tf-text-sub)',border:'2px dashed var(--tf-border)',borderRadius:10,marginBottom:14}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>No groups yet</div>
+      <div style={{fontSize:11}}>Create groups like "Fin Staff", "Anulom Team" to organise your {orgMembers.length} members</div>
+    </div>}
+
+    {groups.map(function(group){
+      var isEdit=editingGroupId===group.id;
+      var groupMemberIds=memberships.filter(function(m){return m.group_id===group.id;}).map(function(m){return m.user_id;});
+      var groupMembersData=groupMemberIds.map(function(uid){return orgMembers.find(function(m){return m.id===uid;})||{id:uid,name:'Unknown'};});
+      return<div key={group.id} style={{border:'1px solid var(--tf-border)',borderRadius:10,marginBottom:12,overflow:'hidden'}}>
+        {/* Group header */}
+        <div style={{padding:'10px 16px',display:'flex',alignItems:'center',gap:10,background:'var(--tf-surface)',borderBottom:'1px solid var(--tf-border)'}}>
+          <div style={{width:12,height:12,borderRadius:'50%',background:group.color,flexShrink:0}}/>
+          {isEdit
+            ?<div style={{display:'flex',gap:6,flex:1}}>
+              <input defaultValue={group.name} id={'grp-inp-'+group.id} autoFocus
+                style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 8px',color:'var(--tf-text)',fontSize:14,fontWeight:700,outline:'none',fontFamily:'inherit'}}
+                onKeyDown={function(e){if(e.key==='Enter'){setEditGroupName(document.getElementById('grp-inp-'+group.id).value);renameGroup(group.id);}if(e.key==='Escape')setEditingGroupId(null);}}/>
+              <button onClick={function(){setEditGroupName(document.getElementById('grp-inp-'+group.id).value);renameGroup(group.id);}} style={{background:'#1e40af',border:'none',borderRadius:5,padding:'4px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Save</button>
+              <button onClick={function(){setEditingGroupId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+            </div>
+            :<span style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',flex:1}}>{group.name}</span>}
+          <span style={{fontSize:12,color:'var(--tf-text-sub)',flexShrink:0}}>{groupMemberIds.length} members</span>
+          {!isEdit&&<>
+            <button onClick={function(){setEditingGroupId(group.id);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Rename</button>
+            <button onClick={function(){deleteGroup(group.id);}} style={{background:'none',border:'1px solid #fecaca',borderRadius:5,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Delete</button>
+          </>}
+        </div>
+        {/* Member grid */}
+        <div style={{padding:'10px 16px',display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:6}}>
+          {orgMembers.map(function(m){
+            var inGroup=groupMemberIds.includes(m.id);
+            var ini=(m.name||m.email||'?').charAt(0).toUpperCase();
+            return<div key={m.id} onClick={function(){toggleMember(group.id,m.id,inGroup);}}
+              style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:7,border:'1px solid',borderColor:inGroup?group.color:'var(--tf-border)',background:inGroup?'rgba(30,64,175,0.05)':'transparent',cursor:'pointer',transition:'all 0.12s'}}>
+              <div style={{width:22,height:22,borderRadius:'50%',background:inGroup?group.color:'var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff',flexShrink:0}}>{ini}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:inGroup?700:500,color:inGroup?'var(--tf-text)':'var(--tf-text-sub)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.name||m.email}</div>
+              </div>
+              <div style={{width:16,height:16,borderRadius:3,border:'1.5px solid',borderColor:inGroup?group.color:'var(--tf-border)',background:inGroup?group.color:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                {inGroup&&<span style={{color:'#fff',fontSize:9,fontWeight:900,lineHeight:1}}>✓</span>}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
+
+    {ungroupedMembers.length>0&&groups.length>0&&<div style={{padding:'12px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,marginTop:4}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Not in any group ({ungroupedMembers.length})</div>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        {ungroupedMembers.map(function(m){
+          return<span key={m.id} style={{fontSize:12,color:'var(--tf-text-sub)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'3px 10px'}}>{m.name||m.email}</span>;
+        })}
+      </div>
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Org Settings Panel (replaces OrgManagementPanel inside org view) ─
 function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   var [hierarchy,setHierarchy]=useState((org.workflow_hierarchy||[]).map(function(h){return{key:h.key,label:h.label};}));
@@ -2893,7 +3052,7 @@ function getDefaultPeriod(freq, cfg){
   return p;
 }
 
-function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly}){
+function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly, orgGroups, orgGroupMemberships}){
   var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
   // Always include a synthetic "Unclassified" entry (frequency=once) so tasks
@@ -3896,7 +4055,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         {hierarchyCols.map(function(hc){return<select key={hc.key} value={filters[hc.key]||'all'} onChange={function(e){setFilter(hc.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
           <option value="all">All {hc.label}s</option>
           <option value="__unassigned">Unassigned</option>
-          {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'').slice(1)}
         </select>;})}
         {cfg.cols.map(function(col){
           var ct=col.type||'checkbox';
@@ -3966,8 +4125,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                     {hierarchyCols.map(function(hc){return<div key={hc.key} style={{flex:1,minWidth:140}}>
                       <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
                       <select value={onceHierarchy[hc.key]||''} onChange={function(e){setOnceHierarchy(function(p){var n=Object.assign({},p);n[hc.key]=e.target.value;return n;});}} style={Object.assign({},_INP,{cursor:'pointer',fontSize:12})}>
-                        <option value="">— Select —</option>
-                        {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                        {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'— Select —')}
                       </select>
                     </div>;})}
                   </div>
@@ -4090,8 +4248,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                 {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hVal=(row.data||{})[hc.key]||'';return<td key={hc.key} style={{padding:'6px 8px',textAlign:'center'}}>
                   <select value={hVal} onChange={function(e){updateCellData(row.id,hc.key,e.target.value);}}
                     style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:hVal?'var(--tf-text)':'var(--tf-text-sub)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:140,WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'5\' viewBox=\'0 0 8 5\'%3E%3Cpath d=\'M0 0l4 5 4-5z\' fill=\'%236b8cad\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 6px center',paddingRight:18}}>
-                    <option value="" style={{background:'var(--tf-surface)',color:'var(--tf-text-sub)'}}>—</option>
-                    {orgMembers.map(function(m){return<option key={m.id} value={m.id} style={{background:'var(--tf-surface)',color:'var(--tf-text)'}}>{m.name||m.email}</option>;})}
+                    {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'—')}
                   </select>
                 </td>;})}
                 {visibleCols.map(function(col){
@@ -6072,7 +6229,7 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 </div>;
 }
 
-function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType}){
+function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
   var [allClients,setAllClients]=useState([]); // all org clients (for Create Task dropdown)
@@ -6625,8 +6782,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   <div style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:600,marginBottom:3}}>{h.label}</div>
                   <select value={ctHierarchy[h.key]||''} onChange={function(e){var v=e.target.value;setCtHierarchy(function(p){var n=Object.assign({},p);if(v)n[h.key]=v;else delete n[h.key];return n;});}}
                     style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
-                    <option value="">— Unassigned —</option>
-                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                    {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'— Unassigned —')}
                   </select>
                 </div>;
               })}
@@ -7486,8 +7642,48 @@ function ModulePlaceholder({moduleLabel,activeTab,features}){
   </div>;
 }
 
+// ── Shared: grouped member dropdown helper ──
+// orgGroups: [{id, name, color}]
+// memberships: [{group_id, user_id}]
+// orgMembers: [{id, name, email}]
+// Returns array of <optgroup> elements (or flat <option>s if no groups defined)
+function renderGroupedMemberOptions(orgMembers, orgGroups, memberships, blankLabel){
+  var blank=blankLabel||'— Select —';
+  if(!orgGroups||orgGroups.length===0){
+    return[<option key="" value="">{blank}</option>].concat(orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;}));
+  }
+  var assignedIds=new Set((memberships||[]).map(function(mb){return mb.user_id;}));
+  var ungrouped=orgMembers.filter(function(m){return!assignedIds.has(m.id);});
+  var result=[<option key="" value="">{blank}</option>];
+  orgGroups.forEach(function(g){
+    var gMembers=orgMembers.filter(function(m){return(memberships||[]).some(function(mb){return mb.group_id===g.id&&mb.user_id===m.id;});});
+    if(gMembers.length>0){
+      result.push(<optgroup key={g.id} label={g.name}>{gMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}</optgroup>);
+    }
+  });
+  if(ungrouped.length>0){
+    result.push(<optgroup key="__ungrouped" label="Other">{ungrouped.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}</optgroup>);
+  }
+  return result;
+}
+
+// Returns members grouped as [{group:{id,name,color}, members:[]}] — for grid UIs
+function groupMembersForGrid(orgMembers, orgGroups, memberships){
+  if(!orgGroups||orgGroups.length===0){
+    return[{group:{id:'__all',name:'All Members',color:'#64748b'},members:orgMembers}];
+  }
+  var assignedIds=new Set((memberships||[]).map(function(mb){return mb.user_id;}));
+  var ungrouped=orgMembers.filter(function(m){return!assignedIds.has(m.id);});
+  var rows=orgGroups.map(function(g){
+    var members=orgMembers.filter(function(m){return(memberships||[]).some(function(mb){return mb.group_id===g.id&&mb.user_id===m.id;});});
+    return{group:g,members:members};
+  }).filter(function(r){return r.members.length>0;});
+  if(ungrouped.length>0)rows.push({group:{id:'__other',name:'Other',color:'#94a3b8'},members:ungrouped});
+  return rows;
+}
+
 // ── Big Clients Module — project-style task boards for high-volume clients ──
-function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
+function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgGroups,orgGroupMemberships}){
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
   var [orgMembers,setOrgMembers]=useState([]);
@@ -7988,14 +8184,25 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   }
 
   function renderRoleAssignmentGrid(roles,onChange){
-    return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:6}}>
-      {orgMembers.map(function(m){
-        return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
-          <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
-          <select value={roles[m.id]||''} onChange={function(e){var v=e.target.value;onChange(m.id,v);}}
-            style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
-            <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
-          </select>
+    var grouped=groupMembersForGrid(orgMembers,orgGroups||[],orgGroupMemberships||[]);
+    return<div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {grouped.map(function(grp){
+        return<div key={grp.group.id}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5,display:'flex',alignItems:'center',gap:5}}>
+            <div style={{width:8,height:8,borderRadius:'50%',background:grp.group.color,flexShrink:0}}/>
+            {grp.group.name}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:5}}>
+            {grp.members.map(function(m){
+              return<div key={m.id} style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',borderRadius:6,padding:'5px 8px',border:'1px solid var(--tf-border)'}}>
+                <div style={{flex:1,fontSize:12,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{(m.name||m.email||'?').split(' ')[0]}</div>
+                <select value={roles[m.id]||''} onChange={function(e){var v=e.target.value;onChange(m.id,v);}}
+                  style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 5px',color:'var(--tf-text)',fontSize:11,outline:'none'}}>
+                  <option value="">None</option><option value="executor">Executor (To Do)</option><option value="reviewer">Reviewer (Review)</option>
+                </select>
+              </div>;
+            })}
+          </div>
         </div>;
       })}
     </div>;
@@ -9083,13 +9290,15 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const [myRole,setMyRole]=useState('member');
+  const [orgGroups,setOrgGroups]=useState([]);       // [{id,name,color,position}]
+  const [orgGroupMemberships,setOrgGroupMemberships]=useState([]); // [{group_id,user_id}]
   // Worksheet navigation hint (set when user clicks a work type in Your Dashboard)
   const [wsInitWorkType,setWsInitWorkType]=useState(null);
   const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
   const [sidebarOpen,setSidebarOpen]=useState(true);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
 
-  useEffect(function(){loadWTC();loadMyRole();/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){loadWTC();loadMyRole();loadOrgGroups();/* eslint-disable-next-line */},[org.id]);
   async function loadWTC(){
     var r=await getAllWorkTypeConfigs(org.id);
     setWorkTypeConfigs(r.data||[]);
@@ -9098,6 +9307,16 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     if(org.created_by===cu.id){setMyRole('owner');return;}
     var r=await supabase.from('organization_members').select('role').eq('org_id',org.id).eq('user_id',cu.id).maybeSingle();
     if(r.data&&r.data.role)setMyRole(r.data.role);
+  }
+  async function loadOrgGroups(){
+    var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');
+    var groups=rg.data||[];
+    setOrgGroups(groups);
+    if(groups.length>0){
+      var gids=groups.map(function(g){return g.id;});
+      var rm=await supabase.from('org_group_members').select('group_id,user_id').in('group_id',gids);
+      setOrgGroupMemberships(rm.data||[]);
+    }
   }
   var activeConfigs=workTypeConfigs.filter(function(c){return c.is_active;});
   var workTypeNames=activeConfigs.map(function(c){return c.name;});
@@ -9115,7 +9334,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
     {id:'comms',label:'Communications',icon:Mail,desc:'Bulk email clients, manage email templates and notifications.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)'},
     {id:'hr',label:'HR',icon:Users,desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
-    {id:'setup',label:'Setup',icon:Settings,desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
+    {id:'setup',label:'Setup',icon:Settings,desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'groups',label:'Groups & Teams'},{id:'settings',label:'Org Settings'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -9185,17 +9404,18 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   // Module content with left sidebar
   var sidebarW=sidebarOpen?210:48;
   var moduleContent=<>
-      {orgModule==='dashboard'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType}/>}
+      {orgModule==='dashboard'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='dashboard'&&tab==='team'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly}/>}
-      {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='comms'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='groups'&&<OrgGroupsPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
       {orgModule==='hr'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='hr'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
@@ -9566,7 +9786,7 @@ function ClientPortal({supabase}){
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
 // ══════════════════════════════════════════════════════════════════
-function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy}){
+function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy, orgGroups, orgGroupMemberships}){
   var today=new Date();
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var [planDate,setPlanDate]=useState(todayStr);
@@ -10014,8 +10234,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
         {canViewOthers&&orgMembers.length>0&&<select value={viewingMember?viewingMember.id:''} onChange={function(e){var uid=e.target.value;if(!uid){setViewingMember(null);}else{var m=orgMembers.find(function(x){return x.id===uid;});setViewingMember(m?{id:m.id,name:m.name||m.email}:null);}setShowPicker(false);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',maxWidth:170,fontFamily:'inherit'}}>
-          <option value="">My Plan</option>
-          {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          {renderGroupedMemberOptions(orgMembers.filter(function(m){return m.id!==cu.id;}),orgGroups||[],orgGroupMemberships||[],'My Plan')}
         </select>}
         {/* Date nav */}
         <div style={{display:'flex',alignItems:'center',gap:4,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'3px 4px'}}>
@@ -10314,8 +10533,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
               {hierarchyCols.map(function(h){return<div key={h.key}>
                 <div style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:600,marginBottom:3}}>{h.label}</div>
                 <select value={ctHierarchy[h.key]||''} onChange={function(e){var v=e.target.value;setCtHierarchy(function(p){var n=Object.assign({},p);if(v)n[h.key]=v;else delete n[h.key];return n;});}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}>
-                  <option value="">— Unassigned —</option>
-                  {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                  {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'— Unassigned —')}
                 </select>
               </div>;})}
             </div>
