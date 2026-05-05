@@ -7688,6 +7688,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
   var [clients,setClients]=useState([]);
   var [orgMembers,setOrgMembers]=useState([]);
   var [selClientId,setSelClientId]=useState(null);
+  var [clientPanelOpen,setClientPanelOpen]=useState(true);
   var [search,setSearch]=useState('');
   var [showPicker,setShowPicker]=useState(false);
   var [mode,setMode]=useState('work');
@@ -7918,38 +7919,58 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
   var cols=selClient?getColumns():[];
 
   return<div style={{display:'flex',gap:0,height:'calc(100vh - 180px)',minHeight:500,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-    {/* Left panel */}
-    <div style={{width:240,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)',flexShrink:0}}>
-      <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Big Clients · {bigClients.length}</div>
-        <button onClick={function(){setShowPicker(true);}} style={{background:'#1e40af',border:'none',borderRadius:6,width:26,height:26,color:'#fff',cursor:'pointer',fontSize:16,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>
+    {/* Left panel — collapsible */}
+    <div style={{width:clientPanelOpen?240:40,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)',flexShrink:0,transition:'width 0.18s ease',overflow:'hidden'}}>
+      <div style={{padding:'10px 10px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:clientPanelOpen?'space-between':'center',gap:6,minHeight:44,flexShrink:0}}>
+        {clientPanelOpen&&<div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>Big Clients · {bigClients.length}</div>}
+        <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+          {clientPanelOpen&&<button onClick={function(){setShowPicker(true);}} title="Add big client" style={{background:'#1e40af',border:'none',borderRadius:6,width:24,height:24,color:'#fff',cursor:'pointer',fontSize:15,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>}
+          <button onClick={function(){setClientPanelOpen(function(v){return !v;});}} title={clientPanelOpen?'Collapse client list':'Expand client list'}
+            style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:11,fontWeight:700,flexShrink:0}}>
+            {clientPanelOpen?'◀':'▶'}
+          </button>
+        </div>
       </div>
-      <div style={{padding:'8px 10px',borderBottom:'1px solid var(--tf-border)'}}>
-        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search clients..."
-          style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-      </div>
-      <div style={{flex:1,overflowY:'auto'}}>
-        {filteredBig.length===0
-          ?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>
-            <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>★</div>
-            <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No big clients yet</div>
-            <div style={{fontSize:11,lineHeight:1.5}}>Click + to mark a high-volume client.</div>
-          </div>
-          :filteredBig.map(function(c){
-            var isActive=selClientId===c.id;
-            return<div key={c.id} onClick={function(){setSelClientId(c.id);setMode('work');setTaskSearch('');setColFilters({});}}
-              style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(30,64,175,0.07)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#1e40af':'transparent'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
-                  {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
+      {clientPanelOpen&&<>
+        <div style={{padding:'8px 10px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+          <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search clients..."
+            style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+        </div>
+        <div style={{flex:1,overflowY:'auto'}}>
+          {filteredBig.length===0
+            ?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>
+              <div style={{fontSize:22,marginBottom:8,opacity:0.35}}>★</div>
+              <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No big clients yet</div>
+              <div style={{fontSize:11,lineHeight:1.5}}>Click + to mark a high-volume client.</div>
+            </div>
+            :filteredBig.map(function(c){
+              var isActive=selClientId===c.id;
+              return<div key={c.id} onClick={function(){setSelClientId(c.id);setMode('work');setTaskSearch('');setColFilters({});}}
+                style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:isActive?'rgba(30,64,175,0.07)':'transparent',borderLeft:'3px solid',borderLeftColor:isActive?'#1e40af':'transparent'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
+                    {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
+                  </div>
+                  <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove from Big Clients?'))toggleBig(c,false);}}
+                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.5}}>×</button>
                 </div>
-                <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove from Big Clients?'))toggleBig(c,false);}}
-                  style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.5}}>×</button>
-              </div>
-            </div>;
-          })}
-      </div>
+              </div>;
+            })}
+        </div>
+      </>}
+      {!clientPanelOpen&&selClient&&<div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',paddingTop:10,gap:6,overflowY:'auto'}}>
+        {filteredBig.map(function(c){
+          var isActive=selClientId===c.id;
+          return<div key={c.id} onClick={function(){setSelClientId(c.id);setMode('work');setClientPanelOpen(true);}}
+            title={c.display_name||c.name}
+            style={{width:30,height:30,borderRadius:7,background:isActive?'rgba(30,64,175,0.15)':'var(--tf-surface)',border:'2px solid',borderColor:isActive?'#1e40af':'var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:11,fontWeight:800,color:isActive?'#1e40af':'var(--tf-text-sub)',flexShrink:0}}>
+            {(c.display_name||c.name).charAt(0).toUpperCase()}
+          </div>;
+        })}
+        <div onClick={function(){setShowPicker(true);}} title="Add big client"
+          style={{width:30,height:30,borderRadius:7,background:'transparent',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',fontSize:15,fontWeight:800,color:'var(--tf-text-sub)',flexShrink:0}}>+</div>
+      </div>}
     </div>
 
     {/* Right panel */}
@@ -9355,15 +9376,15 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
 
   var header=<div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:14,paddingBottom:14}}>
-      <button onClick={orgModule?backToLauncher:onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>&#x2190; {orgModule?'Modules':'Back'}</button>
-      <div style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff'}}>{org.name.charAt(0).toUpperCase()}</div>
-      <div>
-        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.01em'}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:14,paddingBottom:14,overflow:'hidden'}}>
+      <button onClick={orgModule?backToLauncher:onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0,whiteSpace:'nowrap'}}>&#x2190; {orgModule?'Modules':'Back'}</button>
+      <div style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff',flexShrink:0}}>{org.name.charAt(0).toUpperCase()}</div>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.01em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
           {org.name}
           {currentModule&&<span style={{color:'var(--tf-text-sub)',fontWeight:400}}> · {currentModule.label}</span>}
         </div>
-        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div>
       </div>
     </div>
   </div>;
