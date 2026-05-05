@@ -3184,7 +3184,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     return tabs;
   },[allTypes,WS_TYPE_CONFIGS]);
 
-  useEffect(function(){loadClients();loadColPrefs();},[org.id]);
+  useEffect(function(){loadClients();loadColPrefs();},[org.id,(workTypeConfigs||[]).length]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
   useEffect(function(){if(activeType){loadOrgMembers();}},[activeType]);
   // Load column prefs when active type changes
