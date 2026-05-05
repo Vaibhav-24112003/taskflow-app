@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -1723,19 +1723,34 @@ var DEF_CF=[{key:'file_no',label:'File No.',type:'text'},{key:'engagement_type',
 
 function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeConfigs}){
   var [clients,setClients]=useState([]);
+  var [wtEnrollment,setWtEnrollment]=useState({}); // {client_id: [work_type,...]}
   var [loading,setLoading]=useState(true);
   var [search,setSearch]=useState('');
   var [filterStatus,setFilterStatus]=useState('all');
+  var [filterWT,setFilterWT]=useState('');
   var [showForm,setShowForm]=useState(false);
   var [editClient,setEditClient]=useState(null);
   var [showImport,setShowImport]=useState(false);
   var [toastMsg,setToastMsg]=useState(null);
-  useEffect(function(){load();},[ orgId]);
+  useEffect(function(){load();},[orgId]);
   async function load(){
     setLoading(true);
     if(!orgId){setClients([]);setLoading(false);return;}
-    var r=await supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500);
-    if(!r.error)setClients(r.data||[]);
+    var [rc,rw]=await Promise.all([
+      supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500),
+      supabase.from('worksheet_rows').select('client_id,worksheets!inner(work_type,org_id)').eq('worksheets.org_id',orgId).limit(5000)
+    ]);
+    if(!rc.error)setClients(rc.data||[]);
+    var enroll={};
+    (rw.data||[]).forEach(function(row){
+      var wt=row.worksheets&&row.worksheets.work_type;
+      if(!wt)return;
+      if(!enroll[row.client_id])enroll[row.client_id]=new Set();
+      enroll[row.client_id].add(wt);
+    });
+    var enrollArr={};
+    Object.keys(enroll).forEach(function(k){enrollArr[k]=Array.from(enroll[k]).sort();});
+    setWtEnrollment(enrollArr);
     setLoading(false);
   }
   function toast(msg,type){setToastMsg({msg,type:type||'ok'});setTimeout(function(){setToastMsg(null);},3000);}
@@ -1759,15 +1774,19 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
     var a=document.createElement('a');a.href=url;a.download='clients.csv';a.click();URL.revokeObjectURL(url);
     toast('Exported '+clients.length+' clients');
   }
+  var allEnrolledWTs=Array.from(new Set(Object.values(wtEnrollment).flat())).sort();
   var filtered=clients.filter(function(c){
     var q=search.toLowerCase();
-    return(!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q))&&(filterStatus==='all'||c.status===filterStatus);
+    var matchQ=!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q);
+    var matchS=filterStatus==='all'||c.status===filterStatus;
+    var matchWT=!filterWT||(wtEnrollment[c.id]||[]).includes(filterWT);
+    return matchQ&&matchS&&matchWT;
   });
   var SC={active:'#22c55e',inactive:'#94a3b8',prospect:'#f59e0b'};
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
   return<div style={{padding:'0 0 40px',maxWidth:1100,margin:'0 auto'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
-      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master Data</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(function(c){return c.status==='active';}).length} active</div></div>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(function(c){return c.status==='active';}).length} active</div></div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button onClick={function(){setShowImport(true);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬆ Import</button>
         <button onClick={exportCSV} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬇ Export</button>
@@ -1779,6 +1798,10 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
       <select value={filterStatus} onChange={function(e){setFilterStatus(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
         <option value="all">All Status</option>
         {CLIENT_STATUSES.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
+      </select>
+      <select value={filterWT} onChange={function(e){setFilterWT(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+        <option value="">All Work Types</option>
+        {allEnrolledWTs.map(function(w){return<option key={w} value={w}>{w}</option>;})}
       </select>
     </div>
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:filtered.length===0?
@@ -1792,14 +1815,13 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
           </tr></thead>
           <tbody>
             {filtered.map(function(c,i){
-              var cf=c.custom_fields||{};
-              var wts=(cf.work_types||'').split(',').filter(Boolean);
+              var enrolledWTs=wtEnrollment[c.id]||[];
               return<tr key={c.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(107,140,173,0.02)':'transparent'}}>
                 <td style={{padding:'9px 12px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:14}}>{c.name}</div>{c.display_name&&c.display_name!==c.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.display_name}</div>}</td>
                 <td style={{padding:'9px 12px',fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{c.client_type}</td>
                 <td style={{padding:'9px 12px'}}>{c.email&&<div style={{fontSize:12}}>{c.email}</div>}{c.phone&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.phone}</div>}</td>
                 <td style={{padding:'9px 12px'}}>{c.pan&&<div style={{fontSize:11,fontFamily:'monospace'}}>{c.pan}</div>}{c.gstin&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>}</td>
-                <td style={{padding:'9px 12px'}}><div style={{display:'flex',flexWrap:'wrap',gap:3}}>{wts.length?wts.map(function(wt){return<span key={wt} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'1px 6px'}}>{wt}</span>;}):'-'}</div></td>
+                <td style={{padding:'9px 12px'}}><div style={{display:'flex',flexWrap:'wrap',gap:3}}>{enrolledWTs.length?enrolledWTs.map(function(wt){return<span key={wt} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'1px 6px'}}>{wt}</span>;}):'-'}</div></td>
                 <td style={{padding:'9px 12px'}}><span style={{background:SC[c.status]+'20',color:SC[c.status],border:'1px solid '+SC[c.status]+'40',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:600,textTransform:'capitalize'}}>{c.status}</span></td>
                 <td style={{padding:'9px 12px'}}><div style={{display:'flex',gap:5}}>
                   <button onClick={function(){setEditClient(c);setShowForm(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
@@ -9464,9 +9486,335 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   </div>;
 }
 
+// ── Placeholder (Library sub-tabs not yet built) ──────────────────
+function PlaceholderModule({title,desc,icon}){
+  return<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:16,color:'var(--tf-text-sub)'}}>
+    <div style={{fontSize:52}}>{icon}</div>
+    <div style={{fontSize:20,fontWeight:800,color:'var(--tf-text)'}}>{title}</div>
+    <div style={{fontSize:14,maxWidth:420,textAlign:'center',lineHeight:1.7}}>{desc}</div>
+    <span style={{fontSize:11,background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:20,padding:'3px 12px',color:'#6b8cad',fontWeight:700,letterSpacing:'0.05em'}}>COMING SOON</span>
+  </div>;
+}
+
+// ── Credentials Module (Library > Credentials) ─────────────────────
+function CredentialsModule({org,supabase,cu}){
+  var [clients,setClients]=useState([]);
+  var [selClient,setSelClient]=useState(null);
+  var [creds,setCreds]=useState([]);
+  var [search,setSearch]=useState('');
+  var [credSearch,setCredSearch]=useState('');
+  var [showForm,setShowForm]=useState(false);
+  var [editCred,setEditCred]=useState(null);
+  var [revealIds,setRevealIds]=useState({});
+  var [saving,setSaving]=useState(false);
+  var [toast,setToast]=useState(null);
+  var [form,setForm]=useState({portal_name:'',username:'',password:'',pan:'',email:'',mobile:'',notes:''});
+
+  useEffect(function(){loadClients();},[org.id]);
+  useEffect(function(){if(selClient)loadCreds(selClient.id);else setCreds([]);},[selClient]);
+
+  async function loadClients(){
+    var r=await supabase.from('clients').select('id,name,display_name,status').eq('org_id',org.id).order('name').limit(500);
+    setClients(r.data||[]);
+  }
+  async function loadCreds(clientId){
+    var r=await supabase.from('client_credentials').select('*').eq('org_id',org.id).eq('client_id',clientId).order('portal_name');
+    setCreds(r.data||[]);
+  }
+  function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
+  function openAdd(){setForm({portal_name:'',username:'',password:'',pan:'',email:'',mobile:'',notes:''});setEditCred(null);setShowForm(true);}
+  function openEdit(c){setForm({portal_name:c.portal_name||'',username:c.username||'',password:c.password||'',pan:c.pan||'',email:c.email||'',mobile:c.mobile||'',notes:c.notes||''});setEditCred(c);setShowForm(true);}
+  async function saveCred(){
+    if(!form.portal_name.trim()){showToast('Portal name required','err');return;}
+    if(!selClient){showToast('Select a client first','err');return;}
+    setSaving(true);
+    var payload={org_id:org.id,client_id:selClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:form.password||null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,updated_at:new Date().toISOString()};
+    var r=editCred?await supabase.from('client_credentials').update(payload).eq('id',editCred.id).select().single():await supabase.from('client_credentials').insert(payload).select().single();
+    if(r.error){showToast(r.error.message,'err');}
+    else{showToast(editCred?'Updated':'Added');setShowForm(false);loadCreds(selClient.id);}
+    setSaving(false);
+  }
+  async function delCred(id){
+    if(!window.confirm('Delete this credential?'))return;
+    var r=await supabase.from('client_credentials').delete().eq('id',id);
+    if(!r.error){setCreds(function(p){return p.filter(function(c){return c.id!==id;});});showToast('Deleted');}
+    else showToast(r.error.message,'err');
+  }
+  function toggleReveal(id){setRevealIds(function(p){var n=Object.assign({},p);n[id]=!n[id];return n;});}
+  function copyToClipboard(text,label){navigator.clipboard.writeText(text||'');showToast(label+' copied');}
+
+  var filteredClients=clients.filter(function(c){var q=search.toLowerCase();return!q||c.name.toLowerCase().includes(q);});
+  var filteredCreds=creds.filter(function(c){var q=credSearch.toLowerCase();return!q||c.portal_name.toLowerCase().includes(q)||(c.username||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+
+  return<div style={{display:'flex',height:'100%',minHeight:0,gap:0}}>
+    {/* Left: client list */}
+    <div style={{width:220,flexShrink:0,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',minHeight:0}}>
+      <div style={{padding:'12px 10px 8px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+        <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>Clients</div>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..." style={Object.assign({},INP,{padding:'6px 9px',fontSize:12})}/>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        {filteredClients.map(function(c){
+          var isActive=selClient&&selClient.id===c.id;
+          return<button key={c.id} onClick={function(){setSelClient(c);setCredSearch('');}} style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',padding:'8px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid var(--tf-border)',fontFamily:'inherit'}}
+            onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.06)';}}
+            onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+            <div style={{width:28,height:28,borderRadius:8,background:isActive?'#6b8cad':'rgba(107,140,173,0.15)',color:isActive?'#fff':'#6b8cad',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>{c.name.charAt(0).toUpperCase()}</div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:isActive?700:500,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
+            </div>
+          </button>;
+        })}
+        {filteredClients.length===0&&<div style={{padding:16,fontSize:12,color:'var(--tf-text-sub)',textAlign:'center'}}>No clients found</div>}
+      </div>
+    </div>
+
+    {/* Right: credentials panel */}
+    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+      {!selClient?<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:10,color:'var(--tf-text-sub)'}}>
+        <Key size={36} strokeWidth={1.5} style={{opacity:0.3}}/>
+        <div style={{fontSize:14,fontWeight:600}}>Select a client to view credentials</div>
+      </div>:<>
+        <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexShrink:0,flexWrap:'wrap'}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{selClient.name}</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}}>{creds.length} credential{creds.length!==1?'s':''} stored</div>
+          </div>
+          <input value={credSearch} onChange={function(e){setCredSearch(e.target.value);}} placeholder="Filter credentials..." style={Object.assign({},INP,{width:200,padding:'6px 10px',fontSize:12})}/>
+          <button onClick={openAdd} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,whiteSpace:'nowrap'}}>+ Add</button>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
+          {filteredCreds.length===0?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>
+            {creds.length===0?'No credentials stored yet. Click + Add to start.':'No credentials match your search.'}
+          </div>:<div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {filteredCreds.map(function(c){
+              var revealed=revealIds[c.id];
+              return<div key={c.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px 16px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center'}}><Key size={14} color="#fff"/></div>
+                    <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)'}}>{c.portal_name}</div>
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={function(){openEdit(c);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)'}}>Edit</button>
+                    <button onClick={function(){delCred(c.id);}} style={{background:'none',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:'#ef4444'}}>Del</button>
+                  </div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
+                  {c.username&&<CredField label="Login / Username" value={c.username} onCopy={function(){copyToClipboard(c.username,'Username');}}/>}
+                  {c.password&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'6px 10px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Password</div>
+                    <div style={{display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{flex:1,fontFamily:'monospace',fontSize:13,color:'var(--tf-text)',letterSpacing:revealed?'normal':'0.15em'}}>{revealed?c.password:'••••••••'}</span>
+                      <button onClick={function(){toggleReveal(c.id);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',padding:'0 2px'}}>{revealed?'Hide':'Show'}</button>
+                      <button onClick={function(){copyToClipboard(c.password,'Password');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',padding:'0 2px'}}>Copy</button>
+                    </div>
+                  </div>}
+                  {c.pan&&<CredField label="PAN" value={c.pan} onCopy={function(){copyToClipboard(c.pan,'PAN');}} mono/>}
+                  {c.email&&<CredField label="Email" value={c.email} onCopy={function(){copyToClipboard(c.email,'Email');}}/>}
+                  {c.mobile&&<CredField label="Mobile" value={c.mobile} onCopy={function(){copyToClipboard(c.mobile,'Mobile');}}/>}
+                  {c.notes&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'6px 10px',gridColumn:'1/-1'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Notes</div>
+                    <div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{c.notes}</div>
+                  </div>}
+                </div>
+              </div>;
+            })}
+          </div>}
+        </div>
+      </>}
+    </div>
+
+    {/* Add/Edit modal */}
+    {showForm&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'var(--tf-panel)',borderRadius:16,padding:28,width:480,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 25px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:20}}>{editCred?'Edit Credential':'Add Credential'}{selClient?' — '+selClient.name:''}</div>
+        {[{key:'portal_name',label:'Portal Name *',placeholder:'e.g. Income Tax Portal, GST Portal, MCA'},{key:'username',label:'Login / Username',placeholder:''},{key:'password',label:'Password',placeholder:'',type:'password'},{key:'pan',label:'PAN',placeholder:''},{key:'email',label:'Email',placeholder:''},{key:'mobile',label:'Mobile',placeholder:''}].map(function(f){
+          return<div key={f.key} style={{marginBottom:12}}>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>{f.label}</label>
+            <input type={f.type||'text'} value={form[f.key]} onChange={function(e){var v=e.target.value;setForm(function(p){var n=Object.assign({},p);n[f.key]=v;return n;});}} placeholder={f.placeholder} style={INP}/>
+          </div>;
+        })}
+        <div style={{marginBottom:16}}>
+          <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Notes</label>
+          <textarea value={form.notes} onChange={function(e){setForm(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={3} style={Object.assign({},INP,{resize:'vertical'})}/>
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)'}}>Cancel</button>
+          <button onClick={saveCred} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>{saving?'Saving…':'Save'}</button>
+        </div>
+      </div>
+    </div>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.err?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:2000}}>{toast.msg}</div>}
+  </div>;
+}
+function CredField({label,value,onCopy,mono}){
+  return<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'6px 10px'}}>
+    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>{label}</div>
+    <div style={{display:'flex',alignItems:'center',gap:4}}>
+      <span style={{flex:1,fontSize:13,color:'var(--tf-text)',fontFamily:mono?'monospace':'inherit',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{value}</span>
+      <button onClick={onCopy} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',padding:'0 2px',flexShrink:0}}>Copy</button>
+    </div>
+  </div>;
+}
+
+// ── SOPs Library Module (Library > SOPs) ───────────────────────────
+function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
+  var [sops,setSops]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [search,setSearch]=useState('');
+  var [filterWT,setFilterWT]=useState('');
+  var [filterCat,setFilterCat]=useState('');
+  var [showForm,setShowForm]=useState(false);
+  var [editSop,setEditSop]=useState(null);
+  var [expandId,setExpandId]=useState(null);
+  var [form,setForm]=useState({title:'',category:'',work_type:'',content:'',steps:[]});
+  var [saving,setSaving]=useState(false);
+  var [toast,setToast]=useState(null);
+  var [stepInput,setStepInput]=useState('');
+
+  useEffect(function(){load();},[org.id]);
+  async function load(){
+    setLoading(true);
+    var r=await supabase.from('org_sops').select('*').eq('org_id',org.id).order('title');
+    setSops(r.data||[]);
+    setLoading(false);
+  }
+  function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
+  function openAdd(){setForm({title:'',category:'',work_type:'',content:'',steps:[]});setStepInput('');setEditSop(null);setShowForm(true);}
+  function openEdit(s){setForm({title:s.title||'',category:s.category||'',work_type:s.work_type||'',content:s.content||'',steps:Array.isArray(s.steps)?s.steps:[]});setStepInput('');setEditSop(s);setShowForm(true);}
+  function addStep(){var t=stepInput.trim();if(!t)return;setForm(function(p){return Object.assign({},p,{steps:[...p.steps,t]});});setStepInput('');}
+  function removeStep(i){setForm(function(p){var s=[...p.steps];s.splice(i,1);return Object.assign({},p,{steps:s});});}
+  async function saveSop(){
+    if(!form.title.trim()){showToast('Title required','err');return;}
+    setSaving(true);
+    var payload={org_id:org.id,title:form.title.trim(),category:form.category.trim()||null,work_type:form.work_type||null,content:form.content.trim()||null,steps:form.steps,created_by:cu.id,updated_at:new Date().toISOString()};
+    var r=editSop?await supabase.from('org_sops').update(payload).eq('id',editSop.id).select().single():await supabase.from('org_sops').insert(payload).select().single();
+    if(r.error){showToast(r.error.message,'err');}
+    else{showToast(editSop?'Updated':'Added');setShowForm(false);load();}
+    setSaving(false);
+  }
+  async function delSop(id){
+    if(!window.confirm('Delete this SOP?'))return;
+    var r=await supabase.from('org_sops').delete().eq('id',id);
+    if(!r.error){setSops(function(p){return p.filter(function(s){return s.id!==id;});});showToast('Deleted');}
+    else showToast(r.error.message,'err');
+  }
+
+  var cats=Array.from(new Set(sops.map(function(s){return s.category;}).filter(Boolean))).sort();
+  var wts=Array.from(new Set(sops.map(function(s){return s.work_type;}).filter(Boolean))).sort();
+  var filtered=sops.filter(function(s){
+    var q=search.toLowerCase();
+    return(!q||s.title.toLowerCase().includes(q)||(s.content||'').toLowerCase().includes(q))&&(!filterWT||s.work_type===filterWT)&&(!filterCat||s.category===filterCat);
+  });
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+  var activeWTs=(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return c.name;});
+
+  return<div style={{padding:'0 0 40px',maxWidth:1000,margin:'0 auto'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>SOPs Library</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{sops.length} procedures</div>
+      </div>
+      <button onClick={openAdd} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ New SOP</button>
+    </div>
+    <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap'}}>
+      <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search SOPs…" style={Object.assign({},INP,{flex:1,minWidth:180,width:'auto'})}/>
+      <select value={filterWT} onChange={function(e){setFilterWT(e.target.value);}} style={Object.assign({},INP,{width:'auto',cursor:'pointer'})}>
+        <option value="">All Work Types</option>
+        {wts.map(function(w){return<option key={w} value={w}>{w}</option>;})}
+      </select>
+      <select value={filterCat} onChange={function(e){setFilterCat(e.target.value);}} style={Object.assign({},INP,{width:'auto',cursor:'pointer'})}>
+        <option value="">All Categories</option>
+        {cats.map(function(c){return<option key={c} value={c}>{c}</option>;})}
+      </select>
+    </div>
+    {loading?<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading…</div>:filtered.length===0?<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>
+      {sops.length===0?'No SOPs yet. Click + New SOP to create your first procedure.':'No SOPs match your filters.'}
+    </div>:<div style={{display:'flex',flexDirection:'column',gap:10}}>
+      {filtered.map(function(s){
+        var exp=expandId===s.id;
+        var steps=Array.isArray(s.steps)?s.steps:[];
+        return<div key={s.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',cursor:'pointer'}} onClick={function(){setExpandId(exp?null:s.id);}}>
+            <div style={{width:36,height:36,borderRadius:10,background:'linear-gradient(135deg,#0ea5e9,#0284c7)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16}}>📋</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{s.title}</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:3}}>
+                {s.work_type&&<span style={{fontSize:10,fontWeight:700,color:'#6b8cad',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 6px'}}>{s.work_type}</span>}
+                {s.category&&<span style={{fontSize:10,fontWeight:700,color:'#94a3b8',background:'rgba(148,163,184,0.1)',borderRadius:4,padding:'1px 6px'}}>{s.category}</span>}
+                {steps.length>0&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{steps.length} step{steps.length!==1?'s':''}</span>}
+              </div>
+            </div>
+            <div style={{display:'flex',gap:6,flexShrink:0}}>
+              <button onClick={function(e){e.stopPropagation();openEdit(s);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)'}}>Edit</button>
+              <button onClick={function(e){e.stopPropagation();delSop(s.id);}} style={{background:'none',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:'#ef4444'}}>Del</button>
+              <span style={{fontSize:12,color:'var(--tf-text-sub)',display:'flex',alignItems:'center'}}>{exp?'▲':'▼'}</span>
+            </div>
+          </div>
+          {exp&&<div style={{padding:'0 16px 16px',borderTop:'1px solid var(--tf-border)'}}>
+            {s.content&&<div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.7,marginBottom:steps.length>0?12:0,whiteSpace:'pre-wrap',paddingTop:12}}>{s.content}</div>}
+            {steps.length>0&&<div style={{paddingTop:s.content?0:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Steps</div>
+              <ol style={{margin:0,padding:'0 0 0 20px'}}>
+                {steps.map(function(step,i){return<li key={i} style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.7,marginBottom:4}}>{step}</li>;})}
+              </ol>
+            </div>}
+          </div>}
+        </div>;
+      })}
+    </div>}
+
+    {showForm&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'var(--tf-panel)',borderRadius:16,padding:28,width:540,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 25px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:20}}>{editSop?'Edit SOP':'New SOP'}</div>
+        <div style={{marginBottom:12}}>
+          <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Title *</label>
+          <input value={form.title} onChange={function(e){setForm(function(p){return Object.assign({},p,{title:e.target.value});});}} placeholder="SOP title" style={INP}/>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+          <div>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Work Type</label>
+            <select value={form.work_type} onChange={function(e){setForm(function(p){return Object.assign({},p,{work_type:e.target.value});});}} style={INP}>
+              <option value="">— None —</option>
+              {activeWTs.map(function(w){return<option key={w} value={w}>{w}</option>;})}
+            </select>
+          </div>
+          <div>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Category</label>
+            <input value={form.category} onChange={function(e){setForm(function(p){return Object.assign({},p,{category:e.target.value});});}} placeholder="e.g. Filing, Compliance" style={INP}/>
+          </div>
+        </div>
+        <div style={{marginBottom:12}}>
+          <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Description / Notes</label>
+          <textarea value={form.content} onChange={function(e){setForm(function(p){return Object.assign({},p,{content:e.target.value});});}} rows={3} placeholder="Overview or notes for this SOP…" style={Object.assign({},INP,{resize:'vertical'})}/>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.05em'}}>Steps ({form.steps.length})</label>
+          {form.steps.map(function(step,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+            <span style={{fontSize:11,color:'var(--tf-text-sub)',width:20,flexShrink:0,textAlign:'right'}}>{i+1}.</span>
+            <span style={{flex:1,fontSize:13,color:'var(--tf-text)',background:'var(--tf-bg)',borderRadius:6,padding:'4px 10px'}}>{step}</span>
+            <button onClick={function(){removeStep(i);}} style={{background:'none',border:'none',cursor:'pointer',color:'#ef4444',fontSize:14,padding:'0 4px'}}>×</button>
+          </div>;})}
+          <div style={{display:'flex',gap:8,marginTop:6}}>
+            <input value={stepInput} onChange={function(e){setStepInput(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'){e.preventDefault();addStep();}}} placeholder="Add a step and press Enter" style={Object.assign({},INP,{flex:1})}/>
+            <button onClick={addStep} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:8,padding:'7px 14px',cursor:'pointer',fontSize:13,fontWeight:600,color:'#6b8cad',whiteSpace:'nowrap'}}>+ Add</button>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)'}}>Cancel</button>
+          <button onClick={saveSop} disabled={saving} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>{saving?'Saving…':'Save'}</button>
+        </div>
+      </div>
+    </div>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.err?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:2000}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
-  const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'dashboard'|'clients'|'analytics'|'hr'|'billing'|'setup'
+  const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const [myRole,setMyRole]=useState('member');
@@ -9503,30 +9851,27 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
 
   var MODULES=[
-    {id:'dashboard',label:'Your Dashboard',icon:LayoutDashboard,desc:'Your personal works, calendar and everything assigned to you.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Home'},{id:'team',label:'Team'},{id:'plan',label:'Plan My Day'}]},
-    {id:'clients',label:'Clients & Worksheets',icon:BookUser,desc:'Client master data, worksheets and project boards for big clients.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'clients',label:'Client Master Data'},{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'}]},
+    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
+    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
+    {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
+    {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   ];
   if(canSeeAnalytics){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
   MODULES.push(
-    {id:'portal',label:'Client Portal',icon:Globe,desc:'Manage client access, requests, communication and data collection.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)'},
-    {id:'comms',label:'Communications',icon:Mail,desc:'Bulk email clients, manage email templates and notifications.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)'},
-    {id:'hr',label:'HR',icon:Users,desc:'Performance, attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'performance',label:'Performance'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'},{id:'logs',label:'Logs'}]},
+    {id:'comms',label:'Communication',icon:Mail,desc:'Client Portal access, requests and bulk mailing.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
-    {id:'setup',label:'Setup',icon:Settings,desc:'Work types, members and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'worktypes',label:'Work Types'},{id:'members',label:'Members & Invites'},{id:'groups',label:'Groups & Teams'},{id:'settings',label:'Org Settings'}]}
+    {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
+    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
   function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}
-  // Called from YourDashboard when a work type header is clicked
   function navigateToWorkType(wt){
-    setWsInitWorkType(wt);
-    setWsInitMineOnly(true);
-    setOrgModule('clients');
-    setTab('worksheets');
-    localStorage.setItem('tf_lastOrgModule','clients');
-    localStorage.setItem('tf_lastOrgTab','worksheets');
+    setWsInitWorkType(wt);setWsInitMineOnly(true);
+    setOrgModule('workzone');setTab('worksheets');
+    localStorage.setItem('tf_lastOrgModule','workzone');localStorage.setItem('tf_lastOrgTab','worksheets');
   }
 
   var currentModule=orgModule?MODULES.find(function(m){return m.id===orgModule;}):null;
@@ -9572,24 +9917,36 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   // Module content with left sidebar
   var sidebarW=sidebarOpen?210:48;
   var moduleContent=<>
-      {orgModule==='dashboard'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
-      {orgModule==='dashboard'&&tab==='team'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='dashboard'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
-      {orgModule==='clients'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='clients'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
-      {orgModule==='clients'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {/* Your Diary */}
+      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='diary'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {/* WorkZone */}
+      {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {/* Library */}
+      {orgModule==='library'&&tab==='credentials'&&<CredentialsModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='library'&&tab==='sops'&&<SOPsLibraryModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='library'&&tab==='tools'&&<PlaceholderModule title="Tools & Resources" desc="Store utilities, Excel templates, software links and other firm resources." icon="🔧"/>}
+      {orgModule==='library'&&tab==='study'&&<PlaceholderModule title="Study Resources" desc="Circulars, case laws, study material and reference documents." icon="📚"/>}
+      {/* Team */}
+      {orgModule==='team'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='team'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='team'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
+      {/* Analytics */}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='comms'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='setup'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
-      {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
-      {orgModule==='setup'&&tab==='groups'&&<OrgGroupsPanel org={org} cu={cu} supabase={supabase}/>}
-      {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
-      {orgModule==='hr'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
-      {orgModule==='hr'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='hr'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
-      {orgModule==='hr'&&tab==='performance'&&<PerformanceModule org={org} supabase={supabase} cu={cu}/>}
+      {/* Communication */}
+      {orgModule==='comms'&&tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='comms'&&tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {/* Billing */}
       {orgModule==='billing'&&<BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>}
+      {/* Master Data */}
+      {orgModule==='masterdata'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
+      {orgModule==='masterdata'&&tab==='groups'&&<OrgGroupsPanel org={org} cu={cu} supabase={supabase}/>}
+      {/* Set-up */}
+      {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
