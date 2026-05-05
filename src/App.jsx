@@ -1357,10 +1357,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
         <button onClick={()=>setWsForm('new')} style={{width:24,height:24,borderRadius:G.radiusSm,border:'1px dashed var(--tf-border)',background:'transparent',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.color='#6b8cad'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-mut)'}}>+</button>
       </div></>}
-      {activeOrg&&<div style={{flex:1,display:'flex',alignItems:'center',gap:8,overflow:'hidden'}}>
+      {activeOrg&&<div style={{flex:1,display:'flex',alignItems:'center',gap:6,overflow:'hidden',minWidth:0}}>
         <div style={{width:1,height:16,background:'var(--tf-border)',flexShrink:0}}/>
-        <span style={{fontSize:12,fontWeight:700,color:'#6b8cad',whiteSpace:'nowrap'}}>{activeOrg.name}</span>
-        <span style={{fontSize:11,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Organisation</span>
+        <span style={{fontSize:12,fontWeight:700,color:'#6b8cad',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',minWidth:0,flex:1}}>{activeOrg.name}</span>
+        <span style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap',flexShrink:0,background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 5px',lineHeight:'1.4'}}>Org</span>
       </div>}
       {activeWs&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tasks…" style={{background:'var(--tf-input)',border:'1px solid var(--tf-border)',borderRadius:G.radiusSm,padding:'5px 11px',color:'var(--tf-text)',fontSize:12,outline:'none',width:140,fontFamily:G.font,flexShrink:0}}/>}
       {(search||fPriority)&&<button onClick={()=>{setSearch('');setFPriority('')}} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:'100px',padding:'3px 9px',color:'#f87171',fontSize:10,fontWeight:600,cursor:'pointer',fontFamily:G.font,flexShrink:0}}>✕ Clear</button>}
@@ -9376,15 +9376,14 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
 
   var header=<div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:12,paddingTop:14,paddingBottom:14,overflow:'hidden'}}>
+    <div style={{display:'flex',alignItems:'center',gap:10,paddingTop:10,paddingBottom:10,overflow:'hidden'}}>
       <button onClick={orgModule?backToLauncher:onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0,whiteSpace:'nowrap'}}>&#x2190; {orgModule?'Modules':'Back'}</button>
-      <div style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff',flexShrink:0}}>{org.name.charAt(0).toUpperCase()}</div>
-      <div style={{minWidth:0,flex:1}}>
-        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.01em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+      <div style={{width:28,height:28,borderRadius:7,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>{org.name.charAt(0).toUpperCase()}</div>
+      <div style={{minWidth:0,flex:1,overflow:'hidden'}}>
+        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.01em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',lineHeight:'1.2'}}>
           {org.name}
           {currentModule&&<span style={{color:'var(--tf-text-sub)',fontWeight:400}}> · {currentModule.label}</span>}
         </div>
-        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div>
       </div>
     </div>
   </div>;
