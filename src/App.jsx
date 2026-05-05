@@ -1892,7 +1892,16 @@ function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames,workTyp
         {tab==='basic'&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 14px'}}>
           <div style={{gridColumn:'1/-1',marginBottom:12}}><label style={LBL}>Name *</label><input value={name} onChange={function(e){setName(e.target.value);}} style={Object.assign({},INP,{border:errs.name?'1px solid #ef4444':INP.border})} placeholder="Full legal name"/>{errs.name&&<div style={{color:'#ef4444',fontSize:11,marginTop:2}}>{errs.name}</div>}</div>
           <div style={{marginBottom:12}}><label style={LBL}>Display Name</label><input value={dispName} onChange={function(e){setDispName(e.target.value);}} style={INP}/></div>
-          <div style={{marginBottom:12}}><label style={LBL}>Type</label><select value={type} onChange={function(e){setType(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="business">Business</option><option value="individual">Individual</option></select></div>
+          <div style={{marginBottom:12}}><label style={LBL}>Type</label><select value={type} onChange={function(e){setType(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+  <option value="individual">Individual</option>
+  <option value="company">Company</option>
+  <option value="partnership">Partnership</option>
+  <option value="llp">LLP</option>
+  <option value="trust">Trust</option>
+  <option value="huf">HUF</option>
+  <option value="aop">AOP / BOI</option>
+  <option value="business">Business (Other)</option>
+</select></div>
           <div style={{marginBottom:12}}><label style={LBL}>Email</label><input value={email} onChange={function(e){setEmail(e.target.value);}} style={INP} type="email"/></div>
           <div style={{marginBottom:12}}><label style={LBL}>Phone</label><input value={phone} onChange={function(e){setPhone(e.target.value);}} style={INP}/></div>
           <div style={{marginBottom:12}}><label style={LBL}>City</label><input value={city} onChange={function(e){setCity(e.target.value);}} style={INP}/></div>
