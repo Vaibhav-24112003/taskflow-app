@@ -9499,146 +9499,231 @@ function PlaceholderModule({title,desc,icon}){
 // ── Credentials Module (Library > Credentials) ─────────────────────
 function CredentialsModule({org,supabase,cu}){
   var [clients,setClients]=useState([]);
-  var [selClient,setSelClient]=useState(null);
-  var [creds,setCreds]=useState([]);
+  var [allCreds,setAllCreds]=useState([]);   // all creds for the org
+  var [loading,setLoading]=useState(true);
   var [search,setSearch]=useState('');
-  var [credSearch,setCredSearch]=useState('');
+  var [filterType,setFilterType]=useState('');
   var [showForm,setShowForm]=useState(false);
-  var [editCred,setEditCred]=useState(null);
-  var [revealIds,setRevealIds]=useState({});
+  var [editCred,setEditCred]=useState(null);  // existing cred being edited
+  var [formClient,setFormClient]=useState(null);
+  var [formPortal,setFormPortal]=useState('');
   var [saving,setSaving]=useState(false);
   var [toast,setToast]=useState(null);
+  var [detailCell,setDetailCell]=useState(null); // {cred, client}
+  var [revealPw,setRevealPw]=useState(false);
+  var [showAddPortal,setShowAddPortal]=useState(false);
+  var [newPortalName,setNewPortalName]=useState('');
   var [form,setForm]=useState({portal_name:'',username:'',password:'',pan:'',email:'',mobile:'',notes:''});
+  var COMMON_PORTALS=['GST Portal','Income Tax','MCA','TDS Portal','Traces','EPFO','ESIC','Tally','Zoho','Other'];
 
-  useEffect(function(){loadClients();},[org.id]);
-  useEffect(function(){if(selClient)loadCreds(selClient.id);else setCreds([]);},[selClient]);
-
-  async function loadClients(){
-    var r=await supabase.from('clients').select('id,name,display_name,status').eq('org_id',org.id).order('name').limit(500);
-    setClients(r.data||[]);
-  }
-  async function loadCreds(clientId){
-    var r=await supabase.from('client_credentials').select('*').eq('org_id',org.id).eq('client_id',clientId).order('portal_name');
-    setCreds(r.data||[]);
+  useEffect(function(){load();},[org.id]);
+  async function load(){
+    setLoading(true);
+    var [rc,rk]=await Promise.all([
+      supabase.from('clients').select('id,name,pan,email,client_type,status').eq('org_id',org.id).eq('status','active').order('name').limit(500),
+      supabase.from('client_credentials').select('*').eq('org_id',org.id).order('portal_name')
+    ]);
+    setClients(rc.data||[]);
+    setAllCreds(rk.data||[]);
+    setLoading(false);
   }
   function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
-  function openAdd(){setForm({portal_name:'',username:'',password:'',pan:'',email:'',mobile:'',notes:''});setEditCred(null);setShowForm(true);}
-  function openEdit(c){setForm({portal_name:c.portal_name||'',username:c.username||'',password:c.password||'',pan:c.pan||'',email:c.email||'',mobile:c.mobile||'',notes:c.notes||''});setEditCred(c);setShowForm(true);}
+
+  // derive portal columns: from existing creds first, then nothing else
+  var portalCols=useMemo(function(){
+    var seen=new Set();
+    var cols=[];
+    allCreds.forEach(function(c){if(!seen.has(c.portal_name)){seen.add(c.portal_name);cols.push(c.portal_name);}});
+    return cols.sort();
+  },[allCreds]);
+
+  // index: credMap[client_id][portal_name] = cred
+  var credMap=useMemo(function(){
+    var m={};
+    allCreds.forEach(function(c){if(!m[c.client_id])m[c.client_id]={};m[c.client_id][c.portal_name]=c;});
+    return m;
+  },[allCreds]);
+
+  var types=Array.from(new Set(clients.map(function(c){return c.client_type;}).filter(Boolean))).sort();
+  var filtered=clients.filter(function(c){
+    var q=search.toLowerCase();
+    return(!q||c.name.toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q))&&(!filterType||c.client_type===filterType);
+  });
+
+  function openAddCell(client,portalName){
+    setFormClient(client);setFormPortal(portalName||'');
+    setForm({portal_name:portalName||'',username:'',password:'',pan:client.pan||'',email:client.email||'',mobile:'',notes:''});
+    setEditCred(null);setShowForm(true);setDetailCell(null);
+  }
+  function openEditCred(cred,client){
+    setFormClient(client);setFormPortal(cred.portal_name);
+    setForm({portal_name:cred.portal_name,username:cred.username||'',password:cred.password||'',pan:cred.pan||'',email:cred.email||'',mobile:cred.mobile||'',notes:cred.notes||''});
+    setEditCred(cred);setShowForm(true);setDetailCell(null);
+  }
   async function saveCred(){
     if(!form.portal_name.trim()){showToast('Portal name required','err');return;}
-    if(!selClient){showToast('Select a client first','err');return;}
+    if(!formClient){showToast('No client selected','err');return;}
     setSaving(true);
-    var payload={org_id:org.id,client_id:selClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:form.password||null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,updated_at:new Date().toISOString()};
+    var payload={org_id:org.id,client_id:formClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:form.password||null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,updated_at:new Date().toISOString()};
     var r=editCred?await supabase.from('client_credentials').update(payload).eq('id',editCred.id).select().single():await supabase.from('client_credentials').insert(payload).select().single();
     if(r.error){showToast(r.error.message,'err');}
-    else{showToast(editCred?'Updated':'Added');setShowForm(false);loadCreds(selClient.id);}
+    else{showToast(editCred?'Updated':'Saved');setShowForm(false);load();}
     setSaving(false);
   }
   async function delCred(id){
     if(!window.confirm('Delete this credential?'))return;
     var r=await supabase.from('client_credentials').delete().eq('id',id);
-    if(!r.error){setCreds(function(p){return p.filter(function(c){return c.id!==id;});});showToast('Deleted');}
+    if(!r.error){showToast('Deleted');setDetailCell(null);load();}
     else showToast(r.error.message,'err');
   }
-  function toggleReveal(id){setRevealIds(function(p){var n=Object.assign({},p);n[id]=!n[id];return n;});}
-  function copyToClipboard(text,label){navigator.clipboard.writeText(text||'');showToast(label+' copied');}
+  function copyText(text,label){navigator.clipboard.writeText(text||'');showToast(label+' copied');}
+  function addPortalCol(){
+    var name=newPortalName.trim();if(!name)return;
+    // just close — actual column appears once a credential uses this portal name
+    setFormPortal(name);setNewPortalName('');setShowAddPortal(false);
+  }
 
-  var filteredClients=clients.filter(function(c){var q=search.toLowerCase();return!q||c.name.toLowerCase().includes(q);});
-  var filteredCreds=creds.filter(function(c){var q=credSearch.toLowerCase();return!q||c.portal_name.toLowerCase().includes(q)||(c.username||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);});
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+  var FIXED_W=[180,110,160,90]; // Name, PAN, Email, Type
 
-  return<div style={{display:'flex',height:'100%',minHeight:0,gap:0}}>
-    {/* Left: client list */}
-    <div style={{width:220,flexShrink:0,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',minHeight:0}}>
-      <div style={{padding:'12px 10px 8px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
-        <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>Clients</div>
-        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search..." style={Object.assign({},INP,{padding:'6px 9px',fontSize:12})}/>
-      </div>
-      <div style={{flex:1,overflowY:'auto'}}>
-        {filteredClients.map(function(c){
-          var isActive=selClient&&selClient.id===c.id;
-          return<button key={c.id} onClick={function(){setSelClient(c);setCredSearch('');}} style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',padding:'8px 12px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid var(--tf-border)',fontFamily:'inherit'}}
-            onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.06)';}}
-            onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-            <div style={{width:28,height:28,borderRadius:8,background:isActive?'#6b8cad':'rgba(107,140,173,0.15)',color:isActive?'#fff':'#6b8cad',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>{c.name.charAt(0).toUpperCase()}</div>
-            <div style={{minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:isActive?700:500,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-            </div>
-          </button>;
-        })}
-        {filteredClients.length===0&&<div style={{padding:16,fontSize:12,color:'var(--tf-text-sub)',textAlign:'center'}}>No clients found</div>}
-      </div>
+  if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading…</div>;
+
+  return<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+    {/* Toolbar */}
+    <div style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10,flexShrink:0,flexWrap:'wrap'}}>
+      <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flexShrink:0}}>Credentials</div>
+      <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search client or PAN…" style={Object.assign({},INP,{width:200,padding:'5px 9px',fontSize:12})}/>
+      <select value={filterType} onChange={function(e){setFilterType(e.target.value);}} style={Object.assign({},INP,{width:'auto',padding:'5px 9px',fontSize:12,cursor:'pointer'})}>
+        <option value="">All Types</option>
+        {types.map(function(t){return<option key={t} value={t}>{t}</option>;})}
+      </select>
+      <div style={{flex:1}}/>
+      <button onClick={function(){setShowAddPortal(true);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:8,padding:'5px 14px',cursor:'pointer',fontSize:12,fontWeight:600,color:'#6b8cad'}}>+ Portal Column</button>
     </div>
 
-    {/* Right: credentials panel */}
-    <div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-      {!selClient?<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:10,color:'var(--tf-text-sub)'}}>
-        <Key size={36} strokeWidth={1.5} style={{opacity:0.3}}/>
-        <div style={{fontSize:14,fontWeight:600}}>Select a client to view credentials</div>
-      </div>:<>
-        <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexShrink:0,flexWrap:'wrap'}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{selClient.name}</div>
-            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}}>{creds.length} credential{creds.length!==1?'s':''} stored</div>
+    {/* Spreadsheet */}
+    <div style={{flex:1,overflow:'auto'}}>
+      <table style={{borderCollapse:'collapse',minWidth:'100%',fontSize:12}}>
+        <thead>
+          {/* Group header row */}
+          <tr>
+            <th colSpan={4} style={{padding:'6px 10px',background:'rgba(107,140,173,0.06)',borderBottom:'1px solid var(--tf-border)',borderRight:'2px solid var(--tf-border)',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textAlign:'left',letterSpacing:'0.06em',textTransform:'uppercase'}}>Client Details</th>
+            {portalCols.length>0&&<th colSpan={portalCols.length} style={{padding:'6px 10px',background:'rgba(59,130,246,0.06)',borderBottom:'1px solid var(--tf-border)',fontSize:10,fontWeight:700,color:'#3b82f6',textAlign:'center',letterSpacing:'0.06em',textTransform:'uppercase'}}>Login Credentials</th>}
+            <th style={{padding:'6px 10px',background:'var(--tf-bg)',borderBottom:'1px solid var(--tf-border)',fontSize:10,color:'transparent'}}>+</th>
+          </tr>
+          {/* Column header row */}
+          <tr style={{background:'rgba(107,140,173,0.04)'}}>
+            {['Client Name','PAN','Email','Type'].map(function(h,i){return<th key={h} style={{padding:'7px 10px',textAlign:'left',fontWeight:700,color:'var(--tf-text-sub)',borderBottom:'2px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:FIXED_W[i],borderRight:i===3?'2px solid var(--tf-border)':'1px solid var(--tf-border)',position:'sticky',top:0,background:'rgba(245,247,250,0.98)',zIndex:2,textTransform:'uppercase',letterSpacing:'0.05em',fontSize:10}}>{h}</th>;})}
+            {portalCols.map(function(p){return<th key={p} style={{padding:'7px 10px',textAlign:'center',fontWeight:700,color:'#3b82f6',borderBottom:'2px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:130,position:'sticky',top:0,background:'rgba(245,247,250,0.98)',zIndex:2,fontSize:11}}>{p}</th>;})}
+            <th style={{padding:'7px 10px',borderBottom:'2px solid var(--tf-border)',position:'sticky',top:0,background:'rgba(245,247,250,0.98)',zIndex:2,minWidth:40}}/>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.length===0?<tr><td colSpan={5+portalCols.length} style={{padding:32,textAlign:'center',color:'var(--tf-text-sub)'}}>
+            {clients.length===0?'No active clients found.':'No clients match your search.'}
+          </td></tr>:filtered.map(function(client,ri){
+            var bg=ri%2===0?'transparent':'rgba(107,140,173,0.02)';
+            return<tr key={client.id} style={{background:bg}}>
+              {/* Fixed columns */}
+              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',maxWidth:180}}>
+                <div style={{fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
+              </td>
+              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',fontFamily:'monospace',color:'var(--tf-text-sub)',fontSize:11,whiteSpace:'nowrap'}}>{client.pan||'—'}</td>
+              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',maxWidth:160}}>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.email||'—'}</div>
+              </td>
+              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'2px solid var(--tf-border)',fontSize:11,color:'var(--tf-text-sub)',textTransform:'capitalize',whiteSpace:'nowrap'}}>{client.client_type||'—'}</td>
+              {/* Portal credential cells */}
+              {portalCols.map(function(portal){
+                var cred=(credMap[client.id]||{})[portal];
+                if(cred){
+                  return<td key={portal} style={{padding:'5px 8px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',textAlign:'center'}}>
+                    <button onClick={function(){setRevealPw(false);setDetailCell({cred,client});}} style={{background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#3b82f6',fontWeight:600,fontFamily:'inherit',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block',margin:'0 auto'}} title="Click to view/edit">
+                      🔑 {cred.username||'(set)'}
+                    </button>
+                  </td>;
+                } else {
+                  return<td key={portal} style={{padding:'5px 8px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',textAlign:'center'}}>
+                    <button onClick={function(){openAddCell(client,portal);}} style={{background:'none',border:'1px dashed rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',fontFamily:'inherit'}} title="Add credentials">+</button>
+                  </td>;
+                }
+              })}
+              {/* Row-level add button */}
+              <td style={{padding:'5px 8px',borderBottom:'1px solid var(--tf-border)',textAlign:'center'}}>
+                <button onClick={function(){openAddCell(client,'');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'rgba(107,140,173,0.4)',fontFamily:'inherit',lineHeight:1}} title="Add credential for this client">+</button>
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </div>
+
+    {/* Cell detail popover */}
+    {detailCell&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}} onClick={function(){setDetailCell(null);}}>
+      <div style={{background:'var(--tf-panel)',borderRadius:16,padding:24,width:420,maxWidth:'95vw',boxShadow:'0 25px 60px rgba(0,0,0,0.3)'}} onClick={function(e){e.stopPropagation();}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{detailCell.cred.portal_name}</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{detailCell.client.name}</div>
           </div>
-          <input value={credSearch} onChange={function(e){setCredSearch(e.target.value);}} placeholder="Filter credentials..." style={Object.assign({},INP,{width:200,padding:'6px 10px',fontSize:12})}/>
-          <button onClick={openAdd} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,whiteSpace:'nowrap'}}>+ Add</button>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={function(){openEditCred(detailCell.cred,detailCell.client);}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'4px 12px',cursor:'pointer',fontSize:12,fontWeight:600,color:'#6b8cad'}}>Edit</button>
+            <button onClick={function(){delCred(detailCell.cred.id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 12px',cursor:'pointer',fontSize:12,fontWeight:600,color:'#ef4444'}}>Del</button>
+            <button onClick={function(){setDetailCell(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:14,color:'var(--tf-text-sub)'}}>×</button>
+          </div>
         </div>
-        <div style={{flex:1,overflowY:'auto',padding:'12px 16px'}}>
-          {filteredCreds.length===0?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>
-            {creds.length===0?'No credentials stored yet. Click + Add to start.':'No credentials match your search.'}
-          </div>:<div style={{display:'flex',flexDirection:'column',gap:10}}>
-            {filteredCreds.map(function(c){
-              var revealed=revealIds[c.id];
-              return<div key={c.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px 16px'}}>
-                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:10}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center'}}><Key size={14} color="#fff"/></div>
-                    <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)'}}>{c.portal_name}</div>
-                  </div>
-                  <div style={{display:'flex',gap:6}}>
-                    <button onClick={function(){openEdit(c);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)'}}>Edit</button>
-                    <button onClick={function(){delCred(c.id);}} style={{background:'none',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,padding:'3px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:'#ef4444'}}>Del</button>
-                  </div>
-                </div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
-                  {c.username&&<CredField label="Login / Username" value={c.username} onCopy={function(){copyToClipboard(c.username,'Username');}}/>}
-                  {c.password&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'6px 10px'}}>
-                    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Password</div>
-                    <div style={{display:'flex',alignItems:'center',gap:6}}>
-                      <span style={{flex:1,fontFamily:'monospace',fontSize:13,color:'var(--tf-text)',letterSpacing:revealed?'normal':'0.15em'}}>{revealed?c.password:'••••••••'}</span>
-                      <button onClick={function(){toggleReveal(c.id);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',padding:'0 2px'}}>{revealed?'Hide':'Show'}</button>
-                      <button onClick={function(){copyToClipboard(c.password,'Password');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',padding:'0 2px'}}>Copy</button>
-                    </div>
-                  </div>}
-                  {c.pan&&<CredField label="PAN" value={c.pan} onCopy={function(){copyToClipboard(c.pan,'PAN');}} mono/>}
-                  {c.email&&<CredField label="Email" value={c.email} onCopy={function(){copyToClipboard(c.email,'Email');}}/>}
-                  {c.mobile&&<CredField label="Mobile" value={c.mobile} onCopy={function(){copyToClipboard(c.mobile,'Mobile');}}/>}
-                  {c.notes&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'6px 10px',gridColumn:'1/-1'}}>
-                    <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:3}}>Notes</div>
-                    <div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{c.notes}</div>
-                  </div>}
-                </div>
-              </div>;
-            })}
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {detailCell.cred.username&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div><div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Login / Username</div><div style={{fontSize:13,color:'var(--tf-text)',fontWeight:600}}>{detailCell.cred.username}</div></div>
+            <button onClick={function(){copyText(detailCell.cred.username,'Username');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',fontWeight:600}}>Copy</button>
+          </div>}
+          {detailCell.cred.password&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Password</div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{flex:1,fontFamily:'monospace',fontSize:13,color:'var(--tf-text)',letterSpacing:revealPw?'normal':'0.12em'}}>{revealPw?detailCell.cred.password:'••••••••••'}</span>
+              <button onClick={function(){setRevealPw(function(p){return!p;});}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{revealPw?'Hide':'Show'}</button>
+              <button onClick={function(){copyText(detailCell.cred.password,'Password');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',fontWeight:600}}>Copy</button>
+            </div>
+          </div>}
+          {detailCell.cred.pan&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div><div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>PAN</div><div style={{fontSize:13,color:'var(--tf-text)',fontFamily:'monospace',fontWeight:600}}>{detailCell.cred.pan}</div></div>
+            <button onClick={function(){copyText(detailCell.cred.pan,'PAN');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',fontWeight:600}}>Copy</button>
+          </div>}
+          {detailCell.cred.email&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div><div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Email</div><div style={{fontSize:13,color:'var(--tf-text)'}}>{detailCell.cred.email}</div></div>
+            <button onClick={function(){copyText(detailCell.cred.email,'Email');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',fontWeight:600}}>Copy</button>
+          </div>}
+          {detailCell.cred.mobile&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div><div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Mobile</div><div style={{fontSize:13,color:'var(--tf-text)'}}>{detailCell.cred.mobile}</div></div>
+            <button onClick={function(){copyText(detailCell.cred.mobile,'Mobile');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#6b8cad',fontWeight:600}}>Copy</button>
+          </div>}
+          {detailCell.cred.notes&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:4}}>Notes</div>
+            <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{detailCell.cred.notes}</div>
           </div>}
         </div>
-      </>}
-    </div>
+      </div>
+    </div>}
 
-    {/* Add/Edit modal */}
+    {/* Add/Edit form modal */}
     {showForm&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
       <div style={{background:'var(--tf-panel)',borderRadius:16,padding:28,width:480,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 25px 60px rgba(0,0,0,0.3)'}}>
-        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:20}}>{editCred?'Edit Credential':'Add Credential'}{selClient?' — '+selClient.name:''}</div>
-        {[{key:'portal_name',label:'Portal Name *',placeholder:'e.g. Income Tax Portal, GST Portal, MCA'},{key:'username',label:'Login / Username',placeholder:''},{key:'password',label:'Password',placeholder:'',type:'password'},{key:'pan',label:'PAN',placeholder:''},{key:'email',label:'Email',placeholder:''},{key:'mobile',label:'Mobile',placeholder:''}].map(function(f){
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>{editCred?'Edit Credential':'Add Credential'}</div>
+        {formClient&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:18}}>Client: {formClient.name}</div>}
+        <div style={{marginBottom:12}}>
+          <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Portal Name *</label>
+          <input value={form.portal_name} onChange={function(e){setForm(function(p){return Object.assign({},p,{portal_name:e.target.value});});}} placeholder="e.g. GST Portal, Income Tax…" style={INP} list="portal-suggestions"/>
+          <datalist id="portal-suggestions">{COMMON_PORTALS.map(function(p){return<option key={p} value={p}/>;})}</datalist>
+        </div>
+        {[{key:'username',label:'Login / Username'},{key:'password',label:'Password',type:'password'},{key:'pan',label:'PAN'},{key:'email',label:'Email'},{key:'mobile',label:'Mobile'}].map(function(f){
           return<div key={f.key} style={{marginBottom:12}}>
             <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>{f.label}</label>
-            <input type={f.type||'text'} value={form[f.key]} onChange={function(e){var v=e.target.value;setForm(function(p){var n=Object.assign({},p);n[f.key]=v;return n;});}} placeholder={f.placeholder} style={INP}/>
+            <input type={f.type||'text'} value={form[f.key]} onChange={function(e){var v=e.target.value;setForm(function(p){var n=Object.assign({},p);n[f.key]=v;return n;});}} style={INP}/>
           </div>;
         })}
         <div style={{marginBottom:16}}>
           <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Notes</label>
-          <textarea value={form.notes} onChange={function(e){setForm(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={3} style={Object.assign({},INP,{resize:'vertical'})}/>
+          <textarea value={form.notes} onChange={function(e){setForm(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={2} style={Object.assign({},INP,{resize:'vertical'})}/>
         </div>
         <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
           <button onClick={function(){setShowForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)'}}>Cancel</button>
@@ -9646,6 +9731,24 @@ function CredentialsModule({org,supabase,cu}){
         </div>
       </div>
     </div>}
+
+    {/* Add Portal Column modal */}
+    {showAddPortal&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'var(--tf-panel)',borderRadius:14,padding:24,width:380,maxWidth:'95vw',boxShadow:'0 25px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>Add Portal Column</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:12}}>Portal columns appear automatically when you add credentials with that portal name. Select a common one or type a custom name:</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+          {COMMON_PORTALS.filter(function(p){return!portalCols.includes(p);}).map(function(p){return<button key={p} onClick={function(){setNewPortalName(p);}} style={{background:newPortalName===p?'rgba(107,140,173,0.15)':'var(--tf-bg)',border:'1px solid '+(newPortalName===p?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:600,color:newPortalName===p?'#6b8cad':'var(--tf-text-sub)',fontFamily:'inherit'}}>{p}</button>;})}
+        </div>
+        <input value={newPortalName} onChange={function(e){setNewPortalName(e.target.value);}} placeholder="Custom portal name…" style={Object.assign({},INP,{marginBottom:14})}/>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:14}}>💡 Tip: The column will appear after you save the first credential with this portal name.</div>
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowAddPortal(false);setNewPortalName('');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 16px',cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--tf-text-sub)'}}>Cancel</button>
+          <button onClick={addPortalCol} disabled={!newPortalName.trim()} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,opacity:newPortalName.trim()?1:0.5}}>Use this Portal</button>
+        </div>
+      </div>
+    </div>}
+
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.err?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:2000}}>{toast.msg}</div>}
   </div>;
 }
