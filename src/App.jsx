@@ -9375,28 +9375,17 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   if(currentModule&&currentModule.tabs&&tab&&!currentModule.tabs.find(function(t){return t.id===tab;})){var ft=currentModule.tabs[0];setTab(ft?ft.id:'');if(ft)localStorage.setItem('tf_lastOrgTab',ft.id);}
   var showSubTabs=currentModule&&currentModule.tabs&&currentModule.tabs.length>1;
 
-  var header=<div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'0 24px',flexShrink:0}}>
-    <div style={{display:'flex',alignItems:'center',gap:10,paddingTop:10,paddingBottom:10,overflow:'hidden'}}>
-      <button onClick={orgModule?backToLauncher:onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0,whiteSpace:'nowrap'}}>&#x2190; {orgModule?'Modules':'Back'}</button>
-      <div style={{width:28,height:28,borderRadius:7,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>{org.name.charAt(0).toUpperCase()}</div>
-      <div style={{minWidth:0,flex:1,overflow:'hidden'}}>
-        <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.01em',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',lineHeight:'1.2'}}>
-          {org.name}
-          {currentModule&&<span style={{color:'var(--tf-text-sub)',fontWeight:400}}> · {currentModule.label}</span>}
-        </div>
-      </div>
-    </div>
-  </div>;
-
-  // Module launcher view
+  // Module launcher view — no extra header row, back button inline
   if(orgModule===null){
     return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-      {header}
-      <div style={{flex:1,overflow:'auto',padding:'28px 24px 60px'}}>
+      <div style={{flex:1,overflow:'auto',padding:'20px 24px 60px'}}>
         <div style={{maxWidth:1100,margin:'0 auto'}}>
-          <div style={{marginBottom:22}}>
-            <div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Modules</div>
-            <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Pick a module to get focused. Each one groups a specific workflow.</div>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+            <button onClick={onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0,whiteSpace:'nowrap'}}>&#x2190; Back</button>
+            <div>
+              <div style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Modules</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}}>Pick a module to get focused. Each one groups a specific workflow.</div>
+            </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
             {MODULES.map(function(m){
@@ -9444,15 +9433,16 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       {orgModule==='billing'&&<BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>}
   </>;
 
-  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
-    {header}
-    <div style={{flex:1,display:'flex',minHeight:0}}>
-      {/* Left sidebar */}
+  return<div style={{flex:1,display:'flex',minHeight:0}}>
+      {/* Left sidebar — no separate header row, back button lives here */}
       <div style={{width:sidebarW,flexShrink:0,background:'var(--tf-panel)',borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
-        <div style={{padding:sidebarOpen?'10px 10px 6px':'10px 6px 6px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center'}}>
-          {sidebarOpen&&<span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Modules</span>}
+        <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+          {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
+            <span style={{flexShrink:0}}>&#x2190;</span>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#6b8cad',fontWeight:700}}>{currentModule?currentModule.label:'Modules'}</span>
+          </button>}
           <button onClick={function(){setSidebarOpen(!sidebarOpen);}} title={sidebarOpen?'Minimize sidebar':'Expand sidebar'}
-            style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:12,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
+            style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:11,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
         </div>
         <div style={{flex:1,overflowY:'auto',padding:sidebarOpen?'0 6px 10px':'0 4px 10px'}}>
           {MODULES.map(function(m){
@@ -9480,7 +9470,6 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
       <div style={{flex:1,overflow:'auto',padding:'22px 24px 60px',minWidth:0}}>
         {moduleContent}
       </div>
-    </div>
   </div>;
 }
 
