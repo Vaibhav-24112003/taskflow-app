@@ -3587,6 +3587,35 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         });
       }
       if(newRows.length>0){
+        // Inherit hierarchy assignments (assignee/reviewer/etc.) from most recent previous period
+        var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
+        // Compute previous period identifiers
+        var prevYear=periodYear,prevMonth=periodMonth,prevQuarter=periodQuarter;
+        if(cfg.frequency==='monthly'){
+          prevMonth=periodMonth-1;if(prevMonth<1){prevMonth=12;prevYear=periodYear-1;}
+          if(prevMonth===3)prevYear=periodYear-1; // Mar belongs to prev FY
+        }else if(cfg.frequency==='quarterly'){
+          prevQuarter=periodQuarter-1;if(prevQuarter<1){prevQuarter=4;prevYear=periodYear-1;}
+        }else if(cfg.frequency==='yearly'){
+          prevYear=periodYear-1;
+        }
+        var prevLabel=getPeriodLabel(cfg.frequency,prevYear,prevMonth,prevQuarter);
+        var rpw=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',prevLabel).maybeSingle();
+        if(rpw.data){
+          var rpr=await supabase.from('worksheet_rows').select('client_id,data').eq('worksheet_id',rpw.data.id).limit(2000);
+          var prevDataMap={};
+          (rpr.data||[]).forEach(function(r){
+            if(!prevDataMap[r.client_id])prevDataMap[r.client_id]=r.data||{};
+          });
+          newRows=newRows.map(function(r){
+            var prev=prevDataMap[r.client_id];
+            if(!prev)return r;
+            var inherited={};
+            hierKeys.forEach(function(k){if(prev[k])inherited[k]=prev[k];});
+            if(Object.keys(inherited).length===0)return r;
+            return Object.assign({},r,{data:Object.assign({},r.data,inherited)});
+          });
+        }
         var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
         if(ins2.error)console.error('worksheet_rows insert error:',ins2.error);
         existingRows=[...existingRows,...(ins2.data||[])];
