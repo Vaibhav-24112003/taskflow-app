@@ -6238,6 +6238,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [loading,setLoading]=useState(true);
   var [filter,setFilter]=useState('all');
   var [dateFilter,setDateFilter]=useState('all');
+  var [dashView,setDashView]=useState('list'); // 'list' | 'urgency' | 'kanban'
   var [showCalendar,setShowCalendar]=useState(true);
   // Create Task modal state
   var [showCreate,setShowCreate]=useState(false);
@@ -6354,6 +6355,32 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     grouped[wt].push(r);
   });
   Object.keys(grouped).forEach(function(k){grouped[k].sort(function(a,b){if(!a.due_date&&!b.due_date)return 0;if(!a.due_date)return 1;if(!b.due_date)return -1;return a.due_date<b.due_date?-1:1;});});
+
+  // Urgency grouping
+  var urgencyBands=[
+    {id:'overdue',label:'Overdue',icon:'🔴',color:'#ef4444',bg:'rgba(239,68,68,0.06)',border:'rgba(239,68,68,0.2)'},
+    {id:'today',label:'Due Today',icon:'🟡',color:'#f59e0b',bg:'rgba(245,158,11,0.06)',border:'rgba(245,158,11,0.2)'},
+    {id:'week',label:'This Week',icon:'🔵',color:'#3b82f6',bg:'rgba(59,130,246,0.06)',border:'rgba(59,130,246,0.18)'},
+    {id:'later',label:'Upcoming',icon:'⚪',color:'#6b8cad',bg:'rgba(107,140,173,0.04)',border:'var(--tf-border)'},
+    {id:'nodate',label:'No Due Date',icon:'📋',color:'#94a3b8',bg:'transparent',border:'var(--tf-border)'},
+  ];
+  var urgencyGrouped={overdue:[],today:[],week:[],later:[],nodate:[]};
+  filteredRows.forEach(function(r){
+    if(!r.due_date){urgencyGrouped.nodate.push(r);return;}
+    if(r.due_date<todayStr){urgencyGrouped.overdue.push(r);return;}
+    if(r.due_date===todayStr){urgencyGrouped.today.push(r);return;}
+    if(r.due_date<=weekEndStr){urgencyGrouped.week.push(r);return;}
+    urgencyGrouped.later.push(r);
+  });
+
+  // Kanban grouping by status
+  var kanbanCols=[
+    {id:'pending',label:'To Do',color:'#64748b',bg:'rgba(100,116,139,0.08)'},
+    {id:'in_progress',label:'In Progress',color:'#3b82f6',bg:'rgba(59,130,246,0.08)'},
+    {id:'under_review',label:'In Review',color:'#8b5cf6',bg:'rgba(139,92,246,0.08)'},
+  ];
+  var kanbanGrouped={pending:[],in_progress:[],under_review:[]};
+  filteredRows.forEach(function(r){if(kanbanGrouped[r.status]!==undefined)kanbanGrouped[r.status].push(r);else kanbanGrouped.pending.push(r);});
 
   async function updateStatus(rowId,newStatus){
     var updates={status:newStatus};
@@ -6537,12 +6564,110 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       })}
     </div>
 
+    {/* View switcher */}
+    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:16}}>
+      {[
+        {id:'list',icon:'≡',label:'Work Types'},
+        {id:'urgency',icon:'◉',label:'By Urgency'},
+        {id:'kanban',icon:'▦',label:'Kanban'},
+      ].map(function(v){
+        var active=dashView===v.id;
+        return<button key={v.id} onClick={function(){setDashView(v.id);}}
+          style={{display:'flex',alignItems:'center',gap:5,padding:'6px 13px',borderRadius:7,border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',background:active?'rgba(107,140,173,0.12)':'var(--tf-surface)',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,fontFamily:'inherit',transition:'all 0.12s'}}>
+          <span style={{fontSize:13}}>{v.icon}</span>{v.label}
+        </button>;
+      })}
+    </div>
+
     {/* Main content + Calendar sidebar */}
     <div style={{display:'flex',gap:18,alignItems:'flex-start',flexWrap:'wrap'}}>
       {/* Your Works */}
       <div style={{flex:'1 1 560px',minWidth:320}}>
-        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Your Works</div>
-        {filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+
+        {/* ── URGENCY VIEW ── */}
+        {dashView==='urgency'&&(filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}><div style={{fontSize:40,marginBottom:10}}>✓</div><div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div></div>:
+        <div>
+          {urgencyBands.filter(function(b){return urgencyGrouped[b.id].length>0;}).map(function(band){
+            var tasks=urgencyGrouped[band.id];
+            var isOpen=expandedGroups['__urg_'+band.id]!==false;
+            return<div key={band.id} style={{marginBottom:14}}>
+              <button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n['__urg_'+band.id]=!isOpen;return n;});}}
+                style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'0 0 8px 2px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,fontFamily:'inherit',color:band.color}}>
+                <span style={{fontSize:14}}>{band.icon}</span>
+                <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.06em'}}>{band.label} · {tasks.length}</span>
+                <span style={{marginLeft:'auto',fontSize:11,color:'var(--tf-text-sub)'}}>{isOpen?'▲':'▼'}</span>
+              </button>
+              {isOpen&&<div style={{background:'var(--tf-surface)',border:'1px solid',borderColor:band.border,borderRadius:12,overflow:'hidden'}}>
+                {tasks.map(function(row,idx){
+                  var d=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id];var isOver=row.due_date&&row.due_date<todayStr;
+                  return<div key={row.id} style={{borderTop:idx>0?'1px solid var(--tf-border)':'none'}}>
+                    <div onClick={function(){toggleExpand(row.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}>
+                      <div style={{width:6,height:6,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.__title||'Untitled'}</div>
+                        <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{client?(client.display_name||client.name):''}{ws?(' · '+ws.work_type):''}</div>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                        {row.due_date&&<span style={{fontSize:10,fontWeight:700,color:isOver?'#ef4444':band.color,background:isOver?'rgba(239,68,68,0.08)':band.bg,padding:'2px 6px',borderRadius:4,whiteSpace:'nowrap'}}>{isOver?'Overdue · ':''}{new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
+                        <select value={row.status} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(row.id,e.target.value);}}
+                          style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 6px',color:SC[row.status]||'#94a3b8',fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+                          <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Done</option>
+                        </select>
+                      </div>
+                    </div>
+                    {expandedRow===row.id&&<div style={{padding:'0 14px 12px 30px',background:'rgba(107,140,173,0.03)'}}>
+                      {d.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5}}>{d.__description}</div>}
+                      {d.__checklist&&d.__checklist.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4}}>{d.__checklist.map(function(c,ci){return<div key={ci} style={{display:'flex',alignItems:'center',gap:7,fontSize:12}}><span style={{color:c.done?'#22c55e':'var(--tf-border)',fontSize:14}}>{c.done?'✓':'○'}</span><span style={{color:c.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:c.done?'line-through':'none'}}>{c.text}</span></div>;})}</div>}
+                    </div>}
+                  </div>;
+                })}
+              </div>}
+            </div>;
+          })}
+        </div>)}
+
+        {/* ── KANBAN VIEW ── */}
+        {dashView==='kanban'&&<div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:8}}>
+          {kanbanCols.map(function(col){
+            var tasks=kanbanGrouped[col.id];
+            return<div key={col.id} style={{flex:'0 0 260px',minWidth:220,background:col.bg,borderRadius:12,border:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',maxHeight:'calc(100vh - 280px)'}}>
+              <div style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+                <div style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
+                <span style={{fontSize:11,fontWeight:800,color:col.color,textTransform:'uppercase',letterSpacing:'0.06em'}}>{col.label}</span>
+                <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:10,padding:'1px 7px'}}>{tasks.length}</span>
+              </div>
+              <div style={{flex:1,overflowY:'auto',padding:'8px 8px'}}>
+                {tasks.length===0&&<div style={{textAlign:'center',padding:'24px 12px',color:'var(--tf-text-sub)',fontSize:11}}>No tasks</div>}
+                {tasks.map(function(row){
+                  var d=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id];
+                  var isOver=row.due_date&&row.due_date<todayStr;
+                  var isToday=row.due_date===todayStr;
+                  return<div key={row.id} onClick={function(){toggleExpand(row.id);}}
+                    style={{background:'var(--tf-panel)',border:'1px solid',borderColor:expandedRow===row.id?'#6b8cad':'var(--tf-border)',borderRadius:9,padding:'10px 12px',marginBottom:7,cursor:'pointer',transition:'border-color 0.12s',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
+                    <div style={{display:'flex',alignItems:'flex-start',gap:6,marginBottom:5}}>
+                      <div style={{width:6,height:6,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0,marginTop:4}}/>
+                      <div style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)',lineHeight:1.35}}>{d.__title||'Untitled'}</div>
+                    </div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:row.due_date?6:0}}>{client?(client.display_name||client.name):''}{ws&&ws.work_type?' · '+ws.work_type:''}</div>
+                    {row.due_date&&<span style={{display:'inline-block',fontSize:10,fontWeight:700,color:isOver?'#ef4444':isToday?'#f59e0b':'#6b8cad',background:isOver?'rgba(239,68,68,0.08)':isToday?'rgba(245,158,11,0.08)':'rgba(107,140,173,0.07)',padding:'2px 7px',borderRadius:4}}>
+                      {isOver?'⚠ Overdue':isToday?'Today':new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
+                    </span>}
+                    {expandedRow===row.id&&<div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)'}}>
+                      {d.__description&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:6,lineHeight:1.5}}>{d.__description}</div>}
+                      <select value={row.status} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(row.id,e.target.value);}}
+                        style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:SC[row.status]||'#94a3b8',fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+                        <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Done ✓</option>
+                      </select>
+                    </div>}
+                  </div>;
+                })}
+              </div>
+            </div>;
+          })}
+        </div>}
+
+        {/* ── LIST VIEW (original work-type grouping) ── */}
+        {dashView==='list'&&(filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
           <div style={{fontSize:40,marginBottom:10}}>✓</div>
           <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
           <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
@@ -6712,7 +6837,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               </div>
             </div>;
           })}
-        </div>}
+        </div>)}
       </div>
 
       {/* Right-side Calendar */}
