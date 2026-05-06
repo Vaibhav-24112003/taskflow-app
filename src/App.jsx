@@ -10961,21 +10961,37 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   async function loadWsRows(){
     if(!org)return;
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').eq('org_id',org.id).neq('status','completed').limit(2000);
-    var rows=(rr.data||[]).filter(function(r){
+    var assigned=(rr.data||[]).filter(function(r){
       var d=r.data||{};
       if(d.__assignee===planUserId)return true;
       var keys=Object.keys(d);
       for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===planUserId)return true;}
       return false;
     });
-    setWsRows(rows);
-    // Load worksheet metadata for these rows
-    var wsIds=Array.from(new Set(rows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+    // Load worksheet metadata first so we can apply prep_days filter
+    var wsIds=Array.from(new Set(assigned.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+    var meta={};
     if(wsIds.length>0){
       var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds).limit(500);
-      var meta={};(rw.data||[]).forEach(function(w){meta[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
-      setWorksheetMeta(meta);
+      (rw.data||[]).forEach(function(w){meta[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
     }
+    setWorksheetMeta(meta);
+    // Build prep-days map from workTypeConfigs
+    var prepMap={};
+    (workTypeConfigs||[]).forEach(function(c){if(c.prep_days!=null)prepMap[c.name]=c.prep_days;});
+    var todayLocal=new Date();todayLocal.setHours(0,0,0,0);
+    var todayS=todayLocal.getFullYear()+'-'+String(todayLocal.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal.getDate()).padStart(2,'0');
+    var filtered=assigned.filter(function(r){
+      if(!r.due_date)return true;
+      var wt=(meta[r.worksheet_id]||{}).work_type;
+      var pd=wt!=null&&prepMap[wt]!=null?prepMap[wt]:null;
+      if(pd===null)return true;
+      var startDate=new Date(r.due_date+'T00:00:00');
+      startDate.setDate(startDate.getDate()-pd);
+      var startS=startDate.getFullYear()+'-'+String(startDate.getMonth()+1).padStart(2,'0')+'-'+String(startDate.getDate()).padStart(2,'0');
+      return todayS>=startS;
+    });
+    setWsRows(filtered);
   }
 
   async function loadBcTasks(){
@@ -11240,12 +11256,12 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
         </select>}
         {/* Date nav */}
         <div style={{display:'flex',alignItems:'center',gap:4,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'3px 4px'}}>
-          <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>‹</button>
+          <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>‹</button>
           <div style={{textAlign:'center',minWidth:90}}>
             <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{dateLabel}</div>
             <input type="date" value={planDate} onChange={function(e){setPlanDate(e.target.value);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:10,cursor:'pointer',outline:'none',fontFamily:'inherit',display:'block',width:'100%',textAlign:'center'}}/>
           </div>
-          <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.toISOString().split('T')[0]);}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>›</button>
+          <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>›</button>
         </div>
         {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>Today</button>}
         {!isReadOnly&&<button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(showPicker?'#6b8cad':'var(--tf-border)'),borderRadius:7,padding:'6px 12px',color:showPicker?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>Add to Plan</button>}
