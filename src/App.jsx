@@ -3224,6 +3224,8 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
   var [recalculating,setRecalculating]=useState(false);
+  var [prevPeriodData,setPrevPeriodData]=useState(null); // {label, map:{clientId:{hierKey:userId}}, count}
+  var [copyingPrev,setCopyingPrev]=useState(false);
   async function recalcAllDueDates(){
     setRecalculating(true);
     var rw=await supabase.from('worksheets').select('id,org_id,work_type,period_year,period_month,period_quarter,frequency,period_label').eq('org_id',org.id).limit(1000);
@@ -3618,35 +3620,6 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         });
       }
       if(newRows.length>0){
-        // Inherit hierarchy assignments (assignee/reviewer/etc.) from most recent previous period
-        var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
-        // Compute previous period identifiers
-        var prevYear=periodYear,prevMonth=periodMonth,prevQuarter=periodQuarter;
-        if(cfg.frequency==='monthly'){
-          prevMonth=periodMonth-1;if(prevMonth<1){prevMonth=12;prevYear=periodYear-1;}
-          if(prevMonth===3)prevYear=periodYear-1; // Mar belongs to prev FY
-        }else if(cfg.frequency==='quarterly'){
-          prevQuarter=periodQuarter-1;if(prevQuarter<1){prevQuarter=4;prevYear=periodYear-1;}
-        }else if(cfg.frequency==='yearly'){
-          prevYear=periodYear-1;
-        }
-        var prevLabel=getPeriodLabel(cfg.frequency,prevYear,prevMonth,prevQuarter);
-        var rpw=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',prevLabel).maybeSingle();
-        if(rpw.data){
-          var rpr=await supabase.from('worksheet_rows').select('client_id,data').eq('worksheet_id',rpw.data.id).limit(2000);
-          var prevDataMap={};
-          (rpr.data||[]).forEach(function(r){
-            if(!prevDataMap[r.client_id])prevDataMap[r.client_id]=r.data||{};
-          });
-          newRows=newRows.map(function(r){
-            var prev=prevDataMap[r.client_id];
-            if(!prev)return r;
-            var inherited={};
-            hierKeys.forEach(function(k){if(prev[k])inherited[k]=prev[k];});
-            if(Object.keys(inherited).length===0)return r;
-            return Object.assign({},r,{data:Object.assign({},r.data,inherited)});
-          });
-        }
         var ins2=await supabase.from('worksheet_rows').insert(newRows).select();
         if(ins2.error)console.error('worksheet_rows insert error:',ins2.error);
         existingRows=[...existingRows,...(ins2.data||[])];
@@ -3660,7 +3633,62 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         return na.localeCompare(nb);
       });
       setRows(existingRows);
+      // Check if previous period has assignments available to copy
+      checkPrevPeriodAssignments(cfg,periodYear,periodMonth,periodQuarter,existingRows);
     }
+  }
+
+  async function checkPrevPeriodAssignments(cfg,pYear,pMonth,pQuarter,currentRows){
+    setPrevPeriodData(null);
+    if(cfg.frequency==='once')return;
+    var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
+    var prevYear=pYear,prevMonth=pMonth,prevQuarter=pQuarter;
+    if(cfg.frequency==='monthly'){
+      prevMonth=pMonth-1;if(prevMonth<1){prevMonth=12;prevYear=pYear-1;}
+    }else if(cfg.frequency==='quarterly'){
+      prevQuarter=pQuarter-1;if(prevQuarter<1){prevQuarter=4;prevYear=pYear-1;}
+    }else if(cfg.frequency==='yearly'){
+      prevYear=pYear-1;
+    }
+    var prevLabel=getPeriodLabel(cfg.frequency,prevYear,prevMonth,prevQuarter);
+    var rpw=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',prevLabel).maybeSingle();
+    if(!rpw.data)return;
+    var rpr=await supabase.from('worksheet_rows').select('client_id,data').eq('worksheet_id',rpw.data.id).limit(2000);
+    var map={};var count=0;
+    (rpr.data||[]).forEach(function(r){
+      var d=r.data||{};
+      var assigned={};
+      hierKeys.forEach(function(k){if(d[k])assigned[k]=d[k];});
+      if(Object.keys(assigned).length>0){map[r.client_id]=assigned;count++;}
+    });
+    if(count===0)return;
+    // Only show if current period has at least some rows without assignments
+    var unassignedCount=currentRows.filter(function(r){
+      var d=r.data||{};
+      return!hierKeys.some(function(k){return!!d[k];});
+    }).length;
+    if(unassignedCount===0)return;
+    setPrevPeriodData({label:prevLabel,map:map,count:count,unassigned:unassignedCount});
+  }
+
+  async function copyFromPrevPeriod(){
+    if(!prevPeriodData||!rows.length)return;
+    var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
+    setCopyingPrev(true);
+    var toUpdate=[];
+    rows.forEach(function(row){
+      var prev=prevPeriodData.map[row.client_id];
+      if(!prev)return;
+      var d=row.data||{};
+      var alreadyHas=hierKeys.some(function(k){return!!d[k];});
+      if(alreadyHas)return; // don't overwrite existing assignments
+      toUpdate.push({id:row.id,data:Object.assign({},d,prev)});
+    });
+    if(toUpdate.length===0){showToast('All rows already have assignments','info');setCopyingPrev(false);setPrevPeriodData(null);return;}
+    await Promise.all(toUpdate.map(function(u){return supabase.from('worksheet_rows').update({data:u.data}).eq('id',u.id);}));
+    setRows(function(prev){return prev.map(function(r){var u=toUpdate.find(function(x){return x.id===r.id;});return u?Object.assign({},r,{data:u.data}):r;});});
+    showToast('Copied from '+prevPeriodData.label+' → '+toUpdate.length+' rows updated');
+    setPrevPeriodData(null);setCopyingPrev(false);
   }
 
   async function toggleCell(rowId,key,currentVal){
@@ -4072,6 +4100,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           {[2022,2023,2024,2025,2026,2027].map(function(y){return<option key={y} value={y}>{'FY '+y+'-'+String(y+1).slice(2)}</option>;})}
         </select>}
         {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
+
+        {/* Copy-from-previous-period offer */}
+        {prevPeriodData&&cfg.frequency!=='once'&&<div style={{display:'flex',alignItems:'center',gap:8,background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'4px 10px',flexShrink:0}}>
+          <span style={{fontSize:11,color:'#b45309',fontWeight:600}}>↩ {prevPeriodData.label} has assignments</span>
+          <button onClick={copyFromPrevPeriod} disabled={copyingPrev} style={{background:'#f59e0b',border:'none',borderRadius:6,padding:'3px 10px',color:'#fff',cursor:copyingPrev?'not-allowed':'pointer',fontSize:11,fontWeight:700,opacity:copyingPrev?0.6:1,whiteSpace:'nowrap'}}>{copyingPrev?'Copying…':'Copy to this period'}</button>
+          <button onClick={function(){setPrevPeriodData(null);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#b45309',padding:'0 2px',lineHeight:1}}>×</button>
+        </div>}
 
         {/* SOP button */}
         {cfg.sop_steps&&cfg.sop_steps.length>0&&<button onClick={function(){setShowSop(!showSop);}} style={{marginLeft:'auto',background:showSop?'rgba(34,197,94,0.12)':'var(--tf-surface)',border:'1px solid '+(showSop?'rgba(34,197,94,0.3)':'var(--tf-border)'),borderRadius:7,padding:'5px 10px',color:showSop?'#22c55e':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
