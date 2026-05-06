@@ -3176,6 +3176,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [showSop,setShowSop]=useState(false);
 var [showExportMenu,setShowExportMenu]=useState(false);
   var [wsView,setWsView]=useState('grid'); // 'grid' | 'pipeline' | 'funnel'
+  var [dragRowId,setDragRowId]=useState(null);
+  var [newCommentText,setNewCommentText]=useState({});
 
   // Column show/hide
   var [hiddenCols,setHiddenCols]=useState([]);
@@ -3859,8 +3861,21 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   }
 
   async function moveToStage(rowId,stageKey){
-    await supabase.from('worksheet_rows').update({current_stage:stageKey}).eq('id',rowId);
-    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{current_stage:stageKey}):r;});});
+    var val=stageKey||null;
+    await supabase.from('worksheet_rows').update({current_stage:val}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{current_stage:val}):r;});});
+  }
+
+  async function addComment(rowId,text){
+    if(!text||!text.trim())return;
+    var row=rows.find(function(r){return r.id===rowId;});
+    if(!row)return;
+    var authorName=cu.name||cu.email||'User';
+    var newC={id:Date.now()+'',author_id:cu.id,author_name:authorName,text:text.trim(),created_at:new Date().toISOString()};
+    var thread=(row.comments_thread||[]).concat([newC]);
+    await supabase.from('worksheet_rows').update({comments_thread:thread}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{comments_thread:thread}):r;});});
+    setNewCommentText(function(p){var n=Object.assign({},p);delete n[rowId];return n;});
   }
 
   function csvCell(v){if(v===null||v===undefined)return '';var s=String(v);if(s.includes(',')||s.includes('"')||s.includes('\n'))return '"'+s.replace(/"/g,'""')+'"';return s;}
@@ -4382,38 +4397,44 @@ var [showExportMenu,setShowExportMenu]=useState(false);
             var noStageRows=filteredRows.filter(function(r){return !r.current_stage||!cfg.stages.find(function(s){return s.key===r.current_stage;});});
             var allCols=[{key:'__none',label:'Not Started',color:'#64748b',rows:noStageRows}].concat(cfg.stages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#6b8cad',rows:filteredRows.filter(function(r){return r.current_stage===st.key;})};}));
             return allCols.map(function(col){
-              return<div key={col.key} style={{width:220,flexShrink:0}}>
+              return<div key={col.key} style={{width:230,flexShrink:0}}
+                onDragOver={function(e){e.preventDefault();}}
+                onDrop={function(e){e.preventDefault();var rid=e.dataTransfer.getData('rowId');if(rid)moveToStage(rid,col.key==='__none'?null:col.key);setDragRowId(null);}}>
                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8,padding:'6px 10px',background:col.color+'22',borderRadius:8,border:'1px solid '+col.color+'44'}}>
                   <div style={{width:10,height:10,borderRadius:5,background:col.color,flexShrink:0}}/>
                   <span style={{fontWeight:700,fontSize:12,color:col.color,flex:1}}>{col.label}</span>
                   <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-bg)',borderRadius:10,padding:'1px 7px',border:'1px solid var(--tf-border)'}}>{col.rows.length}</span>
                 </div>
-                <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:80}}>
+                <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:80,padding:'2px 0',borderRadius:8,transition:'background 0.15s'}}>
                   {col.rows.map(function(row){
                     var client=clientMap[row.client_id];
                     if(!client)return null;
                     var d=row.data||{};
                     var wsPriority=d.__priority||'medium';
-                    return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',cursor:'pointer'}} onClick={function(){toggleWsExpand(row.id);}}>
+                    var threadCount=(row.comments_thread||[]).length;
+                    var isDragging=dragRowId===row.id;
+                    return<div key={row.id}
+                      draggable={true}
+                      onDragStart={function(e){e.dataTransfer.setData('rowId',row.id);setDragRowId(row.id);}}
+                      onDragEnd={function(){setDragRowId(null);}}
+                      onClick={function(){if(!isDragging)toggleWsExpand(row.id);}}
+                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',cursor:'grab',opacity:isDragging?0.4:1,transition:'opacity 0.15s,box-shadow 0.15s',boxShadow:isDragging?'none':'0 1px 3px rgba(0,0,0,0.12)'}}>
                       <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
                         <div style={{width:6,height:6,borderRadius:3,background:{low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'}[wsPriority],flexShrink:0}}/>
                         <span style={{fontWeight:600,fontSize:12,color:'var(--tf-text)',flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{client.name}</span>
+                        {threadCount>0&&<span style={{fontSize:9,color:'#6b8cad',fontWeight:700}}>💬{threadCount}</span>}
                       </div>
-                      {d.__title&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.__title}</div>}
-                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                        {cfg.stages.map(function(st){
-                          var isActive=row.current_stage===st.key;
-                          return<button key={st.key} onClick={function(e){e.stopPropagation();moveToStage(row.id,st.key);}} title={'Move to '+st.label} style={{background:isActive?st.color||'#6b8cad':'transparent',border:'1px solid '+(st.color||'#6b8cad')+'55',borderRadius:4,padding:'1px 6px',color:isActive?'#fff':st.color||'#6b8cad',cursor:'pointer',fontSize:9,fontWeight:700,whiteSpace:'nowrap',transition:'all 0.15s'}}>{st.label}</button>;
-                        })}
-                      </div>
+                      {d.__title&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.__title}</div>}
+                      {row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginBottom:4}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>}
                     </div>;
                   })}
-                  {col.rows.length===0&&<div style={{border:'1px dashed var(--tf-border)',borderRadius:8,padding:'16px 12px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>Empty</div>}
+                  {col.rows.length===0&&<div style={{border:'1px dashed var(--tf-border)',borderRadius:8,padding:'20px 12px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>Drop here</div>}
                 </div>
               </div>;
             });
           })()}
         </div>
+        <div style={{marginTop:8,fontSize:11,color:'var(--tf-text-sub)',textAlign:'center'}}>Drag cards between columns to move stages · Click a card to expand details</div>
       </div>}
 
       {/* Funnel Summary View */}
@@ -4457,7 +4478,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
               {hierarchyCols.map(function(hc){return!hiddenCols.includes(hc.key)&&<th key={hc.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120}}>{hc.label}</th>;})}
               {visibleCols.map(function(col){var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw}}>{col.label}</th>;})}
-              {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>Status</th>}
+              {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>{cfg.stages&&cfg.stages.length>0?'Stage':'Status'}</th>}
               {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
               {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
               {cfg.frequency==='once'&&<th style={{padding:'10px 6px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:60}}>Actions</th>}
@@ -4544,19 +4565,27 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   </td>;
                 })}
                 {showStatus&&<td style={{padding:'10px 10px',textAlign:'center'}}>
-                  <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
+                  {cfg.stages&&cfg.stages.length>0
+                    ?(function(){var st=cfg.stages.find(function(s){return s.key===row.current_stage;});var stColor=st?st.color||'#6b8cad':'#64748b';return<select value={row.current_stage||''} onChange={function(e){moveToStage(row.id,e.target.value||null);}} style={{background:'transparent',border:'1px solid',borderColor:stColor,borderRadius:20,padding:'3px 8px',color:stColor,fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',maxWidth:130}}>
+                        <option value="">Not Started</option>
+                        {cfg.stages.map(function(s){return<option key={s.key} value={s.key}>{s.label}</option>;})}
+                      </select>;}())
+                    :<select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
                     style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC_STATUS[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize'}}>
                     <option value="pending">Pending</option>
                     <option value="in_progress">In Progress</option>
                     <option value="under_review">Under Review</option>
                     <option value="completed">Completed</option>
-                  </select>
+                  </select>}
                 </td>}
-                {showComments&&<td style={{padding:'10px 14px'}}>
-                  <input value={row.comments||''} onChange={function(e){var v=e.target.value;setRows(function(p){return p.map(function(r){return r.id===row.id?Object.assign({},r,{comments:v}):r;});});}}
-                    onBlur={function(e){updateComment(row.id,e.target.value);}}
-                    placeholder="Add note..."
-                    style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:12,width:'100%',outline:'none',fontFamily:'inherit',padding:'2px 0'}}/>
+                {showComments&&<td style={{padding:'8px 14px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <input value={row.comments||''} onChange={function(e){var v=e.target.value;setRows(function(p){return p.map(function(r){return r.id===row.id?Object.assign({},r,{comments:v}):r;});});}}
+                      onBlur={function(e){updateComment(row.id,e.target.value);}}
+                      placeholder="Quick note..."
+                      style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:12,flex:1,outline:'none',fontFamily:'inherit',padding:'2px 0'}}/>
+                    {(row.comments_thread||[]).length>0&&<span onClick={function(e){e.stopPropagation();toggleWsExpand(row.id);}} title="View thread comments" style={{fontSize:10,fontWeight:700,color:'#6b8cad',background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:10,padding:'1px 7px',cursor:'pointer',whiteSpace:'nowrap',flexShrink:0}}>💬 {row.comments_thread.length}</span>}
+                  </div>
                 </td>}
                 {showTaskCard&&<td style={{padding:'10px 10px',textAlign:'center'}}>
                   {row.task_card_id?<span style={{fontSize:11,fontWeight:600,color:'#22c55e',background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.25)',borderRadius:20,padding:'3px 10px'}}>✓ Created</span>:
@@ -4598,6 +4627,35 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                       })}
                     </div>}
                     {!d.__description&&wsClTotal===0&&!d.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No additional details. Click "Edit Details" to add title, description, checklist, contact person.</div>}
+                    {/* Comments thread */}
+                    <div style={{marginTop:14,borderTop:'1px solid var(--tf-border)',paddingTop:12}}>
+                      <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>Comments {(row.comments_thread||[]).length>0&&<span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>({row.comments_thread.length})</span>}</div>
+                      {(row.comments_thread||[]).map(function(c){
+                        var initial=(c.author_name||'?')[0].toUpperCase();
+                        var ts=new Date(c.created_at);
+                        var tsStr=ts.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+                        return<div key={c.id} style={{display:'flex',gap:8,marginBottom:12}}>
+                          <div style={{width:28,height:28,borderRadius:14,background:'rgba(107,140,173,0.18)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#6b8cad'}}>{initial}</div>
+                          <div style={{flex:1}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                              <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{c.author_name||'User'}</span>
+                              <span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{tsStr}</span>
+                            </div>
+                            <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{c.text}</div>
+                          </div>
+                        </div>;
+                      })}
+                      <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                        <div style={{width:28,height:28,borderRadius:14,background:'rgba(107,140,173,0.18)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#6b8cad'}}>{(cu.name||cu.email||'?')[0].toUpperCase()}</div>
+                        <div style={{flex:1}}>
+                          <textarea value={newCommentText[row.id]||''} onChange={function(e){var v=e.target.value;setNewCommentText(function(p){return Object.assign({},p,{[row.id]:v});});}}
+                            onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment(row.id,newCommentText[row.id]||'');}}}
+                            placeholder="Add a comment… (Enter to post, Shift+Enter for new line)"
+                            style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical',minHeight:40,boxSizing:'border-box'}}/>
+                          {(newCommentText[row.id]||'').trim()&&<button onClick={function(){addComment(row.id,newCommentText[row.id]||'');}} style={{marginTop:4,background:'#6b8cad',border:'none',borderRadius:6,padding:'4px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Post</button>}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                   :<div>
                     <div style={{display:'flex',flexDirection:'column',gap:8,maxWidth:500}}>
