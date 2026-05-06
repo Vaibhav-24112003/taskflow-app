@@ -3224,8 +3224,12 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
   var [recalculating,setRecalculating]=useState(false);
-  var [prevPeriodData,setPrevPeriodData]=useState(null); // {label, map:{clientId:{hierKey:userId}}, count}
-  var [copyingPrev,setCopyingPrev]=useState(false);
+  var [showCopyFrom,setShowCopyFrom]=useState(false);
+  var [copyFromPeriods,setCopyFromPeriods]=useState([]); // [{label,wsId,count}] past periods with assignments
+  var [selCopyPeriod,setSelCopyPeriod]=useState(null);
+  var [copyFromMap,setCopyFromMap]=useState(null);
+  var [copyingFrom,setCopyingFrom]=useState(false);
+  var [loadingCopyFrom,setLoadingCopyFrom]=useState(false);
   async function recalcAllDueDates(){
     setRecalculating(true);
     var rw=await supabase.from('worksheets').select('id,org_id,work_type,period_year,period_month,period_quarter,frequency,period_label').eq('org_id',org.id).limit(1000);
@@ -3633,62 +3637,65 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         return na.localeCompare(nb);
       });
       setRows(existingRows);
-      // Check if previous period has assignments available to copy
-      checkPrevPeriodAssignments(cfg,periodYear,periodMonth,periodQuarter,existingRows);
+      // Reset copy-from state when period changes
+      setShowCopyFrom(false);setCopyFromPeriods([]);setSelCopyPeriod(null);setCopyFromMap(null);
     }
   }
 
-  async function checkPrevPeriodAssignments(cfg,pYear,pMonth,pQuarter,currentRows){
-    setPrevPeriodData(null);
-    if(cfg.frequency==='once')return;
+  async function openCopyFrom(){
+    if(!activeType)return;
+    setShowCopyFrom(true);setLoadingCopyFrom(true);setCopyFromPeriods([]);setSelCopyPeriod(null);setCopyFromMap(null);
     var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
-    var prevYear=pYear,prevMonth=pMonth,prevQuarter=pQuarter;
-    if(cfg.frequency==='monthly'){
-      prevMonth=pMonth-1;if(prevMonth<1){prevMonth=12;prevYear=pYear-1;}
-    }else if(cfg.frequency==='quarterly'){
-      prevQuarter=pQuarter-1;if(prevQuarter<1){prevQuarter=4;prevYear=pYear-1;}
-    }else if(cfg.frequency==='yearly'){
-      prevYear=pYear-1;
+    // Load all past worksheets for this work type (excluding current period)
+    var rw=await supabase.from('worksheets').select('id,period_label,period_year,period_month,period_quarter').eq('org_id',org.id).eq('work_type',activeType).neq('period_label',periodLabel).order('period_year',{ascending:false}).order('period_month',{ascending:false}).order('period_quarter',{ascending:false}).limit(24);
+    var pastWS=rw.data||[];
+    // For each, count how many rows have assignments
+    var periods=[];
+    for(var i=0;i<pastWS.length;i++){
+      var ws=pastWS[i];
+      var rr=await supabase.from('worksheet_rows').select('client_id,data').eq('worksheet_id',ws.id).limit(500);
+      var count=0;
+      (rr.data||[]).forEach(function(r){
+        var d=r.data||{};
+        if(hierKeys.some(function(k){return!!d[k];}))count++;
+      });
+      if(count>0)periods.push({label:ws.period_label,wsId:ws.id,count:count});
     }
-    var prevLabel=getPeriodLabel(cfg.frequency,prevYear,prevMonth,prevQuarter);
-    var rpw=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type',activeType).eq('period_label',prevLabel).maybeSingle();
-    if(!rpw.data)return;
-    var rpr=await supabase.from('worksheet_rows').select('client_id,data').eq('worksheet_id',rpw.data.id).limit(2000);
-    var map={};var count=0;
-    (rpr.data||[]).forEach(function(r){
+    setCopyFromPeriods(periods);
+    setLoadingCopyFrom(false);
+  }
+
+  async function loadCopyFromPeriod(wsId){
+    var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
+    var rr=await supabase.from('worksheet_rows').select('client_id,data').eq('worksheet_id',wsId).limit(2000);
+    var map={};
+    (rr.data||[]).forEach(function(r){
       var d=r.data||{};
       var assigned={};
       hierKeys.forEach(function(k){if(d[k])assigned[k]=d[k];});
-      if(Object.keys(assigned).length>0){map[r.client_id]=assigned;count++;}
+      if(Object.keys(assigned).length>0)map[r.client_id]=assigned;
     });
-    if(count===0)return;
-    // Only show if current period has at least some rows without assignments
-    var unassignedCount=currentRows.filter(function(r){
-      var d=r.data||{};
-      return!hierKeys.some(function(k){return!!d[k];});
-    }).length;
-    if(unassignedCount===0)return;
-    setPrevPeriodData({label:prevLabel,map:map,count:count,unassigned:unassignedCount});
+    setCopyFromMap(map);
   }
 
-  async function copyFromPrevPeriod(){
-    if(!prevPeriodData||!rows.length)return;
+  async function applyCopyFrom(){
+    if(!copyFromMap||!rows.length)return;
     var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
-    setCopyingPrev(true);
+    setCopyingFrom(true);
     var toUpdate=[];
     rows.forEach(function(row){
-      var prev=prevPeriodData.map[row.client_id];
+      var prev=copyFromMap[row.client_id];
       if(!prev)return;
       var d=row.data||{};
       var alreadyHas=hierKeys.some(function(k){return!!d[k];});
-      if(alreadyHas)return; // don't overwrite existing assignments
+      if(alreadyHas)return; // only fill unassigned rows
       toUpdate.push({id:row.id,data:Object.assign({},d,prev)});
     });
-    if(toUpdate.length===0){showToast('All rows already have assignments','info');setCopyingPrev(false);setPrevPeriodData(null);return;}
+    if(toUpdate.length===0){showToast('All rows already have assignments');setCopyingFrom(false);setShowCopyFrom(false);return;}
     await Promise.all(toUpdate.map(function(u){return supabase.from('worksheet_rows').update({data:u.data}).eq('id',u.id);}));
     setRows(function(prev){return prev.map(function(r){var u=toUpdate.find(function(x){return x.id===r.id;});return u?Object.assign({},r,{data:u.data}):r;});});
-    showToast('Copied from '+prevPeriodData.label+' → '+toUpdate.length+' rows updated');
-    setPrevPeriodData(null);setCopyingPrev(false);
+    showToast('Copied from '+selCopyPeriod.label+' → '+toUpdate.length+' rows updated');
+    setCopyingFrom(false);setShowCopyFrom(false);setSelCopyPeriod(null);setCopyFromMap(null);
   }
 
   async function toggleCell(rowId,key,currentVal){
@@ -4101,11 +4108,34 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </select>}
         {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
 
-        {/* Copy-from-previous-period offer */}
-        {prevPeriodData&&cfg.frequency!=='once'&&<div style={{display:'flex',alignItems:'center',gap:8,background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'4px 10px',flexShrink:0}}>
-          <span style={{fontSize:11,color:'#b45309',fontWeight:600}}>↩ {prevPeriodData.label} has assignments</span>
-          <button onClick={copyFromPrevPeriod} disabled={copyingPrev} style={{background:'#f59e0b',border:'none',borderRadius:6,padding:'3px 10px',color:'#fff',cursor:copyingPrev?'not-allowed':'pointer',fontSize:11,fontWeight:700,opacity:copyingPrev?0.6:1,whiteSpace:'nowrap'}}>{copyingPrev?'Copying…':'Copy to this period'}</button>
-          <button onClick={function(){setPrevPeriodData(null);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:13,color:'#b45309',padding:'0 2px',lineHeight:1}}>×</button>
+        {/* Copy assignments from a past period */}
+        {cfg.frequency!=='once'&&<div style={{position:'relative'}}>
+          <button onClick={function(){if(showCopyFrom){setShowCopyFrom(false);}else{openCopyFrom();}}} style={{background:showCopyFrom?'rgba(245,158,11,0.15)':'var(--tf-surface)',border:'1px solid '+(showCopyFrom?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:7,padding:'5px 10px',color:showCopyFrom?'#b45309':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>
+            ↩ Copy from
+          </button>
+          {showCopyFrom&&<>
+            <div onClick={function(){setShowCopyFrom(false);}} style={{position:'fixed',inset:0,zIndex:99}}/>
+            <div style={{position:'absolute',top:'calc(100% + 6px)',left:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,minWidth:280,boxShadow:'0 8px 24px rgba(0,0,0,0.25)',zIndex:100,overflow:'hidden'}}>
+              <div style={{padding:'8px 12px 6px',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'1px solid var(--tf-border)'}}>Copy assignments from period</div>
+              {loadingCopyFrom?<div style={{padding:'16px 12px',fontSize:12,color:'var(--tf-text-sub)'}}>Loading past periods…</div>:copyFromPeriods.length===0?<div style={{padding:'16px 12px',fontSize:12,color:'var(--tf-text-sub)'}}>No past periods with assignments found.</div>:<>
+                <div style={{maxHeight:220,overflowY:'auto'}}>
+                  {copyFromPeriods.map(function(p){
+                    var isSel=selCopyPeriod&&selCopyPeriod.wsId===p.wsId;
+                    return<button key={p.wsId} onClick={function(){setSelCopyPeriod(p);loadCopyFromPeriod(p.wsId);}} style={{display:'flex',alignItems:'center',justifyContent:'space-between',width:'100%',padding:'9px 14px',background:isSel?'rgba(245,158,11,0.1)':'none',border:'none',cursor:'pointer',textAlign:'left',borderBottom:'1px solid var(--tf-border)',fontFamily:'inherit'}}
+                      onMouseEnter={function(e){if(!isSel)e.currentTarget.style.background='var(--tf-surface)';}}
+                      onMouseLeave={function(e){if(!isSel)e.currentTarget.style.background='none';}}>
+                      <span style={{fontSize:13,fontWeight:isSel?700:500,color:isSel?'#b45309':'var(--tf-text)'}}>{p.label}</span>
+                      <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-bg)',borderRadius:4,padding:'1px 7px',border:'1px solid var(--tf-border)'}}>{p.count} assigned</span>
+                    </button>;
+                  })}
+                </div>
+                {selCopyPeriod&&<div style={{padding:'10px 12px',borderTop:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                  <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Copy to unassigned rows in <b>{periodLabel}</b></span>
+                  <button onClick={applyCopyFrom} disabled={copyingFrom||!copyFromMap} style={{background:'#f59e0b',border:'none',borderRadius:6,padding:'5px 14px',color:'#fff',cursor:copyingFrom||!copyFromMap?'not-allowed':'pointer',fontSize:12,fontWeight:700,opacity:copyingFrom||!copyFromMap?0.6:1,whiteSpace:'nowrap'}}>{copyingFrom?'Copying…':'Apply'}</button>
+                </div>}
+              </>}
+            </div>
+          </>}
         </div>}
 
         {/* SOP button */}
