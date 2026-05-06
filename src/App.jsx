@@ -2733,6 +2733,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1,monthly_map:d.monthly_map||null};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1,monthly_map:null}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
   var [sopSteps,setSopSteps]=useState(config&&config.sop_steps?config.sop_steps.map(function(s){return{title:s.title||'',description:s.description||'',link:s.link||''};}):[]);
+  var [stages,setStages]=useState(config&&config.stages&&config.stages.length>0?config.stages.map(function(s){return{key:s.key||'s_'+Date.now(),label:s.label||'',color:s.color||'#6b8cad'};}): []);
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
@@ -2768,6 +2769,19 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   function updateSopStep(idx,field,val){setSopSteps(function(p){return p.map(function(s,i){if(i!==idx)return s;var u=Object.assign({},s);u[field]=val;return u;});});}
   function moveSopStep(idx,dir){setSopSteps(function(p){var a=[...p];var ni=idx+dir;if(ni<0||ni>=a.length)return a;var t=a[idx];a[idx]=a[ni];a[ni]=t;return a;});}
 
+  function addStage(){setStages(function(p){return[...p,{key:'stage_'+Date.now(),label:'',color:'#6b8cad'}];});}
+  function removeStage(idx){setStages(function(p){return p.filter(function(_,i){return i!==idx;});});}
+  function updateStage(idx,field,val){setStages(function(p){return p.map(function(s,i){if(i!==idx)return s;var u=Object.assign({},s);u[field]=val;if(field==='label')u.key=val.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'stage_'+i;return u;});});}
+  function moveStage(idx,dir){setStages(function(p){var a=[...p];var ni=idx+dir;if(ni<0||ni>=a.length)return a;var t=a[idx];a[idx]=a[ni];a[ni]=t;return a;});}
+  function applyStagePreset(preset){
+    var PRESETS={
+      itr:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'temp_working',label:'Temp Working',color:'#8b5cf6'},{key:'data_recheck',label:'Data Recheck',color:'#f59e0b'},{key:'full_working',label:'Full Working',color:'#f97316'},{key:'review',label:'Review',color:'#ec4899'},{key:'partner_approval',label:'Partner Approval',color:'#6366f1'},{key:'filed',label:'Filed',color:'#22c55e'},{key:'ack_received',label:'Ack Received',color:'#10b981'}],
+      audit:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'draft_accounts',label:'Draft Accounts',color:'#3b82f6'},{key:'internal_review',label:'Internal Review',color:'#8b5cf6'},{key:'client_review',label:'Client Review',color:'#f59e0b'},{key:'final_audit',label:'Final Audit',color:'#f97316'},{key:'signing',label:'Signing',color:'#ec4899'},{key:'filing',label:'Filing',color:'#22c55e'}],
+      gst:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Return Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]
+    };
+    if(PRESETS[preset])setStages(PRESETS[preset]);
+  }
+
   async function save(){
     if(!name.trim()){setErr('Name required');return;}
     if(columns.some(function(c){return!c.label.trim();})){setErr('All columns must have a label');return;}
@@ -2781,6 +2795,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       due_dates:dueDates.filter(function(d){return d.day||d.monthly_map;}).map(function(d){return{label:d.label||'Due',day:d.day?Number(d.day):null,month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1,monthly_map:d.monthly_map||null};}),
       client_fields:clientFields.filter(function(f){return f.label.trim();}).map(function(f){return{key:f.key,label:f.label.trim(),type:f.type,options:f.options||''};}),
       sop_steps:sopSteps.filter(function(s){return s.title.trim();}).map(function(s,i){return{step:i+1,title:s.title.trim(),description:s.description.trim(),link:s.link.trim()};}),
+      stages:stages.filter(function(s){return s.label.trim();}).map(function(s,i){return{key:s.key,label:s.label.trim(),color:s.color||'#6b8cad',order:i};}),
       is_active:config?config.is_active:true,
       sort_order:config?config.sort_order:99
     };
@@ -2794,7 +2809,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
-  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'},{id:'sop',label:'SOP'+(sopSteps.length?' ('+sopSteps.length+')':'')}];
+  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'},{id:'sop',label:'SOP'+(sopSteps.length?' ('+sopSteps.length+')':'')},{id:'pipeline',label:'Pipeline'+(stages.length?' ('+stages.length+')':'')}];
 
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
     <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:560,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
@@ -2999,6 +3014,33 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
           </div>}
         </div>}
 
+        {tab==='pipeline'&&<div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Pipeline Stages</label>
+            <button onClick={addStage} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Stage</button>
+          </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>Define the stages clients move through for this work type. Team can drag/move clients between stages in Pipeline view.</div>
+          <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
+            <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',alignSelf:'center'}}>Presets:</span>
+            {[{id:'itr',label:'ITR (9 stages)'},{id:'audit',label:'Audit (7 stages)'},{id:'gst',label:'GST (4 stages)'}].map(function(p){return<button key={p.id} onClick={function(){applyStagePreset(p.id);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'3px 9px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:600}}>{p.label}</button>;})}
+          </div>
+          {stages.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No stages defined. Add stages or choose a preset above.</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {stages.map(function(s,i){
+              return<div key={i} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
+                <span style={{width:20,height:20,borderRadius:10,background:s.color||'#6b8cad',flexShrink:0,display:'inline-block'}}/>
+                <input value={s.label} onChange={function(e){updateStage(i,'label',e.target.value);}} style={Object.assign({},INP,{flex:1})} placeholder={'Stage '+(i+1)+' name'}/>
+                <input type="color" value={s.color||'#6b8cad'} onChange={function(e){updateStage(i,'color',e.target.value);}} style={{width:32,height:28,border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer',padding:2,background:'var(--tf-surface)'}} title="Stage colour"/>
+                <div style={{display:'flex',gap:2,flexShrink:0}}>
+                  <button onClick={function(){moveStage(i,-1);}} disabled={i===0} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',cursor:i===0?'default':'pointer',fontSize:11,opacity:i===0?0.3:1}}>↑</button>
+                  <button onClick={function(){moveStage(i,1);}} disabled={i===stages.length-1} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',cursor:i===stages.length-1?'default':'pointer',fontSize:11,opacity:i===stages.length-1?0.3:1}}>↓</button>
+                  <button onClick={function(){removeStage(i);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:4,padding:'2px 6px',color:'#ef4444',cursor:'pointer',fontSize:13,lineHeight:1}}>×</button>
+                </div>
+              </div>;
+            })}
+          </div>}
+        </div>}
+
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'8px 11px',borderRadius:7}}>{err}</div>}
       </div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:9,padding:'13px 20px',borderTop:'1px solid var(--tf-border)'}}>
@@ -3099,7 +3141,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
     else{
       base={};
       workTypeConfigs.forEach(function(c){
-        base[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null,sop_steps:c.sop_steps||[]};
+        base[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null,sop_steps:c.sop_steps||[],stages:c.stages||[]};
       });
     }
     // Synthetic Unclassified work type (free-form, one-time tasks)
@@ -3133,6 +3175,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [toast,setToast]=useState(null);
   var [showSop,setShowSop]=useState(false);
 var [showExportMenu,setShowExportMenu]=useState(false);
+  var [wsView,setWsView]=useState('grid'); // 'grid' | 'pipeline' | 'funnel'
 
   // Column show/hide
   var [hiddenCols,setHiddenCols]=useState([]);
@@ -3815,6 +3858,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
   }
 
+  async function moveToStage(rowId,stageKey){
+    await supabase.from('worksheet_rows').update({current_stage:stageKey}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{current_stage:stageKey}):r;});});
+  }
+
   function csvCell(v){if(v===null||v===undefined)return '';var s=String(v);if(s.includes(',')||s.includes('"')||s.includes('\n'))return '"'+s.replace(/"/g,'""')+'"';return s;}
 
   function exportCurrentPeriod(){
@@ -4108,6 +4156,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </select>}
         {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
 
+        {/* View toggle: grid / pipeline / funnel — only when pipeline stages are configured */}
+        {cfg.stages&&cfg.stages.length>0&&<div style={{display:'flex',gap:0,border:'1px solid var(--tf-border)',borderRadius:7,overflow:'hidden',flexShrink:0}}>
+          {[{id:'grid',label:'≡ Grid'},{id:'pipeline',label:'⬛ Pipeline'},{id:'funnel',label:'◇ Funnel'}].map(function(v){return<button key={v.id} onClick={function(){setWsView(v.id);}} style={{background:wsView===v.id?'rgba(107,140,173,0.15)':'transparent',border:'none',borderRight:'1px solid var(--tf-border)',padding:'5px 10px',color:wsView===v.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:wsView===v.id?700:500,whiteSpace:'nowrap',lastChild:{borderRight:'none'}}}>{v.label}</button>;})}
+        </div>}
+
         {/* Copy assignments from a past period */}
         {cfg.frequency!=='once'&&<div style={{position:'relative'}}>
           <button onClick={function(){if(showCopyFrom){setShowCopyFrom(false);}else{openCopyFrom();}}} style={{background:showCopyFrom?'rgba(245,158,11,0.15)':'var(--tf-surface)',border:'1px solid '+(showCopyFrom?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:7,padding:'5px 10px',color:showCopyFrom?'#b45309':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4,whiteSpace:'nowrap'}}>
@@ -4322,15 +4375,81 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         })}
       </div>}
 
+      {/* Pipeline Kanban View */}
+      {wsView==='pipeline'&&cfg.stages&&cfg.stages.length>0&&<div style={{overflowX:'auto',paddingBottom:12}}>
+        <div style={{display:'flex',gap:12,minWidth:'max-content'}}>
+          {(function(){
+            var noStageRows=filteredRows.filter(function(r){return !r.current_stage||!cfg.stages.find(function(s){return s.key===r.current_stage;});});
+            var allCols=[{key:'__none',label:'Not Started',color:'#64748b',rows:noStageRows}].concat(cfg.stages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#6b8cad',rows:filteredRows.filter(function(r){return r.current_stage===st.key;})};}));
+            return allCols.map(function(col){
+              return<div key={col.key} style={{width:220,flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8,padding:'6px 10px',background:col.color+'22',borderRadius:8,border:'1px solid '+col.color+'44'}}>
+                  <div style={{width:10,height:10,borderRadius:5,background:col.color,flexShrink:0}}/>
+                  <span style={{fontWeight:700,fontSize:12,color:col.color,flex:1}}>{col.label}</span>
+                  <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-bg)',borderRadius:10,padding:'1px 7px',border:'1px solid var(--tf-border)'}}>{col.rows.length}</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:80}}>
+                  {col.rows.map(function(row){
+                    var client=clientMap[row.client_id];
+                    if(!client)return null;
+                    var d=row.data||{};
+                    var wsPriority=d.__priority||'medium';
+                    return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',cursor:'pointer'}} onClick={function(){toggleWsExpand(row.id);}}>
+                      <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
+                        <div style={{width:6,height:6,borderRadius:3,background:{low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'}[wsPriority],flexShrink:0}}/>
+                        <span style={{fontWeight:600,fontSize:12,color:'var(--tf-text)',flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{client.name}</span>
+                      </div>
+                      {d.__title&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.__title}</div>}
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                        {cfg.stages.map(function(st){
+                          var isActive=row.current_stage===st.key;
+                          return<button key={st.key} onClick={function(e){e.stopPropagation();moveToStage(row.id,st.key);}} title={'Move to '+st.label} style={{background:isActive?st.color||'#6b8cad':'transparent',border:'1px solid '+(st.color||'#6b8cad')+'55',borderRadius:4,padding:'1px 6px',color:isActive?'#fff':st.color||'#6b8cad',cursor:'pointer',fontSize:9,fontWeight:700,whiteSpace:'nowrap',transition:'all 0.15s'}}>{st.label}</button>;
+                        })}
+                      </div>
+                    </div>;
+                  })}
+                  {col.rows.length===0&&<div style={{border:'1px dashed var(--tf-border)',borderRadius:8,padding:'16px 12px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>Empty</div>}
+                </div>
+              </div>;
+            });
+          })()}
+        </div>
+      </div>}
+
+      {/* Funnel Summary View */}
+      {wsView==='funnel'&&cfg.stages&&cfg.stages.length>0&&<div>
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
+          {(function(){
+            var total=filteredRows.length||1;
+            var noStage=filteredRows.filter(function(r){return !r.current_stage||!cfg.stages.find(function(s){return s.key===r.current_stage;});}).length;
+            var cols=[{key:'__none',label:'Not Started',color:'#64748b',count:noStage}].concat(cfg.stages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#6b8cad',count:filteredRows.filter(function(r){return r.current_stage===st.key;}).length};}));
+            return cols.map(function(col,i){
+              var pct=Math.round(col.count/total*100);
+              var barW=Math.max(20,pct);
+              return<div key={col.key} style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:160,fontSize:12,fontWeight:600,color:'var(--tf-text)',textAlign:'right',flexShrink:0,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{col.label}</div>
+                <div style={{flex:1,height:32,background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)',overflow:'hidden',position:'relative'}}>
+                  <div style={{width:barW+'%',height:'100%',background:col.color||'#6b8cad',opacity:0.8,borderRadius:6,transition:'width 0.4s'}}/>
+                  <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:11,fontWeight:700,color:'#fff',mixBlendMode:'difference'}}>{col.count} client{col.count!==1?'s':''}</span>
+                </div>
+                <div style={{width:44,textAlign:'right',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',flexShrink:0}}>{pct}%</div>
+              </div>;
+            });
+          })()}
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',marginTop:4}}>Total: {filteredRows.length} clients across all stages</div>
+      </div>}
+
       {/* Table */}
-      {cfg.frequency==='once'&&rows.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
+      {wsView!=='pipeline'&&wsView!=='funnel'&&cfg.frequency==='once'&&rows.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
         <div style={{fontSize:28,marginBottom:8}}>📝</div>
         <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No one-time tasks yet</div>
         <div>Click <b>+ Add Task</b> above to generate a one-time task by selecting a client, assignee, and due date.</div>
       </div>:
-      cfg.frequency!=='once'&&typeClients.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
+      wsView!=='pipeline'&&wsView!=='funnel'&&cfg.frequency!=='once'&&typeClients.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px 20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>
         No clients have {activeType} as a work type. Add clients in Client Master Data.
       </div>:
+      wsView==='pipeline'||wsView==='funnel'?null:
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead>
@@ -4365,7 +4484,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}</div>
+                      <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}{row.current_stage&&cfg.stages&&cfg.stages.length>0&&(function(){var st=cfg.stages.find(function(s){return s.key===row.current_stage;});return st?<span style={{fontSize:9,fontWeight:700,color:'#fff',background:st.color||'#6b8cad',borderRadius:4,padding:'1px 6px',marginLeft:6}}>{st.label}</span>:null;})()}</div>
                       {d.__title&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{d.__title}</div>}
                     </div>
                     {wsClTotal>0&&<span style={{fontSize:9,color:wsClDone===wsClTotal?'#22c55e':'#6b8cad',fontWeight:700,whiteSpace:'nowrap'}}>✓{wsClDone}/{wsClTotal}</span>}
