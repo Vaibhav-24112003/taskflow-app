@@ -2729,6 +2729,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [name,setName]=useState(config?config.name:'');
   var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
   var [worksheetGroup,setWorksheetGroup]=useState(config?config.worksheet_group||'':'');
+  var [prepDays,setPrepDays]=useState(config&&config.prep_days!=null?String(config.prep_days):'');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
   var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1,monthly_map:d.monthly_map||null};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1,monthly_map:null}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
@@ -2788,7 +2789,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     setSaving(true);
     var firstDue=dueDates.length>0?dueDates[0]:null;
     var payload={
-      org_id:orgId, name:name.trim(), frequency:frequency, worksheet_group:worksheetGroup.trim()||null,
+      org_id:orgId, name:name.trim(), frequency:frequency, worksheet_group:worksheetGroup.trim()||null, prep_days:prepDays!==''&&prepDays!==null?Number(prepDays):null,
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
@@ -2839,6 +2840,14 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
             <label style={LBL}>Worksheet Group <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
             <input value={worksheetGroup} onChange={function(e){setWorksheetGroup(e.target.value);}} style={INP} placeholder="e.g. GST Returns — groups multiple work types into one tab"/>
             <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Work types with the same group name will appear under one worksheet tab with sub-tabs.</div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={LBL}>Worklist Prep Window <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <input type="number" min="0" max="365" value={prepDays} onChange={function(e){setPrepDays(e.target.value);}} style={Object.assign({},INP,{width:80})} placeholder="—"/>
+              <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>days before due date</span>
+            </div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Tasks for this work type appear in Your Diary worklist this many days before the due date. Leave blank to always show. <b>Examples:</b> ITR → 90, Audit → 60, GST → 10, TDS → 15.</div>
           </div>
         </div>}
 
@@ -6667,24 +6676,43 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     setLoading(true);
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments').eq('org_id',org.id).neq('status','completed').limit(3000);
     var rowData=rr.data||[];
-    var myRows=rowData.filter(function(r){
+    // Step 1: filter to rows where I am assigned
+    var assignedRows=rowData.filter(function(r){
       var d=r.data||{};
       if(d.__assignee===cu.id)return true;
       var keys=Object.keys(d);
       for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===cu.id)return true;}
       return false;
     });
+    // Step 2: load worksheets for those rows to get work_type
+    var wsIds=Array.from(new Set(assignedRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+    var wsData=[];
+    if(wsIds.length>0){
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds.slice(0,500)).limit(500);
+      wsData=rw.data||[];
+    }
+    setWorksheets(wsData);
+    // Step 3: build prep-days map from workTypeConfigs prop (work_type name → prep_days)
+    var prepMap={};
+    (workTypeConfigs||[]).forEach(function(c){if(c.prep_days!=null)prepMap[c.name]=c.prep_days;});
+    var wsTypeMap={};wsData.forEach(function(w){wsTypeMap[w.id]=w.work_type;});
+    var todayLocal=new Date();todayLocal.setHours(0,0,0,0);
+    var todayStr=todayLocal.toISOString().slice(0,10);
+    // Step 4: apply prep-window filter — hide rows whose due date is too far in future
+    var myRows=assignedRows.filter(function(r){
+      if(!r.due_date)return true; // no due date → always show
+      var wt=wsTypeMap[r.worksheet_id];
+      var pd=wt!=null&&prepMap[wt]!=null?prepMap[wt]:null;
+      if(pd===null)return true; // prep_days not configured → always show (backward-compat)
+      var startDate=new Date(r.due_date+'T00:00:00');
+      startDate.setDate(startDate.getDate()-pd);
+      return todayStr>=startDate.toISOString().slice(0,10);
+    });
     setRows(myRows);
     // Load all clients of this org (for task creation dropdown + row display)
     var rcAll=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
     setAllClients(rcAll.data||[]);
     setClients(rcAll.data||[]);
-    // Load worksheets referenced by my rows
-    if(myRows.length>0){
-      var wsIds=Array.from(new Set(myRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
-      var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds).limit(500);
-      setWorksheets(rw.data||[]);
-    }else{setWorksheets([]);}
     // Load org members (for hierarchy dropdowns in Create Task form)
     var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
     var mlist=rm.data||[];
