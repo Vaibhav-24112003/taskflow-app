@@ -10811,6 +10811,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var [logForm,setLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
   var [clients,setClients]=useState([]);
   var [loggingId,setLoggingId]=useState(null);
+  var [showDoneInPlan,setShowDoneInPlan]=useState(false); // hide completed plan entries by default
+  var [showBcDone,setShowBcDone]=useState(false); // hide done bc_tasks by default
+  var [bcShowAll,setBcShowAll]=useState(false); // show all bc_tasks (not just today's)
   // Create Task modal
   var [showCreate,setShowCreate]=useState(false);
   var [ctClientId,setCtClientId]=useState('');
@@ -10999,15 +11002,12 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     var planDateObj=new Date(planDate+'T00:00:00');
     var dayOfMonth=planDateObj.getDate();
     var pk=planDate.slice(0,7); // YYYY-MM
-    // Fetch all bc_tasks for this org and filter client-side for this user + due day match
+    // Fetch all bc_tasks for this org and filter client-side for this user (all due days)
     var rt=await supabase.from('bc_tasks').select('*').eq('org_id',org.id);
     var allOrgTasks=rt.data||[];
     var myTasks=allOrgTasks.filter(function(t){
       var roles=t.roles||[];
-      var hasRole=roles.some(function(r){return r.user_id===planUserId;});
-      if(!hasRole)return false;
-      var matchDay=t.due_day===dayOfMonth||t.due_day_2===dayOfMonth;
-      return matchDay;
+      return roles.some(function(r){return r.user_id===planUserId;});
     });
     if(!myTasks.length){setBcTasks([]);return;}
     // Fetch section titles
@@ -11035,8 +11035,11 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       var client=clientMap[t.client_id]||{};
       var myRole=(t.roles||[]).find(function(r){return r.user_id===planUserId;});
       var st=statusMap[t.id]||{};
-      return{task:t,section:sec,client:client,role:myRole?myRole.role:'executor',status:st.status||'not_started',statusId:st.id||null,note:st.note||''};
+      var isDueToday=t.due_day===dayOfMonth||t.due_day_2===dayOfMonth;
+      return{task:t,section:sec,client:client,role:myRole?myRole.role:'executor',status:st.status||'not_started',statusId:st.id||null,note:st.note||'',isDueToday:isDueToday};
     });
+    // Sort: due today first, then by title
+    items.sort(function(a,b){if(a.isDueToday&&!b.isDueToday)return -1;if(!a.isDueToday&&b.isDueToday)return 1;return(a.task.title||'').localeCompare(b.task.title||'');});
     setBcTasks(items);
   }
 
@@ -11131,7 +11134,11 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     }
     var r=await q;
     var tasks=(r.data||[]).filter(function(t){
-      return (t.assignees&&t.assignees.includes(planUserId))||t.created_by===planUserId;
+      var isAssigned=(t.assignees&&t.assignees.includes(planUserId))||t.created_by===planUserId;
+      if(!isAssigned)return false;
+      var s=t.status||'Todo';
+      // Exclude tasks that are already done/completed from picker
+      return s!=='Done'&&s!=='done'&&s!=='Completed'&&s!=='completed';
     });
     setAllTasks(tasks);
   }
@@ -11241,6 +11248,13 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var total=plan.length;
   var pct=total>0?Math.round(done/total*100):0;
   var dateLabel=planDate===todayStr?'Today':(function(){var d=new Date(planDate+'T00:00:00');return d.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});})();
+  var activePlan=plan.filter(function(p){return !p.done;});
+  var donePlan=plan.filter(function(p){return p.done;});
+  // BC task helpers
+  var bcDueToday=bcTasks.filter(function(x){return x.isDueToday;});
+  var bcOther=bcTasks.filter(function(x){return !x.isDueToday;});
+  var bcOtherPending=bcOther.filter(function(x){var s=x.status;return s==='not_started'||s==='in_progress'||s==='reviewing';});
+  var bcOtherDone=bcOther.filter(function(x){var s=x.status;return s==='done'||s==='approved';});
 
   return<div style={{maxWidth:1020,margin:'0 auto',padding:'0 0 60px'}}>
     {/* Header */}
@@ -11293,7 +11307,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
           {!isReadOnly&&<button onClick={function(){setShowPicker(true);}} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ Add Tasks</button>}
         </div>:
         <div style={{display:'flex',flexDirection:'column',gap:8}}>
-          {plan.map(function(entry,idx){
+          {activePlan.map(function(entry,idx){
             var item=entry.item;
             if(!item)return null;
             var ws=entry.workspace;
@@ -11410,37 +11424,90 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
               </div>}
             </div>;
           })}
+          {/* Completed plan items — collapsed by default */}
+          {donePlan.length>0&&<div style={{marginTop:8}}>
+            <button onClick={function(){setShowDoneInPlan(function(v){return !v;});}} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,padding:'4px 0',fontFamily:'inherit'}}>
+              <span style={{fontSize:10}}>{showDoneInPlan?'▼':'▶'}</span>
+              Completed ({donePlan.length})
+            </button>
+            {showDoneInPlan&&<div style={{display:'flex',flexDirection:'column',gap:6,marginTop:6,opacity:0.7}}>
+              {donePlan.map(function(entry){
+                var item=entry.item;if(!item)return null;
+                var pColor=PRIORITY_COLOR[item._priority]||'#94a3b8';
+                var isWsRow=item._kind==='wsrow';
+                return<div key={entry.id} style={{background:'rgba(34,197,94,0.04)',border:'1px solid rgba(34,197,94,0.15)',borderRadius:10,padding:'9px 12px',borderLeft:'3px solid #22c55e',display:'flex',alignItems:'center',gap:10}}>
+                  <div onClick={function(){if(!isReadOnly)toggleDone(entry.id,entry.done);}} style={{width:18,height:18,borderRadius:4,border:'2px solid #22c55e',background:'#22c55e',cursor:isReadOnly?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}>
+                    <span style={{color:'#fff',fontSize:11,fontWeight:900,lineHeight:1}}>✓</span>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <span style={{fontSize:13,fontWeight:500,color:'var(--tf-text-sub)',textDecoration:'line-through'}}>{item._title}</span>
+                    <div style={{display:'flex',gap:5,marginTop:2,flexWrap:'wrap'}}>
+                      {isWsRow&&item._client_name&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>👤 {item._client_name}</span>}
+                      {isWsRow&&item._work_type&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{item._work_type}</span>}
+                    </div>
+                  </div>
+                  {!isReadOnly&&<button onClick={function(){removeFromPlan(entry.id);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'2px 4px',borderRadius:4}}>×</button>}
+                </div>;
+              })}
+            </div>}
+          </div>}
         </div>}
-        {/* Big Client Tasks due today */}
+        {/* Big Client Tasks */}
         {bcTasks.length>0&&<div style={{marginTop:16}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
-            <div style={{fontSize:11,fontWeight:800,color:'#1e40af',textTransform:'uppercase',letterSpacing:'0.07em'}}>Big Client Tasks — Today</div>
-            <span style={{fontSize:10,background:'#dbeafe',color:'#1e40af',borderRadius:20,padding:'1px 7px',fontWeight:700}}>{bcTasks.length}</span>
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-            {bcTasks.map(function(item){
-              var BC_STATUS={executor:{not_started:{label:'To Do',bg:'#f1f5f9',color:'#64748b'},in_progress:{label:'In Progress',bg:'#fef3c7',color:'#d97706'},done:{label:'Done',bg:'#dcfce7',color:'#16a34a'}},reviewer:{not_started:{label:'Review',bg:'#f1f5f9',color:'#64748b'},reviewing:{label:'Reviewing',bg:'#ede9fe',color:'#7c3aed'},approved:{label:'Approved',bg:'#dcfce7',color:'#16a34a'}}};
+          {(function(){
+            var BC_STATUS={executor:{not_started:{label:'To Do',bg:'#f1f5f9',color:'#64748b'},in_progress:{label:'In Progress',bg:'#fef3c7',color:'#d97706'},done:{label:'Done',bg:'#dcfce7',color:'#16a34a'}},reviewer:{not_started:{label:'Review',bg:'#f1f5f9',color:'#64748b'},reviewing:{label:'Reviewing',bg:'#ede9fe',color:'#7c3aed'},approved:{label:'Approved',bg:'#dcfce7',color:'#16a34a'}}};
+            function renderBcItem(item){
               var scfg=((BC_STATUS[item.role]||BC_STATUS.executor)[item.status])||(BC_STATUS[item.role]||BC_STATUS.executor).not_started;
               var dueParts=[item.task.due_day,item.task.due_day_2].filter(Boolean);
-              return<div key={item.task.id} style={{background:'var(--tf-surface)',border:'1px solid #bfdbfe',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:4,height:36,borderRadius:2,background:'#1e40af',flexShrink:0}}/>
+              var isDone=item.status==='done'||item.status==='approved';
+              return<div key={item.task.id} style={{background:isDone?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid '+(item.isDueToday?'#93c5fd':'var(--tf-border)'),borderRadius:10,padding:'9px 12px',display:'flex',alignItems:'center',gap:10,opacity:isDone?0.65:1}}>
+                <div style={{width:4,height:32,borderRadius:2,background:item.isDueToday?'#1e40af':'#94a3b8',flexShrink:0}}/>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.task.title}</div>
-                  <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>
-                    <span style={{fontWeight:700,color:'#1e40af'}}>{(item.client.display_name||item.client.name||'')}</span>
-                    {item.section.title&&<span> · {item.section.title}</span>}
-                    {dueParts.length>0&&<span> · Due {dueParts.join(' & ')}th</span>}
-                    <span style={{marginLeft:6,fontSize:9,background:item.role==='reviewer'?'#ede9fe':'#dbeafe',color:item.role==='reviewer'?'#7c3aed':'#1e40af',borderRadius:10,padding:'1px 6px',fontWeight:700,textTransform:'uppercase'}}>{item.role}</span>
+                  <div style={{fontSize:13,fontWeight:600,color:isDone?'var(--tf-text-sub)':'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',textDecoration:isDone?'line-through':'none'}}>{item.task.title}</div>
+                  <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2,display:'flex',gap:6,flexWrap:'wrap'}}>
+                    <span style={{fontWeight:700,color:item.isDueToday?'#1e40af':'var(--tf-text-sub)'}}>{(item.client.display_name||item.client.name||'')}</span>
+                    {item.section.title&&<span>· {item.section.title}</span>}
+                    {dueParts.length>0&&<span>· Due {dueParts.join(' & ')}th</span>}
+                    {item.isDueToday&&<span style={{fontSize:9,background:'#dbeafe',color:'#1e40af',borderRadius:10,padding:'1px 6px',fontWeight:700}}>TODAY</span>}
+                    <span style={{fontSize:9,background:item.role==='reviewer'?'#ede9fe':'#f1f5f9',color:item.role==='reviewer'?'#7c3aed':'#64748b',borderRadius:10,padding:'1px 6px',fontWeight:700,textTransform:'uppercase'}}>{item.role}</span>
                   </div>
                 </div>
                 <button onClick={function(){if(!isReadOnly)cycleBcStatus(item);}}
                   disabled={isReadOnly}
-                  style={{background:scfg.bg,color:scfg.color,border:'none',borderRadius:20,padding:'5px 12px',fontSize:11,fontWeight:700,cursor:isReadOnly?'default':'pointer',whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0}}>
+                  style={{background:scfg.bg,color:scfg.color,border:'none',borderRadius:20,padding:'4px 10px',fontSize:11,fontWeight:700,cursor:isReadOnly?'default':'pointer',whiteSpace:'nowrap',fontFamily:'inherit',flexShrink:0}}>
                   {scfg.label}
                 </button>
               </div>;
-            })}
-          </div>
+            }
+            return<div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <div style={{fontSize:11,fontWeight:800,color:'#1e40af',textTransform:'uppercase',letterSpacing:'0.07em'}}>Big Client Tasks</div>
+                {bcDueToday.length>0&&<span style={{fontSize:10,background:'#dbeafe',color:'#1e40af',borderRadius:20,padding:'1px 7px',fontWeight:700}}>{bcDueToday.length} due today</span>}
+                {bcOtherPending.length>0&&<span style={{fontSize:10,background:'var(--tf-surface)',color:'var(--tf-text-sub)',borderRadius:20,padding:'1px 7px',fontWeight:600,border:'1px solid var(--tf-border)'}}>{bcOtherPending.length} pending</span>}
+                <button onClick={function(){setBcShowAll(function(v){return !v;});}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,marginLeft:'auto',fontFamily:'inherit',padding:'2px 6px'}}>
+                  {bcShowAll?'Show less ▲':'Show all ▼'}
+                </button>
+              </div>
+              {/* Due today */}
+              {bcDueToday.length>0&&<div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:bcOtherPending.length>0||bcOtherDone.length>0?10:0}}>
+                {bcDueToday.filter(function(x){return showBcDone||(x.status!=='done'&&x.status!=='approved');}).map(renderBcItem)}
+                {bcDueToday.some(function(x){return x.status==='done'||x.status==='approved';})&&<button onClick={function(){setShowBcDone(function(v){return !v;});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0',fontFamily:'inherit',textAlign:'left'}}>
+                  {showBcDone?'Hide done':'Show done ('+bcDueToday.filter(function(x){return x.status==='done'||x.status==='approved';}).length+')'}
+                </button>}
+              </div>}
+              {/* Other/upcoming — shown when bcShowAll */}
+              {(bcShowAll||bcDueToday.length===0)&&bcOtherPending.length>0&&<div>
+                {bcDueToday.length>0&&<div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Other / Upcoming</div>}
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  {bcOtherPending.map(renderBcItem)}
+                </div>
+              </div>}
+              {!bcShowAll&&bcDueToday.length===0&&bcOtherPending.length>0&&<div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {bcOtherPending.slice(0,3).map(renderBcItem)}
+                {bcOtherPending.length>3&&<button onClick={function(){setBcShowAll(true);}} style={{background:'none',border:'none',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,padding:'2px 0',fontFamily:'inherit',textAlign:'left'}}>+ {bcOtherPending.length-3} more pending…</button>}
+              </div>}
+            </div>;
+          })()}
         </div>}
       </div>
 
