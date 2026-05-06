@@ -3178,6 +3178,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [wsView,setWsView]=useState('grid'); // 'grid' | 'pipeline' | 'funnel'
   var [dragRowId,setDragRowId]=useState(null);
   var [newCommentText,setNewCommentText]=useState({});
+  var [pipelineDetailRow,setPipelineDetailRow]=useState(null);
 
   // Column show/hide
   var [hiddenCols,setHiddenCols]=useState([]);
@@ -4171,9 +4172,9 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </select>}
         {cfg.frequency!=='once'&&<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:7,padding:'5px 12px',fontSize:12,fontWeight:700,color:'#6b8cad'}}>{periodLabel}</div>}
 
-        {/* View toggle: grid / pipeline / funnel — only when pipeline stages are configured */}
-        {cfg.stages&&cfg.stages.length>0&&<div style={{display:'flex',gap:0,border:'1px solid var(--tf-border)',borderRadius:7,overflow:'hidden',flexShrink:0}}>
-          {[{id:'grid',label:'≡ Grid'},{id:'pipeline',label:'⬛ Pipeline'},{id:'funnel',label:'◇ Funnel'}].map(function(v){return<button key={v.id} onClick={function(){setWsView(v.id);}} style={{background:wsView===v.id?'rgba(107,140,173,0.15)':'transparent',border:'none',borderRight:'1px solid var(--tf-border)',padding:'5px 10px',color:wsView===v.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:wsView===v.id?700:500,whiteSpace:'nowrap',lastChild:{borderRight:'none'}}}>{v.label}</button>;})}
+        {/* View toggle: always available for recurring work types */}
+        {cfg.frequency!=='once'&&<div style={{display:'flex',gap:0,border:'1px solid var(--tf-border)',borderRadius:7,overflow:'hidden',flexShrink:0}}>
+          {[{id:'grid',label:'≡ Grid'},{id:'pipeline',label:'⬛ Pipeline'},{id:'funnel',label:'◇ Funnel'}].map(function(v,vi){return<button key={v.id} onClick={function(){setWsView(v.id);}} style={{background:wsView===v.id?'rgba(107,140,173,0.15)':'transparent',border:'none',borderRight:vi<2?'1px solid var(--tf-border)':'none',padding:'5px 10px',color:wsView===v.id?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:wsView===v.id?700:500,whiteSpace:'nowrap'}}>{v.label}</button>;})}
         </div>}
 
         {/* Copy assignments from a past period */}
@@ -4391,6 +4392,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       </div>}
 
       {/* Pipeline Kanban View */}
+      {wsView==='pipeline'&&(!cfg.stages||cfg.stages.length===0)&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'36px 24px',textAlign:'center'}}>
+        <div style={{fontSize:32,marginBottom:12}}>⬛</div>
+        <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No pipeline stages configured for {activeType}</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Kanban view.</div>
+      </div>}
       {wsView==='pipeline'&&cfg.stages&&cfg.stages.length>0&&<div style={{overflowX:'auto',paddingBottom:12}}>
         <div style={{display:'flex',gap:12,minWidth:'max-content'}}>
           {(function(){
@@ -4417,7 +4423,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                       draggable={true}
                       onDragStart={function(e){e.dataTransfer.setData('rowId',row.id);setDragRowId(row.id);}}
                       onDragEnd={function(){setDragRowId(null);}}
-                      onClick={function(){if(!isDragging)toggleWsExpand(row.id);}}
+                      onClick={function(){if(!isDragging)setPipelineDetailRow(row);}}
                       style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',cursor:'grab',opacity:isDragging?0.4:1,transition:'opacity 0.15s,box-shadow 0.15s',boxShadow:isDragging?'none':'0 1px 3px rgba(0,0,0,0.12)'}}>
                       <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:4}}>
                         <div style={{width:6,height:6,borderRadius:3,background:{low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'}[wsPriority],flexShrink:0}}/>
@@ -4438,6 +4444,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       </div>}
 
       {/* Funnel Summary View */}
+      {wsView==='funnel'&&(!cfg.stages||cfg.stages.length===0)&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'36px 24px',textAlign:'center'}}>
+        <div style={{fontSize:32,marginBottom:12}}>◇</div>
+        <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No pipeline stages configured for {activeType}</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Funnel view.</div>
+      </div>}
       {wsView==='funnel'&&cfg.stages&&cfg.stages.length>0&&<div>
         <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
           {(function(){
@@ -4721,6 +4732,90 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     </div>}
 
     {showCreateTask&&<WorksheetTaskModal row={showCreateTask.row} client={showCreateTask.client} workType={activeType} period={periodLabel} allWorkspaces={allWorkspaces} supabase={supabase} cu={cu} orgId={org.id} onClose={function(){setShowCreateTask(null);}} onCreated={function(taskId,wsId){supabase.from('worksheet_rows').update({task_card_id:taskId,task_workspace_id:wsId}).eq('id',showCreateTask.row.id).then(function(){setRows(function(p){return p.map(function(r){return r.id===showCreateTask.row.id?Object.assign({},r,{task_card_id:taskId,task_workspace_id:wsId}):r;});});setShowCreateTask(null);showToast('Task card created!');});}}/>}
+
+    {/* Pipeline Card Detail Panel */}
+    {pipelineDetailRow&&(function(){
+      var pRow=rows.find(function(r){return r.id===pipelineDetailRow.id;})||pipelineDetailRow;
+      var pClient=clientMap[pRow.client_id];
+      if(!pClient)return null;
+      var pd=pRow.data||{};
+      var pPriority=pd.__priority||'medium';
+      var pCl=pd.__checklist||[];
+      var pClDone=pCl.filter(function(c){return c.done;}).length;
+      var pThread=pRow.comments_thread||[];
+      return<div style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.45)',display:'flex',justifyContent:'flex-end'}} onClick={function(e){if(e.target===e.currentTarget)setPipelineDetailRow(null);}}>
+        <div style={{width:480,maxWidth:'95vw',background:'var(--tf-bg)',boxShadow:'-8px 0 40px rgba(0,0,0,0.3)',display:'flex',flexDirection:'column',overflowY:'auto'}}>
+          <div style={{padding:'16px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexShrink:0,position:'sticky',top:0,background:'var(--tf-bg)',zIndex:1}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>{pClient.name}</div>
+              {pClient.pan&&<div style={{fontSize:11,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{pClient.pan}</div>}
+            </div>
+            <button onClick={function(){setPipelineDetailRow(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,flexShrink:0}}>×</button>
+          </div>
+          <div style={{padding:'16px 20px'}}>
+            {/* Stage selector */}
+            {cfg.stages&&cfg.stages.length>0&&<div style={{marginBottom:16}}>
+              <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:7}}>Stage</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                <button onClick={function(){moveToStage(pRow.id,null);setPipelineDetailRow(function(p){return Object.assign({},p,{current_stage:null});});}} style={{background:!pRow.current_stage?'#64748b':'transparent',border:'1px solid #64748b',borderRadius:20,padding:'4px 12px',color:!pRow.current_stage?'#fff':'#64748b',cursor:'pointer',fontSize:11,fontWeight:700}}>Not Started</button>
+                {cfg.stages.map(function(s){var isActive=pRow.current_stage===s.key;return<button key={s.key} onClick={function(){moveToStage(pRow.id,s.key);setPipelineDetailRow(function(p){return Object.assign({},p,{current_stage:s.key});});}} style={{background:isActive?s.color||'#6b8cad':'transparent',border:'1px solid '+(s.color||'#6b8cad'),borderRadius:20,padding:'4px 12px',color:isActive?'#fff':s.color||'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:700}}>{s.label}</button>;})}
+              </div>
+            </div>}
+            {/* Meta */}
+            <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
+              <span style={{fontSize:10,fontWeight:800,color:{low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'}[pPriority],background:{low:'rgba(148,163,184,0.1)',medium:'rgba(59,130,246,0.1)',high:'rgba(245,158,11,0.1)',urgent:'rgba(239,68,68,0.1)'}[pPriority],padding:'2px 10px',borderRadius:10,textTransform:'uppercase'}}>{pPriority}</span>
+              {pRow.due_date&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Due: {new Date(pRow.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</span>}
+              {pd.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Contact: {pd.__contact}</span>}
+            </div>
+            {pd.__title&&<div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)',marginBottom:6}}>{pd.__title}</div>}
+            {pd.__description&&<div style={{fontSize:13,color:'var(--tf-text-sub)',lineHeight:1.6,whiteSpace:'pre-wrap',marginBottom:14}}>{pd.__description}</div>}
+            {/* Checklist */}
+            {pCl.length>0&&<div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:7}}>Checklist ({pClDone}/{pCl.length})</div>
+              {pCl.map(function(item,ci){return<div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:5,cursor:'pointer'}} onClick={function(){toggleWsChecklist(pRow.id,ci);}}>
+                <div style={{width:15,height:15,borderRadius:3,border:'1.5px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  {item.done&&<span style={{color:'#fff',fontSize:9,fontWeight:900}}>✓</span>}
+                </div>
+                <span style={{fontSize:12,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none'}}>{item.text}</span>
+              </div>;})}
+            </div>}
+            {/* Quick note */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>Quick Note</div>
+              <input defaultValue={pRow.comments||''} onBlur={function(e){updateComment(pRow.id,e.target.value);setRows(function(p){return p.map(function(r){return r.id===pRow.id?Object.assign({},r,{comments:e.target.value}):r;});});}} placeholder="Quick note..." style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+            </div>
+            {/* Comments thread */}
+            <div style={{borderTop:'1px solid var(--tf-border)',paddingTop:14}}>
+              <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>Comments {pThread.length>0&&<span style={{fontWeight:500,textTransform:'none'}}>({pThread.length})</span>}</div>
+              {pThread.map(function(c){
+                var ts=new Date(c.created_at);
+                var tsStr=ts.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+                return<div key={c.id} style={{display:'flex',gap:8,marginBottom:12}}>
+                  <div style={{width:28,height:28,borderRadius:14,background:'rgba(107,140,173,0.18)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#6b8cad'}}>{(c.author_name||'?')[0].toUpperCase()}</div>
+                  <div style={{flex:1}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                      <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{c.author_name||'User'}</span>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{tsStr}</span>
+                    </div>
+                    <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap'}}>{c.text}</div>
+                  </div>
+                </div>;
+              })}
+              <div style={{display:'flex',gap:8,alignItems:'flex-start',marginTop:4}}>
+                <div style={{width:28,height:28,borderRadius:14,background:'rgba(107,140,173,0.18)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#6b8cad'}}>{(cu.name||cu.email||'?')[0].toUpperCase()}</div>
+                <div style={{flex:1}}>
+                  <textarea value={newCommentText[pRow.id]||''} onChange={function(e){var v=e.target.value;setNewCommentText(function(p){return Object.assign({},p,{[pRow.id]:v});});}}
+                    onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addComment(pRow.id,newCommentText[pRow.id]||'');}}}
+                    placeholder="Add a comment… (Enter to post, Shift+Enter new line)"
+                    style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'vertical',minHeight:44,boxSizing:'border-box'}}/>
+                  {(newCommentText[pRow.id]||'').trim()&&<button onClick={function(){addComment(pRow.id,newCommentText[pRow.id]||'');}} style={{marginTop:4,background:'#6b8cad',border:'none',borderRadius:6,padding:'4px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Post</button>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>;
+    })()}
 
     {/* SOP Slide-out Panel */}
     {showSop&&cfg.sop_steps&&cfg.sop_steps.length>0&&<div style={{position:'fixed',inset:0,zIndex:999,display:'flex',justifyContent:'flex-end'}} onClick={function(e){if(e.target===e.currentTarget)setShowSop(false);}}>
