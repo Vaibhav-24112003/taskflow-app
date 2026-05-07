@@ -1082,6 +1082,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const activeWs=workspaces.find(w=>w.id===activeWsId)||null
   const wsColor=activeWs?.color||'#6b8cad';const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES;const SC=scMap(statuses)
   const wsRgb=hexRgb(wsColor)
+  const activeWsIdRef=useRef(activeWsId);useEffect(()=>{activeWsIdRef.current=activeWsId;},[activeWsId]);
 
   useEffect(()=>{setTeamMemberId(null);setView('board')},[activeWsId])
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
@@ -1222,41 +1223,49 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   },[orgs.length,loadNotifications]);
 
   const saveTask=async td=>{
+    const wsId=activeWsIdRef.current;
     if(td.id){
       const prev=tasks.find(t=>t.id===td.id)
       const{data,error}=await updateTask(td.id,td);if(error){showToast('Failed','err');return}
-      if(data)setTasks(p=>p.map(t=>t.id===data.id?data:t));await logActivity(td.id,cu.id,'Updated')
+      if(data&&activeWsIdRef.current===wsId)setTasks(p=>p.map(t=>t.id===data.id?data:t));await logActivity(td.id,cu.id,'Updated')
       const becameDone=prev&&prev.status!==statuses[statuses.length-1]&&td.status===statuses[statuses.length-1]
       if(becameDone&&td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date){
         const nd=nextDate(td.due_date,td.recurrence_type,td.recurrence_interval)
-        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt}=await createTask(clone);if(nt){setTasks(p=>[...p,nt]);showToast(`Next task created → ${fmtFull(nd)} 🔁`);return}}
+        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt}=await createTask(clone);if(nt&&activeWsIdRef.current===wsId){setTasks(p=>[...p,nt]);showToast(`Next task created → ${fmtFull(nd)} 🔁`);return}}
       }
       showToast('Saved ✓')
     } else {
       const{data,error}=await createTask(td);if(error){showToast('Failed','err');return}
-      if(data){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created')}
+      if(data&&activeWsIdRef.current===wsId){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created')}
       showToast(rrLabel(td.recurrence_type,td.recurrence_interval)?`Created 🔁 ${rrLabel(td.recurrence_type,td.recurrence_interval)}`:'Created ✓')
     }
   }
-  const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
+  const delTask=async id=>{
+    const wsId=activeWsIdRef.current;
+    const{error}=await deleteTask(id);
+    if(error){showToast('Failed to delete task','err');return}
+    if(activeWsIdRef.current===wsId){setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
+  }
 
   const claimTask=useCallback(async(task)=>{
+    const wsId=activeWsIdRef.current;
     const existing=getAssignees(task)
     if(existing.includes(cu.id)){showToast('Already on your board!');return}
     const newAssignees=[...existing,cu.id]
     const delegator=task.delegator_id||task.created_by
     const{data}=await updateTask(task.id,{assignees:newAssignees,assigned_to:newAssignees[0],delegator_id:delegator})
     if(data){
-      setTasks(p=>p.map(t=>t.id===task.id?data:t))
+      if(activeWsIdRef.current===wsId)setTasks(p=>p.map(t=>t.id===task.id?data:t))
       showToast(`✋ Claimed! "${task.title}" added to your board`)
       await logActivity(task.id,cu.id,'Claimed task')
     }else{showToast('Failed to claim task','err')}
   },[cu.id,tasks])
 
   const handleAssignSave=useCallback(async(task,updates)=>{
+    const wsId=activeWsIdRef.current;
     const{data}=await updateTask(task.id,updates)
     if(data){
-      setTasks(p=>p.map(t=>t.id===task.id?data:t))
+      if(activeWsIdRef.current===wsId)setTasks(p=>p.map(t=>t.id===task.id?data:t))
       const isSelf=updates.assignees?.includes(cu.id)&&updates.delegator_id!==cu.id
       const isDel=updates.delegator_id===cu.id&&!updates.assignees?.includes(cu.id)
       if(isSelf) showToast(`✋ Added to your board under manager`)
@@ -1294,6 +1303,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     if(statusChanged)await logActivity(dragId,cu.id,`→${st}`)
   },[dragId,tasks,cu.id])
   const importTasks=async rows=>{
+    const wsId=activeWsIdRef.current;
     const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase())
     const normDate=d=>{
       if(!d)return null
@@ -1309,7 +1319,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       const assignee=byName(r.assigned_to_name)?.id||cu.id
       const delegator=byName(r.delegator_name)?.id||cu.id
       const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:assignee,assignees:[assignee],delegator_id:delegator,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:normDate(r.due_date),recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:r.checklist||[]})
-      if(data){setTasks(p=>[...p,data]);a++}else{s++;if(error)errs.push(r.title+': '+(error.message||'err'))}
+      if(data){if(activeWsIdRef.current===wsId)setTasks(p=>[...p,data]);a++}else{s++;if(error)errs.push(r.title+': '+(error.message||'err'))}
     }
     if(errs.length)console.error('Import errors:',errs)
     showToast(a>0?`✅ Imported ${a} task${a>1?'s':''}${s?' · '+s+' skipped':''}`:`❌ Import failed — ${s} row${s>1?'s':''} skipped`,'err')
