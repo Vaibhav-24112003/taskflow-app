@@ -1100,10 +1100,13 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   },[cu.id])
 
   useEffect(()=>{
-    if(!activeWsId)return
-    Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId),getMemberRole(activeWsId,cu.id)]).then(([{data:m},{data:t},role])=>{
-      setWsMembers(m||[]);setTasks(t||[]);setMyRole(role||'member')
-    })
+    if(!activeWsId){setTasks([]);setWsMembers([]);return}
+    let cancelled=false;
+    setTasks([]);setWsMembers([]);
+    Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId),getMemberRole(activeWsId,cu.id)])
+      .then(([{data:m},{data:t},role])=>{if(!cancelled){setWsMembers(m||[]);setTasks(t||[]);setMyRole(role||'member')}})
+      .catch(e=>console.error('Workspace load error:',e))
+    return()=>{cancelled=true}
   },[activeWsId,cu.id])
 
   const saveWS=async({id,name,description,color,icon})=>{
@@ -1321,9 +1324,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
-  const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
+  const loadWs=async function(){await loadWS();};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');await loadWS();var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
