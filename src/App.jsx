@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import LandingPage from './LandingPage.jsx'
 import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
@@ -11771,6 +11772,6 @@ export default function App(){
   const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
 
   if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
-  if(!session)return<AuthScreen inviteToken={inviteToken}/>
+  if(!session)return<LandingPage onSignIn={async()=>{await signInWithGoogle()}} loading={false}/>
   return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
 }
