@@ -1353,6 +1353,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
       <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.setItem('tf_lastView','home');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
+      {!activeOrg&&!activeWsId&&<div style={{flex:1}}/>}
       {!activeOrg&&activeWsId&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
       <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('');localStorage.setItem('tf_lastView','workspace');}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
@@ -1377,78 +1378,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
-      {/* Notifications bell */}
-      <div ref={notifRef} style={{position:'relative',flexShrink:0}}>
-        <button onClick={()=>{setShowNotif(v=>!v);if(!showNotif)loadNotifications();}} title="Notifications" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(107,140,173,0.4)':'var(--tf-border)'),color:showNotif?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>{if(!showNotif)e.currentTarget.style.background='var(--tf-surface)'}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          {(notifData.today.length+notifData.overdue.length+notifData.assigned.length)>0&&<div style={{position:'absolute',top:-3,right:-3,minWidth:16,height:16,borderRadius:8,background:'#ef4444',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid var(--tf-panel)'}}>{notifData.today.length+notifData.overdue.length+notifData.assigned.length>99?'99+':notifData.today.length+notifData.overdue.length+notifData.assigned.length}</div>}
-        </button>
-        {showNotif&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:12,width:380,maxHeight:'70vh',boxShadow:'0 12px 40px rgba(0,0,0,0.25)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300,display:'flex',flexDirection:'column'}}>
-          <div style={{padding:'14px 16px 10px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Notifications</div>
-            <button onClick={loadNotifications} title="Refresh" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color='#6b8cad'} onMouseLeave={e=>e.currentTarget.style.color='var(--tf-text-sub)'}>↻</button>
-          </div>
-          <div style={{overflowY:'auto',flex:1,maxHeight:'calc(70vh - 50px)'}}>
-            {notifLoading&&(notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Loading...</div>:
-            (notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center'}}>
-              <div style={{fontSize:28,marginBottom:8}}>&#x2714;&#xFE0F;</div>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--tf-text)'}}>All clear!</div>
-              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>No pending due dates or assignments.</div>
-            </div>:<>
-              {notifData.overdue.length>0&&<div>
-                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#ef4444',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:3,background:'#ef4444',display:'inline-block'}}></span>
-                  Overdue ({notifData.overdue.length})
-                </div>
-                {notifData.overdue.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:8,height:8,borderRadius:4,background:'#ef4444',marginTop:5,flexShrink:0}}></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
-                    <div style={{fontSize:10,color:'#ef4444',marginTop:2,fontWeight:600}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
-                  </div>
-                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
-                </div>;})}
-                {notifData.overdue.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.overdue.length-20} more</div>}
-              </div>}
-
-              {notifData.today.length>0&&<div>
-                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#f59e0b',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:3,background:'#f59e0b',display:'inline-block'}}></span>
-                  Due Today ({notifData.today.length})
-                </div>
-                {notifData.today.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:8,height:8,borderRadius:4,background:'#f59e0b',marginTop:5,flexShrink:0}}></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
-                    <div style={{fontSize:10,color:'#f59e0b',marginTop:2,fontWeight:600}}>Due today</div>
-                  </div>
-                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
-                </div>;})}
-                {notifData.today.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.today.length-20} more</div>}
-              </div>}
-
-              {notifData.assigned.length>0&&<div>
-                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#6b8cad',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:3,background:'#6b8cad',display:'inline-block'}}></span>
-                  Assigned to You ({notifData.assigned.length})
-                </div>
-                {notifData.assigned.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:8,height:8,borderRadius:4,background:'#6b8cad',marginTop:5,flexShrink:0}}></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
-                    {item.dueDate&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
-                  </div>
-                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
-                </div>;})}
-                {notifData.assigned.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.assigned.length-20} more</div>}
-              </div>}
-            </>}
-          </div>
-        </div>}
-      </div>
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
