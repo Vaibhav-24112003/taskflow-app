@@ -10492,7 +10492,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
             var isActive=orgModule===m.id;
             var hasTabs=m.tabs&&m.tabs.length>1;
             return<div key={m.id}>
-              <button onClick={function(){openModule(m);}} title={sidebarOpen?'':m.label}
+              <button onClick={function(){openModule(m);if(!sidebarOpen)setSidebarOpen(true);}} title={sidebarOpen?'':m.label}
                 style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'8px 10px':'8px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
                 onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.06)';}}
                 onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
