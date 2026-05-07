@@ -5042,7 +5042,7 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
       </div>
       <div style={{padding:'16px 18px'}}>
         <label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:5,display:'block'}}>Organisation Name *</label>
-        <input value={name} onChange={function(e){setName(e.target.value);}} autoFocus placeholder='e.g. Paresh Sarda & Co.' style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}} onKeyDown={function(e){if(e.key==='Enter')save();}}/>
+        <input value={name} onChange={function(e){setName(e.target.value);}} autoFocus placeholder='e.g. ABC & Associates' style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}} onKeyDown={function(e){if(e.key==='Enter')save();}}/>
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:6,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
       </div>
       <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'11px 18px',borderTop:'1px solid var(--tf-border)'}}>
