@@ -11372,15 +11372,17 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
               onDragStart={function(){setDragIdx(idx);}}
               onDragOver={function(e){e.preventDefault();}}
               onDrop={function(){handleDrop(idx);}}
-              style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)',borderRadius:12,padding:'12px 14px',transition:'all 0.15s',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor)}}>
+              style={{background:entry.done?'rgba(34,197,94,0.04)':'var(--tf-surface)',border:'1px solid',borderColor:isExpanded?'#6b8cad':(entry.done?'rgba(34,197,94,0.2)':'var(--tf-border)'),borderRadius:12,padding:'12px 14px',transition:'all 0.15s',borderLeft:'3px solid '+(entry.done?'#22c55e':pColor),cursor:'pointer'}}
+              onClick={function(){setExpandedId(isExpanded?null:entry.id);if(isExpanded&&showLogForm)setLogEntryId(null);}}>
               <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                <div style={{color:'var(--tf-text-sub)',fontSize:14,paddingTop:2,cursor:'grab',userSelect:'none'}}>⠿</div>
-                <div onClick={function(){if(!isReadOnly)toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:isReadOnly?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
+                <div onClick={function(e){e.stopPropagation();}} style={{color:'var(--tf-text-sub)',fontSize:14,paddingTop:2,cursor:'grab',userSelect:'none'}}>⠿</div>
+                <div onClick={function(e){e.stopPropagation();if(!isReadOnly)toggleDone(entry.id,entry.done);}} style={{width:20,height:20,borderRadius:5,border:'2px solid',borderColor:entry.done?'#22c55e':'var(--tf-border)',background:entry.done?'#22c55e':'transparent',cursor:isReadOnly?'default':'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
                   {entry.done&&<span style={{color:'#fff',fontSize:12,fontWeight:900,lineHeight:1}}>✓</span>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
                     <span style={{fontSize:14,fontWeight:600,color:entry.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:entry.done?'line-through':'none'}}>{item._title}</span>
+                    <span style={{fontSize:10,color:isExpanded?'#6b8cad':'var(--tf-text-mut)',transition:'color 0.15s',marginLeft:-2}}>{isExpanded?'▴':'▾'}</span>
                     {/* Source kind badge */}
                     <span style={{fontSize:9,fontWeight:700,color:isWsRow?'#8b5cf6':'#3b82f6',background:isWsRow?'rgba(139,92,246,0.12)':'rgba(59,130,246,0.12)',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:'0.04em'}}>{isWsRow?'Worksheet':'Task'}</span>
                     <span style={{fontSize:10,fontWeight:700,color:pColor,background:pColor+'18',borderRadius:4,padding:'1px 7px',textTransform:'capitalize'}}>{item._priority}</span>
@@ -11389,16 +11391,22 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
                     {isWsRow&&item._client_name&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>👤 {item._client_name}</span>}
                     {isWsRow&&item._work_type&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>📄 {item._work_type}{item._period?' · '+item._period:''}</span>}
                     {item._due_date&&<span style={{fontSize:10,color:item._due_date<todayStr?'#ef4444':'var(--tf-text-sub)'}}>{item._due_date<todayStr?'⚠ ':''}{new Date(item._due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>}
-                    {cl.length>0&&<span onClick={function(){setExpandedId(isExpanded?null:entry.id);}} style={{fontSize:10,color:clDone===cl.length?'#22c55e':'#6b8cad',cursor:'pointer',background:clDone===cl.length?'rgba(34,197,94,0.1)':'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 7px',fontWeight:600}}>☑ {clDone}/{cl.length}</span>}
+                    {cl.length>0&&<span style={{fontSize:10,color:clDone===cl.length?'#22c55e':'#6b8cad',background:clDone===cl.length?'rgba(34,197,94,0.1)':'rgba(107,140,173,0.1)',borderRadius:4,padding:'1px 7px',fontWeight:600}}>☑ {clDone}/{cl.length}</span>}
                     {entry.logged&&<span style={{fontSize:10,color:'#22c55e',fontWeight:700,background:'rgba(34,197,94,0.1)',borderRadius:4,padding:'1px 7px'}}>Logged ✓</span>}
                   </div>
-                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                  {/* Collapsed preview line */}
+                  {!isExpanded&&<div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    {item._description&&<span style={{fontSize:11,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:260,fontStyle:'italic'}}>{item._description.slice(0,80)}{item._description.length>80?'…':''}</span>}
+                    {entry.time_block&&<span style={{fontSize:11,color:'#6b8cad',fontWeight:600}}>🕐 {entry.time_block}</span>}
+                    {entry.note&&!item._description&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>{entry.note.slice(0,60)}{entry.note.length>60?'…':''}</span>}
+                  </div>}
+                  {/* Expanded inline inputs */}
+                  {isExpanded&&<div onClick={function(e){e.stopPropagation();}} style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',marginTop:4}}>
                     <input value={entry.time_block||''} onChange={function(e){updateTimeBlock(entry.id,e.target.value);}} placeholder="Time (e.g. 10:00-11:00)" style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',width:140}}/>
                     <input value={entry.note||''} onChange={function(e){updateNote(entry.id,e.target.value);}} placeholder="Add a note..." style={{background:'transparent',border:'none',borderBottom:'1px solid var(--tf-border)',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',flex:1,padding:'3px 0'}}/>
-                  </div>
+                  </div>}
                 </div>
-                <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
-                  <button onClick={function(){setExpandedId(isExpanded?null:entry.id);if(showLogForm)setLogEntryId(null);}} title={isExpanded?'Collapse':'Expand'} style={{background:'none',border:'none',color:isExpanded?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 5px',borderRadius:4,fontWeight:600}}>{isExpanded?'▲':'▼'}</button>
+                <div onClick={function(e){e.stopPropagation();}} style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
                   {org&&!isReadOnly&&<button onClick={function(){setLogEntryId(showLogForm?null:entry.id);setExpandedId(entry.id);setLogForm({client_id:isWsRow?(item._client_id||''):'',work_type:isWsRow?(item._work_type||item._title):item._title,hours:1,minutes:0,notes:entry.note||'',});}} title="Send to Log" style={{background:showLogForm?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLogForm?'#6b8cad':'var(--tf-border)'),color:showLogForm?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,padding:'2px 8px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap'}}>→ Log</button>}
                   {!isReadOnly&&<button onClick={function(){removeFromPlan(entry.id);}} title="Remove" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,padding:'2px 4px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>}
                 </div>
