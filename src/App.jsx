@@ -1052,18 +1052,42 @@ var CMD_MODULES=[
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]},
 ];
 
-function CommandBar({workspaces,orgs,tasks,activeOrg,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace}){
+function CommandBar({workspaces,orgs,tasks,wsMembers,activeOrg,supabase,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace,onGoMasterData}){
   var [q,setQ]=useState('');
   var [sel,setSel]=useState(0);
+  var [clients,setClients]=useState([]);
+  var [workTypes,setWorkTypes]=useState([]);
+  var [members,setMembers]=useState([]);
+  var [indexLoading,setIndexLoading]=useState(false);
   var inputRef=useRef();
   useEffect(()=>{inputRef.current&&inputRef.current.focus();},[]);
 
-  var lq=q.toLowerCase().trim();
+  // Fetch org-level index data on open
+  useEffect(()=>{
+    if(!activeOrg||!supabase)return;
+    setIndexLoading(true);
+    Promise.all([
+      supabase.from('clients').select('id,name,display_name,pan,status').eq('org_id',activeOrg.id).order('name').limit(1000),
+      supabase.from('work_type_configs').select('id,name,frequency,is_active').eq('org_id',activeOrg.id).limit(200),
+      supabase.from('organization_members').select('user_id,role').eq('org_id',activeOrg.id).limit(200)
+        .then(async function(rm){
+          var ids=(rm.data||[]).map(function(m){return m.user_id;});
+          if(!ids.length)return{data:[]};
+          var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+          return{data:(rp.data||[]).map(function(p){var mem=(rm.data||[]).find(function(m){return m.user_id===p.id;})||{};return Object.assign({},p,{role:mem.role||'member'});})};
+        })
+    ]).then(function([rc,rwt,rmem]){
+      setClients(rc.data||[]);
+      setWorkTypes(rwt.data||[]);
+      setMembers(rmem.data||[]);
+      setIndexLoading(false);
+    });
+  },[activeOrg&&activeOrg.id]);
 
-  // Build result groups
+  var lq=q.toLowerCase().trim();
   var results=[];
 
-  // Actions (always show when no query, or matching)
+  // Actions
   var actions=[
     {type:'action',icon:'⌂',label:'Go to Home',sub:'',action:()=>{onGoHome();onClose();}},
     {type:'action',icon:'＋',label:'New Workspace',sub:'',action:()=>{onNewWorkspace();onClose();}},
@@ -1079,12 +1103,45 @@ function CommandBar({workspaces,orgs,tasks,activeOrg,onClose,onGoWorkspace,onGoO
   var filtWs=(lq?workspaces.filter(w=>(w.name||'').toLowerCase().includes(lq)):workspaces).slice(0,6);
   if(filtWs.length)results.push({section:'WORKSPACES',items:filtWs.map(w=>({type:'ws',icon:w.icon||'◻',label:w.name,sub:w.description||'',color:w.color,action:()=>{onGoWorkspace(w.id);onClose();}}))});
 
-  // Org modules (only if inside an org)
+  // Clients (require query)
+  if(lq&&clients.length){
+    var filtClients=clients.filter(function(c){
+      var n=(c.display_name||c.name||'').toLowerCase();
+      var p=(c.pan||'').toLowerCase();
+      return n.includes(lq)||p.includes(lq);
+    }).slice(0,8);
+    if(filtClients.length)results.push({section:'CLIENTS',items:filtClients.map(function(c){
+      return{type:'client',icon:'CL',label:c.display_name||c.name,sub:(c.pan?c.pan+' · ':'')+((c.status||'active')),
+        action:()=>{onGoOrgModule('masterdata','clients');onClose();}};
+    })});
+  }
+
+  // Work Types (require query)
+  if(lq&&workTypes.length){
+    var filtWt=workTypes.filter(function(w){return(w.name||'').toLowerCase().includes(lq);}).slice(0,5);
+    if(filtWt.length)results.push({section:'WORK TYPES',items:filtWt.map(function(w){
+      return{type:'worktype',icon:'WK',label:w.name,sub:(w.frequency||'')+(w.is_active?'':' · Inactive'),
+        action:()=>{onGoOrgModule('workzone','worksheets');onClose();}};
+    })});
+  }
+
+  // Members (workspace + org, require query)
+  if(lq){
+    var allMembers=[...wsMembers,...members].filter(function(m,i,arr){return arr.findIndex(function(x){return x.id===m.id;})===i;});
+    var filtMembers=allMembers.filter(function(m){
+      return(m.name||'').toLowerCase().includes(lq)||(m.email||'').toLowerCase().includes(lq);
+    }).slice(0,5);
+    if(filtMembers.length)results.push({section:'MEMBERS',items:filtMembers.map(function(m){
+      return{type:'member',icon:(m.name||m.email||'?')[0].toUpperCase(),label:m.name||m.email,sub:m.email+(m.role?' · '+m.role:''),
+        action:()=>{onGoOrgModule('team','logs');onClose();}};
+    })});
+  }
+
+  // Org modules (only inside an org)
   if(activeOrg){
     var modItems=[];
     CMD_MODULES.forEach(function(m){
-      var mLabel=m.label+' — '+activeOrg.name;
-      if(!lq||m.label.toLowerCase().includes(lq)||activeOrg.name.toLowerCase().includes(lq)){
+      if(!lq||m.label.toLowerCase().includes(lq)){
         modItems.push({type:'module',icon:'◈',label:m.label,sub:activeOrg.name,action:()=>{onGoOrgModule(m.id,m.tabs[0].id);onClose();}});
       }
       m.tabs.forEach(function(t){
@@ -1096,13 +1153,12 @@ function CommandBar({workspaces,orgs,tasks,activeOrg,onClose,onGoWorkspace,onGoO
     if(modItems.length)results.push({section:'MODULES',items:modItems.slice(0,8)});
   }
 
-  // Tasks (only when query given)
+  // Tasks (require query)
   if(lq&&tasks&&tasks.length){
     var filtTasks=tasks.filter(t=>(t.title||'').toLowerCase().includes(lq)).slice(0,6);
     if(filtTasks.length)results.push({section:'TASKS',items:filtTasks.map(t=>({type:'task',icon:'✦',label:t.title,sub:t.status+(t.due_date?' · '+t.due_date:''),action:()=>{onOpenTask(t);onClose();}}))});
   }
 
-  // Flatten for keyboard nav
   var flat=results.flatMap(function(g){return g.items;});
   var safesel=flat.length?Math.min(sel,flat.length-1):0;
 
@@ -1112,33 +1168,35 @@ function CommandBar({workspaces,orgs,tasks,activeOrg,onClose,onGoWorkspace,onGoO
     if(e.key==='ArrowUp'){e.preventDefault();setSel(function(s){return Math.max(s-1,0);});return;}
     if(e.key==='Enter'&&flat[safesel]){flat[safesel].action();return;}
   }
-
-  // Reset selection when query changes
   useEffect(()=>{setSel(0);},[q]);
 
   var flatIdx=0;
+  var isClientOrWt=function(type){return type==='client'||type==='worktype'||type==='member';};
 
   return<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)',zIndex:9000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'12vh'}}>
-    <div onClick={function(e){e.stopPropagation();}} style={{width:'100%',maxWidth:560,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,boxShadow:'0 24px 80px rgba(0,0,0,0.45)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'70vh'}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{width:'100%',maxWidth:580,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,boxShadow:'0 24px 80px rgba(0,0,0,0.45)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'72vh'}}>
       {/* Input */}
       <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
         <span style={{fontSize:16,color:'var(--tf-text-sub)',flexShrink:0}}>⌕</span>
         <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} onKeyDown={handleKey}
-          placeholder="Search workspaces, orgs, modules, tasks…"
+          placeholder="Search clients, work types, members, modules, tasks…"
           style={{flex:1,background:'none',border:'none',outline:'none',fontSize:15,color:'var(--tf-text)',fontFamily:'inherit',caretColor:'#6b8cad'}}/>
+        {indexLoading&&<span style={{fontSize:11,color:'var(--tf-text-mut)',flexShrink:0}}>indexing…</span>}
         <span style={{fontSize:11,color:'var(--tf-text-mut)',background:'var(--tf-surface)',borderRadius:5,padding:'2px 7px',border:'1px solid var(--tf-border)',flexShrink:0}}>ESC</span>
       </div>
       {/* Results */}
       <div style={{overflowY:'auto',flex:1}}>
-        {flat.length===0&&<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No results for "{q}"</div>}
+        {!lq&&flat.length===0&&<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Start typing to search clients, work types, members, modules and tasks</div>}
+        {lq&&flat.length===0&&!indexLoading&&<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No results for "<strong>{q}</strong>"</div>}
         {results.map(function(group){return<div key={group.section}>
           <div style={{padding:'8px 16px 4px',fontSize:10,fontWeight:700,letterSpacing:'0.08em',color:'var(--tf-text-mut)',textTransform:'uppercase'}}>{group.section}</div>
           {group.items.map(function(item){
             var idx=flatIdx++;
             var isActive=idx===safesel;
+            var isBadge=item.icon&&item.icon.length===2&&item.icon===item.icon.toUpperCase()&&isNaN(item.icon);
             return<div key={idx} onClick={item.action} onMouseEnter={function(){setSel(idx);}}
               style={{display:'flex',alignItems:'center',gap:12,padding:'9px 16px',cursor:'pointer',background:isActive?'rgba(107,140,173,0.12)':'transparent',borderLeft:'2px solid '+(isActive?'#6b8cad':'transparent'),transition:'background 0.08s'}}>
-              <div style={{width:28,height:28,borderRadius:7,background:item.color?`rgba(${hexRgb(item.color)},0.15)`:'rgba(107,140,173,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0,color:item.color||'#6b8cad',fontWeight:700}}>{item.icon}</div>
+              <div style={{width:28,height:28,borderRadius:7,background:item.color?`rgba(${hexRgb(item.color)},0.15)`:'rgba(107,140,173,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:isBadge?9:13,flexShrink:0,color:item.color||'#6b8cad',fontWeight:700}}>{item.icon}</div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</div>
                 {item.sub&&<div style={{fontSize:11,color:'var(--tf-text-sub)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.sub}</div>}
@@ -1783,7 +1841,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
     {showCmdBar&&<CommandBar
-      workspaces={workspaces} orgs={orgs} tasks={tasks} activeOrg={activeOrg}
+      workspaces={workspaces} orgs={orgs} tasks={tasks} wsMembers={wsMembers} activeOrg={activeOrg} supabase={supabase}
       onClose={()=>setShowCmdBar(false)}
       onGoWorkspace={id=>{setActiveWsId(id);setActiveOrg(null);localStorage.setItem('tf_lastView','workspace');}}
       onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);localStorage.setItem('tf_lastView','org');}}
