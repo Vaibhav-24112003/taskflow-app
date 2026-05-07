@@ -8294,6 +8294,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
   var [orgMembers,setOrgMembers]=useState([]);
   var [selClientId,setSelClientId]=useState(null);
   var [clientPanelOpen,setClientPanelOpen]=useState(true);
+  var [bcEditMode,setBcEditMode]=useState(false);
   var [search,setSearch]=useState('');
   var [showPicker,setShowPicker]=useState(false);
   var [mode,setMode]=useState('work');
@@ -8530,6 +8531,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
         {clientPanelOpen&&<div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>Big Clients · {bigClients.length}</div>}
         <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
           {clientPanelOpen&&<button onClick={function(){setShowPicker(true);}} title="Add big client" style={{background:'#1e40af',border:'none',borderRadius:6,width:24,height:24,color:'#fff',cursor:'pointer',fontSize:15,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>+</button>}
+          {clientPanelOpen&&<button onClick={function(){setBcEditMode(function(v){return !v;});}} title={bcEditMode?'Lock list (disable remove)':'Unlock to remove clients'} style={{background:bcEditMode?'rgba(220,38,38,0.1)':'none',border:'1px solid',borderColor:bcEditMode?'#dc2626':'var(--tf-border)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:bcEditMode?'#dc2626':'var(--tf-text-sub)',fontSize:12,flexShrink:0}}>{bcEditMode?'🔓':'🔒'}</button>}
           <button onClick={function(){setClientPanelOpen(function(v){return !v;});}} title={clientPanelOpen?'Collapse client list':'Expand client list'}
             style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:11,fontWeight:700,flexShrink:0}}>
             {clientPanelOpen?'◀':'▶'}
@@ -8557,8 +8559,8 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
                     <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
                     {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
                   </div>
-                  <button onClick={function(e){e.stopPropagation();if(window.confirm('Remove from Big Clients?'))toggleBig(c,false);}}
-                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:2,opacity:0.5}}>×</button>
+                  {bcEditMode&&<button onClick={function(e){e.stopPropagation();toggleBig(c,false);}}
+                    title="Remove from Big Clients" style={{background:'rgba(220,38,38,0.1)',border:'1px solid #dc2626',borderRadius:4,color:'#dc2626',cursor:'pointer',fontSize:13,fontWeight:700,padding:'0 5px',lineHeight:'18px',flexShrink:0}}>×</button>}
                 </div>
               </div>;
             })}
