@@ -2890,6 +2890,26 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               var FY_MONTHS=[4,5,6,7,8,9,10,11,12,1,2,3];
               var MNAMES={1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'};
               var hasMap=!!dd.monthly_map;
+              var hasQMap=!!dd.quarterly_map;
+              var Q_LABELS={1:'Q1 (Apr–Jun)',2:'Q2 (Jul–Sep)',3:'Q3 (Oct–Dec)',4:'Q4 (Jan–Mar)'};
+              var Q_END_MONTHS={1:6,2:9,3:12,4:3}; // default due month = quarter end
+              function initQMap(){
+                var m={};
+                [1,2,3,4].forEach(function(q){
+                  var off=dd.month_offset!=null?Number(dd.month_offset):1;
+                  var em=Q_END_MONTHS[q];
+                  var dm=em+off;if(dm>12)dm-=12;
+                  m[q]={day:dd.day||7,due_month:dm};
+                });
+                updateDueDate(i,'quarterly_map',m);
+              }
+              function clearQMap(){updateDueDate(i,'quarterly_map',null);}
+              function updateQMap(q,field,val){
+                var nm=Object.assign({},dd.quarterly_map);
+                nm[q]=Object.assign({},nm[q]||{});
+                nm[q][field]=Number(val);
+                updateDueDate(i,'quarterly_map',nm);
+              }
               function initMap(){
                 var m={};
                 FY_MONTHS.forEach(function(pm){
@@ -2913,12 +2933,13 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
                     <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Day</label>
                     <input type="number" min="1" max="31" value={dd.day} onChange={function(e){updateDueDate(i,'day',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="15"/>
                   </div>}
-                  {frequency!=='monthly'&&(frequency==='quarterly'?<div style={{display:'flex',alignItems:'center',gap:4}}>
-                    <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
-                    <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:120,cursor:'pointer'})}>
+                  {frequency!=='monthly'&&(frequency==='quarterly'?<div style={{display:'flex',alignItems:'center',gap:4,flexWrap:'wrap'}}>
+                    {!hasQMap&&<><label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>When</label>
+                    <select value={dd.month_offset!=null?dd.month_offset:1} onChange={function(e){updateDueDate(i,'month_offset',Number(e.target.value));}} style={Object.assign({},INP,{width:130,cursor:'pointer'})}>
                       <option value={0}>Quarter end month</option>
                       <option value={1}>Next month</option>
-                    </select>
+                    </select></>}
+                    <button onClick={hasQMap?clearQMap:initQMap} style={{background:hasQMap?'rgba(239,68,68,0.08)':'rgba(107,140,173,0.08)',border:'1px solid',borderColor:hasQMap?'rgba(239,68,68,0.2)':'rgba(107,140,173,0.25)',borderRadius:6,padding:'3px 10px',color:hasQMap?'#ef4444':'#6b8cad',cursor:'pointer',fontSize:10,fontWeight:700,whiteSpace:'nowrap'}}>{hasQMap?'Simple mode':'Q Map'}</button>
                   </div>:frequency==='yearly'?<><div style={{display:'flex',alignItems:'center',gap:4}}>
                     <label style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>Month</label>
                     <input type="number" min="1" max="12" value={dd.month||''} onChange={function(e){updateDueDate(i,'month',e.target.value);}} style={Object.assign({},INP,{width:55})} placeholder="—"/>
@@ -2960,6 +2981,25 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
                       <div style={{padding:'5px 10px',fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{MNAMES[pm]}</div>
                       <div style={{padding:'3px 6px'}}><input type="number" min="1" max="31" value={entry.day||''} onChange={function(e){updateMap(pm,'day',e.target.value?Number(e.target.value):'');}} style={Object.assign({},INP,{padding:'4px 6px',fontSize:12,textAlign:'center'})}/></div>
                       <div style={{padding:'3px 6px'}}><select value={entry.due_month||''} onChange={function(e){updateMap(pm,'due_month',e.target.value?Number(e.target.value):'');}} style={Object.assign({},INP,{padding:'4px 6px',fontSize:12,cursor:'pointer'})}>
+                        <option value="">—</option>
+                        {[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m){return<option key={m} value={m}>{MNAMES[m]}</option>;})}
+                      </select></div>
+                    </div>;
+                  })}
+                </div>}
+                {frequency==='quarterly'&&hasQMap&&<div style={{border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden',marginTop:8}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 80px 110px',background:'rgba(107,140,173,0.06)',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+                    <div style={{padding:'6px 10px'}}>Quarter</div>
+                    <div style={{padding:'6px 10px',textAlign:'center'}}>Due Day</div>
+                    <div style={{padding:'6px 10px',textAlign:'center'}}>Due Month</div>
+                  </div>
+                  {[1,2,3,4].map(function(q){
+                    var MNAMES={1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'};
+                    var entry=(dd.quarterly_map&&(dd.quarterly_map[q]||dd.quarterly_map[String(q)]))||{day:'',due_month:''};
+                    return<div key={q} style={{display:'grid',gridTemplateColumns:'1fr 80px 110px',borderTop:'1px solid var(--tf-border)',alignItems:'center'}}>
+                      <div style={{padding:'5px 10px',fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{Q_LABELS[q]}</div>
+                      <div style={{padding:'3px 6px'}}><input type="number" min="1" max="31" value={entry.day||''} onChange={function(e){updateQMap(q,'day',e.target.value||0);}} style={Object.assign({},INP,{padding:'4px 6px',fontSize:12,textAlign:'center'})}/></div>
+                      <div style={{padding:'3px 6px'}}><select value={entry.due_month||''} onChange={function(e){updateQMap(q,'due_month',e.target.value||0);}} style={Object.assign({},INP,{padding:'4px 6px',fontSize:12,cursor:'pointer'})}>
                         <option value="">—</option>
                         {[1,2,3,4,5,6,7,8,9,10,11,12].map(function(m){return<option key={m} value={m}>{MNAMES[m]}</option>;})}
                       </select></div>
