@@ -2731,7 +2731,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [worksheetGroup,setWorksheetGroup]=useState(config?config.worksheet_group||'':'');
   var [prepDays,setPrepDays]=useState(config&&config.prep_days!=null?String(config.prep_days):'');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
-  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1,monthly_map:d.monthly_map||null};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1,monthly_map:null}]:[]);
+  var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1,monthly_map:d.monthly_map||null,quarterly_map:d.quarterly_map||null};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1,monthly_map:null,quarterly_map:null}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
   var [sopSteps,setSopSteps]=useState(config&&config.sop_steps?config.sop_steps.map(function(s){return{title:s.title||'',description:s.description||'',link:s.link||''};}):[]);
   var [stages,setStages]=useState(config&&config.stages&&config.stages.length>0?config.stages.map(function(s){return{key:s.key||'s_'+Date.now(),label:s.label||'',color:s.color||'#6b8cad'};}): []);
@@ -2750,7 +2750,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     });});
   }
 
-  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:'',month_offset:1,monthly_map:null}];});}
+  function addDueDate(){setDueDates(function(p){return[...p,{label:'',day:'',month:'',month_offset:1,monthly_map:null,quarterly_map:null}];});}
   function removeDueDate(idx){setDueDates(function(p){return p.filter(function(_,i){return i!==idx;});});}
   function updateDueDate(idx,field,val){setDueDates(function(p){return p.map(function(d,i){if(i!==idx)return d;var u=Object.assign({},d);u[field]=val;return u;});});}
 
@@ -2793,7 +2793,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
-      due_dates:dueDates.filter(function(d){return d.day||d.monthly_map;}).map(function(d){return{label:d.label||'Due',day:d.day?Number(d.day):null,month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1,monthly_map:d.monthly_map||null};}),
+      due_dates:dueDates.filter(function(d){return d.day||d.monthly_map||d.quarterly_map;}).map(function(d){return{label:d.label||'Due',day:d.day?Number(d.day):null,month:d.month?Number(d.month):null,month_offset:d.month_offset!=null?Number(d.month_offset):1,monthly_map:d.monthly_map||null,quarterly_map:d.quarterly_map||null};}),
       client_fields:clientFields.filter(function(f){return f.label.trim();}).map(function(f){return{key:f.key,label:f.label.trim(),type:f.type,options:f.options||''};}),
       sop_steps:sopSteps.filter(function(s){return s.title.trim();}).map(function(s,i){return{step:i+1,title:s.title.trim(),description:s.description.trim(),link:s.link.trim()};}),
       stages:stages.filter(function(s){return s.label.trim();}).map(function(s,i){return{key:s.key,label:s.label.trim(),color:s.color||'#6b8cad',order:i};}),
