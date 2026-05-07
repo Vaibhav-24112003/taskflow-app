@@ -3391,7 +3391,12 @@ var [showExportMenu,setShowExportMenu]=useState(false);
             if(dd.quarterly_map&&ws2.frequency==='quarterly'&&ws2.period_quarter){
               var qme2=dd.quarterly_map[String(ws2.period_quarter)]||dd.quarterly_map[ws2.period_quarter];
               if(qme2&&qme2.day&&qme2.due_month){
-                var dueQY2=qme2.due_month>=4?ws2.period_year:ws2.period_year+1;
+                // Quarter end months: Q1=Jun(6), Q2=Sep(9), Q3=Dec(12), Q4=Mar(3)
+                var qEndMs2=[6,9,12,3];
+                var qEndM2=qEndMs2[ws2.period_quarter-1];
+                var qEndCalY2=ws2.period_quarter<=3?ws2.period_year:ws2.period_year+1;
+                // Due month >= quarter end month → same calendar year; before → next year
+                var dueQY2=qme2.due_month>=qEndM2?qEndCalY2:qEndCalY2+1;
                 var dq2=dueQY2+'-'+String(qme2.due_month).padStart(2,'0')+'-'+String(qme2.day).padStart(2,'0');
                 dueDates2.push({date:dq2,label:dd.label||'Due'});
               }
@@ -3618,7 +3623,12 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               if(qe&&qe.day&&qe.due_month){
                 // due_month is absolute calendar month; FY year logic:
                 // months Apr(4)-Dec(12) are in FY start year, Jan(1)-Mar(3) in FY start year+1
-                var dueCalYQ=qe.due_month>=4?periodYear:periodYear+1;
+                // Quarter end months: Q1=Jun(6), Q2=Sep(9), Q3=Dec(12), Q4=Mar(3)
+                var qEndMsQ=[6,9,12,3];
+                var qEndMQ=qEndMsQ[periodQuarter-1];
+                var qEndCalYQ=periodQuarter<=3?periodYear:periodYear+1;
+                // Due month >= quarter end month → same calendar year; before → next year
+                var dueCalYQ=qe.due_month>=qEndMQ?qEndCalYQ:qEndCalYQ+1;
                 var dsQ=dueCalYQ+'-'+String(qe.due_month).padStart(2,'0')+'-'+String(qe.day).padStart(2,'0');
                 dueDateList.push({date:dsQ,label:dd.label||'Due'});
               }
