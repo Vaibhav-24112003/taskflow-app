@@ -1039,6 +1039,123 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
   </div>
 }
 
+// ── Command Bar ───────────────────────────────────────────────────────────────
+var CMD_MODULES=[
+  {id:'diary',label:'Your Diary',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
+  {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
+  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
+  {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
+  {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
+  {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
+  {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
+  {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]},
+];
+
+function CommandBar({workspaces,orgs,tasks,activeOrg,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace}){
+  var [q,setQ]=useState('');
+  var [sel,setSel]=useState(0);
+  var inputRef=useRef();
+  useEffect(()=>{inputRef.current&&inputRef.current.focus();},[]);
+
+  var lq=q.toLowerCase().trim();
+
+  // Build result groups
+  var results=[];
+
+  // Actions (always show when no query, or matching)
+  var actions=[
+    {type:'action',icon:'⌂',label:'Go to Home',sub:'',action:()=>{onGoHome();onClose();}},
+    {type:'action',icon:'＋',label:'New Workspace',sub:'',action:()=>{onNewWorkspace();onClose();}},
+  ];
+  var filtActions=lq?actions.filter(a=>a.label.toLowerCase().includes(lq)):actions;
+  if(filtActions.length)results.push({section:'ACTIONS',items:filtActions});
+
+  // Organisations
+  var filtOrgs=(lq?orgs.filter(o=>(o.name||'').toLowerCase().includes(lq)):orgs).slice(0,5);
+  if(filtOrgs.length)results.push({section:'ORGANISATIONS',items:filtOrgs.map(o=>({type:'org',icon:'🏢',label:o.name,sub:o.description||'',action:()=>{onGoOrg(o);onClose();}}))});
+
+  // Workspaces
+  var filtWs=(lq?workspaces.filter(w=>(w.name||'').toLowerCase().includes(lq)):workspaces).slice(0,6);
+  if(filtWs.length)results.push({section:'WORKSPACES',items:filtWs.map(w=>({type:'ws',icon:w.icon||'◻',label:w.name,sub:w.description||'',color:w.color,action:()=>{onGoWorkspace(w.id);onClose();}}))});
+
+  // Org modules (only if inside an org)
+  if(activeOrg){
+    var modItems=[];
+    CMD_MODULES.forEach(function(m){
+      var mLabel=m.label+' — '+activeOrg.name;
+      if(!lq||m.label.toLowerCase().includes(lq)||activeOrg.name.toLowerCase().includes(lq)){
+        modItems.push({type:'module',icon:'◈',label:m.label,sub:activeOrg.name,action:()=>{onGoOrgModule(m.id,m.tabs[0].id);onClose();}});
+      }
+      m.tabs.forEach(function(t){
+        if(lq&&(t.label.toLowerCase().includes(lq)||m.label.toLowerCase().includes(lq))){
+          modItems.push({type:'module',icon:'◉',label:t.label,sub:m.label+' · '+activeOrg.name,action:()=>{onGoOrgModule(m.id,t.id);onClose();}});
+        }
+      });
+    });
+    if(modItems.length)results.push({section:'MODULES',items:modItems.slice(0,8)});
+  }
+
+  // Tasks (only when query given)
+  if(lq&&tasks&&tasks.length){
+    var filtTasks=tasks.filter(t=>(t.title||'').toLowerCase().includes(lq)).slice(0,6);
+    if(filtTasks.length)results.push({section:'TASKS',items:filtTasks.map(t=>({type:'task',icon:'✦',label:t.title,sub:t.status+(t.due_date?' · '+t.due_date:''),action:()=>{onOpenTask(t);onClose();}}))});
+  }
+
+  // Flatten for keyboard nav
+  var flat=results.flatMap(function(g){return g.items;});
+  var safesel=flat.length?Math.min(sel,flat.length-1):0;
+
+  function handleKey(e){
+    if(e.key==='Escape'){onClose();return;}
+    if(e.key==='ArrowDown'){e.preventDefault();setSel(function(s){return Math.min(s+1,flat.length-1);});return;}
+    if(e.key==='ArrowUp'){e.preventDefault();setSel(function(s){return Math.max(s-1,0);});return;}
+    if(e.key==='Enter'&&flat[safesel]){flat[safesel].action();return;}
+  }
+
+  // Reset selection when query changes
+  useEffect(()=>{setSel(0);},[q]);
+
+  var flatIdx=0;
+
+  return<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)',zIndex:9000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'12vh'}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{width:'100%',maxWidth:560,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,boxShadow:'0 24px 80px rgba(0,0,0,0.45)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'70vh'}}>
+      {/* Input */}
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+        <span style={{fontSize:16,color:'var(--tf-text-sub)',flexShrink:0}}>⌕</span>
+        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} onKeyDown={handleKey}
+          placeholder="Search workspaces, orgs, modules, tasks…"
+          style={{flex:1,background:'none',border:'none',outline:'none',fontSize:15,color:'var(--tf-text)',fontFamily:'inherit',caretColor:'#6b8cad'}}/>
+        <span style={{fontSize:11,color:'var(--tf-text-mut)',background:'var(--tf-surface)',borderRadius:5,padding:'2px 7px',border:'1px solid var(--tf-border)',flexShrink:0}}>ESC</span>
+      </div>
+      {/* Results */}
+      <div style={{overflowY:'auto',flex:1}}>
+        {flat.length===0&&<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No results for "{q}"</div>}
+        {results.map(function(group){return<div key={group.section}>
+          <div style={{padding:'8px 16px 4px',fontSize:10,fontWeight:700,letterSpacing:'0.08em',color:'var(--tf-text-mut)',textTransform:'uppercase'}}>{group.section}</div>
+          {group.items.map(function(item){
+            var idx=flatIdx++;
+            var isActive=idx===safesel;
+            return<div key={idx} onClick={item.action} onMouseEnter={function(){setSel(idx);}}
+              style={{display:'flex',alignItems:'center',gap:12,padding:'9px 16px',cursor:'pointer',background:isActive?'rgba(107,140,173,0.12)':'transparent',borderLeft:'2px solid '+(isActive?'#6b8cad':'transparent'),transition:'background 0.08s'}}>
+              <div style={{width:28,height:28,borderRadius:7,background:item.color?`rgba(${hexRgb(item.color)},0.15)`:'rgba(107,140,173,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0,color:item.color||'#6b8cad',fontWeight:700}}>{item.icon}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</div>
+                {item.sub&&<div style={{fontSize:11,color:'var(--tf-text-sub)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.sub}</div>}
+              </div>
+              {isActive&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:5,padding:'2px 7px',border:'1px solid var(--tf-border)',flexShrink:0}}>↵</span>}
+            </div>;
+          })}
+        </div>;})}
+      </div>
+      {/* Footer */}
+      <div style={{padding:'8px 16px',borderTop:'1px solid var(--tf-border)',display:'flex',gap:14,flexShrink:0}}>
+        {[['↑↓','Navigate'],['↵','Open'],['ESC','Close']].map(function(k){return<span key={k[0]} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'var(--tf-text-mut)'}}><kbd style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit',fontSize:10}}>{k[0]}</kbd>{k[1]}</span>;})}
+      </div>
+    </div>
+  </div>;
+}
+
 function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
   const [orgs,setOrgs]=useState([])
@@ -1059,6 +1176,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
   const [showTransferOwner,setShowTransferOwner]=useState(false)
   const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
+  const [showCmdBar,setShowCmdBar]=useState(false)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
   const [qaOrgId,setQaOrgId]=useState('')
@@ -1088,6 +1206,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{setTeamMemberId(null);setView('board')},[activeWsId])
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false);if(notifRef.current&&!notifRef.current.contains(e.target))setShowNotif(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
+  useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowCmdBar(v=>!v);}if(e.key==='Escape')setShowCmdBar(false);};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[]);
 
   const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId&&!localStorage.getItem('tf_lastOrgId')&&localStorage.getItem('tf_lastView')!=='home'){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
   useEffect(()=>{
@@ -1410,6 +1529,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
+      {/* Command bar trigger */}
+      <button onClick={()=>setShowCmdBar(true)} title="Command bar (Ctrl+K / ⌘K)" style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,flexShrink:0,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>
+        <span style={{fontSize:13}}>⌕</span>
+        <span style={{fontSize:10,background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 5px'}}>⌘K</span>
+      </button>
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
@@ -1658,6 +1782,16 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
+    {showCmdBar&&<CommandBar
+      workspaces={workspaces} orgs={orgs} tasks={tasks} activeOrg={activeOrg}
+      onClose={()=>setShowCmdBar(false)}
+      onGoWorkspace={id=>{setActiveWsId(id);setActiveOrg(null);localStorage.setItem('tf_lastView','workspace');}}
+      onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);localStorage.setItem('tf_lastView','org');}}
+      onGoOrgModule={(mod,tab)=>{localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab);if(!activeOrg&&orgs.length>0){var o=orgs[0];setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}setActiveWsId(null);}}
+      onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.setItem('tf_lastView','home');}}
+      onOpenTask={t=>{setEditTask(t);if(!activeWsId||activeWsId!==t.workspace_id)setActiveWsId(t.workspace_id);}}
+      onNewWorkspace={()=>setWsForm('new')}
+    />}
   </div>
 }
 
