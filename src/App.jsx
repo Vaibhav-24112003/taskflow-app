@@ -741,7 +741,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 }
 
 // ── Task Card ─────────────────────────────────────────────────────────────────
-function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging}){
+function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onUnclaim,onDragStart,isDragging}){
   const taskAssignees=getAssignees(task)
   const assigneeUsers=taskAssignees.map(id=>getUser(id,wsMembers)).filter(Boolean)
   const creator=getUser(task.created_by,wsMembers)
@@ -789,17 +789,18 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         </div>
       </div>
       {/* Hover actions */}
-      {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
-        <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
-        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn>
-      </div>}
+      <div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
+        {!mir&&<><Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
+        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn></>}
+        {mir&&<Btn onClick={e=>{e.stopPropagation();onUnclaim&&onUnclaim(task)}} danger sm>Remove from my board</Btn>}
+      </div>
     </div>
     <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
   </>
 }
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
-function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
+function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,onUnclaim,dragId,onDragStart,onDrop,onAdd}){
   const [overCol,setOverCol]=useState(false)
   const [insertIdx,setInsertIdx]=useState(null) // index to show insertion line
   const colRef=useRef()
@@ -849,7 +850,7 @@ function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,
       {tasks.length===0&&overCol&&insertIdx===0&&<InsertLine/>}
       {tasks.map((t,i)=><div key={t.id} data-card data-id={t.id} style={{display:'flex',flexDirection:'column',gap:0}}>
         {overCol&&insertIdx===i&&<InsertLine/>}
-        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id}/>
+        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onUnclaim={onUnclaim} onDragStart={onDragStart} isDragging={dragId===t.id}/>
       </div>)}
       {overCol&&insertIdx===tasks.length&&<InsertLine/>}
     </div>
@@ -954,7 +955,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 // ── Team View Panel ───────────────────────────────────────────────────────────
-function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,openNew,setShowMembers,isOvd}){
+function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,unclaimTask,openNew,setShowMembers,isOvd}){
   const [filter,setFilter]=useState('all') // 'all' | 'own' | 'assigned'
   const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
   const rgb=hexRgb(wsColor)
@@ -1029,7 +1030,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
             {statuses.map(st=><KanbanCol key={st} status={st}
               tasks={displayTasks.filter(t=>t.status===st)}
               wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
-              onEdit={setEditTask} onDelete={delTask}
+              onEdit={setEditTask} onDelete={delTask} onUnclaim={unclaimTask}
               dragId={dragId} onDragStart={setDragId} onDrop={drop}
               onAdd={s=>openNew(s)}/>)}
           </KanbanBoard>
@@ -1260,6 +1261,24 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       await logActivity(task.id,cu.id,'Claimed task')
     }else{showToast('Failed to claim task','err')}
   },[cu.id,tasks])
+
+  const unclaimTask=useCallback(async(task)=>{
+    const wsId=activeWsIdRef.current;
+    const existing=getAssignees(task);
+    const newAssignees=existing.filter(id=>id!==cu.id);
+    if(newAssignees.length===0){
+      // Last assignee — just delete the task
+      const{error}=await deleteTask(task.id);
+      if(error){showToast('Failed to remove','err');return}
+      if(activeWsIdRef.current===wsId)setTasks(p=>p.filter(t=>t.id!==task.id))
+    }else{
+      const{data}=await updateTask(task.id,{assignees:newAssignees,assigned_to:newAssignees[0]})
+      if(data){if(activeWsIdRef.current===wsId)setTasks(p=>p.filter(t=>t.id!==task.id))}
+      else{showToast('Failed to remove','err');return}
+    }
+    showToast('Removed from your board')
+    await logActivity(task.id,cu.id,'Removed from board')
+  },[cu.id])
 
   const handleAssignSave=useCallback(async(task,updates)=>{
     const wsId=activeWsIdRef.current;
@@ -1514,7 +1533,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}}>{myTasks.length} tasks · <span style={{color:'#8fa5be'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
           </div>
           <KanbanBoard isDragging={!!dragId}>
-            {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
+            {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} onUnclaim={unclaimTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
           </KanbanBoard>
         </div>}
 
@@ -1524,7 +1543,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* TEAM */}
           {view==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={workspaces} allProfiles={allProfiles}/>}
 
-          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
+          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} unclaimTask={unclaimTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
 
           {/* RECURRING */}
           {view==='recurring'&&<div>
