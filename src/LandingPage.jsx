@@ -8,7 +8,22 @@ const hex2rgb = hex => {
 
 // ── CSS ───────────────────────────────────────────────────────────────────────
 const CSS = `
-  .lp-root { font-family: 'Inter','Helvetica Neue',system-ui,sans-serif; -webkit-font-smoothing: antialiased; background: #0a0e18; color: #eef0f8; }
+  .lp-root {
+    --lp-bg: #0a0e18; --lp-panel: #131825; --lp-surface: rgba(255,255,255,.03);
+    --lp-text: #eef0f8; --lp-text-sub: #8693b0; --lp-text-mut: #3a4663;
+    --lp-border: rgba(255,255,255,.07); --lp-border-hov: rgba(255,255,255,.14);
+    --lp-nav-bg: rgba(10,14,24,0.75); --lp-alt: rgba(255,255,255,.015);
+    --lp-track: rgba(255,255,255,.05);
+    font-family: 'Inter','Helvetica Neue',system-ui,sans-serif;
+    -webkit-font-smoothing: antialiased; background: var(--lp-bg); color: var(--lp-text);
+  }
+  .lp-root[data-theme="light"] {
+    --lp-bg: #f0f4f9; --lp-panel: #ffffff; --lp-surface: rgba(0,0,0,.03);
+    --lp-text: #111827; --lp-text-sub: #6b7280; --lp-text-mut: #aab0be;
+    --lp-border: rgba(0,0,0,.08); --lp-border-hov: rgba(0,0,0,.16);
+    --lp-nav-bg: rgba(240,244,249,0.85); --lp-alt: rgba(0,0,0,.025);
+    --lp-track: rgba(0,0,0,.06);
+  }
   .lp-root *, .lp-root *::before, .lp-root *::after { box-sizing: border-box; }
   .lp-root ::selection { background: rgba(107,140,173,.35); color: #fff; }
   .lp-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: "tnum"; }
@@ -16,25 +31,27 @@ const CSS = `
   .lp-eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; color: #6b8cad; text-transform: uppercase; letter-spacing: .16em; }
   .lp-h1 { font-size: clamp(40px,5.4vw,72px); font-weight: 800; letter-spacing: -.035em; line-height: 1.04; margin: 0; }
   .lp-h2 { font-size: clamp(28px,3.4vw,44px); font-weight: 800; letter-spacing: -.025em; line-height: 1.1; margin: 0; }
-  .lp-lede { font-size: 18px; color: #8693b0; line-height: 1.6; max-width: 640px; }
+  .lp-lede { font-size: 18px; color: var(--lp-text-sub); line-height: 1.6; max-width: 640px; }
   .lp-sec { padding: 96px 0; position: relative; }
   .lp-root a { color: inherit; text-decoration: none; }
   .lp-grain::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.025) 1px, transparent 1px); background-size: 3px 3px; pointer-events: none; opacity: .6; }
   .lp-btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all .18s ease; white-space: nowrap; font-family: inherit; }
   .lp-btn-primary { background: #6b8cad; color: #fff; box-shadow: 0 6px 18px rgba(107,140,173,.32); }
   .lp-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(107,140,173,.4); }
-  .lp-btn-ghost { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); color: #eef0f8; }
-  .lp-btn-ghost:hover { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); }
-  .lp-btn-link { background: transparent; color: #8693b0; padding: 13px 8px; }
-  .lp-btn-link:hover { color: #eef0f8; }
-  .lp-kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px; background: rgba(255,255,255,.08); border-radius: 4px; border: 1px solid rgba(255,255,255,.07); }
+  .lp-btn-ghost { background: var(--lp-surface); border: 1px solid var(--lp-border); color: var(--lp-text); }
+  .lp-btn-ghost:hover { background: var(--lp-alt); border-color: var(--lp-border-hov); }
+  .lp-btn-link { background: transparent; color: var(--lp-text-sub); padding: 13px 8px; }
+  .lp-btn-link:hover { color: var(--lp-text); }
+  .lp-kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 2px 6px; background: var(--lp-surface); border-radius: 4px; border: 1px solid var(--lp-border); }
   .lp-mod-card { transition: all .2s; }
   .lp-mod-card:hover { transform: translateY(-2px); }
-  .lp-faq-item { background: #131825; border: 1px solid rgba(255,255,255,.07); border-radius: 11px; overflow: hidden; }
+  .lp-faq-item { background: var(--lp-panel); border: 1px solid var(--lp-border); border-radius: 11px; overflow: hidden; }
   .lp-faq-trigger { display: flex; align-items: center; gap: 14px; padding: 16px 20px; cursor: pointer; width: 100%; background: none; border: none; color: inherit; font-family: inherit; text-align: left; }
-  .lp-faq-icon { font-size: 18px; color: #8693b0; transition: transform .2s; }
-  .lp-nav-link { padding: 8px 14px; font-size: 13px; color: #8693b0; font-weight: 500; border-radius: 7px; transition: color .15s; }
-  .lp-nav-link:hover { color: #eef0f8; }
+  .lp-faq-icon { font-size: 18px; color: var(--lp-text-sub); transition: transform .2s; }
+  .lp-nav-link { padding: 8px 14px; font-size: 13px; color: var(--lp-text-sub); font-weight: 500; border-radius: 7px; transition: color .15s; }
+  .lp-nav-link:hover { color: var(--lp-text); }
+  .lp-theme-toggle { background: var(--lp-panel); border: 1px solid var(--lp-border); border-radius: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; transition: all .18s; color: var(--lp-text-sub); }
+  .lp-theme-toggle:hover { border-color: var(--lp-border-hov); color: var(--lp-text); }
   @keyframes lp-fillBar { from { width: 0 } to { width: 100% } }
   @keyframes lp-fadeUp { from { opacity: 0; transform: translateY(8px) } }
   @keyframes lp-blink { 50% { opacity: 0 } }
@@ -55,13 +72,13 @@ function scrollTo(id) {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function Nav({ onSignIn, loading }) {
+function Nav({ onSignIn, loading, dark, onToggleTheme }) {
   return (
-    <nav style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(14px)', background: 'rgba(10,14,24,0.7)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <nav style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(14px)', background: 'var(--lp-nav-bg)', borderBottom: '1px solid var(--lp-border)' }}>
       <div className="lp-container" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
-          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlow</span>
+          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--lp-text)' }}>TaskFlow</span>
         </div>
         <div style={{ flex: 1, display: 'flex', gap: 4, marginLeft: 32 }}>
           {NAV_LINKS.map(({ label, href }) => (
@@ -69,6 +86,9 @@ function Nav({ onSignIn, loading }) {
                onClick={e => { e.preventDefault(); scrollTo(href) }}>{label}</a>
           ))}
         </div>
+        <button className="lp-theme-toggle" onClick={onToggleTheme} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
+          {dark ? '☀︎' : '☾'}
+        </button>
         <button className="lp-btn lp-btn-link" onClick={onSignIn}>Sign in</button>
         <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
           {loading ? 'Signing in…' : 'Start free'}
@@ -83,21 +103,21 @@ function HeroMosaic() {
   return (
     <div style={{ position: 'relative', maxWidth: 1140, margin: '0 auto', height: 520 }}>
       {/* Center: worksheet */}
-      <div style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 680, background: '#131825', border: '1px solid rgba(255,255,255,.14)', borderRadius: 14, boxShadow: '0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(107,140,173,.15)', overflow: 'hidden', zIndex: 3 }}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 680, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 14, boxShadow: '0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(107,140,173,.15)', overflow: 'hidden', zIndex: 3 }}>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--lp-border)', display: 'flex', gap: 6, alignItems: 'center' }}>
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
-          <span className="lp-mono" style={{ fontSize: 11, color: '#3a4663', marginLeft: 10 }}>taskflow.app · WorkZone › GSTR-3B › Apr 2026</span>
+          <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-mut)', marginLeft: 10 }}>taskflow.app · WorkZone › GSTR-3B › Apr 2026</span>
         </div>
         <div style={{ padding: '18px 22px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            <div className="lp-mono" style={{ fontSize: 10, color: '#3a4663', textTransform: 'uppercase', letterSpacing: '.12em' }}>Work type</div>
+            <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em' }}>Work type</div>
             <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.02em' }}>GSTR-3B · April 2026</div>
             <span style={{ flex: 1 }} />
             {[['Filed', 32, '#10b981'], ['Review', 8, '#f59e0b'], ['Late', 2, '#ef4444']].map(([l, v, c]) => (
               <span key={l} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: c }} />
-                <span style={{ color: '#8693b0' }}>{l}</span>
-                <span className="lp-mono" style={{ color: '#eef0f8', fontWeight: 700 }}>{v}</span>
+                <span style={{ color: 'var(--lp-text-sub)' }}>{l}</span>
+                <span className="lp-mono" style={{ color: 'var(--lp-text)', fontWeight: 700 }}>{v}</span>
               </span>
             ))}
           </div>
@@ -108,7 +128,7 @@ function HeroMosaic() {
             ['Patel Trading', 'Overdue', '#ef4444', 10, 'RS'],
             ['Reliance Holdings', 'Filed', '#10b981', 100, 'PM'],
           ].map(([c, s, col, p, a]) => (
-            <div key={c} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 30px 1fr', gap: 12, alignItems: 'center', padding: '9px 0', borderTop: '1px solid rgba(255,255,255,.07)' }}>
+            <div key={c} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 30px 1fr', gap: 12, alignItems: 'center', padding: '9px 0', borderTop: '1px solid var(--lp-border)' }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>{c}</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px', background: `rgba(${hex2rgb(col)},.14)`, border: `1px solid rgba(${hex2rgb(col)},.28)`, borderRadius: 100, fontSize: 11, color: col, fontWeight: 600, width: 'fit-content' }}>
                 <span style={{ width: 5, height: 5, borderRadius: '50%', background: col }} />{s}
@@ -118,7 +138,7 @@ function HeroMosaic() {
                 <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.05)', borderRadius: 4, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${p}%`, background: col }} />
                 </div>
-                <span className="lp-mono" style={{ fontSize: 10.5, color: '#8693b0', width: 30, textAlign: 'right' }}>{p}%</span>
+                <span className="lp-mono" style={{ fontSize: 10.5, color: 'var(--lp-text-sub)', width: 30, textAlign: 'right' }}>{p}%</span>
               </div>
             </div>
           ))}
@@ -126,14 +146,14 @@ function HeroMosaic() {
       </div>
 
       {/* Left float: recurring */}
-      <div style={{ position: 'absolute', left: 0, top: 140, width: 280, background: '#131825', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(-2deg)', zIndex: 2 }}>
+      <div style={{ position: 'absolute', left: 0, top: 140, width: 280, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(-2deg)', zIndex: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(99,102,241,.16)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>↻</span>
           <span style={{ fontSize: 12, fontWeight: 700 }}>Recurring</span>
-          <span className="lp-mono" style={{ fontSize: 10, color: '#3a4663', marginLeft: 'auto' }}>auto</span>
+          <span className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', marginLeft: 'auto' }}>auto</span>
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>TDS Q4 payment</div>
-        <div style={{ fontSize: 11, color: '#8693b0', marginBottom: 10 }}>Monthly · 7th of every month</div>
+        <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginBottom: 10 }}>Monthly · 7th of every month</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((m, i) => (
             <span key={m} className="lp-mono" style={{ flex: 1, padding: '5px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6b8cad' : 'rgba(255,255,255,.04)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 4, fontWeight: i === 1 ? 700 : 500 }}>{m}</span>
@@ -142,39 +162,39 @@ function HeroMosaic() {
       </div>
 
       {/* Right float: client portal */}
-      <div style={{ position: 'absolute', right: 0, top: 90, width: 260, background: '#131825', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(2deg)', zIndex: 2 }}>
+      <div style={{ position: 'absolute', right: 0, top: 90, width: 260, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(2deg)', zIndex: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <span style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(6,182,212,.16)', color: '#06b6d4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>◑</span>
           <span style={{ fontSize: 12, fontWeight: 700 }}>Client portal</span>
         </div>
-        <div style={{ fontSize: 11, color: '#8693b0', marginBottom: 8 }}>From Acme Pvt Ltd · just now</div>
-        <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginBottom: 8 }}>From Acme Pvt Ltd · just now</div>
+        <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,.03)', border: '1px solid var(--lp-border)', borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>
           <span>Bank statement · April</span><br />
-          <span className="lp-mono" style={{ fontSize: 10, color: '#3a4663' }}>statement_apr26.pdf · 1.2 MB</span>
+          <span className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)' }}>statement_apr26.pdf · 1.2 MB</span>
         </div>
         <div style={{ marginTop: 8, width: '100%', padding: '7px', background: '#06b6d4', borderRadius: 6, color: '#fff', fontSize: 11, fontWeight: 700, textAlign: 'center' }}>Approve & link</div>
       </div>
 
       {/* Bottom right: stats */}
-      <div style={{ position: 'absolute', right: 40, bottom: 0, width: 240, background: '#131825', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', zIndex: 4 }}>
-        <div className="lp-mono" style={{ fontSize: 10, color: '#3a4663', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 6 }}>This week · your team</div>
+      <div style={{ position: 'absolute', right: 40, bottom: 0, width: 240, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', zIndex: 4 }}>
+        <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 6 }}>This week · your team</div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
-          <div><div className="lp-mono" style={{ fontSize: 22, fontWeight: 800, color: '#10b981', letterSpacing: '-.02em' }}>147</div><div style={{ fontSize: 10, color: '#8693b0', fontWeight: 600 }}>Filed</div></div>
-          <div><div className="lp-mono" style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.02em' }}>92h</div><div style={{ fontSize: 10, color: '#8693b0', fontWeight: 600 }}>Logged</div></div>
-          <div><div className="lp-mono" style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b', letterSpacing: '-.02em' }}>↑12%</div><div style={{ fontSize: 10, color: '#8693b0', fontWeight: 600 }}>vs last</div></div>
+          <div><div className="lp-mono" style={{ fontSize: 22, fontWeight: 800, color: '#10b981', letterSpacing: '-.02em' }}>147</div><div style={{ fontSize: 10, color: 'var(--lp-text-sub)', fontWeight: 600 }}>Filed</div></div>
+          <div><div className="lp-mono" style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.02em' }}>92h</div><div style={{ fontSize: 10, color: 'var(--lp-text-sub)', fontWeight: 600 }}>Logged</div></div>
+          <div><div className="lp-mono" style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b', letterSpacing: '-.02em' }}>↑12%</div><div style={{ fontSize: 10, color: 'var(--lp-text-sub)', fontWeight: 600 }}>vs last</div></div>
         </div>
       </div>
 
       {/* Bottom left: diary */}
-      <div style={{ position: 'absolute', left: 30, bottom: 60, width: 230, background: '#131825', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(-1deg)', zIndex: 4 }}>
-        <div className="lp-mono" style={{ fontSize: 10, color: '#3a4663', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Today · 09:41</div>
+      <div style={{ position: 'absolute', left: 30, bottom: 60, width: 230, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(-1deg)', zIndex: 4 }}>
+        <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Today · 09:41</div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', marginTop: 6, flexShrink: 0, boxShadow: '0 0 10px #6366f1' }} />
-          <div><div style={{ fontSize: 12, fontWeight: 600 }}>GSTR-3B · Acme</div><div style={{ fontSize: 10.5, color: '#8693b0' }}>Up next · 09:00</div></div>
+          <div><div style={{ fontSize: 12, fontWeight: 600 }}>GSTR-3B · Acme</div><div style={{ fontSize: 10.5, color: 'var(--lp-text-sub)' }}>Up next · 09:00</div></div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', marginTop: 6, flexShrink: 0 }} />
-          <div><div style={{ fontSize: 12, fontWeight: 600 }}>TDS review · Singh</div><div style={{ fontSize: 10.5, color: '#8693b0' }}>11:30</div></div>
+          <div><div style={{ fontSize: 12, fontWeight: 600 }}>TDS review · Singh</div><div style={{ fontSize: 10.5, color: 'var(--lp-text-sub)' }}>11:30</div></div>
         </div>
       </div>
     </div>
@@ -200,7 +220,7 @@ function Hero({ onSignIn, loading }) {
             <button className="lp-btn lp-btn-ghost">▶ Watch 90-sec tour</button>
             <button className="lp-btn lp-btn-link">Book a demo</button>
           </div>
-          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: '#3a4663' }} className="lp-mono">
+          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
             <span>✓ No credit card</span><span>✓ 14-day trial</span><span>✓ Setup in 10 minutes</span>
           </div>
         </div>
@@ -214,12 +234,12 @@ function Hero({ onSignIn, loading }) {
 function Stats() {
   const stats = [['1', 'CA firm onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time filing rate'], ['∞', 'Excel sheets replaced']]
   return (
-    <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.015)' }}>
+    <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)', background: 'var(--lp-alt)' }}>
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
         {stats.map(([v, l]) => (
           <div key={l} style={{ textAlign: 'center' }}>
             <div className="lp-mono" style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.03em', background: 'linear-gradient(180deg,#fff,#8693b0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{v}</div>
-            <div style={{ fontSize: 12, color: '#8693b0', fontWeight: 500, marginTop: 4 }}>{l}</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', fontWeight: 500, marginTop: 4 }}>{l}</div>
           </div>
         ))}
       </div>
@@ -246,7 +266,7 @@ function Problem() {
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">The problem</div>
-          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your firm runs on willpower.<br /><span style={{ color: '#8693b0' }}>It shouldn't.</span></h2>
+          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your firm runs on willpower.<br /><span style={{ color: 'var(--lp-text-sub)' }}>It shouldn't.</span></h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ padding: '24px 26px', background: 'rgba(239,68,68,.04)', border: '1px solid rgba(239,68,68,.18)', borderRadius: 14 }}>
@@ -257,7 +277,7 @@ function Problem() {
             {before.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(239,68,68,.12)' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3, textDecoration: 'line-through', textDecorationColor: 'rgba(239,68,68,.4)' }}>{t}</div>
-                <div style={{ fontSize: 12, color: '#8693b0' }}>{d}</div>
+                <div style={{ fontSize: 12, color: 'var(--lp-text-sub)' }}>{d}</div>
               </div>
             ))}
           </div>
@@ -269,7 +289,7 @@ function Problem() {
             {after.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(16,185,129,.12)' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 3 }}>{t}</div>
-                <div style={{ fontSize: 12, color: '#8693b0' }}>{d}</div>
+                <div style={{ fontSize: 12, color: 'var(--lp-text-sub)' }}>{d}</div>
               </div>
             ))}
           </div>
@@ -293,7 +313,7 @@ function Modules() {
     { id: 'setup', label: 'Set-up', desc: 'Members, invites, roles, org settings.', color: '#64748b', glyph: '◕' },
   ]
   return (
-    <section id="modules" className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <section id="modules" className="lp-sec" style={{ background: 'var(--lp-alt)', borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)' }}>
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">Modules tour</div>
@@ -304,7 +324,7 @@ function Modules() {
           {mods.map(m => {
             const r = hex2rgb(m.color)
             return (
-              <div key={m.id} className="lp-mod-card" style={{ padding: '22px', background: '#131825', border: '1px solid rgba(255,255,255,.07)', borderRadius: 14, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
+              <div key={m.id} className="lp-mod-card" style={{ padding: '22px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 14, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${r},.32)` }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.07)' }}>
                 <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, background: `radial-gradient(circle,rgba(${r},.12),transparent 70%)`, pointerEvents: 'none' }} />
@@ -312,7 +332,7 @@ function Modules() {
                   <span style={{ width: 32, height: 32, borderRadius: 8, background: `rgba(${r},.14)`, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700 }}>{m.glyph}</span>
                   <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em' }}>{m.label}</span>
                 </div>
-                <div style={{ fontSize: 13, color: '#8693b0', lineHeight: 1.55, position: 'relative' }}>{m.desc}</div>
+                <div style={{ fontSize: 13, color: 'var(--lp-text-sub)', lineHeight: 1.55, position: 'relative' }}>{m.desc}</div>
               </div>
             )
           })}
@@ -343,12 +363,12 @@ function Features() {
           {feats.map(f => {
             const r = hex2rgb(f.c)
             return (
-              <div key={f.t} style={{ gridColumn: f.span ? `span ${f.span}` : 'span 1', padding: '22px', background: '#131825', border: '1px solid rgba(255,255,255,.07)', borderRadius: 14, display: 'flex', flexDirection: 'column' }}>
+              <div key={f.t} style={{ gridColumn: f.span ? `span ${f.span}` : 'span 1', padding: '22px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 14, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span style={{ width: 30, height: 30, borderRadius: 7, background: `rgba(${r},.14)`, color: f.c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>{f.icon}</span>
                   <span style={{ fontSize: 14, fontWeight: 700 }}>{f.t}</span>
                 </div>
-                <div style={{ fontSize: 13, color: '#8693b0', lineHeight: 1.55, flex: 1 }}>{f.d}</div>
+                <div style={{ fontSize: 13, color: 'var(--lp-text-sub)', lineHeight: 1.55, flex: 1 }}>{f.d}</div>
               </div>
             )
           })}
@@ -362,9 +382,9 @@ function Features() {
 function ScCapture() {
   return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 30 }}>
-      <div style={{ width: '90%', maxWidth: 480, background: 'rgba(15,18,32,.96)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,.7)', overflow: 'hidden', animation: 'lp-fadeUp .4s ease' }}>
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="lp-mono" style={{ color: '#8693b0' }}>›</span>
+      <div style={{ width: '90%', maxWidth: 480, background: 'rgba(15,18,32,.96)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,.7)', overflow: 'hidden', animation: 'lp-fadeUp .4s ease' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--lp-border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="lp-mono" style={{ color: 'var(--lp-text-sub)' }}>›</span>
           <span style={{ fontSize: 14, flex: 1 }}>GSTR Acme<span style={{ color: '#6b8cad', animation: 'lp-blink 1s steps(2) infinite' }}>|</span></span>
           <span className="lp-kbd">esc</span>
         </div>
@@ -387,11 +407,11 @@ function ScSheet() {
         <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>GSTR-3B · April 2026</span>
         <span style={{ flex: 1 }} />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /><span style={{ color: '#8693b0' }}>Filed</span><span className="lp-mono" style={{ fontWeight: 700 }}>32</span>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /><span style={{ color: 'var(--lp-text-sub)' }}>Filed</span><span className="lp-mono" style={{ fontWeight: 700 }}>32</span>
         </span>
       </div>
       {[['Acme Pvt Ltd', 'Filed', '#10b981', 100], ['Singh & Co', 'Review', '#f59e0b', 80], ['Mehta Industries', 'Data req', '#6b8cad', 40], ['Patel Trading', 'Overdue', '#ef4444', 10], ['Reliance Holdings', 'Filed', '#10b981', 100], ['Tata Components', 'Filed', '#10b981', 100]].map(([c, s, col, p]) => (
-        <div key={c} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid rgba(255,255,255,.07)' }}>
+        <div key={c} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--lp-border)' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>{c}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px', background: `rgba(${hex2rgb(col)},.14)`, border: `1px solid rgba(${hex2rgb(col)},.28)`, borderRadius: 100, fontSize: 11, color: col, fontWeight: 600, width: 'fit-content' }}>
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: col }} />{s}
@@ -400,7 +420,7 @@ function ScSheet() {
             <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.05)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${p}%`, background: col }} />
             </div>
-            <span className="lp-mono" style={{ fontSize: 10.5, color: '#8693b0', width: 30, textAlign: 'right' }}>{p}%</span>
+            <span className="lp-mono" style={{ fontSize: 10.5, color: 'var(--lp-text-sub)', width: 30, textAlign: 'right' }}>{p}%</span>
           </div>
         </div>
       ))}
@@ -417,9 +437,9 @@ function ScRecurring() {
             <span style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(99,102,241,.2)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>↻</span>
             <span style={{ fontSize: 14, fontWeight: 700 }}>TDS payment · Acme Pvt Ltd</span>
           </div>
-          <div style={{ fontSize: 12, color: '#8693b0', marginLeft: 40 }}>Monthly · 7th of every month · until Mar 2027</div>
+          <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', marginLeft: 40 }}>Monthly · 7th of every month · until Mar 2027</div>
         </div>
-        <div className="lp-mono" style={{ fontSize: 10, color: '#3a4663', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Auto-generates</div>
+        <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Auto-generates</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map((m, i) => (
             <span key={m} className="lp-mono" style={{ flex: 1, padding: '8px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6366f1' : 'rgba(99,102,241,.08)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 5, fontWeight: 700, border: i === 1 ? 'none' : '1px solid rgba(99,102,241,.18)' }}>{m}</span>
@@ -435,21 +455,21 @@ function ScInvoice() {
     <div style={{ height: '100%', animation: 'lp-fadeUp .4s ease', padding: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>Invoice · Acme Pvt Ltd</span>
-        <span className="lp-mono" style={{ fontSize: 11, color: '#3a4663' }}>INV-2026-0142</span>
+        <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-mut)' }}>INV-2026-0142</span>
         <span style={{ flex: 1 }} />
         <span style={{ padding: '3px 10px', background: 'rgba(16,185,129,.16)', border: '1px solid rgba(16,185,129,.3)', borderRadius: 100, fontSize: 11, color: '#10b981', fontWeight: 700 }}>Paid</span>
       </div>
       {[['GSTR-3B · April 2026', '5,000'], ['TDS Q4 payment', '3,500'], ['ITR data preparation', '12,000']].map(([l, a]) => (
-        <div key={l} style={{ display: 'flex', padding: '10px 0', borderTop: '1px solid rgba(255,255,255,.07)', fontSize: 13 }}>
+        <div key={l} style={{ display: 'flex', padding: '10px 0', borderTop: '1px solid var(--lp-border)', fontSize: 13 }}>
           <span style={{ flex: 1 }}>{l}</span>
           <span className="lp-mono" style={{ fontWeight: 600 }}>₹{a}</span>
         </div>
       ))}
-      <div style={{ display: 'flex', padding: '14px 0', borderTop: '1px solid rgba(255,255,255,.07)', marginTop: 10, fontSize: 14, fontWeight: 800 }}>
+      <div style={{ display: 'flex', padding: '14px 0', borderTop: '1px solid var(--lp-border)', marginTop: 10, fontSize: 14, fontWeight: 800 }}>
         <span style={{ flex: 1 }}>Total</span>
         <span className="lp-mono">₹20,500</span>
       </div>
-      <div style={{ marginTop: 18, padding: '10px 14px', background: 'rgba(255,255,255,.03)', border: '1px dashed rgba(255,255,255,.14)', borderRadius: 8, fontSize: 11.5, color: '#8693b0' }}>
+      <div style={{ marginTop: 18, padding: '10px 14px', background: 'rgba(255,255,255,.03)', border: '1px dashed rgba(255,255,255,.14)', borderRadius: 8, fontSize: 11.5, color: 'var(--lp-text-sub)' }}>
         ✓ Pulled from completed works · ✓ Tally export ready · ✓ Sent via Gmail
       </div>
     </div>
@@ -469,7 +489,7 @@ function TourVideo() {
     return () => clearInterval(id)
   }, [])
   return (
-    <section id="tour" className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <section id="tour" className="lp-sec" style={{ background: 'var(--lp-alt)', borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)' }}>
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">90-second tour</div>
@@ -484,15 +504,15 @@ function TourVideo() {
                   <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#6b8cad' : '#3a4663', fontWeight: 700 }}>0{i + 1}</span>
                   <span style={{ fontSize: 14, fontWeight: 700, color: i === step ? '#eef0f8' : '#8693b0' }}>{s.t}</span>
                 </div>
-                <div style={{ fontSize: 12, color: '#8693b0', paddingLeft: 24 }}>{s.d}</div>
+                <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', paddingLeft: 24 }}>{s.d}</div>
                 {i === step && <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: '#6b8cad', animation: 'lp-fillBar 3s linear' }} />}
               </div>
             ))}
           </div>
-          <div style={{ background: '#131825', border: '1px solid rgba(255,255,255,.14)', borderRadius: 14, boxShadow: '0 30px 80px rgba(0,0,0,.6)', overflow: 'hidden', height: 420 }}>
-            <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 14, boxShadow: '0 30px 80px rgba(0,0,0,.6)', overflow: 'hidden', height: 420 }}>
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--lp-border)', display: 'flex', gap: 6, alignItems: 'center' }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
-              <span className="lp-mono" style={{ fontSize: 11, color: '#3a4663', marginLeft: 10 }}>taskflow.app</span>
+              <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-mut)', marginLeft: 10 }}>taskflow.app</span>
             </div>
             <div style={{ padding: 24, height: 'calc(100% - 38px)', position: 'relative' }}>
               {step === 0 && <ScCapture />}
@@ -533,10 +553,10 @@ function Compliance() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {items.map(([t, d], i) => (
-              <div key={t} style={{ padding: '16px 18px', background: '#131825', border: '1px solid rgba(255,255,255,.07)', borderRadius: 11 }}>
+              <div key={t} style={{ padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
                 <div className="lp-mono" style={{ fontSize: 10, color: '#6b8cad', fontWeight: 700, marginBottom: 6 }}>0{i + 1}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{t}</div>
-                <div style={{ fontSize: 11.5, color: '#8693b0', lineHeight: 1.45 }}>{d}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--lp-text-sub)', lineHeight: 1.45 }}>{d}</div>
               </div>
             ))}
           </div>
@@ -557,7 +577,7 @@ function Security() {
     ['SOC 2 in progress', 'Type II audit underway with a Big-4 assessor.', '✓'],
   ]
   return (
-    <section id="security" className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <section id="security" className="lp-sec" style={{ background: 'var(--lp-alt)', borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)' }}>
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">Security & data residency</div>
@@ -565,10 +585,10 @@ function Security() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
           {items.map(([t, d, ic]) => (
-            <div key={t} style={{ padding: '22px', background: '#131825', border: '1px solid rgba(255,255,255,.07)', borderRadius: 12 }}>
+            <div key={t} style={{ padding: '22px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 12 }}>
               <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(107,140,173,.12)', color: '#6b8cad', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{ic}</div>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{t}</div>
-              <div style={{ fontSize: 12, color: '#8693b0', lineHeight: 1.55 }}>{d}</div>
+              <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.55 }}>{d}</div>
             </div>
           ))}
         </div>
@@ -602,7 +622,7 @@ function FAQ() {
                 <span style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>{q}</span>
                 <span className="lp-faq-icon" style={{ transform: open === i ? 'rotate(45deg)' : 'none' }}>+</span>
               </button>
-              {open === i && <div style={{ padding: '0 20px 18px', fontSize: 13, color: '#8693b0', lineHeight: 1.6 }}>{a}</div>}
+              {open === i && <div style={{ padding: '0 20px 18px', fontSize: 13, color: 'var(--lp-text-sub)', lineHeight: 1.6 }}>{a}</div>}
             </div>
           ))}
         </div>
@@ -633,7 +653,7 @@ function FinalCTA({ onSignIn, loading }) {
 // ── Footer ────────────────────────────────────────────────────────────────────
 function Footer() {
   return (
-    <footer style={{ borderTop: '1px solid rgba(255,255,255,.07)', padding: '48px 0 32px', background: '#0a0e18' }}>
+    <footer style={{ borderTop: '1px solid var(--lp-border)', padding: '48px 0 32px', background: 'var(--lp-bg)' }}>
       <div className="lp-container">
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 32, marginBottom: 40 }}>
           <div>
@@ -641,7 +661,7 @@ function Footer() {
               <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
               <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlow</span>
             </div>
-            <div style={{ fontSize: 12, color: '#8693b0', lineHeight: 1.6, maxWidth: 300 }}>The operating system for Indian CA firms, accounting practices and tax consultants.</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for Indian CA firms, accounting practices and tax consultants.</div>
           </div>
           {[
             ['Product', ['Modules', 'Pricing', 'Changelog', 'Roadmap', 'Status']],
@@ -650,14 +670,14 @@ function Footer() {
             ['Legal', ['Privacy', 'Terms', 'Security', 'GDPR', 'DPA']],
           ].map(([h, ls]) => (
             <div key={h}>
-              <div className="lp-mono" style={{ fontSize: 10, color: '#3a4663', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 12, fontWeight: 700 }}>{h}</div>
+              <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 12, fontWeight: 700 }}>{h}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {ls.map(l => <a key={l} href="#" style={{ fontSize: 12.5, color: '#8693b0' }}>{l}</a>)}
+                {ls.map(l => <a key={l} href="#" style={{ fontSize: 12.5, color: 'var(--lp-text-sub)' }}>{l}</a>)}
               </div>
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid rgba(255,255,255,.07)', fontSize: 11.5, color: '#3a4663' }} className="lp-mono">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
           <span>© 2026 TaskFlow Technologies Pvt Ltd · Made in India 🇮🇳</span>
           <span>v 2.4.1 · all systems operational</span>
         </div>
@@ -668,10 +688,11 @@ function Footer() {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function LandingPage({ onSignIn, loading }) {
+  const [dark, setDark] = useState(true)
   return (
-    <div className="lp-root">
+    <div className="lp-root" data-theme={dark ? 'dark' : 'light'}>
       <style>{CSS}</style>
-      <Nav onSignIn={onSignIn} loading={loading} />
+      <Nav onSignIn={onSignIn} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
       <Hero onSignIn={onSignIn} loading={loading} />
       <Stats />
       <Problem />
