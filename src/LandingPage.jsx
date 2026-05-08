@@ -78,7 +78,7 @@ function Nav({ onSignIn, loading, dark, onToggleTheme }) {
       <div className="lp-container" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
-          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--lp-text)' }}>TaskFlow</span>
+          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--lp-text)' }}>TaskFlowco</span>
         </div>
         <div style={{ flex: 1, display: 'flex', gap: 4, marginLeft: 32 }}>
           {NAV_LINKS.map(({ label, href }) => (
@@ -272,7 +272,7 @@ function Problem() {
           <div style={{ padding: '24px 26px', background: 'rgba(239,68,68,.04)', border: '1px solid rgba(239,68,68,.18)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(239,68,68,.16)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>×</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before TaskFlow</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before TaskFlowco</span>
             </div>
             {before.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(239,68,68,.12)' }}>
@@ -284,7 +284,7 @@ function Problem() {
           <div style={{ padding: '24px 26px', background: 'rgba(16,185,129,.04)', border: '1px solid rgba(16,185,129,.22)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(16,185,129,.16)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>✓</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With TaskFlow</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With TaskFlowco</span>
             </div>
             {after.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(16,185,129,.12)' }}>
@@ -603,7 +603,7 @@ function FAQ() {
   const qs = [
     ['How long does setup take?', 'Most firms are live in under 30 minutes. Import your client list as CSV, pick the work types you handle, invite your team.'],
     ['Can we migrate from Excel / existing tools?', 'Yes. CSV import for clients and master data. We also help migrate from Practice Pro, Munimji, and similar tools — included in onboarding.'],
-    ['Do clients need an account?', 'Only if they use the Client Portal. You can also operate TaskFlow entirely internally without exposing it to clients.'],
+    ['Do clients need an account?', 'Only if they use the Client Portal. You can also operate TaskFlowco entirely internally without exposing it to clients.'],
     ['What about pricing?', 'Per-user monthly pricing. The first 14 days are free with no credit card. We have firm-wide plans starting at 5 seats.'],
     ['Where is our data stored?', 'In AWS Mumbai (ap-south-1). Encrypted at rest with AES-256. Daily backups. Your data is yours — full export available any time.'],
     ['Does it integrate with Tally / Zoho?', 'Yes. Billing exports to Tally XML and Zoho Books. We also support Gmail OAuth for client communication.'],
@@ -659,7 +659,7 @@ function Footer() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
-              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlow</span>
+              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlowco</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for Indian CA firms, accounting practices and tax consultants.</div>
           </div>
@@ -678,7 +678,7 @@ function Footer() {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
-          <span>© 2026 TaskFlow Technologies Pvt Ltd · Made in India 🇮🇳</span>
+          <span>© 2026 TaskFlowco Technologies Pvt Ltd · Made in India 🇮🇳</span>
           <span>v 2.4.1 · all systems operational</span>
         </div>
       </div>
