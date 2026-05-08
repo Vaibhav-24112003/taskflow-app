@@ -741,7 +741,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 }
 
 // ── Task Card ─────────────────────────────────────────────────────────────────
-function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onUnclaim,onDragStart,isDragging}){
+function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging}){
   const taskAssignees=getAssignees(task)
   const assigneeUsers=taskAssignees.map(id=>getUser(id,wsMembers)).filter(Boolean)
   const creator=getUser(task.created_by,wsMembers)
@@ -789,18 +789,17 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onUnclaim,onDrag
         </div>
       </div>
       {/* Hover actions */}
-      <div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
-        {!mir&&<><Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
-        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn></>}
-        {mir&&<Btn onClick={e=>{e.stopPropagation();onUnclaim&&onUnclaim(task)}} danger sm>Remove from my board</Btn>}
-      </div>
+      {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
+        <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
+        <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn>
+      </div>}
     </div>
     <Confirm open={cdel} icon="🗑️" title="Delete task?" body={`"${task.title}"`} confirmLabel="Delete" onConfirm={()=>{setCdel(false);onDelete(task.id)}} onCancel={()=>setCdel(false)}/>
   </>
 }
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
-function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,onUnclaim,dragId,onDragStart,onDrop,onAdd}){
+function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
   const [overCol,setOverCol]=useState(false)
   const [insertIdx,setInsertIdx]=useState(null) // index to show insertion line
   const colRef=useRef()
@@ -850,7 +849,7 @@ function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,onUncla
       {tasks.length===0&&overCol&&insertIdx===0&&<InsertLine/>}
       {tasks.map((t,i)=><div key={t.id} data-card data-id={t.id} style={{display:'flex',flexDirection:'column',gap:0}}>
         {overCol&&insertIdx===i&&<InsertLine/>}
-        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onUnclaim={onUnclaim} onDragStart={onDragStart} isDragging={dragId===t.id}/>
+        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id}/>
       </div>)}
       {overCol&&insertIdx===tasks.length&&<InsertLine/>}
     </div>
@@ -955,7 +954,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 // ── Team View Panel ───────────────────────────────────────────────────────────
-function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,unclaimTask,openNew,setShowMembers,isOvd}){
+function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,openNew,setShowMembers,isOvd}){
   const [filter,setFilter]=useState('all') // 'all' | 'own' | 'assigned'
   const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
   const rgb=hexRgb(wsColor)
@@ -1030,188 +1029,13 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
             {statuses.map(st=><KanbanCol key={st} status={st}
               tasks={displayTasks.filter(t=>t.status===st)}
               wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
-              onEdit={setEditTask} onDelete={delTask} onUnclaim={unclaimTask}
+              onEdit={setEditTask} onDelete={delTask}
               dragId={dragId} onDragStart={setDragId} onDrop={drop}
               onAdd={s=>openNew(s)}/>)}
           </KanbanBoard>
         </div>}
     </>}
   </div>
-}
-
-// ── Command Bar ───────────────────────────────────────────────────────────────
-var CMD_MODULES=[
-  {id:'diary',label:'Your Diary',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
-  {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
-  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
-  {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
-  {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
-  {id:'comms',label:'Communication',tabs:[{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
-  {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
-  {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-  {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]},
-];
-
-function CommandBar({workspaces,orgs,tasks,wsMembers,activeOrg,supabase,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace,onGoMasterData}){
-  var [q,setQ]=useState('');
-  var [sel,setSel]=useState(0);
-  var [clients,setClients]=useState([]);
-  var [workTypes,setWorkTypes]=useState([]);
-  var [members,setMembers]=useState([]);
-  var [indexLoading,setIndexLoading]=useState(false);
-  var inputRef=useRef();
-  useEffect(()=>{inputRef.current&&inputRef.current.focus();},[]);
-
-  // Fetch org-level index data on open
-  useEffect(()=>{
-    if(!activeOrg||!supabase)return;
-    setIndexLoading(true);
-    Promise.all([
-      supabase.from('clients').select('id,name,display_name,pan,status').eq('org_id',activeOrg.id).order('name').limit(1000),
-      supabase.from('work_type_configs').select('id,name,frequency,is_active').eq('org_id',activeOrg.id).limit(200),
-      supabase.from('organization_members').select('user_id,role').eq('org_id',activeOrg.id).limit(200)
-        .then(async function(rm){
-          var ids=(rm.data||[]).map(function(m){return m.user_id;});
-          if(!ids.length)return{data:[]};
-          var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
-          return{data:(rp.data||[]).map(function(p){var mem=(rm.data||[]).find(function(m){return m.user_id===p.id;})||{};return Object.assign({},p,{role:mem.role||'member'});})};
-        })
-    ]).then(function([rc,rwt,rmem]){
-      setClients(rc.data||[]);
-      setWorkTypes(rwt.data||[]);
-      setMembers(rmem.data||[]);
-      setIndexLoading(false);
-    });
-  },[activeOrg&&activeOrg.id]);
-
-  var lq=q.toLowerCase().trim();
-  var results=[];
-
-  // Actions
-  var actions=[
-    {type:'action',icon:'⌂',label:'Go to Home',sub:'',action:()=>{onGoHome();onClose();}},
-    {type:'action',icon:'＋',label:'New Workspace',sub:'',action:()=>{onNewWorkspace();onClose();}},
-  ];
-  var filtActions=lq?actions.filter(a=>a.label.toLowerCase().includes(lq)):actions;
-  if(filtActions.length)results.push({section:'ACTIONS',items:filtActions});
-
-  // Organisations
-  var filtOrgs=(lq?orgs.filter(o=>(o.name||'').toLowerCase().includes(lq)):orgs).slice(0,5);
-  if(filtOrgs.length)results.push({section:'ORGANISATIONS',items:filtOrgs.map(o=>({type:'org',icon:'🏢',label:o.name,sub:o.description||'',action:()=>{onGoOrg(o);onClose();}}))});
-
-  // Workspaces
-  var filtWs=(lq?workspaces.filter(w=>(w.name||'').toLowerCase().includes(lq)):workspaces).slice(0,6);
-  if(filtWs.length)results.push({section:'WORKSPACES',items:filtWs.map(w=>({type:'ws',icon:w.icon||'◻',label:w.name,sub:w.description||'',color:w.color,action:()=>{onGoWorkspace(w.id);onClose();}}))});
-
-  // Clients (require query)
-  if(lq&&clients.length){
-    var filtClients=clients.filter(function(c){
-      var n=(c.display_name||c.name||'').toLowerCase();
-      var p=(c.pan||'').toLowerCase();
-      return n.includes(lq)||p.includes(lq);
-    }).slice(0,8);
-    if(filtClients.length)results.push({section:'CLIENTS',items:filtClients.map(function(c){
-      return{type:'client',icon:'CL',label:c.display_name||c.name,sub:(c.pan?c.pan+' · ':'')+((c.status||'active')),
-        action:()=>{onGoOrgModule('masterdata','clients');onClose();}};
-    })});
-  }
-
-  // Work Types (require query)
-  if(lq&&workTypes.length){
-    var filtWt=workTypes.filter(function(w){return(w.name||'').toLowerCase().includes(lq);}).slice(0,5);
-    if(filtWt.length)results.push({section:'WORK TYPES',items:filtWt.map(function(w){
-      return{type:'worktype',icon:'WK',label:w.name,sub:(w.frequency||'')+(w.is_active?'':' · Inactive'),
-        action:()=>{onGoOrgModule('workzone','worksheets');onClose();}};
-    })});
-  }
-
-  // Members (workspace + org, require query)
-  if(lq){
-    var allMembers=[...wsMembers,...members].filter(function(m,i,arr){return arr.findIndex(function(x){return x.id===m.id;})===i;});
-    var filtMembers=allMembers.filter(function(m){
-      return(m.name||'').toLowerCase().includes(lq)||(m.email||'').toLowerCase().includes(lq);
-    }).slice(0,5);
-    if(filtMembers.length)results.push({section:'MEMBERS',items:filtMembers.map(function(m){
-      return{type:'member',icon:(m.name||m.email||'?')[0].toUpperCase(),label:m.name||m.email,sub:m.email+(m.role?' · '+m.role:''),
-        action:()=>{onGoOrgModule('team','logs');onClose();}};
-    })});
-  }
-
-  // Org modules (only inside an org)
-  if(activeOrg){
-    var modItems=[];
-    CMD_MODULES.forEach(function(m){
-      if(!lq||m.label.toLowerCase().includes(lq)){
-        modItems.push({type:'module',icon:'◈',label:m.label,sub:activeOrg.name,action:()=>{onGoOrgModule(m.id,m.tabs[0].id);onClose();}});
-      }
-      m.tabs.forEach(function(t){
-        if(lq&&(t.label.toLowerCase().includes(lq)||m.label.toLowerCase().includes(lq))){
-          modItems.push({type:'module',icon:'◉',label:t.label,sub:m.label+' · '+activeOrg.name,action:()=>{onGoOrgModule(m.id,t.id);onClose();}});
-        }
-      });
-    });
-    if(modItems.length)results.push({section:'MODULES',items:modItems.slice(0,8)});
-  }
-
-  // Tasks (require query)
-  if(lq&&tasks&&tasks.length){
-    var filtTasks=tasks.filter(t=>(t.title||'').toLowerCase().includes(lq)).slice(0,6);
-    if(filtTasks.length)results.push({section:'TASKS',items:filtTasks.map(t=>({type:'task',icon:'✦',label:t.title,sub:t.status+(t.due_date?' · '+t.due_date:''),action:()=>{onOpenTask(t);onClose();}}))});
-  }
-
-  var flat=results.flatMap(function(g){return g.items;});
-  var safesel=flat.length?Math.min(sel,flat.length-1):0;
-
-  function handleKey(e){
-    if(e.key==='Escape'){onClose();return;}
-    if(e.key==='ArrowDown'){e.preventDefault();setSel(function(s){return Math.min(s+1,flat.length-1);});return;}
-    if(e.key==='ArrowUp'){e.preventDefault();setSel(function(s){return Math.max(s-1,0);});return;}
-    if(e.key==='Enter'&&flat[safesel]){flat[safesel].action();return;}
-  }
-  useEffect(()=>{setSel(0);},[q]);
-
-  var flatIdx=0;
-  var isClientOrWt=function(type){return type==='client'||type==='worktype'||type==='member';};
-
-  return<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)',zIndex:9000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'12vh'}}>
-    <div onClick={function(e){e.stopPropagation();}} style={{width:'100%',maxWidth:580,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,boxShadow:'0 24px 80px rgba(0,0,0,0.45)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'72vh'}}>
-      {/* Input */}
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
-        <span style={{fontSize:16,color:'var(--tf-text-sub)',flexShrink:0}}>⌕</span>
-        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} onKeyDown={handleKey}
-          placeholder="Search clients, work types, members, modules, tasks…"
-          style={{flex:1,background:'none',border:'none',outline:'none',fontSize:15,color:'var(--tf-text)',fontFamily:'inherit',caretColor:'#6b8cad'}}/>
-        {indexLoading&&<span style={{fontSize:11,color:'var(--tf-text-mut)',flexShrink:0}}>indexing…</span>}
-        <span style={{fontSize:11,color:'var(--tf-text-mut)',background:'var(--tf-surface)',borderRadius:5,padding:'2px 7px',border:'1px solid var(--tf-border)',flexShrink:0}}>ESC</span>
-      </div>
-      {/* Results */}
-      <div style={{overflowY:'auto',flex:1}}>
-        {!lq&&flat.length===0&&<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Start typing to search clients, work types, members, modules and tasks</div>}
-        {lq&&flat.length===0&&!indexLoading&&<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No results for "<strong>{q}</strong>"</div>}
-        {results.map(function(group){return<div key={group.section}>
-          <div style={{padding:'8px 16px 4px',fontSize:10,fontWeight:700,letterSpacing:'0.08em',color:'var(--tf-text-mut)',textTransform:'uppercase'}}>{group.section}</div>
-          {group.items.map(function(item){
-            var idx=flatIdx++;
-            var isActive=idx===safesel;
-            var isBadge=item.icon&&item.icon.length===2&&item.icon===item.icon.toUpperCase()&&isNaN(item.icon);
-            return<div key={idx} onClick={item.action} onMouseEnter={function(){setSel(idx);}}
-              style={{display:'flex',alignItems:'center',gap:12,padding:'9px 16px',cursor:'pointer',background:isActive?'rgba(107,140,173,0.12)':'transparent',borderLeft:'2px solid '+(isActive?'#6b8cad':'transparent'),transition:'background 0.08s'}}>
-              <div style={{width:28,height:28,borderRadius:7,background:item.color?`rgba(${hexRgb(item.color)},0.15)`:'rgba(107,140,173,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:isBadge?9:13,flexShrink:0,color:item.color||'#6b8cad',fontWeight:700}}>{item.icon}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</div>
-                {item.sub&&<div style={{fontSize:11,color:'var(--tf-text-sub)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.sub}</div>}
-              </div>
-              {isActive&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:5,padding:'2px 7px',border:'1px solid var(--tf-border)',flexShrink:0}}>↵</span>}
-            </div>;
-          })}
-        </div>;})}
-      </div>
-      {/* Footer */}
-      <div style={{padding:'8px 16px',borderTop:'1px solid var(--tf-border)',display:'flex',gap:14,flexShrink:0}}>
-        {[['↑↓','Navigate'],['↵','Open'],['ESC','Close']].map(function(k){return<span key={k[0]} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'var(--tf-text-mut)'}}><kbd style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit',fontSize:10}}>{k[0]}</kbd>{k[1]}</span>;})}
-      </div>
-    </div>
-  </div>;
 }
 
 function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
@@ -1234,7 +1058,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
   const [showTransferOwner,setShowTransferOwner]=useState(false)
   const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
-  const [showCmdBar,setShowCmdBar]=useState(false)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
   const [qaOrgId,setQaOrgId]=useState('')
@@ -1259,14 +1082,12 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const activeWs=workspaces.find(w=>w.id===activeWsId)||null
   const wsColor=activeWs?.color||'#6b8cad';const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES;const SC=scMap(statuses)
   const wsRgb=hexRgb(wsColor)
-  const activeWsIdRef=useRef(activeWsId);useEffect(()=>{activeWsIdRef.current=activeWsId;},[activeWsId]);
 
   useEffect(()=>{setTeamMemberId(null);setView('board')},[activeWsId])
   useEffect(()=>{if(view==='team'&&!teamMemberId){const o=wsMembers.find(m=>m.id!==cu.id);setTeamMemberId(o?.id||null)}},[view,wsMembers,teamMemberId,cu.id])
   useEffect(()=>{const h=e=>{if(userMenuRef.current&&!userMenuRef.current.contains(e.target))setShowUserMenu(false);if(wsMenuRef.current&&!wsMenuRef.current.contains(e.target))setShowWsMenu(false);if(notifRef.current&&!notifRef.current.contains(e.target))setShowNotif(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[])
-  useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowCmdBar(v=>!v);}if(e.key==='Escape')setShowCmdBar(false);};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[]);
 
-  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId&&!localStorage.getItem('tf_lastOrgId')&&localStorage.getItem('tf_lastView')!=='home'){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
+  const loadWS=useCallback(async(forceWsId)=>{try{const{data}=await getMyWorkspaces(cu.id);setWorkspaces(data||[]);if(forceWsId){setActiveWsId(forceWsId)}else if(data?.length>0&&!activeWsId&&!localStorage.getItem('tf_lastOrgId')){setActiveWsId(data[0].id)}}catch(e){console.error(e)}finally{setLoading(false)}},[cu.id])
   useEffect(()=>{
     loadWS();
     supabase.from('organizations').select('*').order('name').limit(100).then(function(r){
@@ -1279,13 +1100,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   },[cu.id])
 
   useEffect(()=>{
-    if(!activeWsId){setTasks([]);setWsMembers([]);return}
-    let cancelled=false;
-    setTasks([]);setWsMembers([]);
-    Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId),getMemberRole(activeWsId,cu.id)])
-      .then(([{data:m},{data:t},role])=>{if(!cancelled){setWsMembers(m||[]);setTasks(t||[]);setMyRole(role||'member')}})
-      .catch(e=>console.error('Workspace load error:',e))
-    return()=>{cancelled=true}
+    if(!activeWsId)return
+    Promise.all([getWorkspaceMembers(activeWsId),getTasks(activeWsId),getMemberRole(activeWsId,cu.id)]).then(([{data:m},{data:t},role])=>{
+      setWsMembers(m||[]);setTasks(t||[]);setMyRole(role||'member')
+    })
   },[activeWsId,cu.id])
 
   const saveWS=async({id,name,description,color,icon})=>{
@@ -1401,67 +1219,41 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   },[orgs.length,loadNotifications]);
 
   const saveTask=async td=>{
-    const wsId=activeWsIdRef.current;
     if(td.id){
       const prev=tasks.find(t=>t.id===td.id)
       const{data,error}=await updateTask(td.id,td);if(error){showToast('Failed','err');return}
-      if(data&&activeWsIdRef.current===wsId)setTasks(p=>p.map(t=>t.id===data.id?data:t));await logActivity(td.id,cu.id,'Updated')
+      if(data)setTasks(p=>p.map(t=>t.id===data.id?data:t));await logActivity(td.id,cu.id,'Updated')
       const becameDone=prev&&prev.status!==statuses[statuses.length-1]&&td.status===statuses[statuses.length-1]
       if(becameDone&&td.recurrence_type&&td.recurrence_type!=='none'&&td.due_date){
         const nd=nextDate(td.due_date,td.recurrence_type,td.recurrence_interval)
-        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt}=await createTask(clone);if(nt&&activeWsIdRef.current===wsId){setTasks(p=>[...p,nt]);showToast(`Next task created → ${fmtFull(nd)} 🔁`);return}}
+        if(nd){const clone={title:td.title,description:td.description||'',project:td.project||'',tags:td.tags||[],due_date:nd,recurrence_type:td.recurrence_type,recurrence_interval:td.recurrence_interval||1,status:statuses[0],priority:td.priority,assigned_to:td.assigned_to,assignees:td.assignees||[td.assigned_to].filter(Boolean),checklist:[],workspace_id:td.workspace_id,created_by:cu.id};const{data:nt}=await createTask(clone);if(nt){setTasks(p=>[...p,nt]);showToast(`Next task created → ${fmtFull(nd)} 🔁`);return}}
       }
       showToast('Saved ✓')
     } else {
       const{data,error}=await createTask(td);if(error){showToast('Failed','err');return}
-      if(data&&activeWsIdRef.current===wsId){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created')}
+      if(data){setTasks(p=>[...p,data]);await logActivity(data.id,cu.id,'Created')}
       showToast(rrLabel(td.recurrence_type,td.recurrence_interval)?`Created 🔁 ${rrLabel(td.recurrence_type,td.recurrence_interval)}`:'Created ✓')
     }
   }
-  const delTask=async id=>{
-    const wsId=activeWsIdRef.current;
-    const{error}=await deleteTask(id);
-    if(error){showToast('Failed to delete task','err');return}
-    if(activeWsIdRef.current===wsId){setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
-  }
+  const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
 
   const claimTask=useCallback(async(task)=>{
-    const wsId=activeWsIdRef.current;
     const existing=getAssignees(task)
     if(existing.includes(cu.id)){showToast('Already on your board!');return}
     const newAssignees=[...existing,cu.id]
     const delegator=task.delegator_id||task.created_by
     const{data}=await updateTask(task.id,{assignees:newAssignees,assigned_to:newAssignees[0],delegator_id:delegator})
     if(data){
-      if(activeWsIdRef.current===wsId)setTasks(p=>p.map(t=>t.id===task.id?data:t))
+      setTasks(p=>p.map(t=>t.id===task.id?data:t))
       showToast(`✋ Claimed! "${task.title}" added to your board`)
       await logActivity(task.id,cu.id,'Claimed task')
     }else{showToast('Failed to claim task','err')}
   },[cu.id,tasks])
 
-  const unclaimTask=useCallback(async(task)=>{
-    const wsId=activeWsIdRef.current;
-    const existing=getAssignees(task);
-    const newAssignees=existing.filter(id=>id!==cu.id);
-    if(newAssignees.length===0){
-      // Last assignee — just delete the task
-      const{error}=await deleteTask(task.id);
-      if(error){showToast('Failed to remove','err');return}
-      if(activeWsIdRef.current===wsId)setTasks(p=>p.filter(t=>t.id!==task.id))
-    }else{
-      const{data}=await updateTask(task.id,{assignees:newAssignees,assigned_to:newAssignees[0]})
-      if(data){if(activeWsIdRef.current===wsId)setTasks(p=>p.filter(t=>t.id!==task.id))}
-      else{showToast('Failed to remove','err');return}
-    }
-    showToast('Removed from your board')
-    await logActivity(task.id,cu.id,'Removed from board')
-  },[cu.id])
-
   const handleAssignSave=useCallback(async(task,updates)=>{
-    const wsId=activeWsIdRef.current;
     const{data}=await updateTask(task.id,updates)
     if(data){
-      if(activeWsIdRef.current===wsId)setTasks(p=>p.map(t=>t.id===task.id?data:t))
+      setTasks(p=>p.map(t=>t.id===task.id?data:t))
       const isSelf=updates.assignees?.includes(cu.id)&&updates.delegator_id!==cu.id
       const isDel=updates.delegator_id===cu.id&&!updates.assignees?.includes(cu.id)
       if(isSelf) showToast(`✋ Added to your board under manager`)
@@ -1499,7 +1291,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     if(statusChanged)await logActivity(dragId,cu.id,`→${st}`)
   },[dragId,tasks,cu.id])
   const importTasks=async rows=>{
-    const wsId=activeWsIdRef.current;
     const byName=n=>wsMembers.find(m=>m.name?.toLowerCase()===n?.toLowerCase()||m.email?.toLowerCase()===n?.toLowerCase())
     const normDate=d=>{
       if(!d)return null
@@ -1515,7 +1306,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       const assignee=byName(r.assigned_to_name)?.id||cu.id
       const delegator=byName(r.delegator_name)?.id||cu.id
       const{data,error}=await createTask({title:r.title,description:r.description,status:statuses.includes(r.status)?r.status:statuses[0],priority:PRIORITIES.includes(r.priority)?r.priority:'Medium',assigned_to:assignee,assignees:[assignee],delegator_id:delegator,created_by:cu.id,workspace_id:activeWsId,project:r.project,tags:r.tags,due_date:normDate(r.due_date),recurrence_type:RECURRENCE_TYPES.includes(r.recurrence_type)?r.recurrence_type:'none',recurrence_interval:r.recurrence_interval||1,checklist:r.checklist||[]})
-      if(data){if(activeWsIdRef.current===wsId)setTasks(p=>[...p,data]);a++}else{s++;if(error)errs.push(r.title+': '+(error.message||'err'))}
+      if(data){setTasks(p=>[...p,data]);a++}else{s++;if(error)errs.push(r.title+': '+(error.message||'err'))}
     }
     if(errs.length)console.error('Import errors:',errs)
     showToast(a>0?`✅ Imported ${a} task${a>1?'s':''}${s?' · '+s+' skipped':''}`:`❌ Import failed — ${s} row${s>1?'s':''} skipped`,'err')
@@ -1530,9 +1321,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   }
   const declineInv=async inv=>{await declineInvitation(inv.id);await refreshInvites();showToast('Invitation declined')}
 
-  const loadWs=async function(){await loadWS();};
+  const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');await loadWS();var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');var r1=await supabase.from('workspaces').select('*').limit(200);var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r1.data)setWorkspaces(r1.data);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
@@ -1561,11 +1352,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>✦</div>
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlow</span>
       </div>
-      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.setItem('tf_lastView','home');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
-      {!activeOrg&&!activeWsId&&<div style={{flex:1}}/>}
-      {!activeOrg&&activeWsId&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
+      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
+      {!activeOrg&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
       <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
-        {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('');localStorage.setItem('tf_lastView','workspace');}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
+        {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
         <button onClick={()=>setWsForm('new')} style={{width:24,height:24,borderRadius:G.radiusSm,border:'1px dashed var(--tf-border)',background:'transparent',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',transition:G.trans,fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.color='#6b8cad'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-mut)'}}>+</button>
       </div></>}
       {activeOrg&&<div style={{flex:1,display:'flex',alignItems:'center',gap:6,overflow:'hidden',minWidth:0}}>
@@ -1587,11 +1377,78 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
-      {/* Command bar trigger */}
-      <button onClick={()=>setShowCmdBar(true)} title="Command bar (Ctrl+K / ⌘K)" style={{display:'flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,flexShrink:0,fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>
-        <span style={{fontSize:13}}>⌕</span>
-        <span style={{fontSize:10,background:'var(--tf-surface-hov)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 5px'}}>⌘K</span>
-      </button>
+      {/* Notifications bell */}
+      <div ref={notifRef} style={{position:'relative',flexShrink:0}}>
+        <button onClick={()=>{setShowNotif(v=>!v);if(!showNotif)loadNotifications();}} title="Notifications" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(107,140,173,0.4)':'var(--tf-border)'),color:showNotif?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>{if(!showNotif)e.currentTarget.style.background='var(--tf-surface)'}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          {(notifData.today.length+notifData.overdue.length+notifData.assigned.length)>0&&<div style={{position:'absolute',top:-3,right:-3,minWidth:16,height:16,borderRadius:8,background:'#ef4444',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid var(--tf-panel)'}}>{notifData.today.length+notifData.overdue.length+notifData.assigned.length>99?'99+':notifData.today.length+notifData.overdue.length+notifData.assigned.length}</div>}
+        </button>
+        {showNotif&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:12,width:380,maxHeight:'70vh',boxShadow:'0 12px 40px rgba(0,0,0,0.25)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300,display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'14px 16px 10px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Notifications</div>
+            <button onClick={loadNotifications} title="Refresh" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color='#6b8cad'} onMouseLeave={e=>e.currentTarget.style.color='var(--tf-text-sub)'}>↻</button>
+          </div>
+          <div style={{overflowY:'auto',flex:1,maxHeight:'calc(70vh - 50px)'}}>
+            {notifLoading&&(notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Loading...</div>:
+            (notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center'}}>
+              <div style={{fontSize:28,marginBottom:8}}>&#x2714;&#xFE0F;</div>
+              <div style={{fontSize:14,fontWeight:600,color:'var(--tf-text)'}}>All clear!</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>No pending due dates or assignments.</div>
+            </div>:<>
+              {notifData.overdue.length>0&&<div>
+                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#ef4444',display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:3,background:'#ef4444',display:'inline-block'}}></span>
+                  Overdue ({notifData.overdue.length})
+                </div>
+                {notifData.overdue.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:'#ef4444',marginTop:5,flexShrink:0}}></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
+                    <div style={{fontSize:10,color:'#ef4444',marginTop:2,fontWeight:600}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+                  </div>
+                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
+                </div>;})}
+                {notifData.overdue.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.overdue.length-20} more</div>}
+              </div>}
+
+              {notifData.today.length>0&&<div>
+                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#f59e0b',display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:3,background:'#f59e0b',display:'inline-block'}}></span>
+                  Due Today ({notifData.today.length})
+                </div>
+                {notifData.today.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:'#f59e0b',marginTop:5,flexShrink:0}}></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
+                    <div style={{fontSize:10,color:'#f59e0b',marginTop:2,fontWeight:600}}>Due today</div>
+                  </div>
+                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
+                </div>;})}
+                {notifData.today.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.today.length-20} more</div>}
+              </div>}
+
+              {notifData.assigned.length>0&&<div>
+                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#6b8cad',display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:6,height:6,borderRadius:3,background:'#6b8cad',display:'inline-block'}}></span>
+                  Assigned to You ({notifData.assigned.length})
+                </div>
+                {notifData.assigned.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <div style={{width:8,height:8,borderRadius:4,background:'#6b8cad',marginTop:5,flexShrink:0}}></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
+                    {item.dueDate&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
+                  </div>
+                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
+                </div>;})}
+                {notifData.assigned.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.assigned.length-20} more</div>}
+              </div>}
+            </>}
+          </div>
+        </div>}
+      </div>
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
@@ -1629,58 +1486,57 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
-        {/* YOUR ORGANISATIONS */}
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-          <div>
-            <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.04em'}}>Your Organisations</h1>
-            <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0}}>Organisation Master Data &middot; Client Data &middot; Billing &middot; Time Tracking</p>
-          </div>
-          <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Organisation</button>
-        </div>
-        {orgs.length===0
-          ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}>
-            <div style={{fontSize:32,marginBottom:10}}>&#x1F3E2;</div>
-            <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div>
-            <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create an organisation to manage Client Master Data across workspaces.</div>
-            <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create First Organisation</button>
-          </div>
-          :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
-            {orgs.map(org=>{
-              const wsCount=workspaces.filter(w=>w.org_id===org.id).length;
-              return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-                <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
-                <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
-                  <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(107,140,173,0.14)',border:'1px solid rgba(107,140,173,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#6b8cad'}}>{org.name.charAt(0).toUpperCase()}</div>
-                  <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
-                </div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-                  <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Clients</span>
-                  <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Orgs</span>
-                  <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Billing (soon)</span>
-                  <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Time (soon)</span>
-                </div>
-              </div>;
-            })}
-          </div>
-        }
-
-        {/* YOUR WORKSPACES */}
-        <div style={{marginTop:40,paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
-          <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>Your Workspaces</h2>
-          <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 20px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
-            {workspaces.map(ws=>{const wrgb=hexRgb(ws.color);return<div key={ws.id} onClick={()=>{setActiveWsId(ws.id);localStorage.setItem('tf_lastView','workspace');}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-              <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${ws.color},${ws.color}44)`}}/>
-              <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
-                <div style={{width:42,height:42,borderRadius:'12px',background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{ws.icon}</div>
-                <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{ws.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{ws.description||'No description'}</div></div>
-              </div>
-            </div>})}
-            <div onClick={()=>setWsForm('new')} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-              <div style={{width:42,height:42,borderRadius:'12px',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:'var(--tf-text-mut)'}}>+</div>
-              <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
+        <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.04em'}}>Your Workspaces</h1>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px'}}>Select a workspace or create a new one. Invite colleagues to collaborate.</p>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+          {workspaces.map(ws=>{const wrgb=hexRgb(ws.color);return<div key={ws.id} onClick={()=>setActiveWsId(ws.id)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+            <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${ws.color},${ws.color}44)`}}/>
+            <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
+              <div style={{width:42,height:42,borderRadius:'12px',background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{ws.icon}</div>
+              <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{ws.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{ws.description||'No description'}</div></div>
             </div>
+          </div>})}
+          <div onClick={()=>setWsForm('new')} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+            <div style={{width:42,height:42,borderRadius:'12px',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:'var(--tf-text-mut)'}}>+</div>
+            <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
           </div>
+        </div>
+
+        {/* YOUR ORGANISATIONS */}
+        <div style={{marginTop:40,paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+            <div>
+              <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>Your Organisations</h2>
+              <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'4px 0 0'}}>Organisation Master Data &middot; Client Data &middot; Billing &middot; Time Tracking</p>
+            </div>
+            <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Organisation</button>
+          </div>
+          {orgs.length===0
+            ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}>
+              <div style={{fontSize:32,marginBottom:10}}>&#x1F3E2;</div>
+              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div>
+              <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create an organisation to manage Client Master Data across workspaces.</div>
+              <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create First Organisation</button>
+            </div>
+            :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+              {orgs.map(org=>{
+                const wsCount=workspaces.filter(w=>w.org_id===org.id).length;
+                return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+                  <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
+                  <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
+                    <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(107,140,173,0.14)',border:'1px solid rgba(107,140,173,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#6b8cad'}}>{org.name.charAt(0).toUpperCase()}</div>
+                    <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
+                  </div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
+                    <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Clients</span>
+                    <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Orgs</span>
+                    <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Billing (soon)</span>
+                    <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Time (soon)</span>
+                  </div>
+                </div>;
+              })}
+            </div>
+          }
         </div>
 
 
@@ -1715,7 +1571,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}}>{myTasks.length} tasks · <span style={{color:'#8fa5be'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
           </div>
           <KanbanBoard isDragging={!!dragId}>
-            {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} onUnclaim={unclaimTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
+            {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
           </KanbanBoard>
         </div>}
 
@@ -1725,7 +1581,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* TEAM */}
           {view==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={workspaces} allProfiles={allProfiles}/>}
 
-          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} unclaimTask={unclaimTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
+          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
 
           {/* RECURRING */}
           {view==='recurring'&&<div>
@@ -1840,16 +1696,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
-    {showCmdBar&&<CommandBar
-      workspaces={workspaces} orgs={orgs} tasks={tasks} wsMembers={wsMembers} activeOrg={activeOrg} supabase={supabase}
-      onClose={()=>setShowCmdBar(false)}
-      onGoWorkspace={id=>{setActiveWsId(id);setActiveOrg(null);localStorage.setItem('tf_lastView','workspace');}}
-      onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);localStorage.setItem('tf_lastView','org');}}
-      onGoOrgModule={(mod,tab)=>{localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab);if(!activeOrg&&orgs.length>0){var o=orgs[0];setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}setActiveWsId(null);}}
-      onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.setItem('tf_lastView','home');}}
-      onOpenTask={t=>{setEditTask(t);if(!activeWsId||activeWsId!==t.workspace_id)setActiveWsId(t.workspace_id);}}
-      onNewWorkspace={()=>setWsForm('new')}
-    />}
   </div>
 }
 

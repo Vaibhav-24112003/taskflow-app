@@ -41,6 +41,20 @@ const CSS = `
 `
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
+const NAV_LINKS = [
+  { label: 'Product',   href: '#product'    },
+  { label: 'Modules',   href: '#modules'    },
+  { label: 'Pricing',   href: '#pricing'    },
+  { label: 'Customers', href: '#customers'  },
+  { label: 'Docs',      href: '#faq'        },
+  { label: 'Contact',   href: '#contact'    },
+]
+
+function scrollTo(id) {
+  const el = document.querySelector(id)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 function Nav({ onSignIn, loading }) {
   return (
     <nav style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(14px)', background: 'rgba(10,14,24,0.7)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
@@ -50,11 +64,12 @@ function Nav({ onSignIn, loading }) {
           <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlow</span>
         </div>
         <div style={{ flex: 1, display: 'flex', gap: 4, marginLeft: 32 }}>
-          {['Product', 'Modules', 'Pricing', 'Customers', 'Docs'].map(l => (
-            <a key={l} href="#" className="lp-nav-link">{l}</a>
+          {NAV_LINKS.map(({ label, href }) => (
+            <a key={label} href={href} className="lp-nav-link"
+               onClick={e => { e.preventDefault(); scrollTo(href) }}>{label}</a>
           ))}
         </div>
-        <button className="lp-btn lp-btn-link">Sign in</button>
+        <button className="lp-btn lp-btn-link" onClick={onSignIn}>Sign in</button>
         <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
           {loading ? 'Signing in…' : 'Start free'}
         </button>
@@ -168,7 +183,7 @@ function HeroMosaic() {
 
 function Hero({ onSignIn, loading }) {
   return (
-    <section className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
+    <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(107,140,173,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ position: 'relative' }}>
         <div style={{ textAlign: 'center', maxWidth: 880, margin: '0 auto 56px' }}>
@@ -197,9 +212,9 @@ function Hero({ onSignIn, loading }) {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function Stats() {
-  const stats = [['2,400+', 'CA firms onboard'], ['18 lakh+', 'tasks tracked'], ['142 hrs', 'saved per firm/month'], ['99.7%', 'on-time filing rate']]
+  const stats = [['1', 'CA firm onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time filing rate'], ['∞', 'Excel sheets replaced']]
   return (
-    <section className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.015)' }}>
+    <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)', background: 'rgba(255,255,255,.015)' }}>
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
         {stats.map(([v, l]) => (
           <div key={l} style={{ textAlign: 'center' }}>
@@ -278,7 +293,7 @@ function Modules() {
     { id: 'setup', label: 'Set-up', desc: 'Members, invites, roles, org settings.', color: '#64748b', glyph: '◕' },
   ]
   return (
-    <section className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <section id="modules" className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">Modules tour</div>
@@ -318,7 +333,7 @@ function Features() {
     { t: 'Audit trail', d: 'Every status change, comment and doc upload is logged.', icon: '⎘', c: '#f59e0b', span: 2 },
   ]
   return (
-    <section className="lp-sec">
+    <section id="pricing" className="lp-sec">
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">Built for the work you actually do</div>
@@ -454,7 +469,7 @@ function TourVideo() {
     return () => clearInterval(id)
   }, [])
   return (
-    <section className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <section id="tour" className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">90-second tour</div>
@@ -542,7 +557,7 @@ function Security() {
     ['SOC 2 in progress', 'Type II audit underway with a Big-4 assessor.', '✓'],
   ]
   return (
-    <section className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
+    <section id="security" className="lp-sec" style={{ background: 'rgba(255,255,255,.015)', borderTop: '1px solid rgba(255,255,255,.07)', borderBottom: '1px solid rgba(255,255,255,.07)' }}>
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">Security & data residency</div>
@@ -574,7 +589,7 @@ function FAQ() {
     ['Does it integrate with Tally / Zoho?', 'Yes. Billing exports to Tally XML and Zoho Books. We also support Gmail OAuth for client communication.'],
   ]
   return (
-    <section className="lp-sec">
+    <section id="faq" className="lp-sec">
       <div className="lp-container" style={{ maxWidth: 820 }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
           <div className="lp-eyebrow">FAQ</div>
@@ -599,7 +614,7 @@ function FAQ() {
 // ── Final CTA ─────────────────────────────────────────────────────────────────
 function FinalCTA({ onSignIn, loading }) {
   return (
-    <section className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
+    <section id="contact" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(107,140,173,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ textAlign: 'center', position: 'relative' }}>
         <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />filing day quiet.</h2>
