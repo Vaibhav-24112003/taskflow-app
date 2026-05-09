@@ -660,6 +660,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
   const [checklist,setChecklist]=useState([])
   const [rt,setRt]=useState('none');const [ri,setRi]=useState(1)
   const [cdel,setCdel]=useState(false);const isEdit=!!task
+  const [reminderDate,setReminderDate]=useState('');const [reminderTime,setReminderTime]=useState('09:00')
 
   useEffect(()=>{
     if(!open||!cu)return
@@ -670,6 +671,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     setChecklist(task?.checklist||[])
     if(task){const a=task.assignees?.length>0?task.assignees:task.assigned_to?[task.assigned_to]:[cu.id];setAssignees(a);setDelegatorId(task.delegator_id||task.created_by||cu.id)}
     else{setAssignees([cu.id]);setDelegatorId(cu.id)}
+    setReminderDate(task?.due_date||'');setReminderTime('09:00');
     // Focus title only once when modal opens — never on re-renders
     requestAnimationFrame(()=>titleRef.current?.focus())
   },[open])
@@ -683,6 +685,8 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
     const title=titleVal?.trim();if(!title)return
     const fa=assignees.length>0?assignees:[cu.id]
     const payload={title,description:descRef.current?.value?.trim()||'',project:projRef.current?.value?.trim()||'',tags:(tagsRef.current?.value||'').split(',').map(t=>t.trim()).filter(Boolean),due_date:dateRef.current?.value||null,recurrence_type:rt,recurrence_interval:Math.max(1,Number(ri)||1),status,priority,assignees:fa,assigned_to:fa[0],delegator_id:delegatorId||cu.id,workspace_id:ws.id,created_by:task?.created_by||cu.id,checklist}
+    // Save reminder if set
+    if(reminderDate&&reminderTime){try{const stored=JSON.parse(localStorage.getItem('tf_reminders')||'[]');stored.push({id:Date.now()+'',dateStr:reminderDate,time:reminderTime,title:'Task: '+title});localStorage.setItem('tf_reminders',JSON.stringify(stored));}catch(e){}}
     await onSave(isEdit?{...task,...payload}:payload);onClose()
   }
 
@@ -726,10 +730,22 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
           </div>
         }
       </F>
-      <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} style={INP}/></F>
+      <F full label="Due Date"><input ref={dateRef} type="date" defaultValue={task?.due_date||''} onChange={e=>setReminderDate(e.target.value)} style={INP}/></F>
       <F full label="🔁 Recurrence"><RecurrencePicker recurrenceType={rt} recurrenceInterval={ri} onTypeChange={setRt} onIntervalChange={setRi}/></F>
       <F label="Project"><input ref={projRef} defaultValue={task?.project||''} style={INP} placeholder="e.g. Q4 Launch"/></F>
       <F label="Tags (comma)"><input ref={tagsRef} defaultValue={(task?.tags||[]).join(', ')} style={INP} placeholder="Urgent, Finance"/></F>
+      <F full label="🔔 Reminder (optional)">
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <input type="date" value={reminderDate} onChange={e=>setReminderDate(e.target.value)} style={{...INP,flex:'1 1 160px',minWidth:140}}/>
+          <input type="time" value={reminderTime} onChange={e=>setReminderTime(e.target.value)} style={{...INP,flex:'0 0 130px'}}/>
+          {reminderDate&&<span style={{fontSize:11,color:'#f59e0b',display:'flex',alignItems:'center',gap:4}}>🔔 Will notify at {reminderTime} on {reminderDate}</span>}
+          {reminderDate&&<button type="button" onClick={()=>{setReminderDate('');}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:13}}>✕ Clear</button>}
+        </div>
+        {typeof Notification!=='undefined'&&Notification.permission!=='granted'&&reminderDate&&<div style={{marginTop:6,padding:'6px 10px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:7,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+          <span style={{fontSize:11,color:'#f59e0b'}}>Allow browser notifications to receive this reminder</span>
+          <button type="button" onClick={async()=>{if(typeof Notification!=='undefined')await Notification.requestPermission();}} style={{background:'#f59e0b',border:'none',borderRadius:5,padding:'3px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Allow</button>
+        </div>}
+      </F>
       <F full label="☑ Checklist"><ChecklistEditor items={checklist} onChange={setChecklist} wsColor={ws.color}/></F>
     </div>
     <div style={{display:'flex',justifyContent:'space-between',gap:10,marginTop:8,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
@@ -7857,6 +7873,21 @@ function MiniCalendar({rows,clientMap,wsMap}){
   var [year,setYear]=useState(now.getFullYear());
   var [month,setMonth]=useState(now.getMonth());
   var [selDay,setSelDay]=useState(null);
+  var [reminders,setReminders]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_reminders')||'[]');}catch(e){return[];}});
+  var [showRForm,setShowRForm]=useState(false);
+  var [rTitle,setRTitle]=useState('');
+  var [rTime,setRTime]=useState('09:00');
+  var [notifPerm,setNotifPerm]=useState(typeof Notification!=='undefined'?Notification.permission:'denied');
+
+  function saveReminders(arr){setReminders(arr);localStorage.setItem('tf_reminders',JSON.stringify(arr));}
+  function addReminder(){
+    if(!selDay||!rTitle.trim())return;
+    var dateStr=year+'-'+String(month+1).padStart(2,'0')+'-'+String(selDay).padStart(2,'0');
+    saveReminders([...reminders,{id:Date.now()+'',dateStr,time:rTime,title:rTitle.trim()}]);
+    setRTitle('');setShowRForm(false);
+  }
+  function deleteReminder(id){saveReminders(reminders.filter(function(r){return r.id!==id;}));}
+  async function requestNotif(){if(typeof Notification!=='undefined'){var p=await Notification.requestPermission();setNotifPerm(p);}}
 
   var today=new Date();today.setHours(0,0,0,0);
   var isCurrentMonth=year===today.getFullYear()&&month===today.getMonth();
@@ -7918,18 +7949,53 @@ function MiniCalendar({rows,clientMap,wsMap}){
       </div>
     </div>
     {/* Day detail */}
-    {selDay&&<div style={{borderTop:'1px solid var(--tf-border)',padding:'10px 12px',maxHeight:260,overflowY:'auto'}}>
-      <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>{selDay} {MONTH_NAMES[month]} · {detailRows.length} task{detailRows.length!==1?'s':''}</div>
-      {detailRows.length===0?<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No tasks on this day.</div>:
-      detailRows.map(function(r){
-        var client=clientMap[r.client_id];
-        var ws=wsMap[r.worksheet_id];
-        return<div key={r.id} style={{padding:'6px 0',borderBottom:'1px solid var(--tf-border)',fontSize:11}}>
-          <div style={{fontWeight:700,color:'var(--tf-text)'}}>{client?(client.display_name||client.name):'Unknown'}</div>
-          <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{ws?ws.work_type:''} {ws&&ws.period_label?'· '+ws.period_label:''}</div>
-        </div>;
-      })}
-    </div>}
+    {selDay&&(function(){
+      var selDateStr=year+'-'+String(month+1).padStart(2,'0')+'-'+String(selDay).padStart(2,'0');
+      var dayReminders=reminders.filter(function(r){return r.dateStr===selDateStr;});
+      return<div style={{borderTop:'1px solid var(--tf-border)',maxHeight:340,overflowY:'auto'}}>
+        {/* Day header with reminder button */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 12px 6px'}}>
+          <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text)'}}>{selDay} {MONTH_NAMES[month]} · {detailRows.length} task{detailRows.length!==1?'s':''}{dayReminders.length>0?' · 🔔'+dayReminders.length:''}</div>
+          <button onClick={function(){setShowRForm(!showRForm);setRTitle('');}} style={{background:'none',border:'1px solid rgba(245,158,11,0.4)',borderRadius:6,padding:'2px 8px',cursor:'pointer',fontSize:11,fontWeight:700,color:'#f59e0b',display:'flex',alignItems:'center',gap:3}}>🔔 <span>Remind</span></button>
+        </div>
+        {/* Reminder form */}
+        {showRForm&&<div style={{margin:'0 10px 8px',padding:'10px 12px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8}}>
+          {notifPerm!=='granted'&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,gap:6}}>
+            <span style={{fontSize:10,color:'#f59e0b'}}>Allow notifications for alerts</span>
+            <button onClick={requestNotif} style={{background:'#f59e0b',border:'none',borderRadius:5,padding:'2px 8px',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>Allow</button>
+          </div>}
+          <input value={rTitle} onChange={function(e){setRTitle(e.target.value);}} placeholder="Reminder title…" style={{width:'100%',padding:'6px 8px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none',boxSizing:'border-box',marginBottom:6}}/>
+          <div style={{display:'flex',gap:6}}>
+            <input type="time" value={rTime} onChange={function(e){setRTime(e.target.value);}} style={{flex:1,padding:'5px 8px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+            <button onClick={addReminder} disabled={!rTitle.trim()} style={{background:rTitle.trim()?'#f59e0b':'var(--tf-border)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:rTitle.trim()?'pointer':'default',fontSize:12,fontWeight:700}}>Set</button>
+            <button onClick={function(){setShowRForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12}}>✕</button>
+          </div>
+        </div>}
+        {/* Existing reminders */}
+        {dayReminders.map(function(r){
+          return<div key={r.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+            <span style={{fontSize:12}}>🔔</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:r.fired?'var(--tf-text-sub)':'#f59e0b',textDecoration:r.fired?'line-through':'none'}}>{r.title}</div>
+              <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{r.time}</div>
+            </div>
+            <button onClick={function(){deleteReminder(r.id);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:14,padding:'0 2px'}}>×</button>
+          </div>;
+        })}
+        {/* Tasks */}
+        <div style={{padding:'0 12px 8px'}}>
+          {detailRows.length===0&&dayReminders.length===0?<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic',paddingTop:4}}>No tasks on this day.</div>:
+          detailRows.map(function(r){
+            var client=clientMap[r.client_id];
+            var ws=wsMap[r.worksheet_id];
+            return<div key={r.id} style={{padding:'6px 0',borderBottom:'1px solid var(--tf-border)',fontSize:11}}>
+              <div style={{fontWeight:700,color:'var(--tf-text)'}}>{client?(client.display_name||client.name):'Unknown'}</div>
+              <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{ws?ws.work_type:''} {ws&&ws.period_label?'· '+ws.period_label:''}</div>
+            </div>;
+          })}
+        </div>
+      </div>;
+    })()}
   </div>;
 }
 
