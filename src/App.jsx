@@ -5435,12 +5435,23 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     var wsIds=wsGrouped[wt].map(function(w){return w.id;});
     var wtRows=filteredRows.filter(function(r){return wsIds.includes(r.worksheet_id);});
     var total=wtRows.length;
-    var completed=wtRows.filter(function(r){return r.status==='completed';}).length;
+    // Stages config for this work type
+    var wtCfg=(workTypeConfigs||[]).find(function(c){return c.name===wt;});
+    var wtStages=(wtCfg&&wtCfg.stages&&wtCfg.stages.length>0)?wtCfg.stages:[];
+    var lastStageKey=wtStages.length>0?wtStages[wtStages.length-1].key:null;
+    // "completed" = reached last stage OR status=completed (legacy)
+    var completed=wtRows.filter(function(r){return r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);}).length;
     var pending=total-completed;
-    var overdue=wtRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;}).length;
+    var overdue=wtRows.filter(function(r){var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);return !isDone&&r.due_date&&new Date(r.due_date)<today;}).length;
+    // Stage counts: {stageKey: count}
+    var stageCounts={};
+    wtStages.forEach(function(s){stageCounts[s.key]=wtRows.filter(function(r){return r.current_stage===s.key;}).length;});
+    // "Not started" = no stage set
+    var notStarted=wtRows.filter(function(r){return !r.current_stage;}).length;
     var early=0,ontime=0,late=0,totalDays=0,completedWithDue=0;
     wtRows.forEach(function(r){
-      if(r.status==='completed'&&r.completed_at&&r.due_date){
+      var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);
+      if(isDone&&r.completed_at&&r.due_date){
         var comp=new Date(r.completed_at);comp.setHours(0,0,0,0);
         var due=new Date(r.due_date);due.setHours(0,0,0,0);
         var diff=Math.round((comp-due)/(1000*60*60*24));
@@ -5449,7 +5460,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       }
     });
     var avgDays=completedWithDue>0?Math.round(totalDays/completedWithDue):0;
-    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,early:early,ontime:ontime,late:late,avgDays:avgDays,rows:wtRows,wsIds:wsIds};
+    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,early:early,ontime:ontime,late:late,avgDays:avgDays,rows:wtRows,wsIds:wsIds,stages:wtStages,stageCounts:stageCounts,lastStageKey:lastStageKey,notStarted:notStarted};
   });
 
   // Totals
@@ -5463,12 +5474,14 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     var stat=workTypeStats.find(function(s){return s.wt===drillType;});
     if(stat){
       var dRows=stat.rows;
-      if(drillFilter==='pending')dRows=dRows.filter(function(r){return r.status!=='completed';});
-      else if(drillFilter==='completed')dRows=dRows.filter(function(r){return r.status==='completed';});
-      else if(drillFilter==='overdue')dRows=dRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;});
+      if(drillFilter==='pending')dRows=dRows.filter(function(r){var isDone=r.status==='completed'||(stat.lastStageKey&&r.current_stage===stat.lastStageKey);return !isDone;});
+      else if(drillFilter==='completed')dRows=dRows.filter(function(r){return r.status==='completed'||(stat.lastStageKey&&r.current_stage===stat.lastStageKey);});
+      else if(drillFilter==='overdue')dRows=dRows.filter(function(r){var isDone=r.status==='completed'||(stat.lastStageKey&&r.current_stage===stat.lastStageKey);return !isDone&&r.due_date&&new Date(r.due_date)<today;});
       else if(drillFilter==='early')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2<new Date(r.due_date);});
       else if(drillFilter==='ontime')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
       else if(drillFilter==='late')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2>new Date(r.due_date);});
+      else if(drillFilter==='__none')dRows=dRows.filter(function(r){return !r.current_stage;});
+      else if(drillFilter&&drillFilter.startsWith('stage_'))dRows=dRows.filter(function(r){return r.current_stage===drillFilter.slice(6);});
       drillData={stat:stat,rows:dRows};
     }
   }
@@ -5594,19 +5607,36 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
         <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
           <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>{drillType} — Detail</div>
           <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-            {[{id:'all',label:'All',count:drillData.stat.total},{id:'pending',label:'Pending',count:drillData.stat.pending},{id:'completed',label:'Completed',count:drillData.stat.completed},{id:'overdue',label:'Overdue',count:drillData.stat.overdue},{id:'early',label:'Early',count:drillData.stat.early},{id:'ontime',label:'On-time',count:drillData.stat.ontime},{id:'late',label:'Late',count:drillData.stat.late}].filter(function(f){return f.id==='all'||f.count>0;}).map(function(f){
-              var active=drillFilter===f.id;
-              return<button key={f.id} onClick={function(){setDrillFilter(f.id);}}
-                style={{padding:'4px 10px',borderRadius:20,border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',background:active?'rgba(107,140,173,0.12)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',fontSize:11,fontWeight:active?700:500,cursor:'pointer'}}>
-                {f.label} ({f.count})
-              </button>;
-            })}
+            {(function(){
+              var tabs=[{id:'all',label:'All',count:drillData.stat.total,color:'#6b8cad'}];
+              if(drillData.stat.notStarted>0)tabs.push({id:'__none',label:'Not Started',count:drillData.stat.notStarted,color:'#94a3b8'});
+              drillData.stat.stages.forEach(function(s){
+                var cnt=drillData.stat.stageCounts[s.key]||0;
+                var isLast=s.key===drillData.stat.lastStageKey;
+                tabs.push({id:'stage_'+s.key,label:isLast?'✓ '+s.label:s.label,count:cnt,color:s.color||'#6b8cad'});
+              });
+              if(drillData.stat.stages.length===0){
+                if(drillData.stat.pending>0)tabs.push({id:'pending',label:'Pending',count:drillData.stat.pending,color:'#94a3b8'});
+                if(drillData.stat.completed>0)tabs.push({id:'completed',label:'Completed',count:drillData.stat.completed,color:'#22c55e'});
+              }
+              if(drillData.stat.overdue>0)tabs.push({id:'overdue',label:'Overdue',count:drillData.stat.overdue,color:'#ef4444'});
+              if(drillData.stat.early>0)tabs.push({id:'early',label:'Early',count:drillData.stat.early,color:'#22c55e'});
+              if(drillData.stat.late>0)tabs.push({id:'late',label:'Late',count:drillData.stat.late,color:'#ef4444'});
+              return tabs.map(function(f){
+                var active=drillFilter===f.id;
+                return<button key={f.id} onClick={function(){setDrillFilter(f.id);}}
+                  style={{padding:'4px 10px',borderRadius:20,border:'1px solid',borderColor:active?f.color:'var(--tf-border)',background:active?f.color+'22':'transparent',color:active?f.color:'var(--tf-text-sub)',fontSize:11,fontWeight:active?700:500,cursor:'pointer',transition:'all 0.12s'}}>
+                  {f.label} ({f.count})
+                </button>;
+              });
+            })()}
           </div>
         </div>
         {drillData.rows.length===0?<div style={{padding:'24px 18px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No matching records</div>:
         <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr style={{background:'rgba(107,140,173,0.04)'}}>
             <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Client</th>
+            <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Stage</th>
             <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
             <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Due Date</th>
             <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Completed</th>
@@ -5620,8 +5650,10 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
               var timing='',timingColor='var(--tf-text-sub)';
               if(isCompleted&&row.completed_at&&row.due_date){var diff=daysDiff(row.completed_at,row.due_date);if(diff<0){timing=Math.abs(diff)+'d early';timingColor='#22c55e';}else if(diff===0){timing='On time';timingColor='#6b8cad';}else{timing=diff+'d late';timingColor='#ef4444';}}
               else if(isOverdue){timing=Math.abs(daysDiff(today,row.due_date))+'d overdue';timingColor='#ef4444';}
+              var stageInfo=drillData.stat.stages.find(function(s){return s.key===row.current_stage;});
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
                 <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>{client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+                <td style={{padding:'9px 10px',textAlign:'center'}}>{stageInfo?<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:12,background:(stageInfo.color||'#6b8cad')+'22',color:stageInfo.color||'#6b8cad',whiteSpace:'nowrap'}}>{stageInfo.key===drillData.stat.lastStageKey?'✓ ':''}{stageInfo.label}</span>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>—</span>}</td>
                 <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:SC_STATUS[row.status||'pending'],textTransform:'capitalize'}}>{(row.status||'pending').replace('_',' ')}</span></td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>{row.completed_at?new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
