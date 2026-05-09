@@ -4230,8 +4230,19 @@ var [showExportMenu,setShowExportMenu]=useState(false);
 
   async function moveToStage(rowId,stageKey){
     var val=stageKey||null;
-    await supabase.from('worksheet_rows').update({current_stage:val}).eq('id',rowId);
-    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{current_stage:val}):r;});});
+    var cfgM=WS_TYPE_CONFIGS[activeType]||{};
+    var stagesM=cfgM.stages||[];
+    var lastKeyM=stagesM.length>0?stagesM[stagesM.length-1].key:null;
+    var movingToLast=lastKeyM&&val===lastKeyM;
+    var update={current_stage:val};
+    if(movingToLast){
+      // Auto-complete when reaching final stage
+      var existing=rows.find(function(r){return r.id===rowId;});
+      update.status='completed';
+      if(!existing||!existing.completed_at){update.completed_at=new Date().toISOString();}
+    }
+    await supabase.from('worksheet_rows').update(update).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,update):r;});});
   }
 
   async function addComment(rowId,text){
@@ -5459,12 +5470,16 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     var early=0,ontime=0,late=0,totalDays=0,completedWithDue=0;
     wtRows.forEach(function(r){
       var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);
-      if(isDone&&r.completed_at&&r.due_date){
+      if(!isDone)return;
+      if(r.completed_at&&r.due_date){
         var comp=new Date(r.completed_at);comp.setHours(0,0,0,0);
         var due=new Date(r.due_date);due.setHours(0,0,0,0);
         var diff=Math.round((comp-due)/(1000*60*60*24));
         if(diff<0)early++;else if(diff===0)ontime++;else late++;
         totalDays+=Math.abs(diff);completedWithDue++;
+      }else{
+        // Done but no completed_at recorded — count as on-time so totals match
+        ontime++;
       }
     });
     var avgDays=completedWithDue>0?Math.round(totalDays/completedWithDue):0;
@@ -5486,7 +5501,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       else if(drillFilter==='completed')dRows=dRows.filter(function(r){return r.status==='completed'||(stat.lastStageKey&&r.current_stage===stat.lastStageKey);});
       else if(drillFilter==='overdue')dRows=dRows.filter(function(r){var isDone=r.status==='completed'||(stat.lastStageKey&&r.current_stage===stat.lastStageKey);return !isDone&&r.due_date&&new Date(r.due_date)<today;});
       else if(drillFilter==='early')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2<new Date(r.due_date);});
-      else if(drillFilter==='ontime')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
+      else if(drillFilter==='ontime')dRows=dRows.filter(function(r){var isDone=r.status==='completed'||(stat.lastStageKey&&r.current_stage===stat.lastStageKey);if(!isDone)return false;if(!r.completed_at||!r.due_date)return true;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
       else if(drillFilter==='late')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2>new Date(r.due_date);});
       else if(drillFilter==='__none')dRows=dRows.filter(function(r){return !r.current_stage&&r.status!=='completed';});
       else if(drillFilter&&drillFilter.startsWith('stage_')){var sk=drillFilter.slice(6);var isLastSk=sk===stat.lastStageKey;dRows=dRows.filter(function(r){return r.current_stage===sk||(isLastSk&&r.status==='completed'&&!r.current_stage);});}
@@ -5629,6 +5644,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
               }
               if(drillData.stat.overdue>0)tabs.push({id:'overdue',label:'Overdue',count:drillData.stat.overdue,color:'#ef4444'});
               if(drillData.stat.early>0)tabs.push({id:'early',label:'Early',count:drillData.stat.early,color:'#22c55e'});
+              if(drillData.stat.ontime>0)tabs.push({id:'ontime',label:'On-time',count:drillData.stat.ontime,color:'#6b8cad'});
               if(drillData.stat.late>0)tabs.push({id:'late',label:'Late',count:drillData.stat.late,color:'#ef4444'});
               return tabs.map(function(f){
                 var active=drillFilter===f.id;
