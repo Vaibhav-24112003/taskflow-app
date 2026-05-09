@@ -5444,10 +5444,18 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     var pending=total-completed;
     var overdue=wtRows.filter(function(r){var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);return !isDone&&r.due_date&&new Date(r.due_date)<today;}).length;
     // Stage counts: {stageKey: count}
+    // For the last stage, also count rows with status='completed' but no stage set (legacy completed rows)
     var stageCounts={};
-    wtStages.forEach(function(s){stageCounts[s.key]=wtRows.filter(function(r){return r.current_stage===s.key;}).length;});
-    // "Not started" = no stage set
-    var notStarted=wtRows.filter(function(r){return !r.current_stage;}).length;
+    wtStages.forEach(function(s){
+      var isLast=s.key===lastStageKey;
+      stageCounts[s.key]=wtRows.filter(function(r){
+        if(r.current_stage===s.key)return true;
+        if(isLast&&r.status==='completed'&&!r.current_stage)return true;
+        return false;
+      }).length;
+    });
+    // "Not started" = no stage set AND not completed
+    var notStarted=wtRows.filter(function(r){return !r.current_stage&&r.status!=='completed';}).length;
     var early=0,ontime=0,late=0,totalDays=0,completedWithDue=0;
     wtRows.forEach(function(r){
       var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);
@@ -5480,8 +5488,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       else if(drillFilter==='early')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2<new Date(r.due_date);});
       else if(drillFilter==='ontime')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);var d2=new Date(r.due_date);d2.setHours(0,0,0,0);return c2.getTime()===d2.getTime();});
       else if(drillFilter==='late')dRows=dRows.filter(function(r){if(r.status!=='completed'||!r.completed_at||!r.due_date)return false;var c2=new Date(r.completed_at);c2.setHours(0,0,0,0);return c2>new Date(r.due_date);});
-      else if(drillFilter==='__none')dRows=dRows.filter(function(r){return !r.current_stage;});
-      else if(drillFilter&&drillFilter.startsWith('stage_'))dRows=dRows.filter(function(r){return r.current_stage===drillFilter.slice(6);});
+      else if(drillFilter==='__none')dRows=dRows.filter(function(r){return !r.current_stage&&r.status!=='completed';});
+      else if(drillFilter&&drillFilter.startsWith('stage_')){var sk=drillFilter.slice(6);var isLastSk=sk===stat.lastStageKey;dRows=dRows.filter(function(r){return r.current_stage===sk||(isLastSk&&r.status==='completed'&&!r.current_stage);});}
       drillData={stat:stat,rows:dRows};
     }
   }
