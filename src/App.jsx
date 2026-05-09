@@ -1053,7 +1053,55 @@ var CMD_MODULES=[
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
 ];
 
-function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace}){
+function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace}){
+  // Theme tokens — dark vs light
+  var T=lightMode?{
+    bg:'linear-gradient(160deg,#f8fafc 0%,#f1f5f9 100%)',
+    border:'rgba(107,140,173,0.3)',
+    inputBg:'rgba(0,0,0,0.02)',
+    inputColor:'#1e293b',
+    inputBorder:'rgba(107,140,173,0.2)',
+    placeholder:'#94a3b8',
+    secLabel:'rgba(107,140,173,0.7)',
+    itemHoverBg:'rgba(107,140,173,0.1)',
+    itemHoverBorder:'#6b8cad',
+    itemLabel:'#1e293b',
+    itemLabelSel:'#0f172a',
+    itemSub:'#64748b',
+    iconBg:'rgba(107,140,173,0.1)',
+    kbdBg:'rgba(107,140,173,0.12)',
+    kbdBorder:'rgba(107,140,173,0.25)',
+    kbdColor:'#6b8cad',
+    footerBg:'rgba(0,0,0,0.02)',
+    footerBorder:'rgba(107,140,173,0.15)',
+    shadow:'0 0 0 1px rgba(107,140,173,0.15),0 24px 60px rgba(0,0,0,0.15)',
+    escColor:'#94a3b8',
+    noResultColor:'#94a3b8',
+    backdrop:'rgba(15,23,42,0.45)',
+  }:{
+    bg:'linear-gradient(160deg,#0f1219 0%,#111520 100%)',
+    border:'rgba(107,140,173,0.25)',
+    inputBg:'rgba(255,255,255,0.02)',
+    inputColor:'#fff',
+    inputBorder:'rgba(255,255,255,0.07)',
+    placeholder:'rgba(255,255,255,0.3)',
+    secLabel:'rgba(107,140,173,0.5)',
+    itemHoverBg:'rgba(107,140,173,0.14)',
+    itemHoverBorder:'#6b8cad',
+    itemLabel:'rgba(255,255,255,0.85)',
+    itemLabelSel:'#fff',
+    itemSub:'rgba(255,255,255,0.35)',
+    iconBg:'rgba(255,255,255,0.06)',
+    kbdBg:'rgba(107,140,173,0.12)',
+    kbdBorder:'rgba(107,140,173,0.3)',
+    kbdColor:'#6b8cad',
+    footerBg:'rgba(255,255,255,0.015)',
+    footerBorder:'rgba(255,255,255,0.06)',
+    shadow:'0 0 0 1px rgba(255,255,255,0.04),0 40px 100px rgba(0,0,0,0.75),0 0 60px rgba(107,140,173,0.08)',
+    escColor:'rgba(255,255,255,0.25)',
+    noResultColor:'rgba(255,255,255,0.35)',
+    backdrop:'rgba(0,0,0,0.72)',
+  };
   var [q,setQ]=useState('');
   var [sel,setSel]=useState(0);
   var [clients,setClients]=useState([]);
@@ -1196,48 +1244,46 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,onClose,onGoWor
   },[allItems,selIdx,onClose]);
 
   var flatIdx=0;
-  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'8vh'}} onClick={onClose}>
-    {/* glow ring behind modal */}
+  return<div style={{position:'fixed',inset:0,background:T.backdrop,backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'8vh'}} onClick={onClose}>
     <div style={{position:'absolute',top:'8vh',left:'50%',transform:'translateX(-50%)',width:'min(780px,94vw)',height:2,background:'linear-gradient(90deg,transparent,rgba(107,140,173,0.6),rgba(99,102,241,0.6),transparent)',borderRadius:2,filter:'blur(3px)'}}/>
-    <div style={{width:'min(780px,94vw)',background:'linear-gradient(160deg,#0f1219 0%,#111520 100%)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:20,boxShadow:'0 0 0 1px rgba(255,255,255,0.04),0 40px 100px rgba(0,0,0,0.75),0 0 60px rgba(107,140,173,0.08)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'78vh'}} onClick={function(e){e.stopPropagation();}}>
+    <div style={{width:'min(780px,94vw)',background:T.bg,border:'1px solid '+T.border,borderRadius:20,boxShadow:T.shadow,overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'78vh'}} onClick={function(e){e.stopPropagation();}}>
       {/* Search input */}
-      <div style={{display:'flex',alignItems:'center',gap:14,padding:'20px 24px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0,background:'rgba(255,255,255,0.02)'}}>
+      <div style={{display:'flex',alignItems:'center',gap:14,padding:'20px 24px',borderBottom:'1px solid '+T.inputBorder,flexShrink:0,background:T.inputBg}}>
         <span style={{fontSize:20,color:'rgba(107,140,173,0.7)',flexShrink:0,lineHeight:1}}>⌘</span>
-        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search clients, work types, tasks, modules…" style={{flex:1,background:'none',border:'none',outline:'none',fontSize:18,color:'#fff',fontFamily:'inherit',letterSpacing:'-0.02em',fontWeight:500}}/>
-        {!loaded&&<span style={{fontSize:11,color:'rgba(255,255,255,0.25)',flexShrink:0,fontStyle:'italic'}}>indexing…</span>}
-        <kbd style={{fontSize:12,color:'rgba(255,255,255,0.25)',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'3px 9px',flexShrink:0,fontFamily:'inherit'}}>ESC</kbd>
+        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search clients, work types, tasks, modules…" style={{flex:1,background:'none',border:'none',outline:'none',fontSize:18,color:T.inputColor,fontFamily:'inherit',letterSpacing:'-0.02em',fontWeight:500}}/>
+        {!loaded&&<span style={{fontSize:11,color:T.escColor,flexShrink:0,fontStyle:'italic'}}>indexing…</span>}
+        <kbd style={{fontSize:12,color:T.escColor,background:T.kbdBg,border:'1px solid '+T.kbdBorder,borderRadius:6,padding:'3px 9px',flexShrink:0,fontFamily:'inherit'}}>ESC</kbd>
       </div>
       {/* Results */}
       <div ref={listRef} style={{overflowY:'auto',flex:1,paddingBottom:12}}>
         {sections.length===0&&loaded&&q&&<div style={{padding:'48px 24px',textAlign:'center'}}>
           <div style={{fontSize:28,marginBottom:12,opacity:0.3}}>⌕</div>
-          <div style={{color:'rgba(255,255,255,0.35)',fontSize:14}}>No results for "<span style={{color:'rgba(255,255,255,0.55)'}}>{q}</span>"</div>
+          <div style={{color:T.noResultColor,fontSize:14}}>No results for "<span style={{color:T.itemLabel}}>{q}</span>"</div>
         </div>}
-        {sections.length===0&&!loaded&&<div style={{padding:'48px 24px',textAlign:'center',color:'rgba(255,255,255,0.25)',fontSize:14}}>Building search index…</div>}
+        {sections.length===0&&!loaded&&<div style={{padding:'48px 24px',textAlign:'center',color:T.escColor,fontSize:14}}>Building search index…</div>}
         {sections.map(function(sec){
           return<div key={sec.label}>
-            <div style={{fontSize:10,fontWeight:800,color:'rgba(107,140,173,0.5)',letterSpacing:'0.12em',textTransform:'uppercase',padding:'18px 24px 7px'}}>{sec.label}</div>
+            <div style={{fontSize:10,fontWeight:800,color:T.secLabel,letterSpacing:'0.12em',textTransform:'uppercase',padding:'18px 24px 7px'}}>{sec.label}</div>
             {sec.items.map(function(item){
               var isSel=flatIdx===selIdx;var myIdx=flatIdx++;
               return<div key={item.label+(item.sub||'')+myIdx} data-cmd-sel={isSel?'true':undefined}
-                onClick={item.action}
-                onMouseEnter={function(){setSel(myIdx);}}
-                style={{display:'flex',alignItems:'center',gap:14,padding:'11px 24px',cursor:'pointer',background:isSel?'rgba(107,140,173,0.14)':'transparent',borderLeft:isSel?'3px solid #6b8cad':'3px solid transparent',transition:'all 0.08s'}}>
-                <div style={{width:36,height:36,borderRadius:10,background:item.iconBg?item.iconBg+'22':'rgba(255,255,255,0.06)',border:'1px solid '+(item.iconBg?item.iconBg+'44':'rgba(255,255,255,0.08)'),display:'flex',alignItems:'center',justifyContent:'center',fontSize:item.icon&&item.icon.length>2?11:16,fontWeight:800,color:item.iconBg||'rgba(255,255,255,0.5)',flexShrink:0,letterSpacing:'-0.03em'}}>{item.icon}</div>
+                onClick={item.action} onMouseEnter={function(){setSel(myIdx);}}
+                style={{display:'flex',alignItems:'center',gap:14,padding:'11px 24px',cursor:'pointer',background:isSel?T.itemHoverBg:'transparent',borderLeft:isSel?'3px solid '+T.itemHoverBorder:'3px solid transparent',transition:'all 0.08s'}}>
+                <div style={{width:36,height:36,borderRadius:10,background:item.iconBg?item.iconBg+'22':T.iconBg,border:'1px solid '+(item.iconBg?item.iconBg+'44':T.kbdBorder),display:'flex',alignItems:'center',justifyContent:'center',fontSize:item.icon&&item.icon.length>2?11:16,fontWeight:800,color:item.iconBg||T.secLabel,flexShrink:0,letterSpacing:'-0.03em'}}>{item.icon}</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:14,fontWeight:600,color:isSel?'#fff':'rgba(255,255,255,0.85)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:'-0.01em'}}>{item.label}</div>
-                  {item.sub&&<div style={{fontSize:12,color:'rgba(255,255,255,0.35)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:2}}>{item.sub}</div>}
+                  <div style={{fontSize:14,fontWeight:600,color:isSel?T.itemLabelSel:T.itemLabel,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:'-0.01em'}}>{item.label}</div>
+                  {item.sub&&<div style={{fontSize:12,color:T.itemSub,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:2}}>{item.sub}</div>}
                 </div>
-                {isSel&&<kbd style={{fontSize:11,color:'#6b8cad',background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 8px',flexShrink:0,fontFamily:'inherit',fontWeight:700}}>↵ open</kbd>}
+                {isSel&&<kbd style={{fontSize:11,color:T.kbdColor,background:T.kbdBg,border:'1px solid '+T.kbdBorder,borderRadius:6,padding:'3px 8px',flexShrink:0,fontFamily:'inherit',fontWeight:700}}>↵ open</kbd>}
               </div>;
             })}
           </div>;
         })}
       </div>
       {/* Footer */}
-      <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'10px 24px',display:'flex',gap:20,flexShrink:0,background:'rgba(255,255,255,0.015)'}}>
-        {[['↑↓','navigate'],['↵','open'],['esc','close']].map(function(h){return<span key={h[0]} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'rgba(255,255,255,0.25)'}}><kbd style={{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:5,padding:'2px 7px',fontFamily:'inherit'}}>{h[0]}</kbd>{h[1]}</span>;})}
-        <span style={{marginLeft:'auto',fontSize:12,color:'rgba(255,255,255,0.18)'}}>{allItems.length} result{allItems.length!==1?'s':''}</span>
+      <div style={{borderTop:'1px solid '+T.footerBorder,padding:'10px 24px',display:'flex',gap:20,flexShrink:0,background:T.footerBg}}>
+        {[['↑↓','navigate'],['↵','open'],['esc','close']].map(function(h){return<span key={h[0]} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:T.escColor}}><kbd style={{background:T.kbdBg,border:'1px solid '+T.kbdBorder,borderRadius:5,padding:'2px 7px',fontFamily:'inherit',color:T.kbdColor}}>{h[0]}</kbd>{h[1]}</span>;})}
+        <span style={{marginLeft:'auto',fontSize:12,color:T.noResultColor}}>{allItems.length} result{allItems.length!==1?'s':''}</span>
       </div>
     </div>
   </div>;
@@ -1556,7 +1602,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     <Toast toast={toastData}/>
     {showCmdBar&&<CommandBar
       orgs={orgs} workspaces={workspaces} tasks={tasks} activeOrg={activeOrg}
-      supabase={supabase} cu={cu}
+      supabase={supabase} cu={cu} lightMode={lightMode}
       onClose={()=>setShowCmdBar(false)}
       onGoWorkspace={id=>{localStorage.setItem('tf_lastWsId',id);setActiveWsId(id);setActiveOrg(null);}}
       onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);}}
@@ -1598,8 +1644,13 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         </div>}
       </div>}
       {/* ⌘K command bar button */}
-      <button onClick={()=>setShowCmdBar(true)} title="Search (⌘K)" style={{display:'flex',alignItems:'center',gap:5,height:28,padding:'0 10px',borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font,flexShrink:0,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)';e.currentTarget.style.borderColor='rgba(107,140,173,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)';e.currentTarget.style.borderColor='var(--tf-border)'}}>
-        <span style={{fontSize:13}}>⌘</span><span>K</span>
+      <button onClick={()=>setShowCmdBar(true)} title="Search everything (⌘K)" style={{display:'flex',alignItems:'center',gap:8,height:32,padding:'0 12px 0 10px',borderRadius:8,background:'linear-gradient(135deg,rgba(107,140,173,0.12),rgba(99,102,241,0.08))',border:'1px solid rgba(107,140,173,0.35)',color:'#6b8cad',cursor:'pointer',fontSize:12,fontFamily:G.font,flexShrink:0,transition:G.trans,fontWeight:600,boxShadow:'0 1px 4px rgba(107,140,173,0.1)'}} onMouseEnter={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(107,140,173,0.22),rgba(99,102,241,0.15))';e.currentTarget.style.borderColor='rgba(107,140,173,0.6)';e.currentTarget.style.boxShadow='0 2px 8px rgba(107,140,173,0.2)'}} onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(107,140,173,0.12),rgba(99,102,241,0.08))';e.currentTarget.style.borderColor='rgba(107,140,173,0.35)';e.currentTarget.style.boxShadow='0 1px 4px rgba(107,140,173,0.1)'}}>
+        <span style={{fontSize:14,opacity:0.8}}>🔍</span>
+        <span style={{fontSize:12,color:'var(--tf-text-sub)',fontWeight:400}}>Search…</span>
+        <span style={{display:'flex',alignItems:'center',gap:2,marginLeft:4}}>
+          <kbd style={{fontSize:10,fontWeight:700,color:'#6b8cad',background:'rgba(107,140,173,0.15)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit'}}>⌘</kbd>
+          <kbd style={{fontSize:10,fontWeight:700,color:'#6b8cad',background:'rgba(107,140,173,0.15)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit'}}>K</kbd>
+        </span>
       </button>
       {/* Notifications bell */}
       <div ref={notifRef} style={{position:'relative',flexShrink:0}}>
