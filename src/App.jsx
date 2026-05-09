@@ -1038,6 +1038,206 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
   </div>
 }
 
+/* ──────────────────────────────────────────────────────
+   COMMAND BAR  ⌘K — universal search & jump
+────────────────────────────────────────────────────── */
+var CMD_MODULES=[
+  {id:'diary',label:'Your Diary',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
+  {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
+  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
+  {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
+  {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
+  {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
+  {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
+  {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
+];
+
+function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,onClose,onGoWorkspace,onGoOrg,onGoOrgModule,onGoHome,onOpenTask,onNewWorkspace}){
+  var [q,setQ]=useState('');
+  var [sel,setSel]=useState(0);
+  var [clients,setClients]=useState([]);
+  var [workTypes,setWorkTypes]=useState([]);
+  var [members,setMembers]=useState([]);
+  var [loaded,setLoaded]=useState(false);
+  var inputRef=useRef(null);
+  var listRef=useRef(null);
+
+  useEffect(function(){
+    setTimeout(function(){inputRef.current&&inputRef.current.focus();},30);
+    loadIndex();
+  // eslint-disable-next-line
+  },[]);
+
+  async function loadIndex(){
+    var orgIds=orgs.map(function(o){return o.id;});
+    if(orgIds.length===0){setLoaded(true);return;}
+    var [rc,rwt,rm]=await Promise.all([
+      supabase.from('clients').select('id,name,gstin,status,org_id').in('org_id',orgIds).order('name').limit(1000),
+      supabase.from('work_type_configs').select('id,name,org_id,is_active').in('org_id',orgIds),
+      supabase.from('organization_members').select('user_id,role,org_id,profiles(full_name,email)').in('org_id',orgIds).limit(300),
+    ]);
+    setClients(rc.data||[]);
+    setWorkTypes((rwt.data||[]).filter(function(w){return w.is_active;}));
+    setMembers(rm.data||[]);
+    setLoaded(true);
+  }
+
+  var lq=q.toLowerCase().trim();
+  var orgMap=useMemo(function(){var m={};orgs.forEach(function(o){m[o.id]=o;});return m;},[orgs]);
+
+  // ── build sections ──────────────────────────────────
+  var sections=useMemo(function(){
+    var out=[];
+
+    // ACTIONS
+    var acts=[
+      {label:'Go Home',sub:'Dashboard',icon:'⌂',action:function(){onGoHome();onClose();}},
+      {label:'New Workspace',sub:'Create a workspace',icon:'+',action:function(){onNewWorkspace();onClose();}},
+    ];
+    if(orgs.length>0){
+      acts.push({label:'Master Data → Clients',sub:(activeOrg||orgs[0]).name,icon:'→',action:function(){onGoOrg(activeOrg||orgs[0]);onGoOrgModule('masterdata','clients');onClose();}});
+      acts.push({label:'WorkZone → Worksheets',sub:(activeOrg||orgs[0]).name,icon:'→',action:function(){onGoOrg(activeOrg||orgs[0]);onGoOrgModule('workzone','worksheets');onClose();}});
+    }
+    var fActs=lq?acts.filter(function(a){return a.label.toLowerCase().includes(lq)||a.sub.toLowerCase().includes(lq);}):acts;
+    if(fActs.length)out.push({label:'ACTIONS',items:fActs});
+
+    // ORGANISATIONS
+    var fOrgs=lq?orgs.filter(function(o){return o.name.toLowerCase().includes(lq)||(o.description||'').toLowerCase().includes(lq);}):orgs;
+    if(fOrgs.length)out.push({label:'ORGANISATIONS',items:fOrgs.slice(0,5).map(function(o){return{label:o.name,sub:o.description||'Organisation',icon:'O',iconBg:'#6b8cad',action:function(){onGoOrg(o);onClose();}};})} );
+
+    // WORKSPACES
+    var fWs=lq?workspaces.filter(function(w){return w.name.toLowerCase().includes(lq)||(w.description||'').toLowerCase().includes(lq);}):workspaces;
+    if(fWs.length)out.push({label:'WORKSPACES',items:fWs.slice(0,5).map(function(w){return{label:w.name,sub:w.description||'Workspace',icon:w.icon||'☐',iconBg:w.color||'#6b8cad',action:function(){onGoWorkspace(w.id);onClose();}};})} );
+
+    // CLIENTS
+    var fCl=clients.filter(function(c){return !lq||(c.name.toLowerCase().includes(lq)||(c.gstin||'').toLowerCase().includes(lq));}).slice(0,lq?12:0);
+    if(fCl.length){
+      var totalMatch=lq?clients.filter(function(c){return c.name.toLowerCase().includes(lq)||(c.gstin||'').toLowerCase().includes(lq);}).length:0;
+      out.push({label:'CLIENTS'+(lq&&totalMatch>fCl.length?' · '+fCl.length+' of '+totalMatch:''),items:fCl.map(function(c){
+        var org=orgMap[c.org_id];
+        return{label:c.name,sub:(c.gstin?c.gstin+' · ':'')+( c.status||'Active')+(org?' · '+org.name:''),icon:'CL',iconBg:'#4a7a9b',
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('masterdata','clients');}onClose();}};
+      })});
+    }
+
+    // WORK TYPES → worksheet shortcuts
+    if(lq){
+      var fWT=workTypes.filter(function(wt){return wt.name.toLowerCase().includes(lq);}).slice(0,8);
+      if(fWT.length)out.push({label:'WORK TYPES',items:fWT.map(function(wt){
+        var org=orgMap[wt.org_id];
+        return{label:'View '+wt.name+' Worksheets',sub:(org?org.name+' · ':'')+'WorkZone → Worksheets',icon:'WK',iconBg:'#f59e0b',
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('workzone','worksheets');}onClose();}};
+      })});
+    }
+
+    // MODULES & TABS
+    if(lq||!lq){
+      var modItems=[];
+      CMD_MODULES.forEach(function(m){
+        var mMatch=!lq||m.label.toLowerCase().includes(lq);
+        if(mMatch&&orgs.length>0){
+          modItems.push({label:m.label,sub:'Module'+(activeOrg?' · '+activeOrg.name:''),icon:'▸',iconBg:'#64748b',
+            action:function(){var o=activeOrg||orgs[0];onGoOrg(o);onGoOrgModule(m.id,m.tabs[0]?m.tabs[0].id:'');onClose();}});
+        }
+        if(lq){m.tabs.forEach(function(t){
+          if((m.label+' '+t.label).toLowerCase().includes(lq)&&orgs.length>0){
+            modItems.push({label:m.label+' → '+t.label,sub:'Tab'+(activeOrg?' · '+activeOrg.name:''),icon:'↳',iconBg:'#475569',
+              action:function(){var o=activeOrg||orgs[0];onGoOrg(o);onGoOrgModule(m.id,t.id);onClose();}});
+          }
+        });}
+      });
+      if(modItems.length)out.push({label:'MODULES',items:modItems.slice(0,lq?10:6)});
+    }
+
+    // MEMBERS
+    if(lq){
+      var fMem=members.filter(function(m){
+        var p=m.profiles;return p&&((p.full_name||'').toLowerCase().includes(lq)||(p.email||'').toLowerCase().includes(lq));
+      }).slice(0,5);
+      if(fMem.length)out.push({label:'MEMBERS',items:fMem.map(function(m){
+        var org=orgMap[m.org_id];
+        return{label:m.profiles?.full_name||m.profiles?.email||'Member',sub:(m.role||'member')+(org?' · '+org.name:''),icon:(m.profiles?.full_name||'?').charAt(0).toUpperCase(),iconBg:'#8b5cf6',
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('setup','members');}onClose();}};
+      })});
+    }
+
+    // TASKS
+    if(lq&&tasks.length>0){
+      var fT=tasks.filter(function(t){return(t.title||'').toLowerCase().includes(lq)||(t.description||'').toLowerCase().includes(lq);}).slice(0,6);
+      if(fT.length)out.push({label:'TASKS',items:fT.map(function(t){return{label:t.title,sub:t.status||'',icon:'✓',iconBg:'#10b981',action:function(){onOpenTask(t);onClose();}};})} );
+    }
+
+    return out;
+  // eslint-disable-next-line
+  },[q,clients,workTypes,members,orgs,workspaces,tasks,activeOrg,orgMap]);
+
+  var allItems=useMemo(function(){return sections.flatMap(function(s){return s.items;});},[sections]);
+  var selIdx=Math.min(sel,Math.max(0,allItems.length-1));
+
+  useEffect(function(){setSel(0);},[q]);
+
+  // scroll selected item into view
+  useEffect(function(){
+    if(!listRef.current)return;
+    var el=listRef.current.querySelector('[data-cmd-sel="true"]');
+    if(el)el.scrollIntoView({block:'nearest'});
+  },[selIdx]);
+
+  useEffect(function(){
+    function h(e){
+      if(e.key==='ArrowDown'){e.preventDefault();setSel(function(p){return Math.min(p+1,allItems.length-1);});}
+      else if(e.key==='ArrowUp'){e.preventDefault();setSel(function(p){return Math.max(p-1,0);});}
+      else if(e.key==='Enter'){e.preventDefault();if(allItems[selIdx])allItems[selIdx].action();}
+      else if(e.key==='Escape'){e.preventDefault();onClose();}
+    }
+    document.addEventListener('keydown',h);
+    return function(){document.removeEventListener('keydown',h);};
+  },[allItems,selIdx,onClose]);
+
+  var flatIdx=0;
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'12vh'}} onClick={onClose}>
+    <div style={{width:'min(680px,92vw)',background:'#12151c',border:'1px solid rgba(255,255,255,0.1)',borderRadius:16,boxShadow:'0 32px 80px rgba(0,0,0,0.6)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'70vh'}} onClick={function(e){e.stopPropagation();}}>
+      {/* Search input */}
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 18px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
+        <span style={{fontSize:16,color:'rgba(255,255,255,0.35)',flexShrink:0}}>›</span>
+        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search clients, tasks, modules, work types…" style={{flex:1,background:'none',border:'none',outline:'none',fontSize:15,color:'#fff',fontFamily:'inherit',letterSpacing:'-0.01em'}}/>
+        {!loaded&&<span style={{fontSize:11,color:'rgba(255,255,255,0.3)',flexShrink:0}}>loading…</span>}
+        <kbd style={{fontSize:11,color:'rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:5,padding:'2px 7px',flexShrink:0}}>ESC</kbd>
+      </div>
+      {/* Results */}
+      <div ref={listRef} style={{overflowY:'auto',flex:1,paddingBottom:8}}>
+        {sections.length===0&&loaded&&<div style={{padding:'32px 18px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:13}}>No results for "{q}"</div>}
+        {sections.length===0&&!loaded&&<div style={{padding:'32px 18px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:13}}>Searching…</div>}
+        {sections.map(function(sec){
+          return<div key={sec.label}>
+            <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.3)',letterSpacing:'0.1em',padding:'14px 18px 6px'}}>{sec.label}</div>
+            {sec.items.map(function(item){
+              var isSel=flatIdx===selIdx;var myIdx=flatIdx++;
+              return<div key={item.label+(item.sub||'')+myIdx} data-cmd-sel={isSel?'true':undefined}
+                onClick={item.action}
+                onMouseEnter={function(){setSel(myIdx);}}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'9px 18px',cursor:'pointer',background:isSel?'rgba(107,140,173,0.18)':'transparent',transition:'background 0.1s'}}>
+                <div style={{width:30,height:30,borderRadius:8,background:item.iconBg||'rgba(255,255,255,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:item.icon&&item.icon.length>2?11:14,fontWeight:700,color:'#fff',flexShrink:0,letterSpacing:'-0.03em'}}>{item.icon}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'#fff',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</div>
+                  {item.sub&&<div style={{fontSize:11,color:'rgba(255,255,255,0.4)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{item.sub}</div>}
+                </div>
+                {isSel&&<kbd style={{fontSize:10,color:'rgba(255,255,255,0.4)',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:4,padding:'2px 6px',flexShrink:0}}>↵ open</kbd>}
+              </div>;
+            })}
+          </div>;
+        })}
+      </div>
+      {/* Footer hint */}
+      <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',padding:'8px 18px',display:'flex',gap:16,flexShrink:0}}>
+        {[['↑↓','Navigate'],['↵','Open'],['esc','Close']].map(function(h){return<span key={h[0]} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'rgba(255,255,255,0.3)'}}><kbd style={{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:4,padding:'1px 5px'}}>{h[0]}</kbd>{h[1]}</span>;})}
+        <span style={{marginLeft:'auto',fontSize:11,color:'rgba(255,255,255,0.2)'}}>{allItems.length} result{allItems.length!==1?'s':''}</span>
+      </div>
+    </div>
+  </div>;
+}
+
 function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
   const [orgs,setOrgs]=useState([])
@@ -1058,6 +1258,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
   const [showTransferOwner,setShowTransferOwner]=useState(false)
   const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
+  const [showCmdBar,setShowCmdBar]=useState(false)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
   const [qaOrgId,setQaOrgId]=useState('')
@@ -1077,6 +1278,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const notifCountRef=useRef(0)
 
   useEffect(()=>{localStorage.setItem('tf-light',lightMode?'1':'0')},[lightMode])
+  useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowCmdBar(v=>!v);}};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[]);
 
   const showToast=useCallback((msg,type='ok')=>{setToastData({msg,type});setTimeout(()=>setToastData(null),4000)},[])
   const activeWs=workspaces.find(w=>w.id===activeWsId)||null
@@ -1346,6 +1548,17 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     <GlobalStyle lightMode={lightMode}/>
     {activeWs&&<div style={{position:'fixed',top:0,left:'20%',right:0,height:'32vh',background:`radial-gradient(ellipse at 60% 0%,rgba(${wsRgb},0.06) 0%,transparent 68%)`,pointerEvents:'none',zIndex:0}}/>}
     <Toast toast={toastData}/>
+    {showCmdBar&&<CommandBar
+      orgs={orgs} workspaces={workspaces} tasks={tasks} activeOrg={activeOrg}
+      supabase={supabase} cu={cu}
+      onClose={()=>setShowCmdBar(false)}
+      onGoWorkspace={id=>{localStorage.setItem('tf_lastWsId',id);setActiveWsId(id);setActiveOrg(null);}}
+      onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);}}
+      onGoOrgModule={(mod,tab)=>{var o=activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab);setActiveWsId(null);}}
+      onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}
+      onOpenTask={t=>{setEditTask(t);if(t.workspace_id&&t.workspace_id!==activeWsId){localStorage.setItem('tf_lastWsId',t.workspace_id);setActiveWsId(t.workspace_id);}}}
+      onNewWorkspace={()=>setWsForm('new')}
+    />}
 
     {/* TOP NAV */}
     <nav style={{height:52,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 16px',gap:5,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
@@ -1378,6 +1591,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           ].map((item,i)=><button key={i} onClick={item.action} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:item.danger?'#ef4444':'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font,transition:G.transSnap}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}><span style={{fontSize:14}}>{item.icon}</span>{item.label}</button>)}
         </div>}
       </div>}
+      {/* ⌘K command bar button */}
+      <button onClick={()=>setShowCmdBar(true)} title="Search (⌘K)" style={{display:'flex',alignItems:'center',gap:5,height:28,padding:'0 10px',borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font,flexShrink:0,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)';e.currentTarget.style.borderColor='rgba(107,140,173,0.4)'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)';e.currentTarget.style.borderColor='var(--tf-border)'}}>
+        <span style={{fontSize:13}}>⌘</span><span>K</span>
+      </button>
       {/* Notifications bell */}
       <div ref={notifRef} style={{position:'relative',flexShrink:0}}>
         <button onClick={()=>{setShowNotif(v=>!v);if(!showNotif)loadNotifications();}} title="Notifications" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(107,140,173,0.4)':'var(--tf-border)'),color:showNotif?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>{if(!showNotif)e.currentTarget.style.background='var(--tf-surface)'}}>
