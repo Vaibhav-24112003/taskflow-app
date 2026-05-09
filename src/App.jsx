@@ -6518,7 +6518,59 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
   var [selectedDay,setSelectedDay]=useState(null); // day number or null
-  var [mineOnly,setMineOnly]=useState(!!showMineToggle); // personalized: show only tasks where current user is assigned/reviewer
+  var [mineOnly,setMineOnly]=useState(!!showMineToggle);
+  // Reminders
+  var [reminders,setReminders]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_reminders')||'[]');}catch(e){return[];}});
+  var [showReminderForm,setShowReminderForm]=useState(false);
+  var [rTitle,setRTitle]=useState('');
+  var [rTime,setRTime]=useState('09:00');
+  var [rNote,setRNote]=useState('');
+  var [notifPerm,setNotifPerm]=useState(typeof Notification!=='undefined'?Notification.permission:'denied');
+
+  function saveReminders(arr){setReminders(arr);localStorage.setItem('tf_reminders',JSON.stringify(arr));}
+
+  function addReminder(){
+    if(!selectedDay||!rTitle.trim())return;
+    var dateStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(selectedDay).padStart(2,'0');
+    var newR={id:Date.now()+'',dateStr,time:rTime,title:rTitle.trim(),note:rNote.trim()};
+    saveReminders([...reminders,newR]);
+    setRTitle('');setRNote('');setShowReminderForm(false);
+  }
+
+  function deleteReminder(id){saveReminders(reminders.filter(function(r){return r.id!==id;}));}
+
+  async function requestNotifPerm(){
+    if(typeof Notification==='undefined')return;
+    var perm=await Notification.requestPermission();
+    setNotifPerm(perm);
+  }
+
+  // Polling — check reminders every 30s and fire browser notifications
+  useEffect(function(){
+    function checkReminders(){
+      var now=new Date();
+      var nowDateStr=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+      var nowHH=String(now.getHours()).padStart(2,'0');
+      var nowMM=String(now.getMinutes()).padStart(2,'0');
+      var nowTime=nowHH+':'+nowMM;
+      var stored=[];try{stored=JSON.parse(localStorage.getItem('tf_reminders')||'[]');}catch(e){}
+      var changed=false;
+      stored=stored.map(function(r){
+        if(!r.fired&&r.dateStr===nowDateStr&&r.time===nowTime){
+          if(typeof Notification!=='undefined'&&Notification.permission==='granted'){
+            new Notification('📅 Reminder: '+r.title,{body:r.note||r.dateStr+' at '+r.time,icon:'/favicon.ico'});
+          }
+          changed=true;
+          return Object.assign({},r,{fired:true});
+        }
+        return r;
+      });
+      if(changed){localStorage.setItem('tf_reminders',JSON.stringify(stored));setReminders(stored);}
+    }
+    checkReminders();
+    var iv=setInterval(checkReminders,30000);
+    return function(){clearInterval(iv);};
+  },[]);
 
   var today=new Date();today.setHours(0,0,0,0);
   var isCurrentMonth=calYear===today.getFullYear()&&calMonth===today.getMonth();
@@ -6642,6 +6694,7 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Due dates and workload · {fyLabel}</div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+        {(function(){var upcoming=reminders.filter(function(r){return!r.fired;});return upcoming.length>0&&<div title={upcoming.length+' upcoming reminder'+(upcoming.length!==1?'s':'')} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:7,fontSize:12,fontWeight:700,color:'#f59e0b'}}>🔔 {upcoming.length}</div>;})()}
         {showMineToggle&&<button onClick={function(){setMineOnly(!mineOnly);setSelectedDay(null);}} title="Show only tasks assigned to you" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 12px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>}
         <button onClick={prevMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>‹</button>
         <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',minWidth:160,textAlign:'center'}}>{MONTH_NAMES[calMonth]} {calYear}</div>
@@ -6715,47 +6768,100 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
       </div>
 
       {/* Day Detail Panel */}
-      {selectedDay!==null&&<div style={{flex:'0 0 320px',minWidth:280,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'calc(100vh - 240px)',display:'flex',flexDirection:'column'}}>
-        <div style={{padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-          <div>
-            <div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{selectedDay} {MONTH_NAMES[calMonth]} {calYear}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{detailRows.length} item{detailRows.length!==1?'s':''} due</div>
+      {selectedDay!==null&&(function(){
+        var selDateStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(selectedDay).padStart(2,'0');
+        var dayReminders=reminders.filter(function(r){return r.dateStr===selDateStr;});
+        return<div style={{flex:'0 0 340px',minWidth:300,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'calc(100vh - 200px)',display:'flex',flexDirection:'column'}}>
+          {/* Panel header */}
+          <div style={{padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{selectedDay} {MONTH_NAMES[calMonth]} {calYear}</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{detailRows.length} item{detailRows.length!==1?'s':''} due{dayReminders.length>0?' · '+dayReminders.length+' reminder'+(dayReminders.length!==1?'s':''):''}</div>
+            </div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              <button onClick={function(){setShowReminderForm(!showReminderForm);setRTitle('');setRNote('');}} title="Set reminder" style={{background:showReminderForm?'rgba(107,140,173,0.15)':'none',border:'1px solid',borderColor:showReminderForm?'#6b8cad':'var(--tf-border)',borderRadius:7,padding:'4px 9px',cursor:'pointer',fontSize:14,color:'#6b8cad',display:'flex',alignItems:'center',gap:5}}>
+                🔔<span style={{fontSize:11,fontWeight:700}}>Remind</span>
+              </button>
+              <button onClick={function(){setSelectedDay(null);setShowReminderForm(false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+            </div>
           </div>
-          <button onClick={function(){setSelectedDay(null);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
-        </div>
-        <div style={{overflowY:'auto',flex:1,padding:'0 0 8px'}}>
-          {detailRows.length===0?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No items due on this day</div>:
-          Object.keys(detailGrouped).map(function(wt){
-            return<div key={wt}>
-              <div style={{padding:'10px 16px 4px',fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:.05}}>{wt}</div>
-              {detailGrouped[wt].map(function(row){
-                var client=clientMap[row.client_id];
-                if(!client)return null;
-                var ws=wsMap[row.worksheet_id];
-                var periodStr=ws?ws.period_label:'';
-                var isCompleted=row.status==='completed';
-                var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
-                return<div key={row.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10}}>
+
+          {/* Reminder form */}
+          {showReminderForm&&<div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',background:'rgba(107,140,173,0.05)',flexShrink:0}}>
+            {notifPerm!=='granted'&&<div style={{marginBottom:10,padding:'8px 10px',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+              <span style={{fontSize:11,color:'#f59e0b'}}>Enable notifications to get alerts</span>
+              <button onClick={requestNotifPerm} style={{background:'#f59e0b',border:'none',borderRadius:5,padding:'3px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,flexShrink:0}}>Allow</button>
+            </div>}
+            <div style={{marginBottom:8}}>
+              <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',display:'block',marginBottom:4}}>Reminder title</label>
+              <input value={rTitle} onChange={function(e){setRTitle(e.target.value);}} placeholder="e.g. Follow up GSTR-3B deadline" style={{width:'100%',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:7,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',display:'block',marginBottom:4}}>Time</label>
+                <input type="time" value={rTime} onChange={function(e){setRTime(e.target.value);}} style={{width:'100%',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:7,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',display:'block',marginBottom:4}}>Note (optional)</label>
+              <input value={rNote} onChange={function(e){setRNote(e.target.value);}} placeholder="Additional context…" style={{width:'100%',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:7,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={addReminder} disabled={!rTitle.trim()} style={{flex:1,background:rTitle.trim()?'#6b8cad':'var(--tf-border)',border:'none',borderRadius:7,padding:'8px',color:'#fff',cursor:rTitle.trim()?'pointer':'default',fontSize:13,fontWeight:700}}>Set Reminder</button>
+              <button onClick={function(){setShowReminderForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>Cancel</button>
+            </div>
+          </div>}
+
+          <div style={{overflowY:'auto',flex:1,padding:'0 0 8px'}}>
+            {/* Reminders for this day */}
+            {dayReminders.length>0&&<div>
+              <div style={{padding:'10px 16px 4px',fontSize:11,fontWeight:700,color:'#f59e0b',textTransform:'uppercase',letterSpacing:.05,display:'flex',alignItems:'center',gap:5}}>🔔 Reminders</div>
+              {dayReminders.map(function(r){
+                return<div key={r.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,fontWeight:600,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>
-                    {periodStr&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Period: {periodStr}{row.due_label&&row.due_label!=='Due'?' · '+row.due_label:''}</div>}
-                    {client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
-                    {isCompleted&&row.completed_at&&<div style={{fontSize:9,color:'#22c55e',marginTop:1}}>Done {new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>}
-                    {isOverdue&&<div style={{fontSize:9,color:'#ef4444',fontWeight:600,marginTop:1}}>Overdue</div>}
+                    <div style={{fontSize:13,fontWeight:600,color:r.fired?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:r.fired?'line-through':'none'}}>{r.title}</div>
+                    <div style={{fontSize:11,color:'#f59e0b',marginTop:2}}>⏰ {r.time}{r.note&&' · '+r.note}</div>
                   </div>
-                  <select value={row.status||'pending'} onChange={function(e){quickUpdateStatus(row.id,e.target.value);}}
-                    style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'2px 6px',color:SC_STATUS[row.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
-                    <option value="pending">Pending</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="under_review">Under Review</option>
-                    <option value="completed">Completed</option>
-                  </select>
+                  <button onClick={function(){deleteReminder(r.id);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:15,padding:'0 2px',flexShrink:0}}>×</button>
                 </div>;
               })}
-            </div>;
-          })}
-        </div>
-      </div>}
+            </div>}
+
+            {/* Due items */}
+            {detailRows.length===0&&dayReminders.length===0?<div style={{padding:'24px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No items due on this day.<br/><span style={{fontSize:12,opacity:0.7}}>Click 🔔 Remind to add a reminder.</span></div>:
+            detailRows.length===0?null:
+            Object.keys(detailGrouped).map(function(wt){
+              return<div key={wt}>
+                <div style={{padding:'10px 16px 4px',fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:.05}}>{wt}</div>
+                {detailGrouped[wt].map(function(row){
+                  var client=clientMap[row.client_id];
+                  if(!client)return null;
+                  var ws=wsMap[row.worksheet_id];
+                  var periodStr=ws?ws.period_label:'';
+                  var isCompleted=row.status==='completed';
+                  var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
+                  return<div key={row.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,fontWeight:600,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>
+                      {periodStr&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1}}>Period: {periodStr}</div>}
+                      {client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}
+                      {isCompleted&&row.completed_at&&<div style={{fontSize:9,color:'#22c55e',marginTop:1}}>Done {new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</div>}
+                      {isOverdue&&<div style={{fontSize:9,color:'#ef4444',fontWeight:600,marginTop:1}}>Overdue</div>}
+                    </div>
+                    <select value={row.status||'pending'} onChange={function(e){quickUpdateStatus(row.id,e.target.value);}}
+                      style={{background:'transparent',border:'1px solid',borderColor:SC_STATUS[row.status||'pending'],borderRadius:20,padding:'2px 6px',color:SC_STATUS[row.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="under_review">Under Review</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>;
+                })}
+              </div>;
+            })}
+          </div>
+        </div>;
+      })()}
     </div>}
   </div>;
 }
@@ -10744,7 +10850,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
   }
 
   // Module content with left sidebar
-  var sidebarW=sidebarOpen?210:48;
+  var sidebarW=sidebarOpen?236:52;
   var moduleContent=<>
       {/* Your Diary */}
       {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
@@ -10782,7 +10888,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
       {/* Left sidebar — no separate header row, back button lives here */}
       <div style={{width:sidebarW,flexShrink:0,background:'var(--tf-panel)',borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
         <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
-          {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
+          {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
             <span style={{flexShrink:0}}>&#x2190;</span>
             <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#6b8cad',fontWeight:700}}>{currentModule?currentModule.label:'Modules'}</span>
           </button>}
@@ -10795,15 +10901,15 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
             var hasTabs=m.tabs&&m.tabs.length>1;
             return<div key={m.id}>
               <button onClick={function(){openModule(m);if(!sidebarOpen)setSidebarOpen(true);}} title={sidebarOpen?'':m.label}
-                style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'8px 10px':'8px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
+                style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
                 onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.06)';}}
                 onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-                <m.icon size={16} strokeWidth={isActive?2.2:1.8} style={{flexShrink:0,color:isActive?'#6b8cad':'var(--tf-text-sub)'}}/>
-                {sidebarOpen&&<span style={{fontSize:12,fontWeight:isActive?600:400,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
+                <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{flexShrink:0,color:isActive?'#6b8cad':'var(--tf-text-sub)'}}/>
+                {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
               </button>
-              {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:28,marginBottom:4}}>
+              {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:32,marginBottom:6}}>
                 {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
-                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:tab===t.id?700:500,color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #6b8cad':'2px solid transparent',marginBottom:1}}>
+                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'6px 10px',cursor:'pointer',fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?'#6b8cad':'var(--tf-text-sub)',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #6b8cad':'2px solid transparent',marginBottom:1}}>
                   {t.label}
                 </button>;})}
               </div>}
