@@ -1127,7 +1127,7 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,onClose,onGoWor
       if(fWT.length)out.push({label:'WORK TYPES',items:fWT.map(function(wt){
         var org=orgMap[wt.org_id];
         return{label:'View '+wt.name+' Worksheets',sub:(org?org.name+' · ':'')+'WorkZone → Worksheets',icon:'WK',iconBg:'#f59e0b',
-          action:function(){if(org){onGoOrg(org);onGoOrgModule('workzone','worksheets');}onClose();}};
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('workzone','worksheets',wt.name);}onClose();}};
       })});
     }
 
@@ -1196,43 +1196,48 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,onClose,onGoWor
   },[allItems,selIdx,onClose]);
 
   var flatIdx=0;
-  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(4px)',WebkitBackdropFilter:'blur(4px)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'12vh'}} onClick={onClose}>
-    <div style={{width:'min(680px,92vw)',background:'#12151c',border:'1px solid rgba(255,255,255,0.1)',borderRadius:16,boxShadow:'0 32px 80px rgba(0,0,0,0.6)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'70vh'}} onClick={function(e){e.stopPropagation();}}>
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.72)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:'8vh'}} onClick={onClose}>
+    {/* glow ring behind modal */}
+    <div style={{position:'absolute',top:'8vh',left:'50%',transform:'translateX(-50%)',width:'min(780px,94vw)',height:2,background:'linear-gradient(90deg,transparent,rgba(107,140,173,0.6),rgba(99,102,241,0.6),transparent)',borderRadius:2,filter:'blur(3px)'}}/>
+    <div style={{width:'min(780px,94vw)',background:'linear-gradient(160deg,#0f1219 0%,#111520 100%)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:20,boxShadow:'0 0 0 1px rgba(255,255,255,0.04),0 40px 100px rgba(0,0,0,0.75),0 0 60px rgba(107,140,173,0.08)',overflow:'hidden',display:'flex',flexDirection:'column',maxHeight:'78vh'}} onClick={function(e){e.stopPropagation();}}>
       {/* Search input */}
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'14px 18px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
-        <span style={{fontSize:16,color:'rgba(255,255,255,0.35)',flexShrink:0}}>›</span>
-        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search clients, tasks, modules, work types…" style={{flex:1,background:'none',border:'none',outline:'none',fontSize:15,color:'#fff',fontFamily:'inherit',letterSpacing:'-0.01em'}}/>
-        {!loaded&&<span style={{fontSize:11,color:'rgba(255,255,255,0.3)',flexShrink:0}}>loading…</span>}
-        <kbd style={{fontSize:11,color:'rgba(255,255,255,0.3)',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:5,padding:'2px 7px',flexShrink:0}}>ESC</kbd>
+      <div style={{display:'flex',alignItems:'center',gap:14,padding:'20px 24px',borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0,background:'rgba(255,255,255,0.02)'}}>
+        <span style={{fontSize:20,color:'rgba(107,140,173,0.7)',flexShrink:0,lineHeight:1}}>⌘</span>
+        <input ref={inputRef} value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search clients, work types, tasks, modules…" style={{flex:1,background:'none',border:'none',outline:'none',fontSize:18,color:'#fff',fontFamily:'inherit',letterSpacing:'-0.02em',fontWeight:500}}/>
+        {!loaded&&<span style={{fontSize:11,color:'rgba(255,255,255,0.25)',flexShrink:0,fontStyle:'italic'}}>indexing…</span>}
+        <kbd style={{fontSize:12,color:'rgba(255,255,255,0.25)',background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'3px 9px',flexShrink:0,fontFamily:'inherit'}}>ESC</kbd>
       </div>
       {/* Results */}
-      <div ref={listRef} style={{overflowY:'auto',flex:1,paddingBottom:8}}>
-        {sections.length===0&&loaded&&<div style={{padding:'32px 18px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:13}}>No results for "{q}"</div>}
-        {sections.length===0&&!loaded&&<div style={{padding:'32px 18px',textAlign:'center',color:'rgba(255,255,255,0.3)',fontSize:13}}>Searching…</div>}
+      <div ref={listRef} style={{overflowY:'auto',flex:1,paddingBottom:12}}>
+        {sections.length===0&&loaded&&q&&<div style={{padding:'48px 24px',textAlign:'center'}}>
+          <div style={{fontSize:28,marginBottom:12,opacity:0.3}}>⌕</div>
+          <div style={{color:'rgba(255,255,255,0.35)',fontSize:14}}>No results for "<span style={{color:'rgba(255,255,255,0.55)'}}>{q}</span>"</div>
+        </div>}
+        {sections.length===0&&!loaded&&<div style={{padding:'48px 24px',textAlign:'center',color:'rgba(255,255,255,0.25)',fontSize:14}}>Building search index…</div>}
         {sections.map(function(sec){
           return<div key={sec.label}>
-            <div style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.3)',letterSpacing:'0.1em',padding:'14px 18px 6px'}}>{sec.label}</div>
+            <div style={{fontSize:10,fontWeight:800,color:'rgba(107,140,173,0.5)',letterSpacing:'0.12em',textTransform:'uppercase',padding:'18px 24px 7px'}}>{sec.label}</div>
             {sec.items.map(function(item){
               var isSel=flatIdx===selIdx;var myIdx=flatIdx++;
               return<div key={item.label+(item.sub||'')+myIdx} data-cmd-sel={isSel?'true':undefined}
                 onClick={item.action}
                 onMouseEnter={function(){setSel(myIdx);}}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'9px 18px',cursor:'pointer',background:isSel?'rgba(107,140,173,0.18)':'transparent',transition:'background 0.1s'}}>
-                <div style={{width:30,height:30,borderRadius:8,background:item.iconBg||'rgba(255,255,255,0.1)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:item.icon&&item.icon.length>2?11:14,fontWeight:700,color:'#fff',flexShrink:0,letterSpacing:'-0.03em'}}>{item.icon}</div>
+                style={{display:'flex',alignItems:'center',gap:14,padding:'11px 24px',cursor:'pointer',background:isSel?'rgba(107,140,173,0.14)':'transparent',borderLeft:isSel?'3px solid #6b8cad':'3px solid transparent',transition:'all 0.08s'}}>
+                <div style={{width:36,height:36,borderRadius:10,background:item.iconBg?item.iconBg+'22':'rgba(255,255,255,0.06)',border:'1px solid '+(item.iconBg?item.iconBg+'44':'rgba(255,255,255,0.08)'),display:'flex',alignItems:'center',justifyContent:'center',fontSize:item.icon&&item.icon.length>2?11:16,fontWeight:800,color:item.iconBg||'rgba(255,255,255,0.5)',flexShrink:0,letterSpacing:'-0.03em'}}>{item.icon}</div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:600,color:'#fff',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.label}</div>
-                  {item.sub&&<div style={{fontSize:11,color:'rgba(255,255,255,0.4)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:1}}>{item.sub}</div>}
+                  <div style={{fontSize:14,fontWeight:600,color:isSel?'#fff':'rgba(255,255,255,0.85)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',letterSpacing:'-0.01em'}}>{item.label}</div>
+                  {item.sub&&<div style={{fontSize:12,color:'rgba(255,255,255,0.35)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',marginTop:2}}>{item.sub}</div>}
                 </div>
-                {isSel&&<kbd style={{fontSize:10,color:'rgba(255,255,255,0.4)',background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:4,padding:'2px 6px',flexShrink:0}}>↵ open</kbd>}
+                {isSel&&<kbd style={{fontSize:11,color:'#6b8cad',background:'rgba(107,140,173,0.12)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 8px',flexShrink:0,fontFamily:'inherit',fontWeight:700}}>↵ open</kbd>}
               </div>;
             })}
           </div>;
         })}
       </div>
-      {/* Footer hint */}
-      <div style={{borderTop:'1px solid rgba(255,255,255,0.07)',padding:'8px 18px',display:'flex',gap:16,flexShrink:0}}>
-        {[['↑↓','Navigate'],['↵','Open'],['esc','Close']].map(function(h){return<span key={h[0]} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'rgba(255,255,255,0.3)'}}><kbd style={{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:4,padding:'1px 5px'}}>{h[0]}</kbd>{h[1]}</span>;})}
-        <span style={{marginLeft:'auto',fontSize:11,color:'rgba(255,255,255,0.2)'}}>{allItems.length} result{allItems.length!==1?'s':''}</span>
+      {/* Footer */}
+      <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'10px 24px',display:'flex',gap:20,flexShrink:0,background:'rgba(255,255,255,0.015)'}}>
+        {[['↑↓','navigate'],['↵','open'],['esc','close']].map(function(h){return<span key={h[0]} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'rgba(255,255,255,0.25)'}}><kbd style={{background:'rgba(255,255,255,0.07)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:5,padding:'2px 7px',fontFamily:'inherit'}}>{h[0]}</kbd>{h[1]}</span>;})}
+        <span style={{marginLeft:'auto',fontSize:12,color:'rgba(255,255,255,0.18)'}}>{allItems.length} result{allItems.length!==1?'s':''}</span>
       </div>
     </div>
   </div>;
@@ -1259,6 +1264,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [showTransferOwner,setShowTransferOwner]=useState(false)
   const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
   const [showCmdBar,setShowCmdBar]=useState(false)
+  const [orgNavTarget,setOrgNavTarget]=useState(null)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
   const [qaOrgId,setQaOrgId]=useState('')
@@ -1554,7 +1560,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       onClose={()=>setShowCmdBar(false)}
       onGoWorkspace={id=>{localStorage.setItem('tf_lastWsId',id);setActiveWsId(id);setActiveOrg(null);}}
       onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);}}
-      onGoOrgModule={(mod,tab)=>{var o=activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab);setActiveWsId(null);}}
+      onGoOrgModule={(mod,tab,workType)=>{var o=activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab||'');setActiveWsId(null);setOrgNavTarget({module:mod,tab:tab||'',workType:workType||null,ts:Date.now()});}}
       onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}
       onOpenTask={t=>{setEditTask(t);if(t.workspace_id&&t.workspace_id!==activeWsId){localStorage.setItem('tf_lastWsId',t.workspace_id);setActiveWsId(t.workspace_id);}}}
       onNewWorkspace={()=>setWsForm('new')}
@@ -1700,7 +1706,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* CONTENT */}
     {!activeWs
-      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
@@ -3539,8 +3545,17 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   useEffect(function(){loadClients();loadColPrefs();},[org.id,(workTypeConfigs||[]).length]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
   useEffect(function(){if(activeType){loadOrgMembers();}},[activeType]);
-  // Load column prefs when active type changes
   useEffect(function(){if(activeType)loadColPrefsForType(activeType);},[activeType]);
+  // Jump to a specific work type when initWorkType changes (e.g. from CommandBar)
+  useEffect(function(){
+    if(!initWorkType)return;
+    if(allTypes.indexOf(initWorkType)>=0){
+      setActiveType(initWorkType);
+      var cfg=WS_TYPE_CONFIGS[initWorkType];
+      if(cfg&&cfg.worksheet_group)setActiveGroup(cfg.worksheet_group);
+    }
+  // eslint-disable-next-line
+  },[initWorkType]);
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
@@ -10568,7 +10583,7 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
 }
 
 // ── Org Dashboard ──────────────────────────────────────────────────
-function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
+function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
@@ -10579,6 +10594,14 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack}){
   const [wsInitWorkType,setWsInitWorkType]=useState(null);
   const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
   const [sidebarOpen,setSidebarOpen]=useState(true);
+  // Respond to CommandBar navigation
+  useEffect(function(){
+    if(!navTarget||!navTarget.module)return;
+    setOrgModule(navTarget.module);setTab(navTarget.tab||'');
+    localStorage.setItem('tf_lastOrgModule',navTarget.module);
+    if(navTarget.tab)localStorage.setItem('tf_lastOrgTab',navTarget.tab);
+    if(navTarget.workType){setWsInitWorkType(navTarget.workType);setWsInitMineOnly(false);}
+  },[navTarget]);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
 
   useEffect(function(){loadWTC();loadMyRole();loadOrgGroups();/* eslint-disable-next-line */},[org.id]);
