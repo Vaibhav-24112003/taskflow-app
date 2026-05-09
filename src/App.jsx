@@ -5416,7 +5416,33 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
       var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage').in('worksheet_id',wsIds).limit(2000);
-      setAllRows(rr.data||[]);
+      var rowData=rr.data||[];
+      // Backfill: rows at the last stage of their work type that still have status!='completed'
+      // Build a map of work_type → last stage key
+      var wtLastStageMap={};
+      (workTypeConfigs||[]).forEach(function(c){
+        if(c.stages&&c.stages.length>0)wtLastStageMap[c.name]=c.stages[c.stages.length-1].key;
+      });
+      // Find rows needing backfill
+      var wsById={};wsData.forEach(function(w){wsById[w.id]=w;});
+      var toFix=rowData.filter(function(r){
+        var ws=wsById[r.worksheet_id];if(!ws)return false;
+        var lastKey=wtLastStageMap[ws.work_type];
+        return lastKey&&r.current_stage===lastKey&&r.status!=='completed';
+      });
+      if(toFix.length>0){
+        var now=new Date().toISOString();
+        await Promise.all(toFix.map(function(r){
+          return supabase.from('worksheet_rows').update({status:'completed',completed_at:r.completed_at||now}).eq('id',r.id);
+        }));
+        // Apply fix to local data
+        var fixIds=new Set(toFix.map(function(r){return r.id;}));
+        rowData=rowData.map(function(r){
+          if(!fixIds.has(r.id))return r;
+          return Object.assign({},r,{status:'completed',completed_at:r.completed_at||now});
+        });
+      }
+      setAllRows(rowData);
     }else{setAllRows([]);}
     setLoading(false);
   }
@@ -5669,16 +5695,22 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           <tbody>
             {drillData.rows.map(function(row,ri){
               var client=clientMap[row.client_id];if(!client)return null;
-              var isCompleted=row.status==='completed';
+              var stageInfo=drillData.stat.stages.find(function(s){return s.key===row.current_stage;});
+              var isLastStage=stageInfo&&stageInfo.key===drillData.stat.lastStageKey;
+              // Effective completion: status=completed OR at last stage
+              var isCompleted=row.status==='completed'||isLastStage;
               var isOverdue=!isCompleted&&row.due_date&&new Date(row.due_date)<today;
               var timing='',timingColor='var(--tf-text-sub)';
               if(isCompleted&&row.completed_at&&row.due_date){var diff=daysDiff(row.completed_at,row.due_date);if(diff<0){timing=Math.abs(diff)+'d early';timingColor='#22c55e';}else if(diff===0){timing='On time';timingColor='#6b8cad';}else{timing=diff+'d late';timingColor='#ef4444';}}
+              else if(isCompleted){timing='On time';timingColor='#6b8cad';}
               else if(isOverdue){timing=Math.abs(daysDiff(today,row.due_date))+'d overdue';timingColor='#ef4444';}
-              var stageInfo=drillData.stat.stages.find(function(s){return s.key===row.current_stage;});
+              // When stages configured: use stage as the primary status indicator
+              var hasStages=drillData.stat.stages.length>0;
+              var effectiveStatus=hasStages?(isLastStage?'completed':(row.current_stage?'in_progress':'pending')):(row.status||'pending');
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
                 <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>{client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
-                <td style={{padding:'9px 10px',textAlign:'center'}}>{stageInfo?<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:12,background:(stageInfo.color||'#6b8cad')+'22',color:stageInfo.color||'#6b8cad',whiteSpace:'nowrap'}}>{stageInfo.key===drillData.stat.lastStageKey?'✓ ':''}{stageInfo.label}</span>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>—</span>}</td>
-                <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:SC_STATUS[row.status||'pending'],textTransform:'capitalize'}}>{(row.status||'pending').replace('_',' ')}</span></td>
+                <td style={{padding:'9px 10px',textAlign:'center'}}>{stageInfo?<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:12,background:(stageInfo.color||'#6b8cad')+'22',color:stageInfo.color||'#6b8cad',whiteSpace:'nowrap'}}>{isLastStage?'✓ ':''}{stageInfo.label}</span>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>—</span>}</td>
+                <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:SC_STATUS[effectiveStatus],textTransform:'capitalize'}}>{effectiveStatus.replace('_',' ')}</span></td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>{row.completed_at?new Date(row.completed_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:600,color:timingColor}}>{timing||'—'}</td>
