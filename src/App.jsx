@@ -5404,7 +5404,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     setWorksheets(wsData);
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at').in('worksheet_id',wsIds).limit(2000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage').in('worksheet_id',wsIds).limit(2000);
       setAllRows(rr.data||[]);
     }else{setAllRows([]);}
     setLoading(false);
