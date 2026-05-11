@@ -209,10 +209,10 @@ function Hero({ onSignIn, loading }) {
         <div style={{ textAlign: 'center', maxWidth: 880, margin: '0 auto 56px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(107,140,173,.1)', border: '1px solid rgba(107,140,173,.25)', fontSize: 12, fontWeight: 600, color: '#6b8cad', marginBottom: 24 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6b8cad', boxShadow: '0 0 12px #6b8cad' }} />
-            Built for Indian CA firms · GSTR · TDS · ITR · Audit
+            Built for CA · CS · CMA · Tax & Legal Consultants · Advocates
           </div>
           <h1 className="lp-h1">The operating system<br />for your <span style={{ background: 'linear-gradient(90deg,#6b8cad,#a5b4fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>practice</span>.</h1>
-          <p className="lp-lede" style={{ margin: '24px auto 0' }}>Worksheets, recurring compliances, client portal, billing and team workload — all in one place. Stop juggling Excel, WhatsApp and email. Start filing on time.</p>
+          <p className="lp-lede" style={{ margin: '24px auto 0' }}>Worksheets, recurring work, client portal, billing and team workload — all in one place. For service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
             <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
               {loading ? 'Signing in…' : 'Start free trial →'}
@@ -232,7 +232,7 @@ function Hero({ onSignIn, loading }) {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function Stats() {
-  const stats = [['1', 'CA firm onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time filing rate'], ['∞', 'Excel sheets replaced']]
+  const stats = [['1', 'Practice onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time delivery rate'], ['∞', 'Excel sheets replaced']]
   return (
     <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)', background: 'var(--lp-alt)' }}>
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
@@ -544,7 +544,7 @@ function Compliance() {
           <div>
             <div className="lp-eyebrow">Built for Indian compliance</div>
             <h2 className="lp-h2" style={{ marginTop: 8 }}>Speaks fluent <span style={{ color: '#6b8cad' }}>GSTR</span>, <span style={{ color: '#6366f1' }}>TDS</span>, <span style={{ color: '#10b981' }}>ITR</span>.</h2>
-            <p className="lp-lede" style={{ marginTop: 18 }}>Every recurring rule, every status, every report is shaped to the Indian compliance calendar. Not a generic project tool with templates bolted on.</p>
+            <p className="lp-lede" style={{ marginTop: 18 }}>Every recurring rule, every status, every report is shaped to the Indian compliance calendar — perfect for CA, CS and CMA practices. Define custom work types for advisory, legal or consulting work too.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 24 }}>
               {['ICAI-friendly', 'GSTN periodicity', 'Indian FY Apr–Mar', '₹ INR-first', 'Multi-GSTIN clients'].map(t => (
                 <span key={t} className="lp-mono" style={{ fontSize: 11, padding: '5px 10px', background: 'rgba(107,140,173,.08)', border: '1px solid rgba(107,140,173,.22)', borderRadius: 6, color: '#6b8cad', fontWeight: 600 }}>{t}</span>
@@ -637,7 +637,7 @@ function FinalCTA({ onSignIn, loading }) {
     <section id="contact" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(107,140,173,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ textAlign: 'center', position: 'relative' }}>
-        <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />filing day quiet.</h2>
+        <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />deadline day quiet.</h2>
         <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Start free for 14 days. No credit card. Bring your team. We'll get out of the way.</p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
@@ -661,7 +661,7 @@ function Footer() {
               <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
               <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlowco</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for Indian CA firms, accounting practices and tax consultants.</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants.</div>
           </div>
           {[
             ['Product', ['Modules', 'Pricing', 'Changelog', 'Roadmap', 'Status']],
