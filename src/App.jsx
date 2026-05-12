@@ -1063,7 +1063,7 @@ var CMD_MODULES=[
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
-  {id:'comms',label:'Communication',tabs:[{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
   {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
   {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
@@ -10496,6 +10496,344 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   </div>;
 }
 
+// ── Client Connect Module — Q&A forms, data requests & BYO storage ──
+var PROVIDER_LABELS={google_drive:'Google Drive',dropbox:'Dropbox',onedrive:'OneDrive'};
+
+function ClientConnectModule({org,supabase,cu}){
+  var [clients,setClients]=useState([]);
+  var [requests,setRequests]=useState([]);
+  var [responses,setResponses]=useState([]);
+  var [ccMessages,setCcMessages]=useState([]);
+  var [storageConfig,setStorageConfig]=useState(null);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  var [selClientId,setSelClientId]=useState(null);
+  var [clientSearch,setClientSearch]=useState('');
+  var [mainTab,setMainTab]=useState('requests');
+  var [showCreate,setShowCreate]=useState(false);
+  var [showStorage,setShowStorage]=useState(false);
+  var [showResponses,setShowResponses]=useState(null);
+  var [newTitle,setNewTitle]=useState('');
+  var [newDesc,setNewDesc]=useState('');
+  var [newDue,setNewDue]=useState('');
+  var [newQuestions,setNewQuestions]=useState([]);
+  var [newStorageUrl,setNewStorageUrl]=useState('');
+  var [creating,setCreating]=useState(false);
+  var [storProvider,setStorProvider]=useState('google_drive');
+  var [storUrl,setStorUrl]=useState('');
+  var [storName,setStorName]=useState('');
+  var [savingStorage,setSavingStorage]=useState(false);
+  var [msgText,setMsgText]=useState('');
+  var [sendingMsg,setSendingMsg]=useState(false);
+
+  function showToast(msg,kind){setToast({msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  useEffect(function(){loadAll();},[org.id]);
+
+  async function loadAll(){
+    setLoading(true);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
+    var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
+    var sc=await supabase.from('org_storage_config').select('*').eq('org_id',org.id).maybeSingle();
+    var reqIds=(rr.data||[]).map(function(r){return r.id;});
+    var resData=[],msgData=[];
+    if(reqIds.length>0){
+      var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);
+      var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);
+      resData=rres.data||[];msgData=rmsg.data||[];
+    }
+    setClients(rc.data||[]);setRequests(rr.data||[]);setResponses(resData);setCcMessages(msgData);
+    var cfg=sc.data||null;setStorageConfig(cfg);
+    if(cfg){setStorProvider(cfg.provider||'google_drive');setStorUrl(cfg.folder_url||'');setStorName(cfg.folder_name||'');}
+    setLoading(false);
+  }
+
+  async function createRequest(){
+    if(!newTitle.trim()||!selClientId){showToast('Title and client required','err');return;}
+    setCreating(true);
+    var payload={org_id:org.id,client_id:selClientId,created_by:cu.id,title:newTitle.trim(),description:newDesc.trim()||null,questions:newQuestions,due_date:newDue||null,storage_url:newStorageUrl.trim()||(storageConfig&&storageConfig.folder_url)||null};
+    var {data,error}=await supabase.from('client_connect_requests').insert(payload).select().single();
+    if(error){showToast(error.message,'err');setCreating(false);return;}
+    setRequests(function(p){return[data,...p];});
+    setNewTitle('');setNewDesc('');setNewDue('');setNewQuestions([]);setNewStorageUrl('');
+    setShowCreate(false);setCreating(false);
+    showToast('Request created! Copy the link to share with client.');
+  }
+
+  async function saveStorage(){
+    if(!storUrl.trim()){showToast('Folder URL required','err');return;}
+    setSavingStorage(true);
+    var payload={org_id:org.id,provider:storProvider,folder_url:storUrl.trim(),folder_name:storName.trim()||null,updated_at:new Date().toISOString()};
+    var {data,error}=await supabase.from('org_storage_config').upsert(payload,{onConflict:'org_id'}).select().single();
+    if(error){showToast(error.message,'err');setSavingStorage(false);return;}
+    setStorageConfig(data);setSavingStorage(false);setShowStorage(false);
+    showToast('Storage settings saved!');
+  }
+
+  async function sendMessage(requestId){
+    if(!msgText.trim())return;
+    setSendingMsg(true);
+    var payload={request_id:requestId,from_firm:true,sender_name:cu.email,message:msgText.trim()};
+    var {data,error}=await supabase.from('client_connect_messages').insert(payload).select().single();
+    if(error){showToast(error.message,'err');setSendingMsg(false);return;}
+    setCcMessages(function(p){return[...p,data];});
+    setMsgText('');setSendingMsg(false);
+  }
+
+  function addQuestion(type){setNewQuestions(function(p){return[...p,{id:Date.now()+'',type,label:'',required:false}];});}
+  function updateQuestion(id,field,val){setNewQuestions(function(p){return p.map(function(q){return q.id===id?Object.assign({},q,{[field]:val}):q;});});}
+  function removeQuestion(id){setNewQuestions(function(p){return p.filter(function(q){return q.id!==id;});});}
+  function getShareLink(token){return window.location.origin+'/#/c/'+token;}
+  function copyLink(token){navigator.clipboard.writeText(getShareLink(token)).then(function(){showToast('Link copied!');});}
+  function reqResponseCount(reqId){return responses.filter(function(r){return r.request_id===reqId;}).length;}
+
+  var selClient=clients.find(function(c){return c.id===selClientId;})||null;
+  var clientReqs=requests.filter(function(r){return r.client_id===selClientId;});
+  var clientMsgs=ccMessages.filter(function(m){return clientReqs.some(function(r){return r.id===m.request_id;});});
+  var filteredClients=clients.filter(function(c){if(!clientSearch.trim())return true;var n=(c.display_name||c.name||'').toLowerCase();return n.includes(clientSearch.toLowerCase());});
+  var reqResponses=showResponses?responses.filter(function(r){return r.request_id===showResponses.id;}):[];
+  var INP2={width:'100%',boxSizing:'border-box',padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none'};
+
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading Client Connect…</div>;
+
+  return<div style={{display:'flex',height:'calc(100vh - 110px)',minHeight:0}}>
+    {/* Sidebar */}
+    <div style={{width:220,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',flexShrink:0}}>
+      <div style={{padding:'12px 12px 8px',borderBottom:'1px solid var(--tf-border)'}}>
+        <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients…" style={{width:'100%',boxSizing:'border-box',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        {filteredClients.length===0?<div style={{padding:'24px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>No clients found.</div>:
+        filteredClients.map(function(c){
+          var cReqs=requests.filter(function(r){return r.client_id===c.id;});
+          var pending=cReqs.filter(function(r){return r.status==='sent';}).length;
+          var isActive=c.id===selClientId;
+          return<button key={c.id} onClick={function(){setSelClientId(c.id);setMainTab('requests');}} style={{width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:isActive?'rgba(107,140,173,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:isActive?'3px solid #6b8cad':'3px solid transparent'}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{cReqs.length} req{cReqs.length!==1?'s':''}{pending>0?' · '+pending+' pending':''}</div>
+          </button>;
+        })}
+      </div>
+    </div>
+
+    {/* Main area */}
+    <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0}}>
+      {!selClient?
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:12,color:'var(--tf-text-sub)',textAlign:'center',padding:24}}>
+          <div style={{fontSize:40}}>📋</div>
+          <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Client Connect</div>
+          <div style={{fontSize:13,maxWidth:340}}>Send Q&A questionnaires and data requests to clients via a simple shareable link — no login required. Files go to your own cloud storage.</div>
+          <button onClick={function(){setShowStorage(true);}} style={{marginTop:8,padding:'8px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
+            ⚙ Storage Settings {storageConfig?'('+PROVIDER_LABELS[storageConfig.provider]+')':'(not set)'}
+          </button>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>← Select a client to start</div>
+        </div>:
+        <>
+          <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}</div>
+              {selClient.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>PAN: {selClient.pan}</div>}
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={function(){setShowStorage(true);}} style={{padding:'6px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
+                ⚙ Storage {storageConfig?'('+PROVIDER_LABELS[storageConfig.provider]+')':'(not set)'}
+              </button>
+              <button onClick={function(){setNewStorageUrl((storageConfig&&storageConfig.folder_url)||'');setShowCreate(true);}} style={{padding:'6px 14px',background:'#6b8cad',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>
+                + New Request
+              </button>
+            </div>
+          </div>
+
+          <div style={{display:'flex',gap:0,padding:'0 16px',borderBottom:'1px solid var(--tf-border)'}}>
+            {[{id:'requests',label:'Requests ('+clientReqs.length+')'},{id:'messages',label:'Messages ('+clientMsgs.length+')'}].map(function(t){
+              var act=mainTab===t.id;
+              return<button key={t.id} onClick={function(){setMainTab(t.id);}} style={{padding:'10px 16px',border:'none',background:'none',borderBottom:act?'2px solid #6b8cad':'2px solid transparent',fontFamily:'inherit',cursor:'pointer',fontSize:13,fontWeight:act?700:500,color:act?'#6b8cad':'var(--tf-text-sub)',marginBottom:-1}}>{t.label}</button>;
+            })}
+          </div>
+
+          {mainTab==='requests'&&<div style={{flex:1,overflowY:'auto',padding:16}}>
+            {clientReqs.length===0?
+              <div style={{textAlign:'center',padding:'48px 0',color:'var(--tf-text-sub)'}}>
+                <div style={{fontSize:28,marginBottom:8}}>📨</div>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>No requests yet</div>
+                <div style={{fontSize:12,marginTop:4}}>Click "+ New Request" to send a Q&A form or data collection request</div>
+              </div>:
+              clientReqs.map(function(req){
+                var link=getShareLink(req.token);
+                var rCount=reqResponseCount(req.id);
+                var questions=req.questions||[];
+                return<div key={req.id} style={{border:'1px solid var(--tf-border)',borderRadius:10,padding:14,marginBottom:10,background:'var(--tf-surface)'}}>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:6}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{req.title}</div>
+                      {req.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{req.description}</div>}
+                    </div>
+                    <span style={{flexShrink:0,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700,background:req.status==='responded'?'#22c55e20':req.status==='closed'?'rgba(107,140,173,0.1)':'#f59e0b20',color:req.status==='responded'?'#22c55e':req.status==='closed'?'var(--tf-text-sub)':'#f59e0b',textTransform:'uppercase'}}>{req.status==='responded'?'Responded':req.status==='closed'?'Closed':'Sent'}</span>
+                  </div>
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+                    <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📝 {questions.length} question{questions.length!==1?'s':''}</span>
+                    {req.due_date&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📅 Due {req.due_date}</span>}
+                    {req.storage_url&&<span style={{fontSize:11,color:'#6b8cad'}}>🗂 Storage linked</span>}
+                    {rCount>0&&<span style={{fontSize:11,color:'#22c55e',fontWeight:700}}>✓ {rCount} response{rCount!==1?'s':''}</span>}
+                  </div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    <input readOnly value={link} style={{flex:1,minWidth:0,padding:'6px 10px',border:'1px solid var(--tf-border)',borderRadius:7,background:'var(--tf-bg)',color:'var(--tf-text-sub)',fontSize:11,fontFamily:'monospace'}}/>
+                    <button onClick={function(){copyLink(req.token);}} style={{padding:'6px 12px',background:'#6b8cad',border:'none',borderRadius:7,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0}}>Copy Link</button>
+                    {rCount>0&&<button onClick={function(){setShowResponses(req);}} style={{padding:'6px 12px',background:'#22c55e20',border:'1px solid #22c55e40',borderRadius:7,cursor:'pointer',fontSize:11,fontWeight:700,color:'#22c55e',fontFamily:'inherit',flexShrink:0}}>View Responses</button>}
+                  </div>
+                </div>;
+              })
+            }
+          </div>}
+
+          {mainTab==='messages'&&<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+            <div style={{flex:1,overflowY:'auto',padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}>
+              {clientMsgs.length===0&&<div style={{textAlign:'center',padding:'32px 0',color:'var(--tf-text-sub)',fontSize:12}}>No messages yet. Start a conversation with this client.</div>}
+              {clientMsgs.map(function(m){
+                return<div key={m.id} style={{display:'flex',justifyContent:m.from_firm?'flex-end':'flex-start'}}>
+                  <div style={{maxWidth:'70%',padding:'8px 12px',borderRadius:10,background:m.from_firm?'#6b8cad':'var(--tf-surface)',border:m.from_firm?'none':'1px solid var(--tf-border)',color:m.from_firm?'#fff':'var(--tf-text)'}}>
+                    {!m.from_firm&&<div style={{fontSize:10,fontWeight:700,marginBottom:2,color:'var(--tf-text-sub)'}}>{m.sender_name||'Client'}</div>}
+                    <div style={{fontSize:13}}>{m.message}</div>
+                    <div style={{fontSize:10,opacity:0.7,marginTop:3,textAlign:m.from_firm?'right':'left'}}>{new Date(m.created_at).toLocaleString('en-IN',{hour:'2-digit',minute:'2-digit',day:'numeric',month:'short'})}</div>
+                  </div>
+                </div>;
+              })}
+            </div>
+            <div style={{padding:'10px 16px',borderTop:'1px solid var(--tf-border)',display:'flex',gap:8}}>
+              <input value={msgText} onChange={function(e){setMsgText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();if(clientReqs.length>0)sendMessage(clientReqs[0].id);}}} placeholder={clientReqs.length===0?'Create a request first to enable messaging…':'Type a message…'} disabled={clientReqs.length===0} style={{flex:1,padding:'8px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',opacity:clientReqs.length===0?0.5:1}}/>
+              <button onClick={function(){if(clientReqs.length>0)sendMessage(clientReqs[0].id);}} disabled={sendingMsg||!msgText.trim()||clientReqs.length===0} style={{padding:'8px 16px',background:'#6b8cad',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff',fontFamily:'inherit',opacity:(!msgText.trim()||clientReqs.length===0)?0.5:1}}>Send</button>
+            </div>
+          </div>}
+        </>
+      }
+    </div>
+
+    {/* Create Request Modal */}
+    {showCreate&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'var(--tf-bg)',borderRadius:14,padding:24,width:560,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>New Client Request</div>
+          <button onClick={function(){setShowCreate(false);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--tf-text-sub)',lineHeight:1}}>×</button>
+        </div>
+        <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Title *</label>
+        <input value={newTitle} onChange={function(e){setNewTitle(e.target.value);}} placeholder="e.g. Documents needed for ITR filing" style={Object.assign({},INP2,{marginBottom:12})}/>
+        <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Description</label>
+        <textarea value={newDesc} onChange={function(e){setNewDesc(e.target.value);}} placeholder="Instructions or context for the client…" rows={3} style={{width:'100%',boxSizing:'border-box',padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',resize:'vertical',marginBottom:12}}/>
+        <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Due Date</label>
+        <input type="date" value={newDue} onChange={function(e){setNewDue(e.target.value);}} style={{padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',marginBottom:16}}/>
+
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Questions</div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {[{t:'text',l:'Short Text'},{t:'textarea',l:'Long Text'},{t:'date',l:'Date'},{t:'yesno',l:'Yes/No'},{t:'file',l:'File Upload'}].map(function(qt){
+                return<button key={qt.t} onClick={function(){addQuestion(qt.t);}} style={{padding:'3px 8px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>+ {qt.l}</button>;
+              })}
+            </div>
+          </div>
+          {newQuestions.length===0&&<div style={{padding:'14px',border:'1px dashed var(--tf-border)',borderRadius:8,textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>No questions yet — click above to add</div>}
+          {newQuestions.map(function(q,i){
+            return<div key={q.id} style={{border:'1px solid var(--tf-border)',borderRadius:8,padding:10,marginBottom:8,background:'var(--tf-surface)'}}>
+              <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase'}}>{q.type==='text'?'Short Text':q.type==='textarea'?'Long Text':q.type==='date'?'Date':q.type==='yesno'?'Yes / No':'File Upload'} — Q{i+1}</div>
+                  <input value={q.label} onChange={function(e){updateQuestion(q.id,'label',e.target.value);}} placeholder="Question label…" style={{width:'100%',boxSizing:'border-box',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+                  {q.type==='file'&&<div style={{fontSize:11,color:'#6b8cad',marginTop:4}}>📁 Client will be shown your storage folder link to upload files there</div>}
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0,alignItems:'center'}}>
+                  <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'var(--tf-text-sub)',cursor:'pointer',whiteSpace:'nowrap'}}>
+                    <input type="checkbox" checked={q.required} onChange={function(e){updateQuestion(q.id,'required',e.target.checked);}} style={{accentColor:'#6b8cad'}}/>Req
+                  </label>
+                  <button onClick={function(){removeQuestion(q.id);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,color:'#ef4444',lineHeight:1,padding:0}}>✕</button>
+                </div>
+              </div>
+            </div>;
+          })}
+        </div>
+
+        <div style={{padding:'10px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'rgba(107,140,173,0.06)',marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>📁 File Collection Storage</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:6}}>For file questions, clients see your folder link. Leave blank to use org default.</div>
+          <input value={newStorageUrl} onChange={function(e){setNewStorageUrl(e.target.value);}} placeholder={(storageConfig&&storageConfig.folder_url)||'Paste Google Drive / Dropbox / OneDrive folder URL…'} style={{width:'100%',boxSizing:'border-box',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:11,fontFamily:'inherit',outline:'none'}}/>
+        </div>
+
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowCreate(false);}} style={{padding:'9px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>Cancel</button>
+          <button onClick={createRequest} disabled={creating||!newTitle.trim()} style={{padding:'9px 18px',background:'#6b8cad',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff',fontFamily:'inherit',opacity:creating?0.7:1}}>{creating?'Creating…':'Create & Get Link'}</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* Storage Settings Modal */}
+    {showStorage&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'var(--tf-bg)',borderRadius:14,padding:24,width:460,maxWidth:'95vw'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>Storage Settings</div>
+          <button onClick={function(){setShowStorage(false);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--tf-text-sub)',lineHeight:1}}>×</button>
+        </div>
+        <div style={{padding:'12px',border:'1px solid rgba(107,140,173,0.3)',borderRadius:10,background:'rgba(107,140,173,0.06)',marginBottom:16,fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.6}}>
+          📌 Instead of storing files on TaskFlow's servers, connect your own cloud storage. Create a shared folder and paste its link — clients will upload files directly to your folder.
+        </div>
+        <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6}}>Storage Provider</label>
+        <div style={{display:'flex',gap:8,marginBottom:16}}>
+          {[{id:'google_drive',label:'Google Drive',icon:'🟢'},{id:'dropbox',label:'Dropbox',icon:'📦'},{id:'onedrive',label:'OneDrive',icon:'🔵'}].map(function(p){
+            var act=storProvider===p.id;
+            return<button key={p.id} onClick={function(){setStorProvider(p.id);}} style={{flex:1,padding:'10px 8px',border:'2px solid',borderColor:act?'#6b8cad':'var(--tf-border)',borderRadius:8,background:act?'rgba(107,140,173,0.1)':'var(--tf-surface)',cursor:'pointer',fontFamily:'inherit',textAlign:'center'}}>
+              <div style={{fontSize:18,marginBottom:3}}>{p.icon}</div>
+              <div style={{fontSize:11,fontWeight:700,color:act?'#6b8cad':'var(--tf-text-sub)'}}>{p.label}</div>
+            </button>;
+          })}
+        </div>
+        <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Folder Display Name</label>
+        <input value={storName} onChange={function(e){setStorName(e.target.value);}} placeholder="e.g. Client Documents 2025" style={Object.assign({},INP2,{marginBottom:12})}/>
+        <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Shareable Folder URL *</label>
+        <input value={storUrl} onChange={function(e){setStorUrl(e.target.value);}} placeholder="Paste your shared folder link here…" style={Object.assign({},INP2,{marginBottom:6})}/>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:16}}>
+          {storProvider==='google_drive'&&'Google Drive: right-click folder → Share → Copy link'}
+          {storProvider==='dropbox'&&'Dropbox: right-click folder → Share → Create a link → Copy'}
+          {storProvider==='onedrive'&&'OneDrive: right-click folder → Share → Copy link'}
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button onClick={function(){setShowStorage(false);}} style={{padding:'9px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>Cancel</button>
+          <button onClick={saveStorage} disabled={savingStorage||!storUrl.trim()} style={{padding:'9px 18px',background:'#6b8cad',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff',fontFamily:'inherit',opacity:savingStorage?0.7:1}}>{savingStorage?'Saving…':'Save Settings'}</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* View Responses Modal */}
+    {showResponses&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'var(--tf-bg)',borderRadius:14,padding:24,width:580,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>{showResponses.title}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{reqResponses.length} response{reqResponses.length!==1?'s':''}</div>
+          </div>
+          <button onClick={function(){setShowResponses(null);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--tf-text-sub)',lineHeight:1}}>×</button>
+        </div>
+        {reqResponses.length===0?<div style={{textAlign:'center',padding:'32px 0',color:'var(--tf-text-sub)',fontSize:13}}>No responses yet</div>:
+        reqResponses.map(function(res){
+          var questions=showResponses.questions||[];
+          return<div key={res.id} style={{border:'1px solid var(--tf-border)',borderRadius:10,padding:14,marginBottom:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:13,color:'var(--tf-text)'}}>{res.submitter_name||'Anonymous'}</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{new Date(res.submitted_at).toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
+            </div>
+            {questions.map(function(q){
+              var ans=(res.answers||{})[q.id];
+              return<div key={q.id} style={{marginBottom:8}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>{q.label||'Untitled question'}</div>
+                <div style={{fontSize:13,color:'var(--tf-text)',padding:'6px 10px',background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)'}}>{ans||<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>No answer</span>}</div>
+              </div>;
+            })}
+          </div>;
+        })}
+      </div>
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:2000}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Placeholder (Library sub-tabs not yet built) ──────────────────
 function PlaceholderModule({title,desc,icon}){
   return<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:16,color:'var(--tf-text-sub)'}}>
@@ -10981,7 +11319,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
   MODULES.push(
-    {id:'comms',label:'Communication',icon:Mail,desc:'Client Portal access, requests and bulk mailing.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
+    {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
     {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
@@ -11057,7 +11395,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
       {/* Analytics */}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Communication */}
-      {orgModule==='comms'&&tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='comms'&&tab==='portal'&&<ClientConnectModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='comms'&&tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Billing */}
       {orgModule==='billing'&&<BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>}
@@ -11428,6 +11766,111 @@ function ClientPortal({supabase}){
   </div>;
 }
 
+
+// ── Client Form Public — no-login client-facing form page ──
+function ClientFormPublic({supabase,token}){
+  var [request,setRequest]=useState(null);
+  var [orgName,setOrgName]=useState('');
+  var [loading,setLoading]=useState(true);
+  var [error,setError]=useState(null);
+  var [answers,setAnswers]=useState({});
+  var [name,setName]=useState('');
+  var [submitting,setSubmitting]=useState(false);
+  var [submitted,setSubmitted]=useState(false);
+
+  useEffect(function(){loadForm();},[token]);
+
+  async function loadForm(){
+    setLoading(true);
+    var {data,error}=await supabase.from('client_connect_requests').select('*').eq('token',token).single();
+    if(error||!data){setError('This link is invalid or has expired.');setLoading(false);return;}
+    setRequest(data);
+    var orgRes=await supabase.from('organizations').select('name').eq('id',data.org_id).single();
+    if(orgRes.data)setOrgName(orgRes.data.name);
+    setLoading(false);
+  }
+
+  function setAnswer(qId,val){setAnswers(function(p){return Object.assign({},p,{[qId]:val});});}
+
+  async function submit(){
+    if(!request)return;
+    var questions=request.questions||[];
+    for(var i=0;i<questions.length;i++){
+      var q=questions[i];
+      if(q.required&&!answers[q.id]){alert('Please answer: '+q.label);return;}
+    }
+    setSubmitting(true);
+    var {error}=await supabase.from('client_connect_responses').insert({request_id:request.id,submitter_name:name.trim()||null,answers});
+    if(error){alert('Failed to submit. Please try again.');setSubmitting(false);return;}
+    await supabase.from('client_connect_requests').update({status:'responded'}).eq('token',token);
+    setSubmitted(true);setSubmitting(false);
+  }
+
+  var baseStyle={minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui,sans-serif"};
+  var centerStyle=Object.assign({},baseStyle,{display:'flex',alignItems:'center',justifyContent:'center'});
+
+  if(loading)return<div style={centerStyle}><div style={{color:'#475569',fontSize:14}}>Loading…</div></div>;
+  if(error)return<div style={centerStyle}><div style={{textAlign:'center',padding:32}}><div style={{fontSize:48,marginBottom:16}}>🔗</div><div style={{fontSize:18,fontWeight:700,color:'#1e293b',marginBottom:8}}>Link not found</div><div style={{fontSize:14,color:'#64748b'}}>{error}</div></div></div>;
+  if(submitted)return<div style={centerStyle}><div style={{textAlign:'center',padding:32,maxWidth:400}}><div style={{fontSize:56,marginBottom:16}}>✅</div><div style={{fontSize:22,fontWeight:800,color:'#1e293b',marginBottom:8}}>Thank you!</div><div style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Your response has been submitted to {orgName||'the firm'}. They will follow up if needed.</div></div></div>;
+
+  var questions=request.questions||[];
+  var hasFileQ=questions.some(function(q){return q.type==='file';});
+  var storageUrl=request.storage_url;
+  var INP3={width:'100%',boxSizing:'border-box',padding:'10px 14px',border:'1px solid #d1d5db',borderRadius:8,fontSize:14,fontFamily:'inherit',color:'#1e293b',outline:'none'};
+
+  return<div style={Object.assign({},baseStyle,{padding:'40px 16px'})}>
+    <div style={{maxWidth:600,margin:'0 auto'}}>
+      <div style={{marginBottom:24,textAlign:'center'}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>{orgName}</div>
+        <div style={{fontSize:24,fontWeight:800,color:'#1e293b',marginBottom:8}}>{request.title}</div>
+        {request.description&&<div style={{fontSize:15,color:'#475569',lineHeight:1.6}}>{request.description}</div>}
+        {request.due_date&&<div style={{marginTop:8,fontSize:13,color:'#f59e0b',fontWeight:600}}>📅 Please respond by {request.due_date}</div>}
+      </div>
+
+      {hasFileQ&&storageUrl&&<div style={{border:'1px solid #3b82f640',borderRadius:10,padding:'12px 16px',background:'#eff6ff',marginBottom:20}}>
+        <div style={{fontSize:13,fontWeight:700,color:'#3b82f6',marginBottom:4}}>📁 File Upload Instructions</div>
+        <div style={{fontSize:13,color:'#1e40af',lineHeight:1.5}}>For file questions below, please upload documents to the shared folder:<br/>
+          <a href={storageUrl} target="_blank" rel="noopener noreferrer" style={{color:'#3b82f6',fontWeight:700,textDecoration:'underline',display:'inline-block',marginTop:4}}>→ Open Upload Folder</a>
+        </div>
+      </div>}
+
+      <div style={{background:'#fff',borderRadius:14,padding:24,boxShadow:'0 2px 16px rgba(0,0,0,0.06)',marginBottom:16}}>
+        <div style={{marginBottom:20}}>
+          <label style={{display:'block',fontSize:13,fontWeight:700,color:'#374151',marginBottom:6}}>Your Name <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
+          <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Enter your name…" style={INP3}/>
+        </div>
+
+        {questions.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:'#94a3b8',fontSize:14}}>No questions — just click Submit to confirm receipt.</div>}
+
+        {questions.map(function(q,i){
+          return<div key={q.id} style={{marginBottom:20}}>
+            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#374151',marginBottom:6}}>
+              {q.label||'Question '+(i+1)}{q.required&&<span style={{color:'#ef4444'}}> *</span>}
+            </label>
+            {q.type==='text'&&<input value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} style={INP3}/>}
+            {q.type==='textarea'&&<textarea value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} rows={4} style={Object.assign({},INP3,{resize:'vertical'})}/>}
+            {q.type==='date'&&<input type="date" value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} style={{padding:'10px 14px',border:'1px solid #d1d5db',borderRadius:8,fontSize:14,fontFamily:'inherit',color:'#1e293b',outline:'none'}}/>}
+            {q.type==='yesno'&&<div style={{display:'flex',gap:10}}>
+              {['Yes','No'].map(function(opt){
+                var sel=answers[q.id]===opt;
+                return<button key={opt} onClick={function(){setAnswer(q.id,opt);}} style={{padding:'9px 24px',border:'2px solid',borderColor:sel?'#6b8cad':'#d1d5db',borderRadius:8,background:sel?'rgba(107,140,173,0.1)':'#fff',cursor:'pointer',fontSize:14,fontWeight:700,color:sel?'#6b8cad':'#64748b',fontFamily:'inherit'}}>{opt}</button>;
+              })}
+            </div>}
+            {q.type==='file'&&<div style={{padding:'14px',border:'1px dashed #94a3b8',borderRadius:8,background:'#f8fafc'}}>
+              <div style={{fontSize:13,color:'#475569'}}>📁 Upload this document using the folder link above, then note the filename here.</div>
+              {!storageUrl&&<div style={{fontSize:12,color:'#ef4444',marginTop:4}}>No storage folder set — contact {orgName} for upload instructions.</div>}
+              <input value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} placeholder="Filename or confirmation note (optional)" style={Object.assign({},INP3,{marginTop:8,fontSize:13})}/>
+            </div>}
+          </div>;
+        })}
+
+        <button onClick={submit} disabled={submitting} style={{width:'100%',padding:'13px',background:'#6b8cad',border:'none',borderRadius:10,cursor:submitting?'wait':'pointer',fontSize:15,fontWeight:800,color:'#fff',fontFamily:'inherit',opacity:submitting?0.7:1}}>{submitting?'Submitting…':'Submit Response'}</button>
+      </div>
+
+      <div style={{textAlign:'center',fontSize:12,color:'#94a3b8'}}>Powered by TaskFlowco</div>
+    </div>
+  </div>;
+}
 
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
@@ -12315,6 +12758,10 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
 }
 
 export default function App(){
+  // Client Connect public form: #/c/{token}
+  const clientFormToken=useState(function(){var h=window.location.hash;return h.startsWith('#/c/')?h.slice(4):null;})[0];
+  if(clientFormToken)return<><GlobalStyle lightMode={false}/><ClientFormPublic supabase={supabase} token={clientFormToken}/></>;
+
   // Client Portal route: if URL hash starts with #portal, render client portal
   const [isPortal]=useState(function(){return window.location.hash.indexOf('#portal')===0||window.location.hash.indexOf('#/portal')===0;});
   if(isPortal)return<><GlobalStyle lightMode={false}/><ClientPortal supabase={supabase}/></>;
