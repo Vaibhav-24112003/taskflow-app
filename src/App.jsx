@@ -7192,7 +7192,7 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 </div>;
 }
 
-function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships}){
+function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
   var [allClients,setAllClients]=useState([]); // all org clients (for Create Task dropdown)
@@ -7203,6 +7203,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('list'); // 'list' | 'urgency' | 'kanban'
   var [showCalendar,setShowCalendar]=useState(true);
+  var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
   // Create Task modal state
   var [showCreate,setShowCreate]=useState(false);
   var [ctClientId,setCtClientId]=useState('');
@@ -7222,18 +7223,19 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   function showToast(msg,kind){setToast({msg:msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
 
-  useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id]);
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id,viewMemberId]);
 
   async function load(){
     setLoading(true);
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments').eq('org_id',org.id).neq('status','completed').limit(3000);
     var rowData=rr.data||[];
-    // Step 1: filter to rows where I am assigned
+    // Step 1: filter to rows where the viewed member is assigned
+    var targetId=viewMemberId;
     var assignedRows=rowData.filter(function(r){
       var d=r.data||{};
-      if(d.__assignee===cu.id)return true;
+      if(d.__assignee===targetId)return true;
       var keys=Object.keys(d);
-      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===cu.id)return true;}
+      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===targetId)return true;}
       return false;
     });
     // Step 2: load worksheets for those rows to get work_type
@@ -7284,10 +7286,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   function getRole(r){
     var d=r.data||{};
+    var tid=viewMemberId;
     if(wfHierarchy.length>0){
-      for(var i=0;i<wfHierarchy.length;i++){var k='__h_'+wfHierarchy[i].key;if(d[k]===cu.id)return{level:i,label:wfHierarchy[i].label};}
+      for(var i=0;i<wfHierarchy.length;i++){var k='__h_'+wfHierarchy[i].key;if(d[k]===tid)return{level:i,label:wfHierarchy[i].label};}
     }
-    if(d.__assignee===cu.id)return{level:0,label:'Assignee'};
+    if(d.__assignee===tid)return{level:0,label:'Assignee'};
     return{level:-1,label:'Involved'};
   }
 
@@ -7499,15 +7502,27 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading your dashboard...</div>;
 
+  var viewingMember=orgMembers.find(function(m){return m.id===viewMemberId;})||null;
+  var viewingName=viewMemberId===cu.id?firstName:(viewingMember?(viewingMember.name||viewingMember.email||'Member').split(' ')[0]:'Member');
+  var isSelf=viewMemberId===cu.id;
+
   return<div style={{padding:'0 0 60px'}}>
     {/* Greeting header */}
     <div style={{marginBottom:20,display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
       <div>
         <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>{greet}</div>
-        <h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>Hey, {firstName}! <span style={{fontSize:18}}>👋</span></h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Your personal dashboard for <b style={{color:'var(--tf-text)'}}>{org.name}</b></div>
+        {isSelf
+          ?<h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>Hey, {firstName}! <span style={{fontSize:18}}>👋</span></h2>
+          :<h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>{viewingName}'s Worklist</h2>}
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{isSelf?<>Your personal dashboard for <b style={{color:'var(--tf-text)'}}>{org.name}</b></>:<>Viewing worklist on behalf of <b style={{color:'var(--tf-text)'}}>{viewingName}</b> · {org.name}</>}</div>
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        {/* Member selector */}
+        {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');}}
+          style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:8,padding:'7px 12px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:12,fontWeight:700,outline:'none',fontFamily:'inherit'}}>
+          <option value={cu.id}>👤 My Worklist</option>
+          {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+        </select>}
         <select value={dateFilter} onChange={function(e){setDateFilter(e.target.value);}}
           title="Filter tasks by due date range"
           style={{background:dateFilter!=='all'?'rgba(59,130,246,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:8,padding:'7px 12px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,outline:'none',fontFamily:'inherit'}}>
@@ -7520,9 +7535,12 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           <option value="next30">Next 30 Days</option>
           <option value="nodate">No Due Date</option>
         </select>
-        <button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
+        {isSelf&&onGoToPlan&&<button onClick={onGoToPlan} style={{background:'linear-gradient(135deg,rgba(107,140,173,0.15),rgba(99,102,241,0.12))',border:'1px solid rgba(107,140,173,0.4)',borderRadius:8,padding:'7px 14px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          🗓 My Day →
+        </button>}
+        {isSelf&&<button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
           <span style={{fontSize:14}}>+</span>Create Task
-        </button>
+        </button>}
         <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
         </button>
@@ -11007,7 +11025,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
   var sidebarW=sidebarOpen?236:52;
   var moduleContent=<>
       {/* Your Diary */}
-      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){setTab('plan');localStorage.setItem('tf_lastOrgTab','plan');}}/>}
       {orgModule==='diary'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
