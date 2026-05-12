@@ -7508,13 +7508,12 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   return<div style={{padding:'0 0 60px'}}>
     {/* Greeting header */}
-    <div style={{marginBottom:20,display:'flex',alignItems:'flex-end',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
+    <div style={{marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
       <div>
-        <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}>{greet}</div>
         {isSelf
-          ?<h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>Hey, {firstName}! <span style={{fontSize:18}}>👋</span></h2>
-          :<h2 style={{fontSize:24,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>{viewingName}'s Worklist</h2>}
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{isSelf?<>Your personal dashboard for <b style={{color:'var(--tf-text)'}}>{org.name}</b></>:<>Viewing worklist on behalf of <b style={{color:'var(--tf-text)'}}>{viewingName}</b> · {org.name}</>}</div>
+          ?<h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>{greet}, {firstName} <span style={{fontSize:16}}>👋</span></h2>
+          :<h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>{viewingName}'s Worklist</h2>}
+        {!isSelf&&<div style={{fontSize:11,color:'#8b5cf6',marginTop:2,fontWeight:600}}>Viewing on behalf · {org.name}</div>}
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
         {/* Member selector */}
@@ -7547,36 +7546,36 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       </div>
     </div>
 
-    {/* KPI tiles */}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:12,marginBottom:22}}>
-      {[
-        {id:'all',label:'Total Active',count:stats.total,color:'#6b8cad'},
-        {id:'today',label:'Due Today',count:stats.today,color:'#f59e0b'},
-        {id:'overdue',label:'Overdue',count:stats.overdue,color:'#ef4444'},
-        {id:'review',label:'For Review',count:stats.review,color:'#8b5cf6'},
-      ].map(function(k){
-        var active=filter===k.id;
-        return<button key={k.id} onClick={function(){setFilter(k.id);}}
-          style={{textAlign:'left',padding:'14px 16px',background:active?'rgba(107,140,173,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:active?k.color:'var(--tf-border)',borderRadius:12,cursor:'pointer',fontFamily:'inherit',transition:'all 0.14s'}}>
-          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:4}}>{k.label}</div>
-          <div style={{fontSize:26,fontWeight:800,color:k.color,lineHeight:1}}>{k.count}</div>
-        </button>;
-      })}
-    </div>
-
-    {/* View switcher */}
-    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:16}}>
-      {[
-        {id:'list',icon:'≡',label:'Work Types'},
-        {id:'urgency',icon:'◉',label:'By Urgency'},
-        {id:'kanban',icon:'▦',label:'Kanban'},
-      ].map(function(v){
-        var active=dashView===v.id;
-        return<button key={v.id} onClick={function(){setDashView(v.id);}}
-          style={{display:'flex',alignItems:'center',gap:5,padding:'6px 13px',borderRadius:7,border:'1px solid',borderColor:active?'#6b8cad':'var(--tf-border)',background:active?'rgba(107,140,173,0.12)':'var(--tf-surface)',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,fontFamily:'inherit',transition:'all 0.12s'}}>
-          <span style={{fontSize:13}}>{v.icon}</span>{v.label}
-        </button>;
-      })}
+    {/* KPI chips + View switcher (single compact row) */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:14,flexWrap:'wrap'}}>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        {[
+          {id:'all',label:'All',count:stats.total,color:'#6b8cad'},
+          {id:'today',label:'Today',count:stats.today,color:'#f59e0b'},
+          {id:'overdue',label:'Overdue',count:stats.overdue,color:'#ef4444'},
+          {id:'review',label:'Review',count:stats.review,color:'#8b5cf6'},
+        ].map(function(k){
+          var active=filter===k.id;
+          return<button key={k.id} onClick={function(){setFilter(k.id);}}
+            style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 11px',background:active?k.color+'1f':'var(--tf-surface)',border:'1px solid',borderColor:active?k.color:'var(--tf-border)',borderRadius:20,cursor:'pointer',fontFamily:'inherit',transition:'all 0.12s',fontSize:12}}>
+            <span style={{fontWeight:600,color:active?k.color:'var(--tf-text-sub)'}}>{k.label}</span>
+            <span style={{fontWeight:800,color:k.color}}>{k.count}</span>
+          </button>;
+        })}
+      </div>
+      <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:2}}>
+        {[
+          {id:'list',icon:'≡'},
+          {id:'urgency',icon:'◉'},
+          {id:'kanban',icon:'▦'},
+        ].map(function(v){
+          var active=dashView===v.id;
+          return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.id}
+            style={{padding:'4px 10px',borderRadius:5,border:'none',background:active?'rgba(107,140,173,0.15)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:active?700:500,fontFamily:'inherit',transition:'all 0.1s'}}>
+            {v.icon}
+          </button>;
+        })}
+      </div>
     </div>
 
     {/* Main content + Calendar sidebar */}
