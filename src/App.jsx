@@ -7680,17 +7680,36 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             return a<b?-1:1;
           }).map(function(wt){
             var isUnclassified=wt==='Unclassified';
-            return<div key={wt} style={{marginBottom:18}}>
-              <button onClick={function(){if(onOpenWorkType&&!isUnclassified)onOpenWorkType(wt);}}
-                title={isUnclassified?"Unclassified tasks — classify them below to move to a work type":"Open "+wt+" worksheet with only my clients"}
-                style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'0 0 8px 2px',cursor:(onOpenWorkType&&!isUnclassified)?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,color:isUnclassified?'#f59e0b':'#6b8cad',fontFamily:'inherit'}}
-                onMouseEnter={function(e){if(onOpenWorkType&&!isUnclassified)e.currentTarget.style.color='#4a7a9b';}}
-                onMouseLeave={function(e){e.currentTarget.style.color=isUnclassified?'#f59e0b':'#6b8cad';}}>
-                <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.06em'}}>{isUnclassified?'🏷 Unclassified':wt} · {grouped[wt].length}</span>
-                {onOpenWorkType&&!isUnclassified&&<span style={{fontSize:10,fontWeight:700,opacity:0.7}}>Open worksheet →</span>}
-              </button>
+            var isOpen=!!expandedGroups[wt];
+            // Per-group summary stats
+            var gRows=grouped[wt];
+            var gOverdue=gRows.filter(function(r){return r.due_date&&r.due_date<todayStr;}).length;
+            var gToday=gRows.filter(function(r){return r.due_date===todayStr;}).length;
+            var gReview=gRows.filter(function(r){var role=getRole(r);return role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';}).length;
+            return<div key={wt} style={{marginBottom:10}}>
               <div style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isUnclassified?'rgba(245,158,11,0.4)':'var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-                {(expandedGroups[wt]?grouped[wt]:grouped[wt].slice(0,2)).map(function(row,idx){
+                {/* Collapsible header bar */}
+                <button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n[wt]=!n[wt];return n;});}}
+                  style={{width:'100%',textAlign:'left',background:isOpen?'rgba(107,140,173,0.04)':'transparent',border:'none',borderBottom:isOpen?'1px solid var(--tf-border)':'none',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:'var(--tf-text)',fontFamily:'inherit',transition:'background 0.12s'}}
+                  onMouseEnter={function(e){if(!isOpen)e.currentTarget.style.background='rgba(107,140,173,0.04)';}}
+                  onMouseLeave={function(e){if(!isOpen)e.currentTarget.style.background='transparent';}}>
+                  <span style={{fontSize:11,color:'var(--tf-text-sub)',transition:'transform 0.15s',transform:isOpen?'rotate(90deg)':'rotate(0deg)',display:'inline-block',width:10}}>▶</span>
+                  <span style={{fontSize:13,fontWeight:800,color:isUnclassified?'#f59e0b':'var(--tf-text)',letterSpacing:'-0.01em'}}>{isUnclassified?'🏷 Unclassified':wt}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.1)',padding:'2px 8px',borderRadius:10}}>{gRows.length}</span>
+                  <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginLeft:4}}>
+                    {gOverdue>0&&<span style={{fontSize:10,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',padding:'2px 7px',borderRadius:10}}>● {gOverdue} overdue</span>}
+                    {gToday>0&&<span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',padding:'2px 7px',borderRadius:10}}>● {gToday} today</span>}
+                    {gReview>0&&<span style={{fontSize:10,fontWeight:700,color:'#8b5cf6',background:'rgba(139,92,246,0.1)',padding:'2px 7px',borderRadius:10}}>● {gReview} review</span>}
+                  </div>
+                  {onOpenWorkType&&!isUnclassified&&<span onClick={function(e){e.stopPropagation();onOpenWorkType(wt);}} title={"Open "+wt+" worksheet"}
+                    style={{fontSize:10,fontWeight:700,color:'#6b8cad',opacity:0.75,padding:'3px 8px',borderRadius:6,cursor:'pointer'}}
+                    onMouseEnter={function(e){e.currentTarget.style.opacity='1';e.currentTarget.style.background='rgba(107,140,173,0.1)';}}
+                    onMouseLeave={function(e){e.currentTarget.style.opacity='0.75';e.currentTarget.style.background='transparent';}}>
+                    Open worksheet →
+                  </span>}
+                </button>
+                {/* Row list — only visible when expanded */}
+                {isOpen&&gRows.map(function(row,idx){
                   var client=clientMap[row.client_id];
                   var ws=wsMap[row.worksheet_id];
                   var role=getRole(row);
@@ -7830,10 +7849,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                     </div>}
                   </div>;
                 })}
-                {grouped[wt].length>2&&<button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n[wt]=!n[wt];return n;});}}
-                  style={{width:'100%',background:'rgba(107,140,173,0.04)',border:'none',borderTop:'1px solid var(--tf-border)',padding:'8px 16px',color:'#6b8cad',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',textAlign:'center'}}>
-                  {expandedGroups[wt]?'Show less ▲':'Show '+(grouped[wt].length-2)+' more ▼'}
-                </button>}
               </div>
             </div>;
           })}
