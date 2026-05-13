@@ -4901,7 +4901,6 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                     <span style={{fontSize:8,color:'var(--tf-text-sub)',transform:wsIsExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
                   </div>
                   {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:13}}>{client.display_name}</div>}
-                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>{client.pan}</div>}
                   {cfg.frequency==='once'?<div style={{marginTop:2,marginLeft:13}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
                 {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hVal=(row.data||{})[hc.key]||'';return<td key={hc.key} style={{padding:'6px 8px',textAlign:'center'}}>
@@ -5126,7 +5125,6 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexShrink:0,position:'sticky',top:0,background:'var(--tf-bg)',zIndex:1}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>{pClient.name}</div>
-              {pClient.pan&&<div style={{fontSize:11,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{pClient.pan}</div>}
             </div>
             <button onClick={function(){setPipelineDetailRow(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,flexShrink:0}}>×</button>
           </div>
@@ -5275,7 +5273,7 @@ function WorksheetTaskModal({row,client,workType,period,allWorkspaces,supabase,c
           </select>}
         </div>
         <div style={{background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.15)',borderRadius:8,padding:'9px 12px',fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.7}}>
-          <div><b style={{color:'var(--tf-text)'}}>Client:</b> {client.name}{client.pan?' · PAN: '+client.pan:''}</div>
+          <div><b style={{color:'var(--tf-text)'}}>Client:</b> {client.name}</div>
           <div><b style={{color:'var(--tf-text)'}}>Work Type:</b> {workType} · <b style={{color:'var(--tf-text)'}}>Period:</b> {period}</div>
         </div>
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
@@ -5708,7 +5706,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
               var hasStages=drillData.stat.stages.length>0;
               var effectiveStatus=hasStages?(isLastStage?'completed':(row.current_stage?'in_progress':'pending')):(row.status||'pending');
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
-                <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>{client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+                <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div></td>
                 <td style={{padding:'9px 10px',textAlign:'center'}}>{stageInfo?<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:12,background:(stageInfo.color||'#6b8cad')+'22',color:stageInfo.color||'#6b8cad',whiteSpace:'nowrap'}}>{isLastStage?'✓ ':''}{stageInfo.label}</span>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>—</span>}</td>
                 <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:SC_STATUS[effectiveStatus],textTransform:'capitalize'}}>{effectiveStatus.replace('_',' ')}</span></td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
@@ -5768,7 +5766,6 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
             return<tr key={cl.id} style={{borderBottom:'1px solid var(--tf-border)',background:ci%2?'rgba(107,140,173,0.02)':'transparent'}}>
               <td style={{padding:'9px 14px',position:'sticky',left:0,background:ci%2?'rgba(107,140,173,0.02)':'var(--tf-surface)',zIndex:1}}>
                 <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{cl.name}</div>
-                {cl.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{cl.pan}</div>}
               </td>
               {workTypeNames.map(function(wt){
                 var cell=cl.byWT[wt]||{done:0,total:0};
@@ -5807,7 +5804,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           {overdueRows.map(function(row,ri){
             var client=clientMap[row.client_id];if(!client)return null;
             return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
-              <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{client.name}</div>{client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+              <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{client.name}</div></td>
               <td style={{padding:'9px 10px',fontSize:12,color:'var(--tf-text)'}}>{row.work_type}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</td>
               <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>{row.period_label||'—'}</td>
               <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'#ef4444'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
@@ -7225,6 +7222,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id,viewMemberId]);
 
+  // Auto-refresh when the tab regains focus so newly-assigned worksheet rows show up
+  useEffect(function(){
+    function onFocus(){load();}
+    window.addEventListener('focus',onFocus);
+    return function(){window.removeEventListener('focus',onFocus);};
+    /* eslint-disable-next-line */
+  },[org.id,cu.id]);
+
   async function load(){
     setLoading(true);
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments').eq('org_id',org.id).neq('status','completed').limit(3000);
@@ -7540,6 +7545,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
         {isSelf&&<button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
           <span style={{fontSize:14}}>+</span>Create Task
         </button>}
+        <button onClick={function(){load();}} disabled={loading} title="Reload your tasks" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,opacity:loading?0.6:1}}>
+          <span style={{fontSize:14,display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.3s'}}>↻</span>{loading?'Refreshing…':'Refresh'}
+        </button>
         <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
         </button>
@@ -9141,7 +9149,6 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
-                    {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
                   </div>
                   {bcEditMode&&<button onClick={function(e){e.stopPropagation();toggleBig(c,false);}}
                     title="Remove from Big Clients" style={{background:'rgba(220,38,38,0.1)',border:'1px solid #dc2626',borderRadius:4,color:'#dc2626',cursor:'pointer',fontSize:13,fontWeight:700,padding:'0 5px',lineHeight:'18px',flexShrink:0}}>×</button>}
@@ -9212,7 +9219,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
         <div style={{flex:1,overflowY:'auto'}}>
           {nonBig.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);}).map(function(c){
             return<div key={c.id} style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-              <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>{c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}</div>
+              <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div></div>
               <button onClick={function(){toggleBig(c,true);setShowPicker(false);setSelClientId(c.id);setMode('work');}}
                 style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
             </div>;
@@ -11914,7 +11921,13 @@ function ClientFormPublic({supabase,token}){
           var upJson=await upRes.json();
           if(!upRes.ok||!upJson.ok){
             setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'error'});});
-            alert('File upload failed for "'+fq.label+'": '+(upJson.error||upRes.statusText));
+            var errMsg=upJson.error||upRes.statusText||'Unknown error';
+            var isMissingScope=upJson.missing_scope||(typeof errMsg==='string'&&errMsg.indexOf('missing_scope')!==-1);
+            if(isMissingScope&&(upJson.provider==='dropbox'||typeof errMsg==='string'&&errMsg.toLowerCase().indexOf('dropbox')!==-1)){
+              alert('File upload failed: Your Dropbox token is missing required permissions.\n\nTo fix this:\n1. Go to dropbox.com/developers/apps and open your app\n2. Click the "Permissions" tab\n3. Enable "files.content.write" and "files.content.read"\n4. Click Submit\n5. Go to the "Settings" tab, revoke the old token, and generate a new one\n6. In TaskFlow → Client Connect → Storage Settings, paste the new token');
+            }else{
+              alert('File upload failed for "'+fq.label+'": '+errMsg);
+            }
             setSubmitting(false);return;
           }
           setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'done'});});
@@ -12120,6 +12133,16 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   useEffect(function(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();}},[planDate,org&&org.id,planUserId]);
   useEffect(function(){if(org)loadClients();},[org&&org.id]);
   useEffect(function(){if(org)loadOrgMembers();},[org&&org.id]);
+
+  function refreshAll(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();loadClients();}}
+
+  // Auto-refresh when the tab regains focus so newly-assigned worksheet rows show up
+  useEffect(function(){
+    function onFocus(){refreshAll();}
+    window.addEventListener('focus',onFocus);
+    return function(){window.removeEventListener('focus',onFocus);};
+    /* eslint-disable-next-line */
+  },[planDate,org&&org.id,planUserId]);
 
   async function loadOrgMembers(){
     if(!org)return;
@@ -12497,6 +12520,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
           <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>›</button>
         </div>
         {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>Today</button>}
+        <button onClick={refreshAll} disabled={loading} title="Reload tasks & plan" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,opacity:loading?0.6:1}}>
+          <span style={{fontSize:13,lineHeight:1}}>↻</span>{loading?'…':'Refresh'}
+        </button>
         {!isReadOnly&&<button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(showPicker?'#6b8cad':'var(--tf-border)'),borderRadius:7,padding:'6px 12px',color:showPicker?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>Add to Plan</button>}
         {!isReadOnly&&org&&<button onClick={function(){setShowCreate(true);}} style={{background:'#1e40af',border:'none',borderRadius:7,padding:'7px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
           <span style={{fontSize:15,lineHeight:1}}>+</span>Create Task
