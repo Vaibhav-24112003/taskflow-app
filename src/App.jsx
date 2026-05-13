@@ -11341,6 +11341,166 @@ function ClientPortal({supabase}){
 }
 
 
+// ── Client Form Public — no-login client-facing form page ──
+function ClientFormPublic({supabase,token}){
+  var [request,setRequest]=useState(null);
+  var [orgName,setOrgName]=useState('');
+  var [loading,setLoading]=useState(true);
+  var [error,setError]=useState(null);
+  var [answers,setAnswers]=useState({});
+  var [fileSelections,setFileSelections]=useState({}); // qId -> File object
+  var [uploadProgress,setUploadProgress]=useState({}); // qId -> 'uploading'|'done'|'error'
+  var [name,setName]=useState('');
+  var [submitting,setSubmitting]=useState(false);
+  var [submitted,setSubmitted]=useState(false);
+
+  useEffect(function(){loadForm();},[token]);
+
+  async function loadForm(){
+    setLoading(true);
+    var {data,error}=await supabase.from('client_connect_requests').select('*').eq('token',token).single();
+    if(error||!data){setError('This link is invalid or has expired.');setLoading(false);return;}
+    setRequest(data);
+    var orgRes=await supabase.from('organizations').select('name').eq('id',data.org_id).single();
+    if(orgRes.data)setOrgName(orgRes.data.name);
+    setLoading(false);
+  }
+
+  function setAnswer(qId,val){setAnswers(function(p){return Object.assign({},p,{[qId]:val});});}
+
+  function selectFile(qId,file){
+    if(!file)return;
+    setFileSelections(function(p){return Object.assign({},p,{[qId]:file});});
+    setUploadProgress(function(p){return Object.assign({},p,{[qId]:null});});
+  }
+
+  async function submit(){
+    if(!request)return;
+    var questions=request.questions||[];
+    // Validate required
+    for(var i=0;i<questions.length;i++){
+      var q=questions[i];
+      if(q.required&&q.type!=='file'&&!answers[q.id]){alert('Please answer: '+q.label);return;}
+      if(q.required&&q.type==='file'&&!fileSelections[q.id]&&!answers[q.id]){alert('Please upload a file for: '+q.label);return;}
+    }
+    setSubmitting(true);
+
+    // Upload files via Edge Function (routes to cloud provider or Supabase fallback)
+    var finalAnswers=Object.assign({},answers);
+    var supabaseUrl=supabase.supabaseUrl||(supabase.rest&&supabase.rest.url)||'';
+    var uploadEndpoint=(supabaseUrl||'https://vorxrjekbokqkigfabhr.supabase.co').replace(/\/$/,'')+'/functions/v1/cc-upload';
+    var anonKey=supabase.supabaseKey||supabase.headers&&supabase.headers.apikey||'';
+    for(var j=0;j<questions.length;j++){
+      var fq=questions[j];
+      if(fq.type==='file'&&fileSelections[fq.id]){
+        var file=fileSelections[fq.id];
+        setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'uploading'});});
+        var fd=new FormData();
+        fd.append('request_token',token);
+        fd.append('question_id',fq.id);
+        fd.append('file',file);
+        try{
+          var upRes=await fetch(uploadEndpoint,{method:'POST',headers:anonKey?{apikey:anonKey,Authorization:'Bearer '+anonKey}:{},body:fd});
+          var upJson=await upRes.json();
+          if(!upRes.ok||!upJson.ok){
+            setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'error'});});
+            var errMsg=upJson.error||upRes.statusText||'Unknown error';
+            var isMissingScope=upJson.missing_scope||(typeof errMsg==='string'&&errMsg.indexOf('missing_scope')!==-1);
+            if(isMissingScope&&(upJson.provider==='dropbox'||typeof errMsg==='string'&&errMsg.toLowerCase().indexOf('dropbox')!==-1)){
+              alert('File upload failed: Your Dropbox token is missing required permissions.\n\nTo fix this:\n1. Go to dropbox.com/developers/apps and open your app\n2. Click the "Permissions" tab\n3. Enable "files.content.write" and "files.content.read"\n4. Click Submit\n5. Go to the "Settings" tab, revoke the old token, and generate a new one\n6. In TaskFlow → Client Connect → Storage Settings, paste the new token');
+            }else{
+              alert('File upload failed for "'+fq.label+'": '+errMsg);
+            }
+            setSubmitting(false);return;
+          }
+          setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'done'});});
+          finalAnswers[fq.id]={provider:upJson.provider,path:upJson.path,url:upJson.url||null,name:upJson.name||file.name,size:upJson.size||file.size};
+        }catch(err){
+          setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'error'});});
+          alert('Upload error: '+err.message);setSubmitting(false);return;
+        }
+      }
+    }
+
+    var {error:resErr}=await supabase.from('client_connect_responses').insert({request_id:request.id,submitter_name:name.trim()||null,answers:finalAnswers});
+    if(resErr){alert('Failed to submit. Please try again.');setSubmitting(false);return;}
+    await supabase.from('client_connect_requests').update({status:'responded'}).eq('token',token);
+    setSubmitted(true);setSubmitting(false);
+  }
+
+  var baseStyle={minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui,sans-serif"};
+  var centerStyle=Object.assign({},baseStyle,{display:'flex',alignItems:'center',justifyContent:'center'});
+
+  if(loading)return<div style={centerStyle}><div style={{color:'#475569',fontSize:14}}>Loading…</div></div>;
+  if(error)return<div style={centerStyle}><div style={{textAlign:'center',padding:32}}><div style={{fontSize:48,marginBottom:16}}>🔗</div><div style={{fontSize:18,fontWeight:700,color:'#1e293b',marginBottom:8}}>Link not found</div><div style={{fontSize:14,color:'#64748b'}}>{error}</div></div></div>;
+  if(submitted)return<div style={centerStyle}><div style={{textAlign:'center',padding:32,maxWidth:400}}><div style={{fontSize:56,marginBottom:16}}>✅</div><div style={{fontSize:22,fontWeight:800,color:'#1e293b',marginBottom:8}}>Thank you!</div><div style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Your response has been submitted to {orgName||'the firm'}. They will get back to you if needed.</div></div></div>;
+
+  var questions=request.questions||[];
+  var INP3={width:'100%',boxSizing:'border-box',padding:'10px 14px',border:'1px solid #d1d5db',borderRadius:8,fontSize:14,fontFamily:'inherit',color:'#1e293b',outline:'none'};
+
+  return<div style={Object.assign({},baseStyle,{padding:'40px 16px'})}>
+    <div style={{maxWidth:600,margin:'0 auto'}}>
+      <div style={{marginBottom:24,textAlign:'center'}}>
+        <div style={{fontSize:11,fontWeight:700,color:'#6b8cad',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:6}}>{orgName}</div>
+        <div style={{fontSize:24,fontWeight:800,color:'#1e293b',marginBottom:8}}>{request.title}</div>
+        {request.description&&<div style={{fontSize:15,color:'#475569',lineHeight:1.6}}>{request.description}</div>}
+        {request.due_date&&<div style={{marginTop:8,fontSize:13,color:'#f59e0b',fontWeight:600}}>📅 Please respond by {request.due_date}</div>}
+      </div>
+
+      <div style={{background:'#fff',borderRadius:14,padding:24,boxShadow:'0 2px 16px rgba(0,0,0,0.06)',marginBottom:16}}>
+        <div style={{marginBottom:20}}>
+          <label style={{display:'block',fontSize:13,fontWeight:700,color:'#374151',marginBottom:6}}>Your Name <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
+          <input value={name} onChange={function(e){setName(e.target.value);}} placeholder="Enter your name…" style={INP3}/>
+        </div>
+
+        {questions.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:'#94a3b8',fontSize:14}}>No questions — just click Submit to confirm receipt.</div>}
+
+        {questions.map(function(q,i){
+          var fileState=uploadProgress[q.id];
+          var selectedFile=fileSelections[q.id];
+          return<div key={q.id} style={{marginBottom:20}}>
+            <label style={{display:'block',fontSize:13,fontWeight:700,color:'#374151',marginBottom:6}}>
+              {q.label||'Question '+(i+1)}{q.required&&<span style={{color:'#ef4444'}}> *</span>}
+            </label>
+            {q.type==='text'&&<input value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} style={INP3}/>}
+            {q.type==='textarea'&&<textarea value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} rows={4} style={Object.assign({},INP3,{resize:'vertical'})}/>}
+            {q.type==='date'&&<input type="date" value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} style={{padding:'10px 14px',border:'1px solid #d1d5db',borderRadius:8,fontSize:14,fontFamily:'inherit',color:'#1e293b',outline:'none'}}/>}
+            {q.type==='yesno'&&<div style={{display:'flex',gap:10}}>
+              {['Yes','No'].map(function(opt){
+                var sel=answers[q.id]===opt;
+                return<button key={opt} onClick={function(){setAnswer(q.id,opt);}} style={{padding:'9px 24px',border:'2px solid',borderColor:sel?'#6b8cad':'#d1d5db',borderRadius:8,background:sel?'rgba(107,140,173,0.1)':'#fff',cursor:'pointer',fontSize:14,fontWeight:700,color:sel?'#6b8cad':'#64748b',fontFamily:'inherit'}}>{opt}</button>;
+              })}
+            </div>}
+            {q.type==='file'&&<div>
+              <label style={{display:'block',border:'2px dashed '+(selectedFile?'#6b8cad':'#d1d5db'),borderRadius:10,padding:'20px',textAlign:'center',cursor:'pointer',background:selectedFile?'rgba(107,140,173,0.05)':'#fafafa',transition:'all 0.2s'}}>
+                <input type="file" onChange={function(e){selectFile(q.id,e.target.files[0]);}} style={{display:'none'}}/>
+                {!selectedFile&&<>
+                  <div style={{fontSize:28,marginBottom:8}}>📎</div>
+                  <div style={{fontSize:14,fontWeight:600,color:'#374151'}}>Click to select file</div>
+                  <div style={{fontSize:12,color:'#9ca3af',marginTop:4}}>Any file type, up to 25MB</div>
+                </>}
+                {selectedFile&&<>
+                  <div style={{fontSize:24,marginBottom:6}}>{fileState==='done'?'✅':fileState==='error'?'❌':'📄'}</div>
+                  <div style={{fontSize:14,fontWeight:700,color:fileState==='error'?'#ef4444':'#374151'}}>{selectedFile.name}</div>
+                  <div style={{fontSize:12,color:'#9ca3af',marginTop:2}}>{(selectedFile.size/1024).toFixed(0)} KB · Click to change</div>
+                  {fileState==='uploading'&&<div style={{fontSize:12,color:'#6b8cad',marginTop:4}}>Uploading…</div>}
+                  {fileState==='done'&&<div style={{fontSize:12,color:'#22c55e',marginTop:4}}>Uploaded successfully</div>}
+                  {fileState==='error'&&<div style={{fontSize:12,color:'#ef4444',marginTop:4}}>Upload failed — please try again</div>}
+                </>}
+              </label>
+            </div>}
+          </div>;
+        })}
+
+        <button onClick={submit} disabled={submitting} style={{width:'100%',padding:'13px',background:'#6b8cad',border:'none',borderRadius:10,cursor:submitting?'wait':'pointer',fontSize:15,fontWeight:800,color:'#fff',fontFamily:'inherit',opacity:submitting?0.7:1,marginTop:8}}>{submitting?'Uploading & Submitting…':'Submit Response'}</button>
+      </div>
+
+      <div style={{textAlign:'center',fontSize:12,color:'#94a3b8'}}>Powered by TaskFlowco</div>
+    </div>
+  </div>;
+}
+
+
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
 // ══════════════════════════════════════════════════════════════════
