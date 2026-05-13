@@ -7168,6 +7168,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id]);
 
+  // Auto-refresh when the tab regains focus so newly-assigned worksheet rows show up
+  useEffect(function(){
+    function onFocus(){load();}
+    window.addEventListener('focus',onFocus);
+    return function(){window.removeEventListener('focus',onFocus);};
+    /* eslint-disable-next-line */
+  },[org.id,cu.id]);
+
   async function load(){
     setLoading(true);
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments').eq('org_id',org.id).neq('status','completed').limit(3000);
@@ -7466,6 +7474,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
         </select>
         <button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
           <span style={{fontSize:14}}>+</span>Create Task
+        </button>
+        <button onClick={function(){load();}} disabled={loading} title="Reload your tasks" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,opacity:loading?0.6:1}}>
+          <span style={{fontSize:14,display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.3s'}}>↻</span>{loading?'Refreshing…':'Refresh'}
         </button>
         <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
@@ -11618,6 +11629,16 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   useEffect(function(){if(org)loadClients();},[org&&org.id]);
   useEffect(function(){if(org)loadOrgMembers();},[org&&org.id]);
 
+  function refreshAll(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();loadClients();}}
+
+  // Auto-refresh when the tab regains focus so newly-assigned worksheet rows show up
+  useEffect(function(){
+    function onFocus(){refreshAll();}
+    window.addEventListener('focus',onFocus);
+    return function(){window.removeEventListener('focus',onFocus);};
+    /* eslint-disable-next-line */
+  },[planDate,org&&org.id,planUserId]);
+
   async function loadOrgMembers(){
     if(!org)return;
     var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
@@ -11994,6 +12015,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
           <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1}}>›</button>
         </div>
         {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>Today</button>}
+        <button onClick={refreshAll} disabled={loading} title="Reload tasks & plan" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5,opacity:loading?0.6:1}}>
+          <span style={{fontSize:13,lineHeight:1}}>↻</span>{loading?'…':'Refresh'}
+        </button>
         {!isReadOnly&&<button onClick={function(){setShowPicker(!showPicker);}} style={{background:showPicker?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(showPicker?'#6b8cad':'var(--tf-border)'),borderRadius:7,padding:'6px 12px',color:showPicker?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>Add to Plan</button>}
         {!isReadOnly&&org&&<button onClick={function(){setShowCreate(true);}} style={{background:'#1e40af',border:'none',borderRadius:7,padding:'7px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
           <span style={{fontSize:15,lineHeight:1}}>+</span>Create Task
