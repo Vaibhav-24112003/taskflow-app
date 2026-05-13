@@ -10738,7 +10738,7 @@ function ClientConnectModule({org,supabase,cu}){
                 <div style={{flex:1}}>
                   <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase'}}>{q.type==='text'?'Short Text':q.type==='textarea'?'Long Text':q.type==='date'?'Date':q.type==='yesno'?'Yes / No':'File Upload'} — Q{i+1}</div>
                   <input value={q.label} onChange={function(e){updateQuestion(q.id,'label',e.target.value);}} placeholder="Question label…" style={{width:'100%',boxSizing:'border-box',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none'}}/>
-                  {q.type==='file'&&<div style={{fontSize:11,color:'#6b8cad',marginTop:4}}>📁 Client will be shown your storage folder link to upload files there</div>}
+                  {q.type==='file'&&<div style={{fontSize:11,color:'#6b8cad',marginTop:4}}>📎 Client will upload directly in the form — file stored securely and downloadable by you</div>}
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:4,flexShrink:0,alignItems:'center'}}>
                   <label style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'var(--tf-text-sub)',cursor:'pointer',whiteSpace:'nowrap'}}>
@@ -10820,9 +10820,21 @@ function ClientConnectModule({org,supabase,cu}){
             </div>
             {questions.map(function(q){
               var ans=(res.answers||{})[q.id];
+              var isFile=q.type==='file'&&ans&&typeof ans==='object'&&ans.path;
               return<div key={q.id} style={{marginBottom:8}}>
                 <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>{q.label||'Untitled question'}</div>
-                <div style={{fontSize:13,color:'var(--tf-text)',padding:'6px 10px',background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)'}}>{ans||<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>No answer</span>}</div>
+                {isFile?
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)'}}>
+                    <span style={{fontSize:14}}>📄</span>
+                    <span style={{fontSize:12,color:'var(--tf-text)',flex:1}}>{ans.name||'Uploaded file'}{ans.size?' ('+Math.round(ans.size/1024)+'KB)':''}</span>
+                    <button onClick={async function(){
+                      var {data}=await supabase.storage.from('cc-uploads').createSignedUrl(ans.path,3600);
+                      if(data&&data.signedUrl)window.open(data.signedUrl,'_blank');
+                      else showToast('Could not generate download link','err');
+                    }} style={{padding:'4px 10px',background:'#6b8cad',border:'none',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0}}>Download</button>
+                  </div>:
+                  <div style={{fontSize:13,color:'var(--tf-text)',padding:'6px 10px',background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)'}}>{ans!=null&&ans!==''?String(ans):<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>No answer</span>}</div>
+                }
               </div>;
             })}
           </div>;
@@ -11774,6 +11786,8 @@ function ClientFormPublic({supabase,token}){
   var [loading,setLoading]=useState(true);
   var [error,setError]=useState(null);
   var [answers,setAnswers]=useState({});
+  var [fileSelections,setFileSelections]=useState({}); // qId -> File object
+  var [uploadProgress,setUploadProgress]=useState({}); // qId -> 'uploading'|'done'|'error'
   var [name,setName]=useState('');
   var [submitting,setSubmitting]=useState(false);
   var [submitted,setSubmitted]=useState(false);
@@ -11792,16 +11806,45 @@ function ClientFormPublic({supabase,token}){
 
   function setAnswer(qId,val){setAnswers(function(p){return Object.assign({},p,{[qId]:val});});}
 
+  function selectFile(qId,file){
+    if(!file)return;
+    setFileSelections(function(p){return Object.assign({},p,{[qId]:file});});
+    setUploadProgress(function(p){return Object.assign({},p,{[qId]:null});});
+  }
+
   async function submit(){
     if(!request)return;
     var questions=request.questions||[];
+    // Validate required
     for(var i=0;i<questions.length;i++){
       var q=questions[i];
-      if(q.required&&!answers[q.id]){alert('Please answer: '+q.label);return;}
+      if(q.required&&q.type!=='file'&&!answers[q.id]){alert('Please answer: '+q.label);return;}
+      if(q.required&&q.type==='file'&&!fileSelections[q.id]&&!answers[q.id]){alert('Please upload a file for: '+q.label);return;}
     }
     setSubmitting(true);
-    var {error}=await supabase.from('client_connect_responses').insert({request_id:request.id,submitter_name:name.trim()||null,answers});
-    if(error){alert('Failed to submit. Please try again.');setSubmitting(false);return;}
+
+    // Upload files first
+    var finalAnswers=Object.assign({},answers);
+    for(var j=0;j<questions.length;j++){
+      var fq=questions[j];
+      if(fq.type==='file'&&fileSelections[fq.id]){
+        var file=fileSelections[fq.id];
+        var safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+        var path=request.id+'/'+fq.id+'/'+Date.now()+'_'+safeName;
+        setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'uploading'});});
+        var {data:upData,error:upErr}=await supabase.storage.from('cc-uploads').upload(path,file,{upsert:true});
+        if(upErr){
+          setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'error'});});
+          alert('File upload failed for "'+fq.label+'": '+upErr.message);
+          setSubmitting(false);return;
+        }
+        setUploadProgress(function(p){return Object.assign({},p,{[fq.id]:'done'});});
+        finalAnswers[fq.id]={path:path,name:file.name,size:file.size};
+      }
+    }
+
+    var {error:resErr}=await supabase.from('client_connect_responses').insert({request_id:request.id,submitter_name:name.trim()||null,answers:finalAnswers});
+    if(resErr){alert('Failed to submit. Please try again.');setSubmitting(false);return;}
     await supabase.from('client_connect_requests').update({status:'responded'}).eq('token',token);
     setSubmitted(true);setSubmitting(false);
   }
@@ -11811,11 +11854,9 @@ function ClientFormPublic({supabase,token}){
 
   if(loading)return<div style={centerStyle}><div style={{color:'#475569',fontSize:14}}>Loading…</div></div>;
   if(error)return<div style={centerStyle}><div style={{textAlign:'center',padding:32}}><div style={{fontSize:48,marginBottom:16}}>🔗</div><div style={{fontSize:18,fontWeight:700,color:'#1e293b',marginBottom:8}}>Link not found</div><div style={{fontSize:14,color:'#64748b'}}>{error}</div></div></div>;
-  if(submitted)return<div style={centerStyle}><div style={{textAlign:'center',padding:32,maxWidth:400}}><div style={{fontSize:56,marginBottom:16}}>✅</div><div style={{fontSize:22,fontWeight:800,color:'#1e293b',marginBottom:8}}>Thank you!</div><div style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Your response has been submitted to {orgName||'the firm'}. They will follow up if needed.</div></div></div>;
+  if(submitted)return<div style={centerStyle}><div style={{textAlign:'center',padding:32,maxWidth:400}}><div style={{fontSize:56,marginBottom:16}}>✅</div><div style={{fontSize:22,fontWeight:800,color:'#1e293b',marginBottom:8}}>Thank you!</div><div style={{fontSize:15,color:'#64748b',lineHeight:1.6}}>Your response has been submitted to {orgName||'the firm'}. They will get back to you if needed.</div></div></div>;
 
   var questions=request.questions||[];
-  var hasFileQ=questions.some(function(q){return q.type==='file';});
-  var storageUrl=request.storage_url;
   var INP3={width:'100%',boxSizing:'border-box',padding:'10px 14px',border:'1px solid #d1d5db',borderRadius:8,fontSize:14,fontFamily:'inherit',color:'#1e293b',outline:'none'};
 
   return<div style={Object.assign({},baseStyle,{padding:'40px 16px'})}>
@@ -11827,13 +11868,6 @@ function ClientFormPublic({supabase,token}){
         {request.due_date&&<div style={{marginTop:8,fontSize:13,color:'#f59e0b',fontWeight:600}}>📅 Please respond by {request.due_date}</div>}
       </div>
 
-      {hasFileQ&&storageUrl&&<div style={{border:'1px solid #3b82f640',borderRadius:10,padding:'12px 16px',background:'#eff6ff',marginBottom:20}}>
-        <div style={{fontSize:13,fontWeight:700,color:'#3b82f6',marginBottom:4}}>📁 File Upload Instructions</div>
-        <div style={{fontSize:13,color:'#1e40af',lineHeight:1.5}}>For file questions below, please upload documents to the shared folder:<br/>
-          <a href={storageUrl} target="_blank" rel="noopener noreferrer" style={{color:'#3b82f6',fontWeight:700,textDecoration:'underline',display:'inline-block',marginTop:4}}>→ Open Upload Folder</a>
-        </div>
-      </div>}
-
       <div style={{background:'#fff',borderRadius:14,padding:24,boxShadow:'0 2px 16px rgba(0,0,0,0.06)',marginBottom:16}}>
         <div style={{marginBottom:20}}>
           <label style={{display:'block',fontSize:13,fontWeight:700,color:'#374151',marginBottom:6}}>Your Name <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
@@ -11843,6 +11877,8 @@ function ClientFormPublic({supabase,token}){
         {questions.length===0&&<div style={{textAlign:'center',padding:'24px 0',color:'#94a3b8',fontSize:14}}>No questions — just click Submit to confirm receipt.</div>}
 
         {questions.map(function(q,i){
+          var fileState=uploadProgress[q.id];
+          var selectedFile=fileSelections[q.id];
           return<div key={q.id} style={{marginBottom:20}}>
             <label style={{display:'block',fontSize:13,fontWeight:700,color:'#374151',marginBottom:6}}>
               {q.label||'Question '+(i+1)}{q.required&&<span style={{color:'#ef4444'}}> *</span>}
@@ -11856,15 +11892,28 @@ function ClientFormPublic({supabase,token}){
                 return<button key={opt} onClick={function(){setAnswer(q.id,opt);}} style={{padding:'9px 24px',border:'2px solid',borderColor:sel?'#6b8cad':'#d1d5db',borderRadius:8,background:sel?'rgba(107,140,173,0.1)':'#fff',cursor:'pointer',fontSize:14,fontWeight:700,color:sel?'#6b8cad':'#64748b',fontFamily:'inherit'}}>{opt}</button>;
               })}
             </div>}
-            {q.type==='file'&&<div style={{padding:'14px',border:'1px dashed #94a3b8',borderRadius:8,background:'#f8fafc'}}>
-              <div style={{fontSize:13,color:'#475569'}}>📁 Upload this document using the folder link above, then note the filename here.</div>
-              {!storageUrl&&<div style={{fontSize:12,color:'#ef4444',marginTop:4}}>No storage folder set — contact {orgName} for upload instructions.</div>}
-              <input value={answers[q.id]||''} onChange={function(e){setAnswer(q.id,e.target.value);}} placeholder="Filename or confirmation note (optional)" style={Object.assign({},INP3,{marginTop:8,fontSize:13})}/>
+            {q.type==='file'&&<div>
+              <label style={{display:'block',border:'2px dashed '+(selectedFile?'#6b8cad':'#d1d5db'),borderRadius:10,padding:'20px',textAlign:'center',cursor:'pointer',background:selectedFile?'rgba(107,140,173,0.05)':'#fafafa',transition:'all 0.2s'}}>
+                <input type="file" onChange={function(e){selectFile(q.id,e.target.files[0]);}} style={{display:'none'}}/>
+                {!selectedFile&&<>
+                  <div style={{fontSize:28,marginBottom:8}}>📎</div>
+                  <div style={{fontSize:14,fontWeight:600,color:'#374151'}}>Click to select file</div>
+                  <div style={{fontSize:12,color:'#9ca3af',marginTop:4}}>Any file type, up to 25MB</div>
+                </>}
+                {selectedFile&&<>
+                  <div style={{fontSize:24,marginBottom:6}}>{fileState==='done'?'✅':fileState==='error'?'❌':'📄'}</div>
+                  <div style={{fontSize:14,fontWeight:700,color:fileState==='error'?'#ef4444':'#374151'}}>{selectedFile.name}</div>
+                  <div style={{fontSize:12,color:'#9ca3af',marginTop:2}}>{(selectedFile.size/1024).toFixed(0)} KB · Click to change</div>
+                  {fileState==='uploading'&&<div style={{fontSize:12,color:'#6b8cad',marginTop:4}}>Uploading…</div>}
+                  {fileState==='done'&&<div style={{fontSize:12,color:'#22c55e',marginTop:4}}>Uploaded successfully</div>}
+                  {fileState==='error'&&<div style={{fontSize:12,color:'#ef4444',marginTop:4}}>Upload failed — please try again</div>}
+                </>}
+              </label>
             </div>}
           </div>;
         })}
 
-        <button onClick={submit} disabled={submitting} style={{width:'100%',padding:'13px',background:'#6b8cad',border:'none',borderRadius:10,cursor:submitting?'wait':'pointer',fontSize:15,fontWeight:800,color:'#fff',fontFamily:'inherit',opacity:submitting?0.7:1}}>{submitting?'Submitting…':'Submit Response'}</button>
+        <button onClick={submit} disabled={submitting} style={{width:'100%',padding:'13px',background:'#6b8cad',border:'none',borderRadius:10,cursor:submitting?'wait':'pointer',fontSize:15,fontWeight:800,color:'#fff',fontFamily:'inherit',opacity:submitting?0.7:1,marginTop:8}}>{submitting?'Uploading & Submitting…':'Submit Response'}</button>
       </div>
 
       <div style={{textAlign:'center',fontSize:12,color:'#94a3b8'}}>Powered by TaskFlowco</div>
