@@ -3543,7 +3543,12 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [wsExpandedRow,setWsExpandedRow]=useState(null);
   var [wsEditingRow,setWsEditingRow]=useState(null);
   var [wsEditData,setWsEditData]=useState({});
+  var [sortCol,setSortCol]=useState(null); // null | 'client' | '__status' | '__startdate' | col.key
+  var [sortDir,setSortDir]=useState('asc');
+  var [headerFilterOpen,setHeaderFilterOpen]=useState(null); // colKey of open header filter
   var WS_PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
+  var WS_STATUS_COLORS={pending:'#94a3b8',in_progress:'#3b82f6',under_review:'#f59e0b',completed:'#22c55e'};
+  function toggleSort(colKey){setSortCol(function(prev){if(prev===colKey){setSortDir(function(d){return d==='asc'?'desc':'asc';});return colKey;}setSortDir('asc');return colKey;});}
 
   function toggleWsExpand(rowId){setWsExpandedRow(function(p){return p===rowId?null:rowId;});setWsEditingRow(null);}
 
@@ -3877,6 +3882,15 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         return wts.some(function(t){return t.trim()===activeType;});
       });
 
+      // Helper: compute start_date from due_date using prep_days config
+      function computeStartDate(dueDate){
+        if(!dueDate)return null;
+        var wCfg=(workTypeConfigs||[]).find(function(c){return c.name===activeType;});
+        var pd=wCfg?wCfg.prep_days:null;
+        if(pd==null)return null;
+        var d2=new Date(dueDate+'T00:00:00');d2.setDate(d2.getDate()-pd);
+        return d2.getFullYear()+'-'+String(d2.getMonth()+1).padStart(2,'0')+'-'+String(d2.getDate()).padStart(2,'0');
+      }
       // Compute due dates from config (always, not just for new rows)
       function computeDueDate(day,month,freq,monthOffset){
         if(!day)return null;
@@ -4005,11 +4019,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       if(missing.length>0){
         if(dueDateList.length<=1){
           var dd=dueDateList[0]||null;
-          missing.forEach(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dd){r.due_date=dd.date;r.due_label=dd.label;}newRows.push(r);});
+          missing.forEach(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dd){r.due_date=dd.date;r.due_label=dd.label;var sd=computeStartDate(dd.date);if(sd)r.start_date=sd;}newRows.push(r);});
         }else{
           missing.forEach(function(c){
             dueDateList.forEach(function(dd){
-              newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+              var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label};
+              var sd=computeStartDate(dd.date);if(sd)r.start_date=sd;
+              newRows.push(r);
             });
           });
         }
@@ -4177,6 +4193,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     await supabase.from('worksheet_rows').delete().eq('id',rowId);
     setRows(function(prev){return prev.filter(function(r){return r.id!==rowId;});});
     showToast('Task removed');
+  }
+
+  async function updateStartDate(rowId,dateStr){
+    await supabase.from('worksheet_rows').update({start_date:dateStr||null}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{start_date:dateStr||null}):r;});});
   }
 
   // Classify an unclassified row: move it to the chosen work type's current-period worksheet
@@ -4400,7 +4421,8 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   // All toggleable columns (dynamic + built-in)
   var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):
     [{key:'__assignee',label:'Assignee'}];
-  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat(hierarchyCols).concat([{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
+  var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat(hierarchyCols).concat([{key:'__startdate',label:'Start By'},{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
+  var showStartDate=!hiddenCols.includes('__startdate');
   var showStatus=!hiddenCols.includes('__status');
   var showComments=!hiddenCols.includes('__comments');
   var showTaskCard=!hiddenCols.includes('__taskcard');
@@ -4447,6 +4469,20 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     }
     return true;
   });
+  if(sortCol){
+    filteredRows=filteredRows.slice().sort(function(a,b){
+      var av,bv;
+      if(sortCol==='client'){av=(clientMap[a.client_id]||{}).name||'';bv=(clientMap[b.client_id]||{}).name||'';}
+      else if(sortCol==='__status'){av=a.status||'pending';bv=b.status||'pending';}
+      else if(sortCol==='__startdate'){av=a.start_date||'9999';bv=b.start_date||'9999';}
+      else if(sortCol==='__duedate'){av=a.due_date||'9999';bv=b.due_date||'9999';}
+      else{av=String((a.data||{})[sortCol]||'');bv=String((b.data||{})[sortCol]||'');}
+      var cmp=av.localeCompare(bv);
+      return sortDir==='asc'?cmp:-cmp;
+    });
+  }
+  var todayD0=new Date();todayD0.setHours(0,0,0,0);
+  var todayS2=todayD0.getFullYear()+'-'+String(todayD0.getMonth()+1).padStart(2,'0')+'-'+String(todayD0.getDate()).padStart(2,'0');
 
   return<div style={{padding:'0 0 60px'}}>
     {/* Header */}
@@ -4860,14 +4896,69 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         No clients have {activeType} as a work type. Add clients in Client Master Data.
       </div>:
       wsView==='pipeline'||wsView==='funnel'?null:
-      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}}>
+      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}} onClick={function(){setHeaderFilterOpen(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
-              <th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Client</th>
-              {hierarchyCols.map(function(hc){return!hiddenCols.includes(hc.key)&&<th key={hc.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120}}>{hc.label}</th>;})}
-              {visibleCols.map(function(col){var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;return<th key={col.key} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw}}>{col.label}</th>;})}
-              {showStatus&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100}}>{cfg.stages&&cfg.stages.length>0?'Stage':'Status'}</th>}
+              {/* Client — sticky left */}
+              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:0,zIndex:3,background:'rgba(107,140,173,0.07)',cursor:'pointer',userSelect:'none',borderRight:'2px solid var(--tf-border)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  Client
+                  <span style={{fontSize:9,opacity:0.7}}>{sortCol==='client'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
+                  {filterClient&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block',marginLeft:2}} title="Filter active"/>}
+                </div>
+              </th>
+              {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hfActive=filters[hc.key]&&filters[hc.key]!=='all';return<th key={hc.key} onClick={function(){toggleSort(hc.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===hc.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none',position:'relative'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
+                  {hc.label}
+                  <span style={{fontSize:9,opacity:0.7}}>{sortCol===hc.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
+                  {hfActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
+                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===hc.key?null:hc.key;});}} style={{fontSize:9,opacity:hfActive?1:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3,background:hfActive?'rgba(245,158,11,0.15)':'transparent'}} title="Filter this column">▾</span>
+                </div>
+                {headerFilterOpen===hc.key&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:160,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
+                  <select value={filters[hc.key]||'all'} onChange={function(e){setFilter(hc.key,e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+                    <option value="all">All {hc.label}s</option>
+                    <option value="__unassigned">Unassigned</option>
+                    {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+                  </select>
+                </div>}
+              </th>;})}
+              {visibleCols.map(function(col){
+                var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;
+                var cfActive=filters[col.key]&&filters[col.key]!=='all';
+                return<th key={col.key} onClick={function(){toggleSort(col.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===col.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw,cursor:'pointer',userSelect:'none',position:'relative'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:3}}>
+                    {col.label}
+                    <span style={{fontSize:9,opacity:0.7}}>{sortCol===col.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
+                    {cfActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
+                    <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===col.key?null:col.key;});}} style={{fontSize:9,opacity:cfActive?1:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3,background:cfActive?'rgba(245,158,11,0.15)':'transparent'}} title="Filter">▾</span>
+                  </div>
+                  {headerFilterOpen===col.key&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:150,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
+                    <select value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+                      <option value="all">All</option>
+                      {ct==='checkbox'&&<><option value="checked">Done</option><option value="unchecked">Not Done</option></>}
+                      {ct!=='checkbox'&&<><option value="__filled">Has Value</option><option value="__empty">Empty</option></>}
+                      {ct==='select'&&(col.options||'').split(',').filter(Boolean).map(function(o){return<option key={o.trim()} value={o.trim()}>{o.trim()}</option>;})}
+                    </select>
+                  </div>}
+                </th>;
+              })}
+              {showStartDate&&<th onClick={function(){toggleSort('__startdate');}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol==='__startdate'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>Start By<span style={{fontSize:9,opacity:0.7}}>{sortCol==='__startdate'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span></div>
+              </th>}
+              {showStatus&&<th onClick={function(){toggleSort('__status');}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol==='__status'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100,cursor:'pointer',userSelect:'none',position:'relative'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:3}}>
+                  {cfg.stages&&cfg.stages.length>0?'Stage':'Status'}
+                  <span style={{fontSize:9,opacity:0.7}}>{sortCol==='__status'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
+                  {filters.__status&&filters.__status!=='all'&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
+                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__status'?null:'__status';});}} style={{fontSize:9,opacity:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3}} title="Filter">▾</span>
+                </div>
+                {headerFilterOpen==='__status'&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:150,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
+                  <select value={filters.__status||'all'} onChange={function(e){setFilter('__status',e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+                    <option value="all">All Status</option><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
+                  </select>
+                </div>}
+              </th>}
               {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
               {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
               {cfg.frequency==='once'&&<th style={{padding:'10px 6px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:60}}>Actions</th>}
@@ -4887,10 +4978,14 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               var wsClTotal=(d.__checklist||[]).length;
               var hasDetails=!!(d.__title||d.__description||d.__contact||wsClTotal>0);
               var totalCols=1+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
+              var rowBg=allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.025)':'var(--tf-bg)';
+              var statusBorderColor=WS_STATUS_COLORS[row.status]||'#94a3b8';
+              var startActive=!row.start_date||row.start_date<=todayS2;
               return<React.Fragment key={row.id}>
-              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.02)':'transparent',transition:'background 0.15s',cursor:'pointer'}}
+              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:rowBg,transition:'background 0.15s',cursor:'pointer',borderLeft:'3px solid '+statusBorderColor}}
                 onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='INPUT'||e.target.tagName==='BUTTON')return;toggleWsExpand(row.id);}}>
-                <td style={{padding:'10px 14px'}}>
+                {/* Client — sticky left */}
+                <td style={{padding:'10px 14px',position:'sticky',left:0,zIndex:1,background:rowBg,borderRight:'2px solid var(--tf-border)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
                     <div style={{flex:1}}>
@@ -4952,6 +5047,15 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                       style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:12,width:'100%',minWidth:60,outline:'none',fontFamily:'inherit',padding:'4px 6px',textAlign:'center'}}/>
                   </td>;
                 })}
+                {showStartDate&&<td style={{padding:'6px 8px',textAlign:'center'}}>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+                    <input type="date" value={row.start_date||''} onChange={function(e){updateStartDate(row.id,e.target.value||null);}} onClick={function(e){e.stopPropagation();}}
+                      style={{background:'transparent',border:'1px solid',borderColor:startActive?'#22c55e':'#f59e0b',borderRadius:6,padding:'3px 5px',color:startActive?'#22c55e':'#f59e0b',fontSize:10,fontWeight:700,outline:'none',fontFamily:'inherit',cursor:'pointer',width:96}}/>
+                    {!row.start_date&&<span style={{fontSize:9,color:'var(--tf-text-sub)'}}>always show</span>}
+                    {row.start_date&&!startActive&&<span style={{fontSize:9,color:'#f59e0b',fontWeight:600}}>not yet</span>}
+                    {row.start_date&&startActive&&<span style={{fontSize:9,color:'#22c55e',fontWeight:600}}>active</span>}
+                  </div>
+                </td>}
                 {showStatus&&<td style={{padding:'10px 10px',textAlign:'center'}}>
                   {cfg.stages&&cfg.stages.length>0
                     ?(function(){var st=cfg.stages.find(function(s){return s.key===row.current_stage;});var stColor=st?st.color||'#6b8cad':'#64748b';return<select value={row.current_stage||''} onChange={function(e){moveToStage(row.id,e.target.value||null);}} style={{background:'transparent',border:'1px solid',borderColor:stColor,borderRadius:20,padding:'3px 8px',color:stColor,fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',maxWidth:130}}>
@@ -5104,6 +5208,20 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               </React.Fragment>;
             })}
           </tbody>
+          <tfoot>
+            <tr style={{borderTop:'2px solid var(--tf-border)',background:'rgba(107,140,173,0.04)'}}>
+              <td colSpan={100} style={{padding:'8px 16px',position:'sticky',left:0}}>
+                <div style={{display:'flex',gap:20,flexWrap:'wrap',fontSize:11,fontWeight:600}}>
+                  <span style={{color:'var(--tf-text-sub)'}}>Total: <b style={{color:'var(--tf-text)'}}>{filteredRows.length}</b>{filteredRows.length!==rows.length&&' / '+rows.length}</span>
+                  {(function(){var pn=filteredRows.filter(function(r){return(r.status||'pending')==='pending';}).length;return pn>0&&<span style={{color:'#94a3b8'}}>⬤ Pending: {pn}</span>;}())}
+                  {(function(){var ip=filteredRows.filter(function(r){return r.status==='in_progress';}).length;return ip>0&&<span style={{color:'#3b82f6'}}>⬤ In Progress: {ip}</span>;}())}
+                  {(function(){var ur=filteredRows.filter(function(r){return r.status==='under_review';}).length;return ur>0&&<span style={{color:'#f59e0b'}}>⬤ Review: {ur}</span>;}())}
+                  {(function(){var dn=filteredRows.filter(function(r){return r.status==='completed';}).length;return dn>0&&<span style={{color:'#22c55e'}}>⬤ Done: {dn}</span>;}())}
+                  {(function(){var ns=filteredRows.filter(function(r){return r.start_date&&r.start_date>todayS2;}).length;return ns>0&&<span style={{color:'#f59e0b',marginLeft:8}}>🕐 Not yet active: {ns}</span>;}())}
+                </div>
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </div>}
     </div>}
@@ -7232,7 +7350,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   async function load(){
     setLoading(true);
-    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments').eq('org_id',org.id).neq('status','completed').limit(3000);
+    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(3000);
     var rowData=rr.data||[];
     // Step 1: filter to rows where the viewed member is assigned
     var targetId=viewMemberId;
@@ -7251,7 +7369,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       wsData=rw.data||[];
     }
     setWorksheets(wsData);
-    setRows(assignedRows);
+    // Filter by start_date: only show rows where today >= start_date (or no start_date set)
+    var todayLocal2=new Date();todayLocal2.setHours(0,0,0,0);
+    var todayStr2=todayLocal2.getFullYear()+'-'+String(todayLocal2.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal2.getDate()).padStart(2,'0');
+    setRows(assignedRows.filter(function(r){return !r.start_date||r.start_date<=todayStr2;}));
     // Load all clients of this org (for task creation dropdown + row display)
     var rcAll=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
     setAllClients(rcAll.data||[]);
@@ -12200,7 +12321,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
 
   async function loadWsRows(){
     if(!org)return;
-    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').eq('org_id',org.id).neq('status','completed').limit(2000);
+    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(2000);
     var assigned=(rr.data||[]).filter(function(r){
       var d=r.data||{};
       if(d.__assignee===planUserId)return true;
@@ -12216,7 +12337,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       (rw.data||[]).forEach(function(w){meta[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
     }
     setWorksheetMeta(meta);
-    setWsRows(assigned);
+    var todayLocal3=new Date();todayLocal3.setHours(0,0,0,0);
+    var todayStr3=todayLocal3.getFullYear()+'-'+String(todayLocal3.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal3.getDate()).padStart(2,'0');
+    setWsRows(assigned.filter(function(r){return !r.start_date||r.start_date<=todayStr3;}));
   }
 
   async function loadBcTasks(){
