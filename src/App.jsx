@@ -3532,7 +3532,6 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [hiddenCols,setHiddenCols]=useState([]);
   var [showColMenu,setShowColMenu]=useState(false);
   // Filters
-  var [showFilters,setShowFilters]=useState(false);
   var [filters,setFilters]=useState({});
   // Filter: client name search
   var [filterClient,setFilterClient]=useState('');
@@ -4710,53 +4709,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
 
         {/* Mine Only toggle */}
         <button onClick={function(){setMineOnly(!mineOnly);}} title="Show only tasks where I'm assigned or reviewing" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>
-        {/* Filter toggle button */}
-        <button onClick={function(){setShowFilters(!showFilters);}} style={{background:showFilters||hasActiveFilters?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:hasActiveFilters?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
-          ▽ Filter{hasActiveFilters&&<span style={{fontSize:10,color:'#f59e0b'}}>Active</span>}
-        </button>
       </div>
-
-      {/* Filter bar */}
-      {showFilters&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap',padding:'10px 14px',background:'rgba(107,140,173,0.04)',border:'1px solid var(--tf-border)',borderRadius:10}}>
-        <input value={filterClient} onChange={function(e){setFilterClient(e.target.value);}} placeholder="Search client..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',width:140}}/>
-        <select value={filters.__status||'all'} onChange={function(e){setFilter('__status',e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-          <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
-        </select>
-        {hierarchyCols.map(function(hc){return<select key={hc.key} value={filters[hc.key]||'all'} onChange={function(e){setFilter(hc.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-          <option value="all">All {hc.label}s</option>
-          <option value="__unassigned">Unassigned</option>
-          {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'').slice(1)}
-        </select>;})}
-        {cfg.cols.map(function(col){
-          var ct=col.type||'checkbox';
-          if(ct==='checkbox'){
-            return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-              <option value="all">{col.label}: All</option>
-              <option value="checked">{col.label}: Done</option>
-              <option value="unchecked">{col.label}: Not Done</option>
-            </select>;
-          }
-          if(ct==='select'){
-            var opts=(col.options||'').split(',').map(function(o){return o.trim();}).filter(Boolean);
-            return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-              <option value="all">{col.label}: All</option>
-              <option value="__filled">Has Value</option>
-              <option value="__empty">Empty</option>
-              {opts.map(function(o){return<option key={o} value={o}>{o}</option>;})}
-            </select>;
-          }
-          return<select key={col.key} value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-            <option value="all">{col.label}: All</option>
-            <option value="__filled">Has Value</option>
-            <option value="__empty">Empty</option>
-          </select>;
-        })}
-        {hasActiveFilters&&<button onClick={clearFilters} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:7,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Clear</button>}
-        {hasActiveFilters&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing {filteredRows.length} of {rows.length}</span>}
-      </div>}
 
       {/* Add one-time task modal */}
       {cfg.frequency==='once'&&showAddOnce&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)resetOnceForm();}}>
@@ -4989,7 +4942,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         <button onClick={clearSelection} style={{marginLeft:'auto',background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>✕ Clear</button>
       </div>}
 
-      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',maxHeight:'calc(100vh - 360px)',minHeight:200}} onClick={function(){setHeaderFilterOpen(null);}}>
+      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',height:'calc(100vh - 240px)',minHeight:240}} onClick={function(){setHeaderFilterOpen(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead style={{position:'sticky',top:0,zIndex:5}}>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
@@ -5002,8 +4955,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   Client
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='client'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
-                  {filterClient&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block',marginLeft:2}} title="Filter active"/>}
+                  {filterClient&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
+                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__client'?null:'__client';});}} style={{fontSize:9,opacity:filterClient?1:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3,background:filterClient?'rgba(245,158,11,0.15)':'transparent'}} title="Search clients">▾</span>
                 </div>
+                {headerFilterOpen==='__client'&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:200,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
+                  <input autoFocus value={filterClient} onChange={function(e){setFilterClient(e.target.value);}} placeholder="Search client name..." style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                  {filterClient&&<button onClick={function(){setFilterClient('');setHeaderFilterOpen(null);}} style={{marginTop:6,width:'100%',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px',color:'#ef4444',cursor:'pointer',fontSize:11}}>Clear</button>}
+                </div>}
               </th>
               {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hfActive=filters[hc.key]&&filters[hc.key]!=='all';return<th key={hc.key} onClick={function(){toggleSort(hc.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===hc.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none',position:'relative'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
