@@ -7251,23 +7251,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       wsData=rw.data||[];
     }
     setWorksheets(wsData);
-    // Step 3: build prep-days map from workTypeConfigs prop (work_type name → prep_days)
-    var prepMap={};
-    (workTypeConfigs||[]).forEach(function(c){if(c.prep_days!=null)prepMap[c.name]=c.prep_days;});
-    var wsTypeMap={};wsData.forEach(function(w){wsTypeMap[w.id]=w.work_type;});
-    var todayLocal=new Date();todayLocal.setHours(0,0,0,0);
-    var todayStr=todayLocal.toISOString().slice(0,10);
-    // Step 4: apply prep-window filter — hide rows whose due date is too far in future
-    var myRows=assignedRows.filter(function(r){
-      if(!r.due_date)return true; // no due date → always show
-      var wt=wsTypeMap[r.worksheet_id];
-      var pd=wt!=null&&prepMap[wt]!=null?prepMap[wt]:null;
-      if(pd===null)return true; // prep_days not configured → always show (backward-compat)
-      var startDate=new Date(r.due_date+'T00:00:00');
-      startDate.setDate(startDate.getDate()-pd);
-      return todayStr>=startDate.toISOString().slice(0,10);
-    });
-    setRows(myRows);
+    setRows(assignedRows);
     // Load all clients of this org (for task creation dropdown + row display)
     var rcAll=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
     setAllClients(rcAll.data||[]);
@@ -12232,22 +12216,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       (rw.data||[]).forEach(function(w){meta[w.id]={work_type:w.work_type,period_label:w.period_label,frequency:w.frequency};});
     }
     setWorksheetMeta(meta);
-    // Build prep-days map from workTypeConfigs
-    var prepMap={};
-    (workTypeConfigs||[]).forEach(function(c){if(c.prep_days!=null)prepMap[c.name]=c.prep_days;});
-    var todayLocal=new Date();todayLocal.setHours(0,0,0,0);
-    var todayS=todayLocal.getFullYear()+'-'+String(todayLocal.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal.getDate()).padStart(2,'0');
-    var filtered=assigned.filter(function(r){
-      if(!r.due_date)return true;
-      var wt=(meta[r.worksheet_id]||{}).work_type;
-      var pd=wt!=null&&prepMap[wt]!=null?prepMap[wt]:null;
-      if(pd===null)return true;
-      var startDate=new Date(r.due_date+'T00:00:00');
-      startDate.setDate(startDate.getDate()-pd);
-      var startS=startDate.getFullYear()+'-'+String(startDate.getMonth()+1).padStart(2,'0')+'-'+String(startDate.getDate()).padStart(2,'0');
-      return todayS>=startS;
-    });
-    setWsRows(filtered);
+    setWsRows(assigned);
   }
 
   async function loadBcTasks(){
