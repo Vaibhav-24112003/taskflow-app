@@ -3546,6 +3546,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [sortCol,setSortCol]=useState(null); // null | 'client' | '__status' | '__startdate' | col.key
   var [sortDir,setSortDir]=useState('asc');
   var [headerFilterOpen,setHeaderFilterOpen]=useState(null); // colKey of open header filter
+  var [selectedIds,setSelectedIds]=useState(new Set());
+  var [showBulkAction,setShowBulkAction]=useState(null); // null | 'status' | 'startdate' | 'assignee'
+  var [bulkStartDate,setBulkStartDate]=useState('');
+  var [bulkAssigneeKey,setBulkAssigneeKey]=useState('');
+  var [bulkAssigneeVal,setBulkAssigneeVal]=useState('');
+  var [pageSize,setPageSize]=useState(50);
+  var [pageIdx,setPageIdx]=useState(0);
   var WS_PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
   var WS_STATUS_COLORS={pending:'#94a3b8',in_progress:'#3b82f6',under_review:'#f59e0b',completed:'#22c55e'};
   function toggleSort(colKey){setSortCol(function(prev){if(prev===colKey){setSortDir(function(d){return d==='asc'?'desc':'asc';});return colKey;}setSortDir('asc');return colKey;});}
@@ -4200,6 +4207,55 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{start_date:dateStr||null}):r;});});
   }
 
+  function toggleSelect(rowId){setSelectedIds(function(prev){var s=new Set(prev);if(s.has(rowId))s.delete(rowId);else s.add(rowId);return s;});}
+  function toggleSelectAll(rowsList){setSelectedIds(function(prev){if(prev.size===rowsList.length&&rowsList.length>0)return new Set();return new Set(rowsList.map(function(r){return r.id;}));});}
+  function clearSelection(){setSelectedIds(new Set());setShowBulkAction(null);}
+
+  async function bulkUpdateStatus(newStatus){
+    var ids=Array.from(selectedIds);if(ids.length===0)return;
+    await supabase.from('worksheet_rows').update({status:newStatus}).in('id',ids);
+    setRows(function(prev){return prev.map(function(r){return selectedIds.has(r.id)?Object.assign({},r,{status:newStatus}):r;});});
+    showToast('Updated '+ids.length+' rows');clearSelection();
+  }
+  async function bulkUpdateStartDate(){
+    var ids=Array.from(selectedIds);if(ids.length===0)return;
+    await supabase.from('worksheet_rows').update({start_date:bulkStartDate||null}).in('id',ids);
+    setRows(function(prev){return prev.map(function(r){return selectedIds.has(r.id)?Object.assign({},r,{start_date:bulkStartDate||null}):r;});});
+    showToast('Updated Start By for '+ids.length+' rows');clearSelection();setBulkStartDate('');
+  }
+  async function bulkPushStartDateBy(days){
+    var ids=Array.from(selectedIds);if(ids.length===0)return;
+    var rowsToUpd=rows.filter(function(r){return selectedIds.has(r.id);});
+    for(var i=0;i<rowsToUpd.length;i++){
+      var r=rowsToUpd[i];var base=r.start_date||r.due_date;
+      if(!base)continue;
+      var d=new Date(base+'T00:00:00');d.setDate(d.getDate()+days);
+      var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      await supabase.from('worksheet_rows').update({start_date:ds}).eq('id',r.id);
+    }
+    showToast('Pushed Start By '+(days>0?'+':'')+days+' days for '+ids.length+' rows');
+    await loadWorksheet();clearSelection();
+  }
+  async function bulkUpdateAssignee(){
+    var ids=Array.from(selectedIds);if(ids.length===0||!bulkAssigneeKey)return;
+    var rowsToUpd=rows.filter(function(r){return selectedIds.has(r.id);});
+    for(var i=0;i<rowsToUpd.length;i++){
+      var r=rowsToUpd[i];
+      var nd=Object.assign({},r.data||{});
+      if(bulkAssigneeVal)nd[bulkAssigneeKey]=bulkAssigneeVal;else delete nd[bulkAssigneeKey];
+      await supabase.from('worksheet_rows').update({data:nd}).eq('id',r.id);
+    }
+    showToast('Assigned '+ids.length+' rows');
+    await loadWorksheet();clearSelection();setBulkAssigneeKey('');setBulkAssigneeVal('');
+  }
+  async function bulkDelete(){
+    var ids=Array.from(selectedIds);if(ids.length===0)return;
+    if(!window.confirm('Delete '+ids.length+' rows? This cannot be undone.'))return;
+    await supabase.from('worksheet_rows').delete().in('id',ids);
+    setRows(function(prev){return prev.filter(function(r){return !selectedIds.has(r.id);});});
+    showToast('Deleted '+ids.length+' rows');clearSelection();
+  }
+
   // Classify an unclassified row: move it to the chosen work type's current-period worksheet
   var classifiableConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active&&c.name!=='Unclassified';});
   async function classifyRowInSheet(row,newWorkType){
@@ -4483,6 +4539,10 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   }
   var todayD0=new Date();todayD0.setHours(0,0,0,0);
   var todayS2=todayD0.getFullYear()+'-'+String(todayD0.getMonth()+1).padStart(2,'0')+'-'+String(todayD0.getDate()).padStart(2,'0');
+  // Pagination: slice filteredRows for display
+  var totalPages=pageSize==='all'?1:Math.max(1,Math.ceil(filteredRows.length/pageSize));
+  var safePageIdx=Math.min(pageIdx,totalPages-1);
+  var pagedRows=pageSize==='all'?filteredRows:filteredRows.slice(safePageIdx*pageSize,(safePageIdx+1)*pageSize);
 
   return<div style={{padding:'0 0 60px'}}>
     {/* Header */}
@@ -4896,12 +4956,49 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         No clients have {activeType} as a work type. Add clients in Client Master Data.
       </div>:
       wsView==='pipeline'||wsView==='funnel'?null:
-      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto'}} onClick={function(){setHeaderFilterOpen(null);}}>
+      <>
+      {/* Bulk-actions toolbar */}
+      {selectedIds.size>0&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',marginBottom:8,background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:10,flexWrap:'wrap'}}>
+        <span style={{fontSize:13,fontWeight:700,color:'#6366f1'}}>✓ {selectedIds.size} selected</span>
+        <div style={{width:1,height:18,background:'rgba(99,102,241,0.3)'}}/>
+        <select onChange={function(e){if(e.target.value){bulkUpdateStatus(e.target.value);e.target.value='';}}} defaultValue="" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+          <option value="">Set Status →</option><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
+        </select>
+        <div style={{display:'flex',alignItems:'center',gap:4}}>
+          <input type="date" value={bulkStartDate} onChange={function(e){setBulkStartDate(e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'4px 7px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+          <button onClick={bulkUpdateStartDate} style={{background:'#6366f1',border:'none',borderRadius:7,padding:'5px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Set Start By</button>
+        </div>
+        <div style={{display:'flex',gap:3}}>
+          <button onClick={function(){bulkPushStartDateBy(-7);}} title="Pull start dates earlier by 7 days" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>−7d</button>
+          <button onClick={function(){bulkPushStartDateBy(7);}} title="Push start dates later by 7 days" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>+7d</button>
+          <button onClick={function(){bulkPushStartDateBy(15);}} title="Push start dates later by 15 days" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>+15d</button>
+          <button onClick={function(){bulkPushStartDateBy(30);}} title="Push start dates later by 30 days" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>+30d</button>
+        </div>
+        {hierarchyCols.length>0&&<div style={{display:'flex',alignItems:'center',gap:4}}>
+          <select value={bulkAssigneeKey} onChange={function(e){setBulkAssigneeKey(e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'4px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none'}}>
+            <option value="">Role…</option>
+            {hierarchyCols.map(function(hc){return<option key={hc.key} value={hc.key}>{hc.label}</option>;})}
+          </select>
+          <select value={bulkAssigneeVal} onChange={function(e){setBulkAssigneeVal(e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'4px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',maxWidth:120}}>
+            <option value="">— Unassign —</option>
+            {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          </select>
+          <button onClick={bulkUpdateAssignee} disabled={!bulkAssigneeKey} style={{background:bulkAssigneeKey?'#6366f1':'var(--tf-surface)',border:'none',borderRadius:7,padding:'5px 10px',color:bulkAssigneeKey?'#fff':'var(--tf-text-sub)',cursor:bulkAssigneeKey?'pointer':'not-allowed',fontSize:11,fontWeight:700,opacity:bulkAssigneeKey?1:0.6}}>Assign</button>
+        </div>}
+        <button onClick={bulkDelete} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:7,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:700}}>🗑 Delete</button>
+        <button onClick={clearSelection} style={{marginLeft:'auto',background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>✕ Clear</button>
+      </div>}
+
+      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',maxHeight:'calc(100vh - 360px)',minHeight:200}} onClick={function(){setHeaderFilterOpen(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
-          <thead>
+          <thead style={{position:'sticky',top:0,zIndex:5}}>
             <tr style={{background:'rgba(107,140,173,0.07)'}}>
-              {/* Client — sticky left */}
-              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:0,zIndex:3,background:'rgba(107,140,173,0.07)',cursor:'pointer',userSelect:'none',borderRight:'2px solid var(--tf-border)'}}>
+              {/* Select-all checkbox — sticky left */}
+              <th style={{padding:'10px 8px',textAlign:'center',position:'sticky',left:0,zIndex:6,background:'rgba(107,140,173,0.07)',borderBottom:'1px solid var(--tf-border)',width:36,minWidth:36}}>
+                <input type="checkbox" checked={pagedRows.length>0&&pagedRows.every(function(r){return selectedIds.has(r.id);})} onChange={function(){toggleSelectAll(pagedRows);}} style={{cursor:'pointer',width:14,height:14}} title="Select all on this page"/>
+              </th>
+              {/* Client — sticky left after checkbox */}
+              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:36,zIndex:6,background:'rgba(107,140,173,0.07)',cursor:'pointer',userSelect:'none',borderRight:'2px solid var(--tf-border)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   Client
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='client'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
@@ -4965,7 +5062,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map(function(row,ri){
+            {pagedRows.map(function(row,ri){
               var client=clientMap[row.client_id];
               if(!client)return null;
               var d=row.data||{};
@@ -4977,15 +5074,20 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               var wsClDone=(d.__checklist||[]).filter(function(c){return c.done;}).length;
               var wsClTotal=(d.__checklist||[]).length;
               var hasDetails=!!(d.__title||d.__description||d.__contact||wsClTotal>0);
-              var totalCols=1+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
+              var totalCols=2+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStartDate?1:0)+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
               var rowBg=allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.025)':'var(--tf-bg)';
               var statusBorderColor=WS_STATUS_COLORS[row.status]||'#94a3b8';
               var startActive=!row.start_date||row.start_date<=todayS2;
+              var isSel=selectedIds.has(row.id);
               return<React.Fragment key={row.id}>
-              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:rowBg,transition:'background 0.15s',cursor:'pointer',borderLeft:'3px solid '+statusBorderColor}}
+              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:isSel?'rgba(99,102,241,0.08)':rowBg,transition:'background 0.15s',cursor:'pointer',borderLeft:'3px solid '+statusBorderColor}}
                 onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='INPUT'||e.target.tagName==='BUTTON')return;toggleWsExpand(row.id);}}>
-                {/* Client — sticky left */}
-                <td style={{padding:'10px 14px',position:'sticky',left:0,zIndex:1,background:rowBg,borderRight:'2px solid var(--tf-border)'}}>
+                {/* Select checkbox — sticky left */}
+                <td style={{padding:'8px',textAlign:'center',position:'sticky',left:0,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,width:36,minWidth:36}}>
+                  <input type="checkbox" checked={isSel} onChange={function(){toggleSelect(row.id);}} onClick={function(e){e.stopPropagation();}} style={{cursor:'pointer',width:14,height:14}}/>
+                </td>
+                {/* Client — sticky left after checkbox */}
+                <td style={{padding:'10px 14px',position:'sticky',left:36,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,borderRight:'2px solid var(--tf-border)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
                     <div style={{flex:1}}>
@@ -5223,7 +5325,24 @@ var [showExportMenu,setShowExportMenu]=useState(false);
             </tr>
           </tfoot>
         </table>
+      </div>
+      {/* Pagination controls */}
+      {pageSize!=='all'&&filteredRows.length>pageSize&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 4px',gap:10,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--tf-text-sub)'}}>
+          <span>Rows per page:</span>
+          <select value={pageSize} onChange={function(e){var v=e.target.value;setPageSize(v==='all'?'all':Number(v));setPageIdx(0);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+            <option value={25}>25</option><option value={50}>50</option><option value={100}>100</option><option value={200}>200</option><option value="all">All</option>
+          </select>
+          <span style={{marginLeft:6}}>Page {safePageIdx+1} of {totalPages} ({filteredRows.length} total)</span>
+        </div>
+        <div style={{display:'flex',gap:4}}>
+          <button disabled={safePageIdx===0} onClick={function(){setPageIdx(0);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:safePageIdx===0?'var(--tf-text-mut)':'var(--tf-text-sub)',cursor:safePageIdx===0?'not-allowed':'pointer',fontSize:11,fontWeight:700,opacity:safePageIdx===0?0.5:1}}>« First</button>
+          <button disabled={safePageIdx===0} onClick={function(){setPageIdx(Math.max(0,safePageIdx-1));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:safePageIdx===0?'var(--tf-text-mut)':'var(--tf-text-sub)',cursor:safePageIdx===0?'not-allowed':'pointer',fontSize:11,fontWeight:700,opacity:safePageIdx===0?0.5:1}}>‹ Prev</button>
+          <button disabled={safePageIdx>=totalPages-1} onClick={function(){setPageIdx(Math.min(totalPages-1,safePageIdx+1));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:safePageIdx>=totalPages-1?'var(--tf-text-mut)':'var(--tf-text-sub)',cursor:safePageIdx>=totalPages-1?'not-allowed':'pointer',fontSize:11,fontWeight:700,opacity:safePageIdx>=totalPages-1?0.5:1}}>Next ›</button>
+          <button disabled={safePageIdx>=totalPages-1} onClick={function(){setPageIdx(totalPages-1);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:safePageIdx>=totalPages-1?'var(--tf-text-mut)':'var(--tf-text-sub)',cursor:safePageIdx>=totalPages-1?'not-allowed':'pointer',fontSize:11,fontWeight:700,opacity:safePageIdx>=totalPages-1?0.5:1}}>Last »</button>
+        </div>
       </div>}
+      </>}
     </div>}
 
     {showCreateTask&&<WorksheetTaskModal row={showCreateTask.row} client={showCreateTask.client} workType={activeType} period={periodLabel} allWorkspaces={allWorkspaces} supabase={supabase} cu={cu} orgId={org.id} onClose={function(){setShowCreateTask(null);}} onCreated={function(taskId,wsId){supabase.from('worksheet_rows').update({task_card_id:taskId,task_workspace_id:wsId}).eq('id',showCreateTask.row.id).then(function(){setRows(function(p){return p.map(function(r){return r.id===showCreateTask.row.id?Object.assign({},r,{task_card_id:taskId,task_workspace_id:wsId}):r;});});setShowCreateTask(null);showToast('Task card created!');});}}/>}
