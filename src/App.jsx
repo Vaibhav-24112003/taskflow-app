@@ -4550,7 +4550,8 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Worksheets</h2>
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {allTypes.length} work types</div>
       </div>
-      <button onClick={recalcAllDueDates} disabled={recalculating} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:8,padding:'7px 14px',color:'#6b8cad',cursor:recalculating?'not-allowed':'pointer',fontSize:12,fontWeight:600,opacity:recalculating?0.6:1}}>{recalculating?'Recalculating...':'Recalculate Due Dates'}</button>
+      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+      <button onClick={recalcAllDueDates} disabled={recalculating} title="Recompute due dates and start-by dates for all rows" style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:8,padding:'7px 12px',color:'#6b8cad',cursor:recalculating?'not-allowed':'pointer',fontSize:12,fontWeight:600,opacity:recalculating?0.6:1}}>{recalculating?'Recalculating...':'↻ Recalc Dates'}</button>
       {/* Export button */}
       {activeType&&<div style={{position:'relative'}}>
         <button onClick={function(){setShowExportMenu(!showExportMenu);}} style={{background:showExportMenu?'rgba(34,197,94,0.12)':'rgba(107,140,173,0.1)',border:'1px solid '+(showExportMenu?'rgba(34,197,94,0.3)':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 14px',color:showExportMenu?'#22c55e':'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
@@ -4571,6 +4572,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           </div>
         </>}
       </div>}
+      </div>
 
     </div>
 
@@ -4956,7 +4958,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   Client
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='client'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
                   {filterClient&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
-                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__client'?null:'__client';});}} style={{fontSize:9,opacity:filterClient?1:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3,background:filterClient?'rgba(245,158,11,0.15)':'transparent'}} title="Search clients">▾</span>
+                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__client'?null:'__client';});}} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,lineHeight:1,marginLeft:4,cursor:'pointer',padding:'2px 5px',borderRadius:4,background:filterClient?'rgba(245,158,11,0.18)':'rgba(107,140,173,0.12)',color:filterClient?'#f59e0b':'#6b8cad',border:'1px solid '+(filterClient?'rgba(245,158,11,0.35)':'rgba(107,140,173,0.25)'),fontWeight:700}} title="Search clients">⚲</span>
                 </div>
                 {headerFilterOpen==='__client'&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:200,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
                   <input autoFocus value={filterClient} onChange={function(e){setFilterClient(e.target.value);}} placeholder="Search client name..." style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
@@ -4968,7 +4970,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   {hc.label}
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol===hc.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
                   {hfActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
-                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===hc.key?null:hc.key;});}} style={{fontSize:9,opacity:hfActive?1:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3,background:hfActive?'rgba(245,158,11,0.15)':'transparent'}} title="Filter this column">▾</span>
+                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===hc.key?null:hc.key;});}} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,lineHeight:1,marginLeft:4,cursor:'pointer',padding:'2px 5px',borderRadius:4,background:hfActive?'rgba(245,158,11,0.18)':'rgba(107,140,173,0.12)',color:hfActive?'#f59e0b':'#6b8cad',border:'1px solid '+(hfActive?'rgba(245,158,11,0.35)':'rgba(107,140,173,0.25)'),fontWeight:700}} title="Filter this column">▼</span>
                 </div>
                 {headerFilterOpen===hc.key&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:160,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
                   <select value={filters[hc.key]||'all'} onChange={function(e){setFilter(hc.key,e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
@@ -4986,7 +4988,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                     {col.label}
                     <span style={{fontSize:9,opacity:0.7}}>{sortCol===col.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
                     {cfActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
-                    <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===col.key?null:col.key;});}} style={{fontSize:9,opacity:cfActive?1:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3,background:cfActive?'rgba(245,158,11,0.15)':'transparent'}} title="Filter">▾</span>
+                    <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===col.key?null:col.key;});}} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,lineHeight:1,marginLeft:4,cursor:'pointer',padding:'2px 5px',borderRadius:4,background:cfActive?'rgba(245,158,11,0.18)':'rgba(107,140,173,0.12)',color:cfActive?'#f59e0b':'#6b8cad',border:'1px solid '+(cfActive?'rgba(245,158,11,0.35)':'rgba(107,140,173,0.25)'),fontWeight:700}} title="Filter">▼</span>
                   </div>
                   {headerFilterOpen===col.key&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:150,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
                     <select value={filters[col.key]||'all'} onChange={function(e){setFilter(col.key,e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
@@ -5006,7 +5008,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   {cfg.stages&&cfg.stages.length>0?'Stage':'Status'}
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='__status'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
                   {filters.__status&&filters.__status!=='all'&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
-                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__status'?null:'__status';});}} style={{fontSize:9,opacity:0.5,cursor:'pointer',padding:'1px 3px',borderRadius:3}} title="Filter">▾</span>
+                  {(function(){var sfActive=filters.__status&&filters.__status!=='all';return<span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__status'?null:'__status';});}} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,lineHeight:1,marginLeft:4,cursor:'pointer',padding:'2px 5px',borderRadius:4,background:sfActive?'rgba(245,158,11,0.18)':'rgba(107,140,173,0.12)',color:sfActive?'#f59e0b':'#6b8cad',border:'1px solid '+(sfActive?'rgba(245,158,11,0.35)':'rgba(107,140,173,0.25)'),fontWeight:700}} title="Filter">▼</span>;})()}
                 </div>
                 {headerFilterOpen==='__status'&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:150,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
                   <select value={filters.__status||'all'} onChange={function(e){setFilter('__status',e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
@@ -5034,11 +5036,10 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               var hasDetails=!!(d.__title||d.__description||d.__contact||wsClTotal>0);
               var totalCols=2+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStartDate?1:0)+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
               var rowBg=allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(107,140,173,0.025)':'var(--tf-bg)';
-              var statusBorderColor=WS_STATUS_COLORS[row.status]||'#94a3b8';
               var startActive=!row.start_date||row.start_date<=todayS2;
               var isSel=selectedIds.has(row.id);
               return<React.Fragment key={row.id}>
-              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:isSel?'rgba(99,102,241,0.08)':rowBg,transition:'background 0.15s',cursor:'pointer',borderLeft:'3px solid '+statusBorderColor}}
+              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:isSel?'rgba(99,102,241,0.08)':rowBg,transition:'background 0.15s',cursor:'pointer'}}
                 onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='INPUT'||e.target.tagName==='BUTTON')return;toggleWsExpand(row.id);}}>
                 {/* Select checkbox — sticky left */}
                 <td style={{padding:'8px',textAlign:'center',position:'sticky',left:0,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,width:36,minWidth:36}}>
