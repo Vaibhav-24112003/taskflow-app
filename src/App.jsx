@@ -4890,7 +4890,6 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                     <span style={{fontSize:8,color:'var(--tf-text-sub)',transform:wsIsExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
                   </div>
                   {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:13}}>{client.display_name}</div>}
-                  {client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>{client.pan}</div>}
                   {cfg.frequency==='once'?<div style={{marginTop:2,marginLeft:13}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
                 {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hVal=(row.data||{})[hc.key]||'';return<td key={hc.key} style={{padding:'6px 8px',textAlign:'center'}}>
@@ -5115,7 +5114,6 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,flexShrink:0,position:'sticky',top:0,background:'var(--tf-bg)',zIndex:1}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>{pClient.name}</div>
-              {pClient.pan&&<div style={{fontSize:11,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{pClient.pan}</div>}
             </div>
             <button onClick={function(){setPipelineDetailRow(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,flexShrink:0}}>×</button>
           </div>
@@ -5264,7 +5262,7 @@ function WorksheetTaskModal({row,client,workType,period,allWorkspaces,supabase,c
           </select>}
         </div>
         <div style={{background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.15)',borderRadius:8,padding:'9px 12px',fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.7}}>
-          <div><b style={{color:'var(--tf-text)'}}>Client:</b> {client.name}{client.pan?' · PAN: '+client.pan:''}</div>
+          <div><b style={{color:'var(--tf-text)'}}>Client:</b> {client.name}</div>
           <div><b style={{color:'var(--tf-text)'}}>Work Type:</b> {workType} · <b style={{color:'var(--tf-text)'}}>Period:</b> {period}</div>
         </div>
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:8,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
@@ -5652,7 +5650,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
               else if(isOverdue){timing=Math.abs(daysDiff(today,row.due_date))+'d overdue';timingColor='#ef4444';}
               var stageInfo=drillData.stat.stages.find(function(s){return s.key===row.current_stage;});
               return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
-                <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div>{client.pan&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+                <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</div></td>
                 <td style={{padding:'9px 10px',textAlign:'center'}}>{stageInfo?<span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:12,background:(stageInfo.color||'#6b8cad')+'22',color:stageInfo.color||'#6b8cad',whiteSpace:'nowrap'}}>{stageInfo.key===drillData.stat.lastStageKey?'✓ ':''}{stageInfo.label}</span>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>—</span>}</td>
                 <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:11,fontWeight:700,color:SC_STATUS[row.status||'pending'],textTransform:'capitalize'}}>{(row.status||'pending').replace('_',' ')}</span></td>
                 <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:isOverdue?'#ef4444':'var(--tf-text-sub)'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
@@ -5712,7 +5710,6 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
             return<tr key={cl.id} style={{borderBottom:'1px solid var(--tf-border)',background:ci%2?'rgba(107,140,173,0.02)':'transparent'}}>
               <td style={{padding:'9px 14px',position:'sticky',left:0,background:ci%2?'rgba(107,140,173,0.02)':'var(--tf-surface)',zIndex:1}}>
                 <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{cl.name}</div>
-                {cl.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{cl.pan}</div>}
               </td>
               {workTypeNames.map(function(wt){
                 var cell=cl.byWT[wt]||{done:0,total:0};
@@ -5751,7 +5748,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           {overdueRows.map(function(row,ri){
             var client=clientMap[row.client_id];if(!client)return null;
             return<tr key={row.id} style={{borderBottom:'1px solid var(--tf-border)',background:ri%2?'rgba(107,140,173,0.02)':'transparent'}}>
-              <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{client.name}</div>{client.pan&&<div style={{fontSize:9,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{client.pan}</div>}</td>
+              <td style={{padding:'9px 14px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:12}}>{client.name}</div></td>
               <td style={{padding:'9px 10px',fontSize:12,color:'var(--tf-text)'}}>{row.work_type}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:9,color:'#6b8cad',marginLeft:4}}>({row.due_label})</span>}</td>
               <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'var(--tf-text-sub)'}}>{row.period_label||'—'}</td>
               <td style={{padding:'9px 10px',textAlign:'center',fontSize:12,color:'#ef4444'}}>{row.due_date?new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'—'}</td>
@@ -9064,7 +9061,6 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
-                    {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}
                   </div>
                   {bcEditMode&&<button onClick={function(e){e.stopPropagation();toggleBig(c,false);}}
                     title="Remove from Big Clients" style={{background:'rgba(220,38,38,0.1)',border:'1px solid #dc2626',borderRadius:4,color:'#dc2626',cursor:'pointer',fontSize:13,fontWeight:700,padding:'0 5px',lineHeight:'18px',flexShrink:0}}>×</button>}
@@ -9135,7 +9131,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
         <div style={{flex:1,overflowY:'auto'}}>
           {nonBig.filter(function(c){var q=search.toLowerCase();return !q||(c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q);}).map(function(c){
             return<div key={c.id} style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-              <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>{c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',fontFamily:'monospace'}}>{c.pan}</div>}</div>
+              <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div></div>
               <button onClick={function(){toggleBig(c,true);setShowPicker(false);setSelClientId(c.id);setMode('work');}}
                 style={{background:'#1e40af',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Mark Big</button>
             </div>;
