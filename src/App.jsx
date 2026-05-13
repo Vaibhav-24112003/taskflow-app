@@ -10906,9 +10906,20 @@ function ClientConnectModule({org,supabase,cu}){
                     {ans.url?
                       <a href={ans.url} target="_blank" rel="noopener noreferrer" style={{padding:'4px 10px',background:'#6b8cad',border:'none',borderRadius:6,fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0,textDecoration:'none'}}>Open</a>:
                       <button onClick={async function(){
-                        var {data}=await supabase.storage.from('cc-uploads').createSignedUrl(ans.path,3600);
-                        if(data&&data.signedUrl)window.open(data.signedUrl,'_blank');
-                        else showToast('Could not generate download link','err');
+                        if(ans.provider==='dropbox'){
+                          var storageCfg=cloudStorages.find(function(s){return s.provider==='dropbox';});
+                          if(!storageCfg||!storageCfg.access_token){showToast('Dropbox not connected','err');return;}
+                          try{
+                            var r=await fetch('https://api.dropboxapi.com/2/files/get_temporary_link',{method:'POST',headers:{'Authorization':'Bearer '+storageCfg.access_token,'Content-Type':'application/json'},body:JSON.stringify({path:ans.path})});
+                            var j=await r.json();
+                            if(j.link)window.open(j.link,'_blank');
+                            else showToast('Could not generate download link','err');
+                          }catch(e){showToast('Could not generate download link','err');}
+                        }else{
+                          var {data}=await supabase.storage.from('cc-uploads').createSignedUrl(ans.path,3600);
+                          if(data&&data.signedUrl)window.open(data.signedUrl,'_blank');
+                          else showToast('Could not generate download link','err');
+                        }
                       }} style={{padding:'4px 10px',background:'#6b8cad',border:'none',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0}}>Download</button>
                     }
                   </div>:
