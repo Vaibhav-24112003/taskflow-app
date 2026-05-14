@@ -4946,14 +4946,14 @@ var [showExportMenu,setShowExportMenu]=useState(false);
 
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',height:'calc(100vh - 240px)',minHeight:240}} onClick={function(){setHeaderFilterOpen(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
-          <thead style={{position:'sticky',top:0,zIndex:5}}>
-            <tr style={{background:'rgba(107,140,173,0.07)'}}>
+          <thead style={{position:'sticky',top:0,zIndex:5,boxShadow:'0 2px 6px rgba(0,0,0,0.08)'}}>
+            <tr style={{background:'rgba(91,120,155,0.16)'}}>
               {/* Select-all checkbox — sticky left */}
-              <th style={{padding:'10px 8px',textAlign:'center',position:'sticky',left:0,zIndex:6,background:'rgba(107,140,173,0.07)',borderBottom:'1px solid var(--tf-border)',width:36,minWidth:36}}>
+              <th style={{padding:'10px 8px',textAlign:'center',position:'sticky',left:0,zIndex:6,background:'rgba(91,120,155,0.16)',borderBottom:'2px solid rgba(107,140,173,0.4)',width:36,minWidth:36}}>
                 <input type="checkbox" checked={pagedRows.length>0&&pagedRows.every(function(r){return selectedIds.has(r.id);})} onChange={function(){toggleSelectAll(pagedRows);}} style={{cursor:'pointer',width:14,height:14}} title="Select all on this page"/>
               </th>
               {/* Client — sticky left after checkbox */}
-              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:36,zIndex:6,background:'rgba(107,140,173,0.07)',cursor:'pointer',userSelect:'none',borderRight:'2px solid var(--tf-border)'}}>
+              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:36,zIndex:6,background:'rgba(91,120,155,0.16)',cursor:'pointer',userSelect:'none',borderRight:'3px solid rgba(107,140,173,0.35)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   Client
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='client'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
@@ -4965,7 +4965,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   {filterClient&&<button onClick={function(){setFilterClient('');setHeaderFilterOpen(null);}} style={{marginTop:6,width:'100%',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px',color:'#ef4444',cursor:'pointer',fontSize:11}}>Clear</button>}
                 </div>}
               </th>
-              {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hfActive=filters[hc.key]&&filters[hc.key]!=='all';return<th key={hc.key} onClick={function(){toggleSort(hc.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===hc.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none',position:'relative'}}>
+              {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hfActive=filters[hc.key]&&filters[hc.key]!=='all';return<th key={hc.key} onClick={function(){toggleSort(hc.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===hc.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none',position:'relative'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
                   {hc.label}
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol===hc.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
@@ -4983,7 +4983,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               {visibleCols.map(function(col){
                 var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;
                 var cfActive=filters[col.key]&&filters[col.key]!=='all';
-                return<th key={col.key} onClick={function(){toggleSort(col.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===col.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:mw,cursor:'pointer',userSelect:'none',position:'relative'}}>
+                return<th key={col.key} onClick={function(){toggleSort(col.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===col.key?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:mw,cursor:'pointer',userSelect:'none',position:'relative'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:3}}>
                     {col.label}
                     <span style={{fontSize:9,opacity:0.7}}>{sortCol===col.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
@@ -5000,10 +5000,10 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   </div>}
                 </th>;
               })}
-              {showStartDate&&<th onClick={function(){toggleSort('__startdate');}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol==='__startdate'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none'}}>
+              {showStartDate&&<th onClick={function(){toggleSort('__startdate');}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol==='__startdate'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>Start By<span style={{fontSize:9,opacity:0.7}}>{sortCol==='__startdate'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span></div>
               </th>}
-              {showStatus&&<th onClick={function(){toggleSort('__status');}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol==='__status'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:100,cursor:'pointer',userSelect:'none',position:'relative'}}>
+              {showStatus&&<th onClick={function(){toggleSort('__status');}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol==='__status'?'#6b8cad':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:100,cursor:'pointer',userSelect:'none',position:'relative'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:3}}>
                   {cfg.stages&&cfg.stages.length>0?'Stage':'Status'}
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='__status'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
@@ -5016,9 +5016,9 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   </select>
                 </div>}
               </th>}
-              {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
-              {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
-              {cfg.frequency==='once'&&<th style={{padding:'10px 6px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:60}}>Actions</th>}
+              {showComments&&<th style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:160}}>Comments</th>}
+              {showTaskCard&&<th style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:110}}>Task Card</th>}
+              {cfg.frequency==='once'&&<th style={{padding:'10px 6px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(107,140,173,0.4)',whiteSpace:'nowrap',minWidth:60}}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -5046,7 +5046,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   <input type="checkbox" checked={isSel} onChange={function(){toggleSelect(row.id);}} onClick={function(e){e.stopPropagation();}} style={{cursor:'pointer',width:14,height:14}}/>
                 </td>
                 {/* Client — sticky left after checkbox */}
-                <td style={{padding:'10px 14px',position:'sticky',left:36,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,borderRight:'2px solid var(--tf-border)'}}>
+                <td style={{padding:'10px 14px',position:'sticky',left:36,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,borderRight:'3px solid rgba(107,140,173,0.3)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
                     <div style={{flex:1}}>
