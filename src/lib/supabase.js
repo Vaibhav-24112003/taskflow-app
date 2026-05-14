@@ -149,7 +149,7 @@ export const cancelInvitation = (invitationId) =>
 export const getTasks = (workspaceId) =>
   supabase
     .from('tasks')
-    .select('id,title,description,status,priority,due_date,assigned_to,assignees,delegator_id,created_by,workspace_id,project,tags,checklist,recurrence_type,recurrence_interval,created_at,updated_at')
+    .select('id,title,description,status,priority,due_date,assigned_to,assignees,delegator_id,created_by,workspace_id,project,tags,checklist,recurrence_type,recurrence_interval,created_at,updated_at,archived_at')
     .eq('workspace_id', workspaceId)
     .order('created_at', { ascending: false })
     .limit(1000)

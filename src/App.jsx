@@ -757,7 +757,7 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
 }
 
 // ── Task Card ─────────────────────────────────────────────────────────────────
-function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDragging}){
+function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onArchive,onDragStart,isDragging}){
   const taskAssignees=getAssignees(task)
   const assigneeUsers=taskAssignees.map(id=>getUser(id,wsMembers)).filter(Boolean)
   const creator=getUser(task.created_by,wsMembers)
@@ -807,6 +807,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
       {/* Hover actions */}
       {!mir&&<div style={{display:'flex',gap:4,marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)',opacity:hov?1:0,transform:hov?'none':'translateY(2px)',transition:G.trans,pointerEvents:hov?'auto':'none'}}>
         <Btn onClick={e=>{e.stopPropagation();onEdit(task)}} outline color={acc} sm>Edit</Btn>
+        {onArchive&&<Btn onClick={e=>{e.stopPropagation();onArchive(task.id)}} outline color="#8fa5be" sm>🗄 Archive</Btn>}
         <Btn onClick={e=>{e.stopPropagation();setCdel(true)}} danger sm>Delete</Btn>
       </div>}
     </div>
@@ -815,7 +816,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
 }
 
 // ── Kanban Column ─────────────────────────────────────────────────────────────
-function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,onDragStart,onDrop,onAdd}){
+function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,onArchive,dragId,onDragStart,onDrop,onAdd}){
   const [overCol,setOverCol]=useState(false)
   const [insertIdx,setInsertIdx]=useState(null) // index to show insertion line
   const colRef=useRef()
@@ -865,7 +866,7 @@ function KanbanCol({status,tasks,wsColor,SC,wsMembers,cu,onEdit,onDelete,dragId,
       {tasks.length===0&&overCol&&insertIdx===0&&<InsertLine/>}
       {tasks.map((t,i)=><div key={t.id} data-card data-id={t.id} style={{display:'flex',flexDirection:'column',gap:0}}>
         {overCol&&insertIdx===i&&<InsertLine/>}
-        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onDragStart={onDragStart} isDragging={dragId===t.id}/>
+        <TaskCard task={t} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={onEdit} onDelete={onDelete} onArchive={onArchive} onDragStart={onDragStart} isDragging={dragId===t.id}/>
       </div>)}
       {overCol&&insertIdx===tasks.length&&<InsertLine/>}
     </div>
@@ -970,7 +971,7 @@ function ImportExportModal({open,onClose,tasks,wsMembers,statuses,wsName,onImpor
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 // ── Team View Panel ───────────────────────────────────────────────────────────
-function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,openNew,setShowMembers,isOvd}){
+function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,wsRgb,statuses,SC,dragId,setDragId,drop,setEditTask,delTask,archiveTask,openNew,setShowMembers,isOvd}){
   const [filter,setFilter]=useState('all') // 'all' | 'own' | 'assigned'
   const selMem=wsMembers.find(m=>m.id===teamMemberId)||null
   const rgb=hexRgb(wsColor)
@@ -1045,7 +1046,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
             {statuses.map(st=><KanbanCol key={st} status={st}
               tasks={displayTasks.filter(t=>t.status===st)}
               wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu}
-              onEdit={setEditTask} onDelete={delTask}
+              onEdit={setEditTask} onDelete={delTask} onArchive={archiveTask}
               dragId={dragId} onDragStart={setDragId} onDrop={drop}
               onAdd={s=>openNew(s)}/>)}
           </KanbanBoard>
@@ -1460,6 +1461,17 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     }
   }
   const delTask=async id=>{await deleteTask(id);setTasks(p=>p.filter(t=>t.id!==id));setEditTask(null);setCreateStatus(null)}
+  const archiveTask=async id=>{
+    const ts=new Date().toISOString()
+    const{error}=await supabase.from('tasks').update({archived_at:ts}).eq('id',id)
+    if(error){showToast('Failed to archive','err');return}
+    setTasks(p=>p.map(t=>t.id===id?{...t,archived_at:ts}:t));setEditTask(null);showToast('Archived ✓')
+  }
+  const restoreTask=async id=>{
+    const{error}=await supabase.from('tasks').update({archived_at:null}).eq('id',id)
+    if(error){showToast('Failed to restore','err');return}
+    setTasks(p=>p.map(t=>t.id===id?{...t,archived_at:null}:t));showToast('Restored ✓')
+  }
 
   const claimTask=useCallback(async(task)=>{
     const existing=getAssignees(task)
@@ -1550,9 +1562,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');await loadWS();var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
-  const myTasks=tasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-  const allT=tasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-  const recT=tasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
+  const liveTasks=tasks.filter(t=>!t.archived_at)
+  const archivedTasks=tasks.filter(t=>!!t.archived_at).sort((a,b)=>new Date(b.archived_at)-new Date(a.archived_at))
+  const myTasks=liveTasks.filter(t=>bf(t)&&isOnMyBoard(t,cu.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+  const allT=liveTasks.filter(bf).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+  const recT=liveTasks.filter(t=>t.recurrence_type&&t.recurrence_type!=='none')
   const curUser=enrich(cu)
     const views=[
     {id:'board',label:'My Board',icon:'⊞'},
@@ -1560,7 +1574,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {id:'plan',label:'Plan My Day',icon:'🗓'},
     {id:'recurring',label:'Recurring',icon:'🔁'},
     {id:'list',label:'All Tasks',icon:'☰'},
-    {id:'dashboard',label:'Dashboard',icon:'*'}
+    {id:'dashboard',label:'Dashboard',icon:'*'},
+    {id:'archive',label:'Archive',icon:'🗄'}
   ]
 
   if(loading)return<div style={{minHeight:'100vh',background:'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontFamily:G.font}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(107,140,173,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
@@ -1814,7 +1829,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
             <div><h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.03em'}}>My Board</h2><p style={{margin:'4px 0 0',fontSize:12,color:'var(--tf-text-sub)'}}>{myTasks.length} tasks · <span style={{color:'#8fa5be'}}>📥 assigned</span> · <span style={{color:'#f59e0b'}}>📤 delegated</span></p></div>
           </div>
           <KanbanBoard isDragging={!!dragId}>
-            {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
+            {statuses.map(st=><KanbanCol key={st} status={st} tasks={myTasks.filter(t=>t.status===st)} wsColor={wsColor} SC={SC} wsMembers={wsMembers} cu={cu} onEdit={setEditTask} onDelete={delTask} onArchive={archiveTask} dragId={dragId} onDragStart={setDragId} onDrop={drop} onAdd={s=>openNew(s)}/>)}
           </KanbanBoard>
         </div>}
 
@@ -1824,7 +1839,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           {/* TEAM */}
           {view==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={workspaces} allProfiles={allProfiles}/>}
 
-          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
+          {view==='team'&&<TeamViewPanel allT={allT} wsMembers={wsMembers} teamMemberId={teamMemberId} setTeamMemberId={setTeamMemberId} cu={cu} wsColor={wsColor} wsRgb={wsRgb} statuses={statuses} SC={SC} dragId={dragId} setDragId={setDragId} drop={drop} setEditTask={setEditTask} delTask={delTask} archiveTask={archiveTask} openNew={openNew} setShowMembers={setShowMembers} isOvd={isOvd}/>}
 
           {/* RECURRING */}
           {view==='recurring'&&<div>
@@ -1924,6 +1939,40 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                     </div>
                   }
             </div>
+          </div>}
+
+          {/* ARCHIVE */}
+          {view==='archive'&&<div>
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:20,gap:12,flexWrap:'wrap'}}>
+              <div>
+                <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>🗄 Archived Tasks</h2>
+                <p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>{archivedTasks.length} archived · restore to put back on the board or delete forever</p>
+              </div>
+            </div>
+            {archivedTasks.length===0
+              ?<div style={{textAlign:'center',padding:56,border:'1px dashed var(--tf-border)',borderRadius:G.radius,color:'var(--tf-text-mut)'}}>
+                <div style={{fontSize:36,marginBottom:12}}>🗄</div>
+                <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:8}}>Nothing archived</div>
+                <div style={{fontSize:12}}>Use the Archive button on any task to move it here.</div>
+              </div>
+              :<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,overflow:'hidden'}}>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <thead><tr style={{borderBottom:'1px solid var(--tf-border)'}}>{['Task','Status','Archived','Actions'].map(h=><th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:10,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em'}}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {archivedTasks.map(t=>{const col=SC[t.status]||wsColor;return<tr key={t.id} style={{borderBottom:'1px solid var(--tf-border)'}}>
+                      <td style={{padding:'10px 14px'}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{t.title}</div>{t.project&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{t.project}</div>}</td>
+                      <td style={{padding:'10px 14px'}}><Tag label={t.status} color={col}/></td>
+                      <td style={{padding:'10px 14px',fontSize:11,color:'var(--tf-text-sub)'}}>{t.archived_at?fmtDate(t.archived_at):'—'}</td>
+                      <td style={{padding:'8px 14px'}}>
+                        <div style={{display:'flex',gap:6}}>
+                          <Btn onClick={()=>restoreTask(t.id)} outline color="#10b981" sm>↺ Restore</Btn>
+                          <Btn onClick={()=>{if(window.confirm('Delete "'+t.title+'" forever? This cannot be undone.'))delTask(t.id);}} danger sm>Delete forever</Btn>
+                        </div>
+                      </td>
+                    </tr>;})}
+                  </tbody>
+                </table>
+              </div>}
           </div>}
 
         </div>{/* end other-views scroll */}
@@ -3497,6 +3546,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [bulkAssigneeVal,setBulkAssigneeVal]=useState('');
   var [pageSize,setPageSize]=useState(50);
   var [pageIdx,setPageIdx]=useState(0);
+  var [showArchived,setShowArchived]=useState(false);
   var WS_PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
   var WS_STATUS_COLORS={pending:'#94a3b8',in_progress:'#3b82f6',under_review:'#f59e0b',completed:'#22c55e'};
   function toggleSort(colKey){setSortCol(function(prev){if(prev===colKey){setSortDir(function(d){return d==='asc'?'desc':'asc';});return colKey;}setSortDir('asc');return colKey;});}
@@ -4200,6 +4250,33 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     setRows(function(prev){return prev.filter(function(r){return !selectedIds.has(r.id);});});
     showToast('Deleted '+ids.length+' rows');clearSelection();
   }
+  async function archiveRow(rowId){
+    var ts=new Date().toISOString();
+    var res=await supabase.from('worksheet_rows').update({archived_at:ts}).eq('id',rowId);
+    if(res.error){showToast('Failed to archive','err');return;}
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{archived_at:ts}):r;});});
+    showToast('Archived ✓');
+  }
+  async function restoreRow(rowId){
+    var res=await supabase.from('worksheet_rows').update({archived_at:null}).eq('id',rowId);
+    if(res.error){showToast('Failed to restore','err');return;}
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{archived_at:null}):r;});});
+    showToast('Restored ✓');
+  }
+  async function deleteRowForever(rowId){
+    if(!window.confirm('Delete this row forever? This cannot be undone.'))return;
+    var res=await supabase.from('worksheet_rows').delete().eq('id',rowId);
+    if(res.error){showToast('Failed to delete','err');return;}
+    setRows(function(prev){return prev.filter(function(r){return r.id!==rowId;});});
+    showToast('Deleted forever');
+  }
+  async function bulkArchive(){
+    var ids=Array.from(selectedIds);if(ids.length===0)return;
+    var ts=new Date().toISOString();
+    await supabase.from('worksheet_rows').update({archived_at:ts}).in('id',ids);
+    setRows(function(prev){return prev.map(function(r){return selectedIds.has(r.id)?Object.assign({},r,{archived_at:ts}):r;});});
+    showToast('Archived '+ids.length+' rows');clearSelection();
+  }
 
   // Classify an unclassified row: move it to the chosen work type's current-period worksheet
   var classifiableConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active&&c.name!=='Unclassified';});
@@ -4431,6 +4508,9 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   // Apply filters to rows
   var hasActiveFilters=Object.keys(filters).length>0||filterClient||mineOnly;
   var filteredRows=rows.filter(function(row){
+    // Archive view shows archived rows only; main view hides them
+    if(showArchived){if(!row.archived_at)return false;}
+    else{if(row.archived_at)return false;}
     var client=clientMap[row.client_id];
     if(!client)return false;
     // Mine-only filter: row.data must contain cu.id as __assignee or in any __h_*
@@ -4498,6 +4578,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
       <button onClick={recalcAllDueDates} disabled={recalculating} title="Recompute due dates and start-by dates for all rows" style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:8,padding:'7px 12px',color:'#6b8cad',cursor:recalculating?'not-allowed':'pointer',fontSize:12,fontWeight:600,opacity:recalculating?0.6:1}}>{recalculating?'Recalculating...':'↻ Recalc Dates'}</button>
+      {(function(){var archCount=rows.filter(function(r){return !!r.archived_at;}).length;return <button onClick={function(){clearSelection();setShowArchived(function(v){return !v;});}} title={showArchived?'Back to active rows':'View archived rows'} style={{background:showArchived?'rgba(245,158,11,0.16)':'rgba(143,165,190,0.1)',border:'1px solid '+(showArchived?'rgba(245,158,11,0.4)':'rgba(143,165,190,0.25)'),borderRadius:8,padding:'7px 12px',color:showArchived?'#f59e0b':'#8fa5be',cursor:'pointer',fontSize:12,fontWeight:600,display:'inline-flex',alignItems:'center',gap:6}}>{showArchived?'← Back to Active':'🗄 Archive'}{!showArchived&&archCount>0&&<span style={{background:'rgba(143,165,190,0.18)',borderRadius:10,padding:'1px 7px',fontSize:11,fontWeight:700}}>{archCount}</span>}</button>;})()}
       {/* Export button */}
       {activeType&&<div style={{position:'relative'}}>
         <button onClick={function(){setShowExportMenu(!showExportMenu);}} style={{background:showExportMenu?'rgba(34,197,94,0.12)':'rgba(107,140,173,0.1)',border:'1px solid '+(showExportMenu?'rgba(34,197,94,0.3)':'rgba(107,140,173,0.25)'),borderRadius:8,padding:'7px 14px',color:showExportMenu?'#22c55e':'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:5}}>
@@ -4886,10 +4967,18 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           </select>
           <button onClick={bulkUpdateAssignee} disabled={!bulkAssigneeKey} style={{background:bulkAssigneeKey?'#6366f1':'var(--tf-surface)',border:'none',borderRadius:7,padding:'5px 10px',color:bulkAssigneeKey?'#fff':'var(--tf-text-sub)',cursor:bulkAssigneeKey?'pointer':'not-allowed',fontSize:11,fontWeight:700,opacity:bulkAssigneeKey?1:0.6}}>Assign</button>
         </div>}
+        {!showArchived&&<button onClick={bulkArchive} style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:7,padding:'5px 10px',color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:700}}>🗄 Archive</button>}
         <button onClick={bulkDelete} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:7,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:700}}>🗑 Delete</button>
         <button onClick={clearSelection} style={{marginLeft:'auto',background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>✕ Clear</button>
       </div>}
 
+      {showArchived&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',marginBottom:8,background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:10}}>
+        <span style={{fontSize:18}}>🗄</span>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#f59e0b'}}>Archive view</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing archived rows for {activeType||'this work type'}. Restore puts them back; Delete forever is permanent.</div>
+        </div>
+      </div>}
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',height:'calc(100vh - 240px)',minHeight:240}} onClick={function(){setHeaderFilterOpen(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead style={{position:'sticky',top:0,zIndex:5,boxShadow:'0 2px 6px rgba(0,0,0,0.08)'}}>
@@ -5091,7 +5180,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   <button onClick={function(){setShowCreateTask({row,client});}} style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:7,padding:'5px 10px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>+ Create</button>}
                 </td>}
                 {cfg.frequency==='once'&&<td style={{padding:'10px 6px',textAlign:'center'}}>
-                  {activeType==='Unclassified'&&classifiableConfigs.length>0&&<div style={{marginBottom:4}}>
+                  {!showArchived&&activeType==='Unclassified'&&classifiableConfigs.length>0&&<div style={{marginBottom:4}}>
                     <select value="" onChange={function(e){if(e.target.value)classifyRowInSheet(row,e.target.value);}}
                       title="Classify this task into a work type"
                       style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:6,padding:'4px 8px',color:'#f59e0b',fontSize:10,fontWeight:700,cursor:'pointer',outline:'none'}}>
@@ -5100,7 +5189,15 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                     </select>
                   </div>}
                   {row.data&&row.data.__assignee&&activeType!=='Unclassified'&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>{(orgMembers.find(function(m){return m.id===row.data.__assignee;})||{}).name||'Assigned'}</div>}
-                  <button onClick={function(){deleteOnceRow(row.id);}} title="Remove task" style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>✕</button>
+                  {showArchived
+                    ?<div style={{display:'flex',gap:4,justifyContent:'center'}}>
+                      <button onClick={function(){restoreRow(row.id);}} title="Restore" style={{background:'rgba(16,185,129,0.1)',border:'1px solid rgba(16,185,129,0.3)',borderRadius:6,padding:'3px 8px',color:'#10b981',cursor:'pointer',fontSize:11,fontWeight:700}}>↺ Restore</button>
+                      <button onClick={function(){deleteRowForever(row.id);}} title="Delete forever" style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,padding:'3px 8px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:700}}>✕ Forever</button>
+                    </div>
+                    :<div style={{display:'flex',gap:2,justifyContent:'center'}}>
+                      <button onClick={function(){archiveRow(row.id);}} title="Archive" style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#f59e0b';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>🗄</button>
+                      <button onClick={function(){deleteOnceRow(row.id);}} title="Remove task" style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-mut)';}}>✕</button>
+                    </div>}
                 </td>}
               </tr>
               {/* Expandable task detail row */}
