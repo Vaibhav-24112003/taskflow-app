@@ -593,10 +593,10 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
       </div>
       <select value={delegatorId||''} onChange={e=>setDelegatorId(e.target.value)} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',fontFamily:'inherit',marginBottom:16}}>
         <option value="">— Select Manager —</option>
-        {wsMembers.map(m=><option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
+        {wsMembers.map(m=><option key={m.id} value={m.id}>{(m.name||(m.email||'').split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
       </select>
       {delegatorId&&(()=>{const dm=wsMembers.find(m=>m.id===delegatorId);const eu=dm?enrich(dm):null;return eu?<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,padding:'8px 12px',borderRadius:8,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.06)'}}>
-        <Avatar user={eu} size={24}/><span style={{fontSize:12,fontWeight:600,color:'#f59e0b'}}>{dm.name||dm.email.split('@')[0]} — Manager</span>
+        <Avatar user={eu} size={24}/><span style={{fontSize:12,fontWeight:600,color:'#f59e0b'}}>{dm.name||d(m.email||'').split('@')[0]} — Manager</span>
       </div>:null})()}
       <div style={{background:'rgba(143,165,190,0.06)',border:'1px solid rgba(143,165,190,0.15)',borderRadius:G.radiusMd,padding:'10px 14px',fontSize:11,color:'#8fa5be'}}>
         This task will appear on <strong>your board</strong> as "Assigned by [Manager]". The manager sees it as a delegated task under their watch.
@@ -614,13 +614,13 @@ function AssignTaskModal({open,onClose,task,wsMembers,cu,ws,onSave}){
         :<>
           <select value="" onChange={e=>{if(e.target.value)toggleSub(e.target.value);e.target.value='';}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,cursor:'pointer',outline:'none',fontFamily:'inherit',marginBottom:8}}>
             <option value="">— Add Assignee —</option>
-            {others.filter(m=>!subordinates.includes(m.id)).map(m=><option key={m.id} value={m.id}>{m.name||m.email.split('@')[0]}</option>)}
+            {others.filter(m=>!subordinates.includes(m.id)).map(m=><option key={m.id} value={m.id}>{m.name||(m.email||'').split('@')[0]}</option>)}
           </select>
           {subordinates.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
             {subordinates.map(sid=>{const m=others.find(x=>x.id===sid);if(!m)return null;const eu=enrich(m);
               return<div key={sid} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:8,border:'1.5px solid rgba(107,140,173,0.4)',background:'rgba(107,140,173,0.08)'}}>
                 <Avatar user={eu} size={20}/>
-                <span style={{fontSize:12,fontWeight:600,color:ws.color}}>{m.name||m.email.split('@')[0]}</span>
+                <span style={{fontSize:12,fontWeight:600,color:ws.color}}>{m.name||(m.email||'').split('@')[0]}</span>
                 <span onClick={()=>toggleSub(sid)} style={{cursor:'pointer',fontSize:14,color:'var(--tf-text-sub)',marginLeft:2,lineHeight:1}}>×</span>
               </div>
             })}
@@ -701,11 +701,11 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F full label="⚡ Manager / Delegator">
         <select value={delegatorId||''} onChange={e=>setDelegatorId(e.target.value)} style={{...INP,cursor:'pointer'}}>
           <option value="">— Select Manager —</option>
-          {wsMembers.map(m=><option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
+          {wsMembers.map(m=><option key={m.id} value={m.id}>{(m.name||(m.email||'').split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
         </select>
         {delegatorId&&(()=>{const dm=wsMembers.find(m=>m.id===delegatorId);const eu=dm?enrich(dm):null;return eu?<div style={{display:'flex',alignItems:'center',gap:8,marginTop:6,padding:'6px 10px',borderRadius:G.radiusMd,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.06)'}}>
           <Avatar user={eu} size={22}/>
-          <span style={{fontSize:12,fontWeight:600,color:'#f59e0b'}}>{dm.name||dm.email.split('@')[0]}</span>
+          <span style={{fontSize:12,fontWeight:600,color:'#f59e0b'}}>{dm.name||d(m.email||'').split('@')[0]}</span>
           <span style={{fontSize:10,color:'rgba(245,158,11,0.7)',marginLeft:4}}>Manager</span>
         </div>:null})()}
       </F>
@@ -713,13 +713,13 @@ function TaskFormModal({open,onClose,task,ws,wsMembers,cu,statuses,defaultStatus
       <F full label={`✅ Assignee${assignees.length>1?'s':''} (${assignees.length})`}>
         <select value="" onChange={e=>{if(e.target.value)toggleA(e.target.value);e.target.value='';}} style={{...INP,cursor:'pointer'}}>
           <option value="">— Add Assignee —</option>
-          {wsMembers.filter(m=>!assignees.includes(m.id)).map(m=><option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
+          {wsMembers.filter(m=>!assignees.includes(m.id)).map(m=><option key={m.id} value={m.id}>{(m.name||(m.email||'').split('@')[0])+(m.id===cu.id?' (You)':'')}</option>)}
         </select>
         {assignees.length>0&&<div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:6}}>
           {assignees.map(aid=>{const m=wsMembers.find(x=>x.id===aid);if(!m)return null;const eu=enrich(m);
             return<div key={aid} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:G.radiusMd,border:`1.5px solid rgba(${rgb},0.4)`,background:`rgba(${rgb},0.08)`}}>
               <Avatar user={eu} size={20}/>
-              <span style={{fontSize:12,fontWeight:600,color:ws.color}}>{m.name||m.email.split('@')[0]}{m.id===cu.id?' (You)':''}</span>
+              <span style={{fontSize:12,fontWeight:600,color:ws.color}}>{m.name||(m.email||'').split('@')[0]}{m.id===cu.id?' (You)':''}</span>
               <span onClick={()=>toggleA(aid)} style={{cursor:'pointer',fontSize:14,color:'var(--tf-text-sub)',marginLeft:2,lineHeight:1}}>×</span>
             </div>
           })}
@@ -780,7 +780,7 @@ function TaskCard({task,wsColor,SC,wsMembers,cu,onEdit,onDelete,onDragStart,isDr
         {cl.length>0&&<span style={{fontSize:10,color:clPct===100?'#10b981':'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>☑ {clDone}/{cl.length}</span>}
         {ovd&&<span style={{fontSize:10,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Overdue</span>}
         {mir&&(()=>{const dlg=getUser(task.delegator_id||task.created_by,wsMembers);return dlg&&dlg.id!==cu.id?<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3,background:'rgba(143,165,190,0.1)',borderRadius:4,padding:'1px 6px'}}>
-            <Avatar user={dlg} size={12}/><span style={{fontSize:10,color:'#8fa5be',fontWeight:600}}>via {dlg.name?.split(' ')[0]||dlg.email.split('@')[0]}</span>
+            <Avatar user={dlg} size={12}/><span style={{fontSize:10,color:'#8fa5be',fontWeight:600}}>via {dlg.name?.split(' ')[0]||(dlg.email||'').split('@')[0]}</span>
           </div>:<span style={{marginLeft:'auto',fontSize:10,color:'#8fa5be',background:'rgba(143,165,190,0.1)',borderRadius:4,padding:'1px 6px',fontWeight:600}}>Assigned</span>})()}
         {del&&!mir&&<div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3}}>
           {assigneeUsers.slice(0,2).map(u=><Avatar key={u.id} user={u} size={14}/>)}
@@ -1000,12 +1000,12 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
       <select value={teamMemberId||''} onChange={e=>setTeamMemberId(e.target.value)} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 12px',color:'var(--tf-text)',fontSize:12,fontWeight:600,cursor:'pointer',outline:'none',fontFamily:'inherit',minWidth:200}}>
         {wsMembers.map(m=>{
           const mAll=allT.filter(t=>isOnMyBoard(t,m.id)).length
-          return<option key={m.id} value={m.id}>{(m.name||m.email.split('@')[0])+(m.id===cu.id?' (You)':'')} — {mAll} task{mAll!==1?'s':''}</option>
+          return<option key={m.id} value={m.id}>{(m.name||(m.email||'').split('@')[0])+(m.id===cu.id?' (You)':'')} — {mAll} task{mAll!==1?'s':''}</option>
         })}
       </select>
       {selMem&&<div style={{display:'flex',alignItems:'center',gap:6,background:'var(--tf-surface)',border:`1px solid rgba(${rgb},0.15)`,borderRadius:'100px',padding:'4px 12px 4px 4px',flexShrink:0}}>
         <Avatar user={enrich(selMem)} size={22} ring={wsColor}/>
-        <span style={{fontSize:11,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap'}}>{selMem.name||selMem.email.split('@')[0]}{selMem.id===cu.id?' (You)':''}</span>
+        <span style={{fontSize:11,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap'}}>{selMem.name||selMe(m.email||'').split('@')[0]}{selMem.id===cu.id?' (You)':''}</span>
       </div>}
       <div style={{display:'flex',gap:4,flexWrap:'wrap',marginLeft:'auto'}}>
           {[
@@ -1432,7 +1432,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       var orgIds=orgs.map(function(o){return o.id;});
 
       // Fetch all non-completed rows with due_date <= today OR assigned to me
-      var rr=await supabase.from('worksheet_rows').select('id,client_id,org_id,due_date,due_label,status,data,worksheet_id,comments').in('org_id',orgIds).neq('status','completed').limit(3000);
+      var rr=await supabase.from('worksheet_rows').select('id,client_id,org_id,due_date,due_label,status,data,worksheet_id,comments,start_date').in('org_id',orgIds).neq('status','completed').limit(3000);
       var allRows=rr.data||[];
 
       // Fetch worksheet info for work_type names
@@ -1751,7 +1751,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {showUserMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:220,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
           <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:10,alignItems:'center'}}>
             <Avatar user={curUser} size={32}/>
-            <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{cu.user_metadata?.full_name||cu.email.split('@')[0]}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cu.email}</div></div>
+            <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cu.email}</div></div>
           </div>
           {pendingInvites.length>0&&<div style={{borderBottom:'1px solid var(--tf-border)'}}>
             <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:'#8fa5be',textTransform:'uppercase',letterSpacing:'0.06em'}}>Pending Invitations</div>
@@ -3881,6 +3881,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     if(ws){
       // Load rows, auto-create for missing clients
       var rr=await supabase.from('worksheet_rows').select('*').eq('worksheet_id',ws.id).limit(2000);
+      if(rr.error){showToast('Failed to load worksheet rows: '+rr.error.message,'err');setLoading(false);return;}
       var existingRows=rr.data||[];
       // Get clients for this work type (use currentClients to avoid stale state)
       var typeClients=currentClients.filter(function(c){
@@ -5593,6 +5594,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 
   async function loadData(){
     setLoading(true);
+    try{
     var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
     // Fetch worksheets for the selected FY year, also include year+1 to catch old calendar-year monthly data (Jan-Mar)
     var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).in('period_year',[selectedYear,selectedYear+1]).limit(1000);
@@ -5609,7 +5611,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     setWorksheets(wsData);
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage').in('worksheet_id',wsIds).limit(2000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage,start_date').in('worksheet_id',wsIds).limit(2000);
+      if(rr.error){showToast('Failed to load analytics data: '+rr.error.message,'err');setLoading(false);return;}
       var rowData=rr.data||[];
       // Backfill: rows at the last stage of their work type that still have status!='completed'
       // Build a map of work_type → last stage key
@@ -5638,7 +5641,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       }
       setAllRows(rowData);
     }else{setAllRows([]);}
-    setLoading(false);
+    }finally{setLoading(false);}
   }
 
   var clientMap={};
@@ -7179,6 +7182,7 @@ useEffect(function(){loadTeam();},[org.id]);
 
 async function loadTeam(){
 setLoading(true);
+try{
 var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
 var mlist=rm.data||[];
 if(mlist.length>0){
@@ -7188,7 +7192,8 @@ var profiles=rp.data||[];
 var roleMap={};mlist.forEach(function(m){roleMap[m.user_id]=m.role;});
 setMembers(profiles.map(function(p){return Object.assign({},p,{role:roleMap[p.id]||'member'});}));
 }
-var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data').eq('org_id',org.id).limit(5000);
+var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,start_date').eq('org_id',org.id).limit(5000);
+if(rr.error){showToast('Failed to load team data: '+rr.error.message,'err');setLoading(false);return;}
 setRows(rr.data||[]);
 var allRows=rr.data||[];
 if(allRows.length>0){
@@ -7197,7 +7202,7 @@ if(wsIds.length>0){var rw=await supabase.from('worksheets').select('id,work_type
 }
 var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
 setClients(rc.data||[]);
-setLoading(false);
+}finally{setLoading(false);}
 }
 
 var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -7429,6 +7434,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   async function load(){
     setLoading(true);
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(3000);
+    if(rr.error){showToast('Failed to load tasks: '+rr.error.message,'err');setLoading(false);return;}
     var rowData=rr.data||[];
     // Step 1: filter to rows where the viewed member is assigned
     var targetId=viewMemberId;
@@ -7683,7 +7689,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   }
 
   // Greeting
-  var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?cu.email.split('@')[0]:'')||'there';
+  var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?(cu.email||'').split('@')[0]:'')||'there';
   var firstName=displayName.split(' ')[0];
   var hr=new Date().getHours();
   var greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
@@ -12400,6 +12406,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   async function loadWsRows(){
     if(!org)return;
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(2000);
+    if(rr.error){console.error('loadWsRows failed:',rr.error.message);return;}
     var assigned=(rr.data||[]).filter(function(r){
       var d=r.data||{};
       if(d.__assignee===planUserId)return true;
@@ -13118,7 +13125,7 @@ export default function App(){
   const handleAuth=async user=>{
     authIdRef.current=user.id
     try{
-      await upsertProfile({id:user.id,email:user.email,name:user.user_metadata?.full_name||user.email.split('@')[0],avatar_url:user.user_metadata?.avatar_url||null})
+      await upsertProfile({id:user.id,email:user.email,name:user.user_metadata?.full_name||(user.email||'').split('@')[0],avatar_url:user.user_metadata?.avatar_url||null})
       // If arrived via invite token, accept it using server-side function
       if(inviteToken){
         await acceptInvitationByToken(inviteToken)
