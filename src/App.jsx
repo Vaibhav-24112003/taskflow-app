@@ -1339,11 +1339,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [qaWorkTypes,setQaWorkTypes]=useState([])
   const [qaSaving,setQaSaving]=useState(false)
   const userMenuRef=useRef();const wsMenuRef=useRef();const notifRef=useRef()
-  // Notifications
+  // Notifications — reminders only
   const [showNotif,setShowNotif]=useState(false)
-  const [notifData,setNotifData]=useState({today:[],overdue:[],assigned:[]})
-  const [notifLoading,setNotifLoading]=useState(false)
-  const notifCountRef=useRef(0)
+  const [reminderList,setReminderList]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_reminders')||'[]');}catch(e){return[];}})
 
   useEffect(()=>{localStorage.setItem('tf-light',lightMode?'1':'0')},[lightMode])
   useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowCmdBar(v=>!v);}};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[]);
@@ -1422,72 +1420,27 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     setQaSaving(false);
   }
 
-  // --- Notifications: load today's due, overdue, and assigned-to-me tasks ---
-  const loadNotifications=useCallback(async()=>{
-    if(orgs.length===0)return;
-    setNotifLoading(true);
-    try{
-      var today=new Date();
-      var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
-      var orgIds=orgs.map(function(o){return o.id;});
-
-      // Fetch all non-completed rows with due_date <= today OR assigned to me
-      var rr=await supabase.from('worksheet_rows').select('id,client_id,org_id,due_date,due_label,status,data,worksheet_id,comments,start_date').in('org_id',orgIds).neq('status','completed').limit(3000);
-      var allRows=rr.data||[];
-
-      // Fetch worksheet info for work_type names
-      var wsIds=[...new Set(allRows.map(function(r){return r.worksheet_id;}))];
-      var wsMap={};
-      if(wsIds.length>0){
-        var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(2000);
-        (rw.data||[]).forEach(function(w){wsMap[w.id]=w;});
-      }
-
-      // Fetch client names
-      var clientIds=[...new Set(allRows.map(function(r){return r.client_id;}))];
-      var clientMap={};
-      if(clientIds.length>0){
-        var rc=await supabase.from('clients').select('id,name,display_name').in('id',clientIds).limit(2000);
-        (rc.data||[]).forEach(function(c){clientMap[c.id]=c;});
-      }
-
-      // Org name map
-      var orgMap={};
-      orgs.forEach(function(o){orgMap[o.id]=o.name;});
-
-      // Enrich rows
-      var enriched=allRows.map(function(row){
-        var ws=wsMap[row.worksheet_id]||{};
-        var client=clientMap[row.client_id]||{};
-        // Check if this row is assigned to current user via any hierarchy level or legacy __assignee
-        var rd=row.data||{};
-        var isAssignedToMe=rd.__assignee===cu.id;
-        var dataKeys=Object.keys(rd);
-        for(var dk=0;dk<dataKeys.length;dk++){if(dataKeys[dk].indexOf('__h_')===0&&rd[dataKeys[dk]]===cu.id){isAssignedToMe=true;break;}}
-        return{id:row.id,clientName:client.display_name||client.name||'Unknown',workType:ws.work_type||'',period:ws.period_label||'',orgName:orgMap[row.org_id]||'',dueDate:row.due_date,dueLabel:row.due_label||'',status:row.status||'pending',isAssignedToMe:isAssignedToMe,orgId:row.org_id};
-      });
-
-      var todayTasks=enriched.filter(function(r){return r.dueDate===todayStr;});
-      var overdueTasks=enriched.filter(function(r){return r.dueDate&&r.dueDate<todayStr;});
-      var assignedToMe=enriched.filter(function(r){return r.isAssignedToMe;});
-
-      // Remove duplicates: assigned tasks that are also today/overdue stay in their category
-      var todayIds=new Set(todayTasks.map(function(r){return r.id;}));
-      var overdueIds=new Set(overdueTasks.map(function(r){return r.id;}));
-      var assignedFiltered=assignedToMe.filter(function(r){return !todayIds.has(r.id)&&!overdueIds.has(r.id);});
-
-      setNotifData({today:todayTasks,overdue:overdueTasks,assigned:assignedFiltered});
-      notifCountRef.current=todayTasks.length+overdueTasks.length+assignedFiltered.length;
-    }catch(e){console.error('Notification load error:',e);}
-    setNotifLoading(false);
-  },[orgs,cu.id]);
-
-  // Load notifications on mount and every 5 minutes
+  // --- Notifications: reminders from localStorage only ---
+  function loadReminders(){
+    try{setReminderList(JSON.parse(localStorage.getItem('tf_reminders')||'[]'));}catch(e){setReminderList([]);}
+  }
+  function dismissReminder(id){
+    var next=reminderList.filter(function(r){return r.id!==id;});
+    localStorage.setItem('tf_reminders',JSON.stringify(next));
+    setReminderList(next);
+  }
+  function clearFiredReminders(){
+    var next=reminderList.filter(function(r){return !r.fired;});
+    localStorage.setItem('tf_reminders',JSON.stringify(next));
+    setReminderList(next);
+  }
+  // Re-read reminders periodically and on cross-tab storage changes
   useEffect(function(){
-    if(orgs.length>0){loadNotifications();}
-    var iv=setInterval(function(){if(orgs.length>0)loadNotifications();},300000);
-    return function(){clearInterval(iv);};
-  },[orgs.length,loadNotifications]);
+    var iv=setInterval(loadReminders,30000);
+    function onStorage(e){if(e.key==='tf_reminders')loadReminders();}
+    window.addEventListener('storage',onStorage);
+    return function(){clearInterval(iv);window.removeEventListener('storage',onStorage);};
+  },[]);
 
   const saveTask=async td=>{
     if(td.id){
@@ -1668,78 +1621,70 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           <kbd style={{fontSize:10,fontWeight:700,color:'#6b8cad',background:'rgba(107,140,173,0.15)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit'}}>K</kbd>
         </span>
       </button>
-      {/* Notifications bell */}
-      <div ref={notifRef} style={{position:'relative',flexShrink:0}}>
-        <button onClick={()=>{setShowNotif(v=>!v);if(!showNotif)loadNotifications();}} title="Notifications" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(107,140,173,0.4)':'var(--tf-border)'),color:showNotif?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>{if(!showNotif)e.currentTarget.style.background='var(--tf-surface)'}}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          {(notifData.today.length+notifData.overdue.length+notifData.assigned.length)>0&&<div style={{position:'absolute',top:-3,right:-3,minWidth:16,height:16,borderRadius:8,background:'#ef4444',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid var(--tf-panel)'}}>{notifData.today.length+notifData.overdue.length+notifData.assigned.length>99?'99+':notifData.today.length+notifData.overdue.length+notifData.assigned.length}</div>}
-        </button>
-        {showNotif&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:12,width:380,maxHeight:'70vh',boxShadow:'0 12px 40px rgba(0,0,0,0.25)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300,display:'flex',flexDirection:'column'}}>
-          <div style={{padding:'14px 16px 10px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Notifications</div>
-            <button onClick={loadNotifications} title="Refresh" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color='#6b8cad'} onMouseLeave={e=>e.currentTarget.style.color='var(--tf-text-sub)'}>↻</button>
+      {/* Notifications bell — reminders only */}
+      {(function(){
+        var nowR=new Date();
+        var todayR=nowR.getFullYear()+'-'+String(nowR.getMonth()+1).padStart(2,'0')+'-'+String(nowR.getDate()).padStart(2,'0');
+        var nowHM=String(nowR.getHours()).padStart(2,'0')+':'+String(nowR.getMinutes()).padStart(2,'0');
+        var sorted=reminderList.slice().sort(function(a,b){return (a.dateStr+a.time).localeCompare(b.dateStr+b.time);});
+        var pastDue=sorted.filter(function(r){return r.dateStr<todayR||(r.dateStr===todayR&&r.time<=nowHM);});
+        var laterToday=sorted.filter(function(r){return r.dateStr===todayR&&r.time>nowHM;});
+        var upcoming=sorted.filter(function(r){return r.dateStr>todayR;});
+        var badge=pastDue.length+laterToday.length;
+        function renderRow(r,color){return<div key={r.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+          <div style={{width:8,height:8,borderRadius:4,background:color,marginTop:5,flexShrink:0}}></div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.title||'Reminder'}</div>
+            {r.note&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.note}</div>}
+            <div style={{fontSize:10,color:color,marginTop:2,fontWeight:600}}>{new Date(r.dateStr+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})} · {r.time}</div>
           </div>
-          <div style={{overflowY:'auto',flex:1,maxHeight:'calc(70vh - 50px)'}}>
-            {notifLoading&&(notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Loading...</div>:
-            (notifData.today.length+notifData.overdue.length+notifData.assigned.length)===0?<div style={{padding:'28px 16px',textAlign:'center'}}>
-              <div style={{fontSize:28,marginBottom:8}}>&#x2714;&#xFE0F;</div>
-              <div style={{fontSize:14,fontWeight:600,color:'var(--tf-text)'}}>All clear!</div>
-              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>No pending due dates or assignments.</div>
-            </div>:<>
-              {notifData.overdue.length>0&&<div>
-                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#ef4444',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:3,background:'#ef4444',display:'inline-block'}}></span>
-                  Overdue ({notifData.overdue.length})
-                </div>
-                {notifData.overdue.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:8,height:8,borderRadius:4,background:'#ef4444',marginTop:5,flexShrink:0}}></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
-                    <div style={{fontSize:10,color:'#ef4444',marginTop:2,fontWeight:600}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>
+          <button onClick={function(){dismissReminder(r.id);}} title="Dismiss" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4,lineHeight:1}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+        </div>;}
+        return<div ref={notifRef} style={{position:'relative',flexShrink:0}}>
+          <button onClick={function(){setShowNotif(function(v){return !v;});if(!showNotif)loadReminders();}} title="Reminders" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(107,140,173,0.4)':'var(--tf-border)'),color:showNotif?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){if(!showNotif)e.currentTarget.style.background='var(--tf-surface)';}}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            {badge>0&&<div style={{position:'absolute',top:-3,right:-3,minWidth:16,height:16,borderRadius:8,background:'#ef4444',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid var(--tf-panel)'}}>{badge>99?'99+':badge}</div>}
+          </button>
+          {showNotif&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:12,width:380,maxHeight:'70vh',boxShadow:'0 12px 40px rgba(0,0,0,0.25)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300,display:'flex',flexDirection:'column'}}>
+            <div style={{padding:'14px 16px 10px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Reminders</div>
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                {pastDue.length>0&&<button onClick={clearFiredReminders} title="Clear all fired reminders" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,padding:'2px 6px',borderRadius:4,fontWeight:600}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>Clear fired</button>}
+                <button onClick={loadReminders} title="Refresh" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:'2px 6px',borderRadius:4}} onMouseEnter={function(e){e.currentTarget.style.color='#6b8cad';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>↻</button>
+              </div>
+            </div>
+            <div style={{overflowY:'auto',flex:1,maxHeight:'calc(70vh - 50px)'}}>
+              {reminderList.length===0?<div style={{padding:'28px 16px',textAlign:'center'}}>
+                <div style={{fontSize:28,marginBottom:8}}>🔔</div>
+                <div style={{fontSize:14,fontWeight:600,color:'var(--tf-text)'}}>No reminders</div>
+                <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:4}}>Add reminders from the Calendar or task forms.</div>
+              </div>:<>
+                {pastDue.length>0&&<div>
+                  <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#ef4444',display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:6,height:6,borderRadius:3,background:'#ef4444',display:'inline-block'}}></span>
+                    Due Now ({pastDue.length})
                   </div>
-                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
-                </div>;})}
-                {notifData.overdue.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.overdue.length-20} more</div>}
-              </div>}
-
-              {notifData.today.length>0&&<div>
-                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#f59e0b',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:3,background:'#f59e0b',display:'inline-block'}}></span>
-                  Due Today ({notifData.today.length})
-                </div>
-                {notifData.today.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:8,height:8,borderRadius:4,background:'#f59e0b',marginTop:5,flexShrink:0}}></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
-                    <div style={{fontSize:10,color:'#f59e0b',marginTop:2,fontWeight:600}}>Due today</div>
+                  {pastDue.slice(0,30).map(function(r){return renderRow(r,'#ef4444');})}
+                </div>}
+                {laterToday.length>0&&<div>
+                  <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#f59e0b',display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:6,height:6,borderRadius:3,background:'#f59e0b',display:'inline-block'}}></span>
+                    Later Today ({laterToday.length})
                   </div>
-                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
-                </div>;})}
-                {notifData.today.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.today.length-20} more</div>}
-              </div>}
-
-              {notifData.assigned.length>0&&<div>
-                <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#6b8cad',display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:6,height:6,borderRadius:3,background:'#6b8cad',display:'inline-block'}}></span>
-                  Assigned to You ({notifData.assigned.length})
-                </div>
-                {notifData.assigned.slice(0,20).map(function(item){return<div key={item.id} style={{padding:'8px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer',transition:'background 0.12s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:8,height:8,borderRadius:4,background:'#6b8cad',marginTop:5,flexShrink:0}}></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.clientName}</div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{item.workType}{item.dueLabel&&item.dueLabel!=='Due'?' · '+item.dueLabel:''}{item.period?' · '+item.period:''}</div>
-                    {item.dueDate&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:2}}>Due: {new Date(item.dueDate+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
+                  {laterToday.slice(0,30).map(function(r){return renderRow(r,'#f59e0b');})}
+                </div>}
+                {upcoming.length>0&&<div>
+                  <div style={{padding:'10px 16px 6px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:'#6b8cad',display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:6,height:6,borderRadius:3,background:'#6b8cad',display:'inline-block'}}></span>
+                    Upcoming ({upcoming.length})
                   </div>
-                  <div style={{fontSize:9,color:'var(--tf-text-mut)',whiteSpace:'nowrap',marginTop:2}}>{item.orgName}</div>
-                </div>;})}
-                {notifData.assigned.length>20&&<div style={{padding:'6px 16px',fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>+{notifData.assigned.length-20} more</div>}
-              </div>}
-            </>}
-          </div>
-        </div>}
-      </div>
+                  {upcoming.slice(0,30).map(function(r){return renderRow(r,'#6b8cad');})}
+                </div>}
+              </>}
+            </div>
+          </div>}
+        </div>;
+      })()}
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
