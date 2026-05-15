@@ -7465,9 +7465,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id,viewMemberId]);
 
-  // Auto-refresh when the tab regains focus so newly-assigned worksheet rows show up
+  // Auto-refresh when the tab regains focus, throttled to once per 60s
   useEffect(function(){
-    function onFocus(){load();}
+    var lastLoad=Date.now();
+    function onFocus(){if(Date.now()-lastLoad>60000){lastLoad=Date.now();load();}}
     window.addEventListener('focus',onFocus);
     return function(){window.removeEventListener('focus',onFocus);};
     /* eslint-disable-next-line */
@@ -12378,9 +12379,10 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
 
   function refreshAll(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();loadClients();}}
 
-  // Auto-refresh when the tab regains focus so newly-assigned worksheet rows show up
+  // Auto-refresh when the tab regains focus, throttled to once per 60s
   useEffect(function(){
-    function onFocus(){refreshAll();}
+    var lastLoad=Date.now();
+    function onFocus(){if(Date.now()-lastLoad>60000){lastLoad=Date.now();refreshAll();}}
     window.addEventListener('focus',onFocus);
     return function(){window.removeEventListener('focus',onFocus);};
     /* eslint-disable-next-line */
