@@ -7919,6 +7919,19 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     await load();
   }
 
+  // New 3-column layout state
+  var [wsRailFilter,setWsRailFilter]=useState('all'); // 'all' | 'today' | work_type_name
+  var [myDayIds,setMyDayIds]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_mydayids_'+org.id)||'[]');}catch(e){return[];}});
+  var [quickAdd,setQuickAdd]=useState('');
+
+  function toggleMyDay(rowId){
+    setMyDayIds(function(prev){
+      var next=prev.includes(rowId)?prev.filter(function(x){return x!==rowId;}):[...prev,rowId];
+      localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));
+      return next;
+    });
+  }
+
   // Greeting
   var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?(cu.email||'').split('@')[0]:'')||'there';
   var firstName=displayName.split(' ')[0];
@@ -7931,278 +7944,292 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var viewingName=viewMemberId===cu.id?firstName:(viewingMember?(viewingMember.name||viewingMember.email||'Member').split(' ')[0]:'Member');
   var isSelf=viewMemberId===cu.id;
 
-  return<div style={{padding:'0 0 60px'}}>
-    {/* Greeting header */}
-    <div style={{marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
-      <div>
-        {isSelf
-          ?<h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>{greet}, {firstName} <span style={{fontSize:16}}>👋</span></h2>
-          :<h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0,letterSpacing:'-0.02em'}}>{viewingName}'s Worklist</h2>}
-        {!isSelf&&<div style={{fontSize:11,color:'#8b5cf6',marginTop:2,fontWeight:600}}>Viewing on behalf · {org.name}</div>}
-      </div>
-      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-        {/* Member selector */}
-        {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');}}
-          style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:8,padding:'7px 12px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:12,fontWeight:700,outline:'none',fontFamily:'inherit'}}>
-          <option value={cu.id}>👤 My Worklist</option>
-          {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-        </select>}
-        <select value={dateFilter} onChange={function(e){setDateFilter(e.target.value);}}
-          title="Filter tasks by due date range"
-          style={{background:dateFilter!=='all'?'rgba(59,130,246,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:8,padding:'7px 12px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,outline:'none',fontFamily:'inherit'}}>
-          <option value="all">📆 All Dates</option>
-          <option value="overdue">⚠ Overdue</option>
-          <option value="today">Due Today</option>
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="next7">Next 7 Days</option>
-          <option value="next30">Next 30 Days</option>
-          <option value="nodate">No Due Date</option>
-        </select>
-        {isSelf&&onGoToPlan&&<button onClick={onGoToPlan} style={{background:'linear-gradient(135deg,rgba(107,140,173,0.15),rgba(99,102,241,0.12))',border:'1px solid rgba(107,140,173,0.4)',borderRadius:8,padding:'7px 14px',color:'#6b8cad',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-          🗓 My Day →
-        </button>}
-        {isSelf&&<button onClick={function(){setShowCreate(true);}} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(34,197,94,0.25)'}}>
-          <span style={{fontSize:14}}>+</span>Create Task
-        </button>}
-        <button onClick={function(){load();}} disabled={loading} title="Reload your tasks" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6,opacity:loading?0.6:1}}>
-          <span style={{fontSize:14,display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.3s'}}>↻</span>{loading?'Refreshing…':'Refresh'}
-        </button>
-        <button onClick={function(){setShowCalendar(!showCalendar);}} style={{background:showCalendar?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:showCalendar?'#6366f1':'var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showCalendar?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-          <span>📅</span>{showCalendar?'Hide Calendar':'Show Calendar'}
-        </button>
-      </div>
-    </div>
+  // Rail-filtered rows for middle column
+  var railFiltered=filteredRows.filter(function(r){
+    if(wsRailFilter==='all')return true;
+    if(wsRailFilter==='today')return r.due_date===todayStr;
+    var ws=wsMap[r.worksheet_id];
+    return ws&&ws.work_type===wsRailFilter;
+  });
+  var railGrouped={};
+  railFiltered.forEach(function(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws?ws.work_type:'Unknown';
+    if(!railGrouped[wt])railGrouped[wt]=[];
+    railGrouped[wt].push(r);
+  });
+  Object.keys(railGrouped).forEach(function(k){railGrouped[k].sort(function(a,b){if(!a.due_date&&!b.due_date)return 0;if(!a.due_date)return 1;if(!b.due_date)return -1;return a.due_date<b.due_date?-1:1;});});
 
-    {/* KPI chips + View switcher (single compact row) */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:14,flexWrap:'wrap'}}>
-      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-        {[
-          {id:'all',label:'All',count:stats.total,color:'#6b8cad'},
-          {id:'today',label:'Today',count:stats.today,color:'#f59e0b'},
-          {id:'overdue',label:'Overdue',count:stats.overdue,color:'#ef4444'},
-          {id:'review',label:'Review',count:stats.review,color:'#8b5cf6'},
-        ].map(function(k){
-          var active=filter===k.id;
-          return<button key={k.id} onClick={function(){setFilter(k.id);}}
-            style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 11px',background:active?k.color+'1f':'var(--tf-surface)',border:'1px solid',borderColor:active?k.color:'var(--tf-border)',borderRadius:20,cursor:'pointer',fontFamily:'inherit',transition:'all 0.12s',fontSize:12}}>
-            <span style={{fontWeight:600,color:active?k.color:'var(--tf-text-sub)'}}>{k.label}</span>
-            <span style={{fontWeight:800,color:k.color}}>{k.count}</span>
-          </button>;
-        })}
+  // Avatar color helper
+  var avatarColors=['#6b8cad','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b','#ef4444'];
+  function avatarColor(id){var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return avatarColors[n%avatarColors.length];}
+
+  // Client pill color helper
+  var clientPillColors=['#6b8cad','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b'];
+  function clientColor(id){var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return clientPillColors[n%clientPillColors.length];}
+
+  // My Day planned tasks
+  var myDayTasks=rows.filter(function(r){return r.due_date===todayStr||myDayIds.includes(r.id);});
+  var morningTasks=myDayTasks.slice(0,Math.ceil(myDayTasks.length/2));
+  var afternoonTasks=myDayTasks.slice(Math.ceil(myDayTasks.length/2));
+  var suggestedTasks=rows.filter(function(r){return r.due_date&&r.due_date<todayStr&&!myDayIds.includes(r.id);}).slice(0,5);
+
+  // Mini calendar data (2-week grid)
+  var calStart=new Date(today);
+  var calDow=calStart.getDay();var mondayOffset=calDow===0?-6:1-calDow;
+  calStart.setDate(calStart.getDate()+mondayOffset);
+  var calDays=[];
+  for(var ci=0;ci<14;ci++){var cd=new Date(calStart);cd.setDate(calStart.getDate()+ci);calDays.push(cd);}
+  var calDayStrings=calDays.map(function(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');});
+  var calDotMap={};
+  rows.forEach(function(r){if(r.due_date&&calDayStrings.includes(r.due_date)){if(!calDotMap[r.due_date])calDotMap[r.due_date]=0;calDotMap[r.due_date]++;}});
+
+  return<div style={{display:'flex',height:'100%',overflow:'hidden'}}>
+
+    {/* ══ LEFT COLUMN: Worksheets Rail 240px ══ */}
+    <div style={{width:240,flexShrink:0,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{padding:'16px 16px 10px',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid var(--tf-border)'}}>
+        <span style={{flex:1,fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Worksheets</span>
+        {isSelf&&<button onClick={function(){setShowCreate(true);}} title="Create task" style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:22,height:22,cursor:'pointer',color:'var(--tf-text-sub)',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>+</button>}
       </div>
-      <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:2}}>
+      <div style={{flex:1,overflowY:'auto',padding:'6px 8px 10px'}}>
         {[
-          {id:'list',icon:'≡'},
-          {id:'urgency',icon:'◉'},
-          {id:'kanban',icon:'▦'},
-        ].map(function(v){
-          var active=dashView===v.id;
-          return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.id}
-            style={{padding:'4px 10px',borderRadius:5,border:'none',background:active?'rgba(107,140,173,0.15)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:active?700:500,fontFamily:'inherit',transition:'all 0.1s'}}>
-            {v.icon}
-          </button>;
+          {id:'all',label:'All',count:stats.total,icon:'≡'},
+          {id:'today',label:'Today',count:stats.today,icon:'◉'},
+        ].concat(
+          Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
+            var overdueCount=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
+            return{id:wt,label:wt,count:(grouped[wt]||[]).length,icon:'▪',overdue:overdueCount};
+          })
+        ).map(function(item){
+          var active=wsRailFilter===item.id;
+          return<div key={item.id} onClick={function(){setWsRailFilter(item.id);}}
+            style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:7,cursor:'pointer',marginBottom:1,
+              background:active?'rgba(107,140,173,0.1)':'transparent',
+              borderLeft:active?'2px solid #6b8cad':'2px solid transparent'}}>
+            <span style={{fontSize:12,color:active?'#6b8cad':'var(--tf-text-sub)',flexShrink:0}}>{item.icon}</span>
+            <span style={{flex:1,fontSize:12,fontWeight:active?700:500,color:active?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.label}</span>
+            {item.overdue>0&&<span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444',flexShrink:0,display:'inline-block'}} title={item.overdue+' overdue'}/>}
+            <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{item.count}</span>
+          </div>;
         })}
       </div>
     </div>
 
-    {/* Main content + Calendar sidebar */}
-    <div style={{display:'flex',gap:18,alignItems:'flex-start',flexWrap:'wrap'}}>
-      {/* Your Works */}
-      <div style={{flex:'1 1 560px',minWidth:320}}>
-
-        {/* ── URGENCY VIEW ── */}
-        {dashView==='urgency'&&(filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}><div style={{fontSize:40,marginBottom:10}}>✓</div><div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div></div>:
-        <div>
-          {urgencyBands.filter(function(b){return urgencyGrouped[b.id].length>0;}).map(function(band){
-            var tasks=urgencyGrouped[band.id];
-            var isOpen=expandedGroups['__urg_'+band.id]!==false;
-            return<div key={band.id} style={{marginBottom:14}}>
-              <button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n['__urg_'+band.id]=!isOpen;return n;});}}
-                style={{width:'100%',textAlign:'left',background:'none',border:'none',padding:'0 0 8px 2px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,fontFamily:'inherit',color:band.color}}>
-                <span style={{fontSize:14}}>{band.icon}</span>
-                <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'0.06em'}}>{band.label} · {tasks.length}</span>
-                <span style={{marginLeft:'auto',fontSize:11,color:'var(--tf-text-sub)'}}>{isOpen?'▲':'▼'}</span>
-              </button>
-              {isOpen&&<div style={{background:'var(--tf-surface)',border:'1px solid',borderColor:band.border,borderRadius:12,overflow:'hidden'}}>
-                {tasks.map(function(row,idx){
-                  var d=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id];var isOver=row.due_date&&row.due_date<todayStr;
-                  return<div key={row.id} style={{borderTop:idx>0?'1px solid var(--tf-border)':'none'}}>
-                    <div onClick={function(){toggleExpand(row.id);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer'}}>
-                      <div style={{width:6,height:6,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{d.__title||'Untitled'}</div>
-                        <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{client?(client.display_name||client.name):''}{ws?(' · '+ws.work_type):''}</div>
-                      </div>
-                      <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                        {row.due_date&&<span style={{fontSize:10,fontWeight:700,color:isOver?'#ef4444':band.color,background:isOver?'rgba(239,68,68,0.08)':band.bg,padding:'2px 6px',borderRadius:4,whiteSpace:'nowrap'}}>{isOver?'Overdue · ':''}{new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
-                        <select value={row.status} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(row.id,e.target.value);}}
-                          style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 6px',color:SC[row.status]||'#94a3b8',fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-                          <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Done</option>
-                        </select>
-                      </div>
-                    </div>
-                    {expandedRow===row.id&&<div style={{padding:'0 14px 12px 30px',background:'rgba(107,140,173,0.03)'}}>
-                      {d.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5}}>{d.__description}</div>}
-                      {d.__checklist&&d.__checklist.length>0&&<div style={{display:'flex',flexDirection:'column',gap:4}}>{d.__checklist.map(function(c,ci){return<div key={ci} style={{display:'flex',alignItems:'center',gap:7,fontSize:12}}><span style={{color:c.done?'#22c55e':'var(--tf-border)',fontSize:14}}>{c.done?'✓':'○'}</span><span style={{color:c.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:c.done?'line-through':'none'}}>{c.text}</span></div>;})}</div>}
-                    </div>}
-                  </div>;
-                })}
-              </div>}
-            </div>;
+    {/* ══ MIDDLE COLUMN: Task List 1fr ══ */}
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
+      {/* Sticky header */}
+      <div style={{flexShrink:0,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'14px 18px 10px'}}>
+        {/* Row 1: Greeting + actions */}
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:10}}>
+          <div>
+            {isSelf
+              ?<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{greet}, {firstName} 👋</div>
+              :<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{viewingName}'s Worklist</div>}
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:3,fontFamily:"'JetBrains Mono',monospace"}}>
+              {stats.total} works · <span style={{color:'#ef4444'}}>{stats.overdue} overdue</span> · <span style={{color:'#f59e0b'}}>{stats.today} due today</span>
+              {!isSelf&&<span style={{color:'#8b5cf6',fontFamily:'inherit'}}> · Viewing {viewingName}</span>}
+            </div>
+          </div>
+          <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0,flexWrap:'wrap'}}>
+            <button onClick={function(){load();}} disabled={loading} title="Reload tasks"
+              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,opacity:loading?0.6:1}}>
+              <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.3s'}}>↻</span>{loading?'…':'Refresh'}
+            </button>
+            {isSelf&&<button onClick={function(){setShowCreate(true);}}
+              style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'6px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(91,108,240,0.3)'}}>
+              + Create Task
+            </button>}
+          </div>
+        </div>
+        {/* Row 2: filter pills + view toggles + date filter + member */}
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+          {[
+            {id:'all',label:'All',count:stats.total},
+            {id:'today',label:'Today',count:stats.today},
+            {id:'overdue',label:'Overdue',count:stats.overdue},
+            {id:'review',label:'Review',count:stats.review},
+          ].map(function(pill){
+            var active=filter===pill.id;
+            var isOverdue=pill.id==='overdue';
+            var isReview=pill.id==='review';
+            return<button key={pill.id} onClick={function(){setFilter(pill.id);}}
+              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 11px',borderRadius:100,border:'1px solid',
+                borderColor:active?(isOverdue?'rgba(239,68,68,0.5)':isReview?'rgba(14,165,233,0.5)':'var(--tf-text)'):'var(--tf-border)',
+                background:active?(pill.id==='all'?'#0f172a':isOverdue?'rgba(239,68,68,0.1)':isReview?'rgba(14,165,233,0.1)':'rgba(107,140,173,0.1)'):'var(--tf-panel)',
+                color:active?(pill.id==='all'?'#fff':isOverdue?'#ef4444':isReview?'#0ea5e9':'#6b8cad'):(isOverdue?'#ef4444':isReview?'#0ea5e9':'var(--tf-text-sub)'),
+                fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>
+              {pill.label}
+              {pill.count>0&&<span style={{fontSize:10,fontWeight:700,opacity:0.8}}>{pill.count}</span>}
+            </button>;
           })}
-        </div>)}
+          <div style={{flex:1}}/>
+          <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:2}}>
+            {[{id:'list',icon:'≡'},{id:'urgency',icon:'◉'},{id:'kanban',icon:'▦'}].map(function(v){
+              var active=dashView===v.id;
+              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.id}
+                style={{padding:'3px 8px',borderRadius:4,border:'none',background:active?'rgba(107,140,173,0.18)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,fontFamily:'inherit'}}>
+                {v.icon}
+              </button>;
+            })}
+          </div>
+          <select value={dateFilter} onChange={function(e){setDateFilter(e.target.value);}}
+            style={{background:dateFilter!=='all'?'rgba(59,130,246,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:7,padding:'5px 9px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit'}}>
+            <option value="all">All Dates</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="next7">Next 7 Days</option>
+            <option value="next30">Next 30 Days</option>
+            <option value="nodate">No Due Date</option>
+          </select>
+          {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');}}
+            style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'5px 9px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit'}}>
+            <option value={cu.id}>My Worklist</option>
+            {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          </select>}
+        </div>
+      </div>
 
-        {/* ── KANBAN VIEW ── */}
-        {dashView==='kanban'&&<div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:8}}>
-          {kanbanCols.map(function(col){
-            var tasks=kanbanGrouped[col.id];
-            return<div key={col.id} style={{flex:'0 0 260px',minWidth:220,background:col.bg,borderRadius:12,border:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',maxHeight:'calc(100vh - 280px)'}}>
-              <div style={{padding:'10px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-                <div style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
-                <span style={{fontSize:11,fontWeight:800,color:col.color,textTransform:'uppercase',letterSpacing:'0.06em'}}>{col.label}</span>
-                <span style={{marginLeft:'auto',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:10,padding:'1px 7px'}}>{tasks.length}</span>
-              </div>
-              <div style={{flex:1,overflowY:'auto',padding:'8px 8px'}}>
-                {tasks.length===0&&<div style={{textAlign:'center',padding:'24px 12px',color:'var(--tf-text-sub)',fontSize:11}}>No tasks</div>}
-                {tasks.map(function(row){
-                  var d=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id];
-                  var isOver=row.due_date&&row.due_date<todayStr;
-                  var isToday=row.due_date===todayStr;
-                  return<div key={row.id} onClick={function(){toggleExpand(row.id);}}
-                    style={{background:'var(--tf-panel)',border:'1px solid',borderColor:expandedRow===row.id?'#6b8cad':'var(--tf-border)',borderRadius:9,padding:'10px 12px',marginBottom:7,cursor:'pointer',transition:'border-color 0.12s',boxShadow:'0 1px 4px rgba(0,0,0,0.05)'}}>
-                    <div style={{display:'flex',alignItems:'flex-start',gap:6,marginBottom:5}}>
-                      <div style={{width:6,height:6,borderRadius:'50%',background:PC[d.__priority||'medium'],flexShrink:0,marginTop:4}}/>
-                      <div style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)',lineHeight:1.35}}>{d.__title||'Untitled'}</div>
-                    </div>
-                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:row.due_date?6:0}}>{client?(client.display_name||client.name):''}{ws&&ws.work_type?' · '+ws.work_type:''}</div>
-                    {row.due_date&&<span style={{display:'inline-block',fontSize:10,fontWeight:700,color:isOver?'#ef4444':isToday?'#f59e0b':'#6b8cad',background:isOver?'rgba(239,68,68,0.08)':isToday?'rgba(245,158,11,0.08)':'rgba(107,140,173,0.07)',padding:'2px 7px',borderRadius:4}}>
-                      {isOver?'⚠ Overdue':isToday?'Today':new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
-                    </span>}
-                    {expandedRow===row.id&&<div style={{marginTop:8,paddingTop:8,borderTop:'1px solid var(--tf-border)'}}>
-                      {d.__description&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:6,lineHeight:1.5}}>{d.__description}</div>}
-                      <select value={row.status} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(row.id,e.target.value);}}
-                        style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:SC[row.status]||'#94a3b8',fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
-                        <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Done ✓</option>
-                      </select>
-                    </div>}
-                  </div>;
-                })}
-              </div>
-            </div>;
-          })}
-        </div>}
+      {/* Scrollable body */}
+      <div style={{flex:1,overflowY:'auto',padding:'14px 18px'}}>
+        {/* Quick-add bar */}
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'var(--tf-panel)',border:'1px dashed var(--tf-border)',borderRadius:10,marginBottom:14}}>
+          <span style={{fontSize:14,color:'var(--tf-text-sub)',fontWeight:700}}>+</span>
+          <input value={quickAdd} onChange={function(e){setQuickAdd(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter'&&quickAdd.trim()){setCtTitle(quickAdd.trim());setQuickAdd('');setShowCreate(true);}}}
+            placeholder="Quick add task… (press Enter)"
+            style={{flex:1,background:'none',border:'none',outline:'none',fontSize:13,color:'var(--tf-text)',fontFamily:'inherit'}}/>
+          <kbd style={{fontSize:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>Enter</kbd>
+        </div>
 
-        {/* ── LIST VIEW (original work-type grouping) ── */}
-        {dashView==='list'&&(filteredRows.length===0?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
-          <div style={{fontSize:40,marginBottom:10}}>✓</div>
-          <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
-          <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
-        </div>:
-        <div>
-          {Object.keys(grouped).sort(function(a,b){
-            // Put Unclassified at the top so it's easy to triage
-            if(a==='Unclassified')return -1;
-            if(b==='Unclassified')return 1;
-            return a<b?-1:1;
-          }).map(function(wt){
-            var isUnclassified=wt==='Unclassified';
-            var isOpen=!!expandedGroups[wt];
-            // Per-group summary stats
-            var gRows=grouped[wt];
-            var gOverdue=gRows.filter(function(r){return r.due_date&&r.due_date<todayStr;}).length;
-            var gToday=gRows.filter(function(r){return r.due_date===todayStr;}).length;
-            var gReview=gRows.filter(function(r){var role=getRole(r);return role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';}).length;
-            return<div key={wt} style={{marginBottom:10}}>
-              <div style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isUnclassified?'rgba(245,158,11,0.4)':'var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-                {/* Collapsible header bar */}
+        {/* Task groups */}
+        {railFiltered.length===0
+          ?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
+            <div style={{fontSize:36,marginBottom:10}}>✓</div>
+            <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
+            <div style={{fontSize:12}}>{filter==='all'?'No tasks assigned to you.':'No tasks match this filter.'}</div>
+          </div>
+          :<div>
+            {Object.keys(railGrouped).sort(function(a,b){if(a==='Unclassified')return -1;if(b==='Unclassified')return 1;return a<b?-1:1;}).map(function(wt){
+              var isUnclassified=wt==='Unclassified'||wt==='Unknown';
+              var isOpen=!!expandedGroups[wt];
+              var gRows=railGrouped[wt];
+              var gOverdue=gRows.filter(function(r){return r.due_date&&r.due_date<todayStr;}).length;
+              var gReview=gRows.filter(function(r){var role=getRole(r);return role.label.toLowerCase().indexOf('review')>=0||r.status==='under_review';}).length;
+              return<div key={wt} style={{marginBottom:10,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+                {/* Group header */}
                 <button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n[wt]=!n[wt];return n;});}}
-                  style={{width:'100%',textAlign:'left',background:isOpen?'rgba(107,140,173,0.04)':'transparent',border:'none',borderBottom:isOpen?'1px solid var(--tf-border)':'none',padding:'12px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:'var(--tf-text)',fontFamily:'inherit',transition:'background 0.12s'}}
+                  style={{width:'100%',textAlign:'left',background:isOpen?'rgba(107,140,173,0.04)':'transparent',border:'none',borderBottom:isOpen?'1px solid var(--tf-border)':'none',padding:'11px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:'var(--tf-text)',fontFamily:'inherit'}}
                   onMouseEnter={function(e){if(!isOpen)e.currentTarget.style.background='rgba(107,140,173,0.04)';}}
                   onMouseLeave={function(e){if(!isOpen)e.currentTarget.style.background='transparent';}}>
-                  <span style={{fontSize:11,color:'var(--tf-text-sub)',transition:'transform 0.15s',transform:isOpen?'rotate(90deg)':'rotate(0deg)',display:'inline-block',width:10}}>▶</span>
-                  <span style={{fontSize:13,fontWeight:800,color:isUnclassified?'#f59e0b':'var(--tf-text)',letterSpacing:'-0.01em'}}>{isUnclassified?'🏷 Unclassified':wt}</span>
-                  <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.1)',padding:'2px 8px',borderRadius:10}}>{gRows.length}</span>
-                  <div style={{flex:1,display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginLeft:4}}>
-                    {gOverdue>0&&<span style={{fontSize:10,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',padding:'2px 7px',borderRadius:10}}>● {gOverdue} overdue</span>}
-                    {gToday>0&&<span style={{fontSize:10,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',padding:'2px 7px',borderRadius:10}}>● {gToday} today</span>}
-                    {gReview>0&&<span style={{fontSize:10,fontWeight:700,color:'#8b5cf6',background:'rgba(139,92,246,0.1)',padding:'2px 7px',borderRadius:10}}>● {gReview} review</span>}
-                  </div>
+                  <span style={{fontSize:10,color:'var(--tf-text-sub)',transition:'transform 0.15s',transform:isOpen?'rotate(90deg)':'rotate(0deg)',display:'inline-block',width:10,flexShrink:0}}>▶</span>
+                  <span style={{fontSize:13,fontWeight:800,color:isUnclassified?'#f59e0b':'var(--tf-text)',letterSpacing:'-0.01em',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{isUnclassified?'🏷 Unclassified':wt}</span>
+                  <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.1)',padding:'2px 7px',borderRadius:10,fontFamily:"'JetBrains Mono',monospace"}}>{gRows.length}</span>
+                  {gOverdue>0&&<span style={{fontSize:10,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',padding:'2px 7px',borderRadius:10}}>● {gOverdue}</span>}
+                  {gReview>0&&<span style={{fontSize:10,fontWeight:700,color:'#0ea5e9',background:'rgba(14,165,233,0.1)',padding:'2px 7px',borderRadius:10}}>⊙ {gReview}</span>}
                   {onOpenWorkType&&!isUnclassified&&<span onClick={function(e){e.stopPropagation();onOpenWorkType(wt);}} title={"Open "+wt+" worksheet"}
-                    style={{fontSize:10,fontWeight:700,color:'#6b8cad',opacity:0.75,padding:'3px 8px',borderRadius:6,cursor:'pointer'}}
+                    style={{fontSize:10,fontWeight:700,color:'#6b8cad',opacity:0.7,padding:'2px 7px',borderRadius:5,cursor:'pointer',whiteSpace:'nowrap'}}
                     onMouseEnter={function(e){e.currentTarget.style.opacity='1';e.currentTarget.style.background='rgba(107,140,173,0.1)';}}
-                    onMouseLeave={function(e){e.currentTarget.style.opacity='0.75';e.currentTarget.style.background='transparent';}}>
-                    Open worksheet →
+                    onMouseLeave={function(e){e.currentTarget.style.opacity='0.7';e.currentTarget.style.background='transparent';}}>
+                    Open →
                   </span>}
                 </button>
-                {/* Row list — only visible when expanded */}
+                {/* Row list */}
                 {isOpen&&gRows.map(function(row,idx){
                   var client=clientMap[row.client_id];
                   var ws=wsMap[row.worksheet_id];
                   var role=getRole(row);
                   var isOverdue=row.due_date&&row.due_date<todayStr;
                   var isToday=row.due_date===todayStr;
-                  var isReview=role.label.toLowerCase().indexOf('review')>=0;
-                  var rowTitle=(row.data&&row.data.__title)||'';
+                  var isReview=role.label.toLowerCase().indexOf('review')>=0||row.status==='under_review';
+                  var inMyDay=myDayIds.includes(row.id);
                   var rd=row.data||{};
                   var priority=rd.__priority||'medium';
-                  var isExpanded=expandedRow===row.id;
-                  var isEditing=editingRow===row.id;
-                  var clDone=(rd.__checklist||[]).filter(function(c){return c.done;}).length;
-                  var clTotal=(rd.__checklist||[]).length;
+                  var rowTitle=rd.__title||'';
                   var wsFreq=ws&&ws.frequency;
                   var isRecurring=wsFreq==='monthly'||wsFreq==='quarterly'||wsFreq==='yearly';
                   var clientName=client?(client.display_name||client.name):'Unknown';
                   var bigText=rowTitle?rowTitle:isRecurring?clientName:(row.due_label||wt);
                   var dueTag=(!rowTitle&&isRecurring&&row.due_label&&row.due_label!=='Due')?row.due_label:'';
-                  var showClientSub=!!rowTitle||!isRecurring;
-                  return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)'}}>
+                  var clDone=(rd.__checklist||[]).filter(function(c){return c.done;}).length;
+                  var clTotal=(rd.__checklist||[]).length;
+                  var isExpanded=expandedRow===row.id;
+                  var isEditing=editingRow===row.id;
+                  // Assignee lookup
+                  var assigneeId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
+                  var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
+                  var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
+                  var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
+                  return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)',
+                    borderLeft:isOverdue?'2.5px solid #ef4444':isReview?'2.5px solid #0ea5e9':'none',
+                    background:isOverdue?'rgba(239,68,68,0.02)':inMyDay?'rgba(107,140,173,0.05)':'transparent'}}>
                     {/* Summary row */}
-                    <div style={{padding:'12px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',cursor:'pointer',transition:'background 0.1s'}}
-                      onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION')return;toggleExpand(row.id);}}
+                    <div style={{padding:'10px 14px',display:'grid',gridTemplateColumns:'22px 1fr auto auto auto',alignItems:'center',gap:8,cursor:'pointer'}}
+                      onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='BUTTON')return;toggleExpand(row.id);}}
                       onMouseEnter={function(e){e.currentTarget.style.background='rgba(107,140,173,0.04)';}}
                       onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                      {/* Priority dot */}
-                      <div style={{width:8,height:8,borderRadius:'50%',background:PC[priority],flexShrink:0}} title={priority+' priority'}/>
-                      <div style={{flex:1,minWidth:180}}>
-                        <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',marginBottom:2,lineHeight:1.2}}>
+                      {/* Col 1: Checkbox */}
+                      <div onClick={function(e){e.stopPropagation();updateStatus(row.id,'completed');}}
+                        style={{width:16,height:16,borderRadius:4,border:'1.5px solid',borderColor:PC[priority],background:'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                        title="Mark complete"/>
+                      {/* Col 2: Title + sub */}
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.3}}>
                           {bigText}
-                          {dueTag&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginLeft:6}}>· {dueTag}</span>}
+                          {dueTag&&<span style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:500,marginLeft:5}}>· {dueTag}</span>}
+                          {inMyDay&&<span style={{fontSize:9,color:'#6b8cad',fontWeight:800,marginLeft:6,letterSpacing:'0.05em'}}>· IN MY DAY</span>}
                         </div>
-                        <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
-                          {showClientSub&&<span style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName}</span>}
+                        <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginTop:1}}>
+                          <span style={{color:isReview?'#0ea5e9':'#6b8cad',fontWeight:600,background:isReview?'rgba(14,165,233,0.08)':'rgba(107,140,173,0.08)',padding:'1px 5px',borderRadius:8}}>{role.label}</span>
+                          {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:600}}>✓ {clDone}/{clTotal}</span>}
                           {ws&&<span>{ws.period_label}</span>}
-                          <span style={{color:isReview?'#8b5cf6':'#6b8cad',fontWeight:700,background:isReview?'rgba(139,92,246,0.1)':'rgba(107,140,173,0.1)',padding:'1px 7px',borderRadius:10}}>{role.label}</span>
-                          {clTotal>0&&<span style={{color:clDone===clTotal?'#22c55e':'#6b8cad',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
                         </div>
                       </div>
-                      {row.due_date&&<div style={{fontSize:11,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',flexShrink:0}}>
-                        {isOverdue?'Overdue · ':isToday?'Today · ':''}
-                        {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
-                      </div>}
-                      {isUnclassified&&activeConfigs.length>0&&
-                        <select value="" onChange={function(e){if(e.target.value)classifyRow(row,e.target.value);}}
-                          title="Classify this task into a work type"
+                      {/* Col 3: Client tag */}
+                      <div style={{flexShrink:0}}>
+                        {client&&<span style={{display:'inline-block',fontSize:10,fontWeight:600,color:clientColor(row.client_id),borderLeft:'2px solid '+clientColor(row.client_id),background:'rgba(107,140,173,0.06)',padding:'2px 6px 2px 5px',borderRadius:4,maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                          {clientName}
+                        </span>}
+                      </div>
+                      {/* Col 4: Assignee avatar */}
+                      <div style={{flexShrink:0}}>
+                        {assigneeId&&<div style={{width:22,height:22,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:'#fff'}} title={assigneeName}>
+                          {assigneeInitials}
+                        </div>}
+                      </div>
+                      {/* Col 5: Due date + hover actions */}
+                      <div style={{flexShrink:0,display:'flex',alignItems:'center',gap:4}}>
+                        {row.due_date&&<span style={{fontSize:10,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
+                          {isOverdue?'Overdue':isToday?'Today':new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
+                        </span>}
+                        <button onClick={function(e){e.stopPropagation();toggleMyDay(row.id);}} title={inMyDay?'Remove from My Day':'Add to My Day'}
+                          style={{background:'none',border:'none',cursor:'pointer',fontSize:12,opacity:inMyDay?1:0.3,color:'#f59e0b',padding:'0 2px',lineHeight:1}}
+                          onMouseEnter={function(e){e.currentTarget.style.opacity='1';}}
+                          onMouseLeave={function(e){e.currentTarget.style.opacity=inMyDay?'1':'0.3';}}>☀</button>
+                        {isUnclassified&&activeConfigs.length>0&&
+                          <select value="" onChange={function(e){if(e.target.value)classifyRow(row,e.target.value);}}
+                            onClick={function(e){e.stopPropagation();}}
+                            style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:5,padding:'2px 5px',color:'#f59e0b',fontSize:9,fontWeight:700,cursor:'pointer',outline:'none'}}>
+                            <option value="">Classify</option>
+                            {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+                          </select>
+                        }
+                        <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
                           onClick={function(e){e.stopPropagation();}}
-                          style={{background:'var(--tf-bg)',border:'1px solid #f59e0b',borderRadius:6,padding:'4px 8px',color:'#f59e0b',fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',flexShrink:0}}>
-                          <option value="">Classify →</option>
-                          {activeConfigs.map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+                          style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'2px 7px',color:SC[row.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize'}}>
+                          <option value="pending">Pending</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="under_review">Under Review</option>
+                          <option value="completed">Completed</option>
                         </select>
-                      }
-                      <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}}
-                        onClick={function(e){e.stopPropagation();}}
-                        style={{background:'transparent',border:'1px solid',borderColor:SC[row.status||'pending'],borderRadius:20,padding:'3px 9px',color:SC[row.status||'pending'],fontSize:11,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="under_review">Under Review</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                      <span style={{fontSize:10,color:'var(--tf-text-sub)',transform:isExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s',flexShrink:0}}>▼</span>
+                        <span style={{fontSize:9,color:'var(--tf-text-sub)',transform:isExpanded?'rotate(180deg)':'rotate(0deg)',transition:'transform 0.15s'}}>▼</span>
+                      </div>
                     </div>
                     {/* Expanded detail panel */}
-                    {isExpanded&&<div style={{padding:'0 16px 14px 28px',background:'rgba(107,140,173,0.03)'}}>
+                    {isExpanded&&<div style={{padding:'0 14px 12px 36px',background:'rgba(107,140,173,0.03)'}}>
                       {!isEditing?<div>
-                        {/* View mode */}
                         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
                           <span style={{fontSize:10,fontWeight:800,color:PC[priority],background:priority==='urgent'?'rgba(239,68,68,0.1)':priority==='high'?'rgba(245,158,11,0.1)':priority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{priority}</span>
                           {rd.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📞 {rd.__contact}</span>}
@@ -8224,7 +8251,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                         {!rd.__description&&clTotal===0&&!rd.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No additional details. Click Edit to add.</div>}
                       </div>
                       :<div>
-                        {/* Edit mode */}
                         <div style={{display:'flex',flexDirection:'column',gap:10}}>
                           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                             <div>
@@ -8276,17 +8302,132 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                     </div>}
                   </div>;
                 })}
-              </div>
-            </div>;
-          })}
-        </div>)}
+              </div>;
+            })}
+          </div>}
+      </div>
+    </div>
+
+    {/* ══ RIGHT COLUMN: My Day Panel 340px ══ */}
+    <div style={{width:340,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {/* Header */}
+      <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:4}}>
+          <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</div>
+          <button style={{background:'#0f172a',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>▶ Start focus</button>
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>
+          {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}
+        </div>
+        {/* Capacity bar */}
+        <div style={{marginTop:12}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--tf-text-sub)',marginBottom:4,fontFamily:"'JetBrains Mono',monospace"}}>
+            <span>Capacity</span>
+            <span>{myDayTasks.length} tasks / 8h</span>
+          </div>
+          <div style={{height:6,background:'var(--tf-surface)',borderRadius:3,overflow:'hidden'}}>
+            <div style={{height:'100%',width:Math.min(100,(myDayTasks.length/8)*100)+'%',background:'#6b8cad',borderRadius:3,transition:'width 0.3s'}}/>
+          </div>
+        </div>
+        {/* Summary pills */}
+        <div style={{display:'flex',gap:6,marginTop:10}}>
+          {[
+            {label:'Scheduled',value:myDayTasks.length,color:'#6b8cad'},
+            {label:'Done',value:0,color:'#22c55e'},
+            {label:'Overdue',value:stats.overdue,color:'#ef4444'},
+          ].map(function(p){return<div key={p.label} style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 8px',textAlign:'center'}}>
+            <div style={{fontSize:16,fontWeight:800,color:p.color,fontFamily:"'JetBrains Mono',monospace"}}>{p.value}</div>
+            <div style={{fontSize:9,color:'var(--tf-text-sub)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em'}}>{p.label}</div>
+          </div>;})}
+        </div>
       </div>
 
-      {/* Right-side Calendar */}
-      {showCalendar&&<div style={{flex:'0 0 360px',minWidth:300,position:'sticky',top:8}}>
-        <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12}}>Your Calendar</div>
-        <MiniCalendar rows={rows} clientMap={clientMap} wsMap={wsMap}/>
-      </div>}
+      {/* Scrollable body */}
+      <div style={{flex:1,overflowY:'auto',padding:'12px 14px'}}>
+        {/* Morning */}
+        {morningTasks.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Morning</div>
+          {morningTasks.map(function(row,idx){
+            var rd=row.data||{};var client=clientMap[row.client_id];
+            var assigneeId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
+            var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
+            var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
+            var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
+            var statusLabel=row.status==='in_progress'?'● Now':row.status==='completed'?'✓ Done':idx===0?'Up next':'Pending';
+            var statusColor=row.status==='in_progress'?'#22c55e':row.status==='completed'?'#94a3b8':idx===0?'#f59e0b':'var(--tf-text-sub)';
+            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,marginBottom:4}}>
+                <span style={{fontSize:10,fontWeight:700,color:statusColor,fontFamily:"'JetBrains Mono',monospace"}}>{statusLabel}</span>
+                {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
+              </div>
+              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
+              {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+            </div>;
+          })}
+        </div>}
+
+        {/* Afternoon */}
+        {afternoonTasks.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Afternoon</div>
+          {afternoonTasks.map(function(row){
+            var rd=row.data||{};var client=clientMap[row.client_id];
+            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7}}>
+              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
+              {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+            </div>;
+          })}
+        </div>}
+
+        {myDayTasks.length===0&&<div style={{textAlign:'center',padding:'20px 0',color:'var(--tf-text-sub)',fontSize:12}}>
+          <div style={{fontSize:28,marginBottom:8}}>☀</div>
+          <div style={{fontWeight:600}}>No tasks planned for today</div>
+          <div style={{fontSize:11,marginTop:4}}>Add tasks using the ☀ button</div>
+        </div>}
+
+        {/* Suggested for today */}
+        {suggestedTasks.length>0&&<div style={{marginTop:14}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+            <span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em'}}>Suggested for today</span>
+            <span style={{fontSize:9,color:'var(--tf-text-sub)',opacity:0.6}}>· overdue</span>
+          </div>
+          {suggestedTasks.map(function(row){
+            var rd=row.data||{};var client=clientMap[row.client_id];
+            return<div key={row.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'rgba(239,68,68,0.03)',border:'1px solid rgba(239,68,68,0.12)',borderRadius:8,marginBottom:6}}>
+              <span style={{fontSize:13,color:'var(--tf-text-sub)',opacity:0.4}}>⠿</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
+                <div style={{fontSize:10,color:'#ef4444',fontWeight:600}}>Due {row.due_date?new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>
+              </div>
+              <button onClick={function(){toggleMyDay(row.id);}} title="Add to My Day"
+                style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>
+                ☀ Add
+              </button>
+            </div>;
+          })}
+        </div>}
+
+        {/* Mini calendar — 2-week grid */}
+        <div style={{marginTop:18,padding:'12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10}}>
+          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>2-Week View</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,textAlign:'center'}}>
+            {['M','T','W','T','F','S','S'].map(function(d,i){return<div key={i} style={{fontSize:8,fontWeight:700,color:'var(--tf-text-sub)',padding:'2px 0'}}>{d}</div>;})}
+            {calDays.map(function(d,i){
+              var dStr=calDayStrings[i];
+              var isT=dStr===todayStr;
+              var dotCount=calDotMap[dStr]||0;
+              return<div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'3px 1px'}}>
+                <div style={{width:20,height:20,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
+                  background:isT?'#6b8cad':'transparent',
+                  color:isT?'#fff':'var(--tf-text)',
+                  fontSize:10,fontWeight:isT?800:500,fontFamily:"'JetBrains Mono',monospace"}}>
+                  {d.getDate()}
+                </div>
+                {dotCount>0&&<div style={{width:4,height:4,borderRadius:'50%',background:isT?'#fff':'#6b8cad',marginTop:1}}/>}
+              </div>;
+            })}
+          </div>
+        </div>
+      </div>
     </div>
 
     {/* Toast */}
