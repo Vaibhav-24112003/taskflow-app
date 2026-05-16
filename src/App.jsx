@@ -7922,15 +7922,24 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   // New 3-column layout state
   var [wsRailFilter,setWsRailFilter]=useState('all'); // 'all' | 'today' | work_type_name
   var [myDayIds,setMyDayIds]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_mydayids_'+org.id)||'[]');}catch(e){return[];}});
+  var [myDayHidden,setMyDayHidden]=useState(function(){try{var _td=new Date();var _ts=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');var raw=localStorage.getItem('tf_mydayhidden_'+org.id+'_'+_ts);return raw?JSON.parse(raw):[];}catch(e){return[];}});
   var [quickAdd,setQuickAdd]=useState('');
 
-  function toggleMyDay(rowId){
-    setMyDayIds(function(prev){
-      var next=prev.includes(rowId)?prev.filter(function(x){return x!==rowId;}):[...prev,rowId];
-      localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));
-      return next;
-    });
+  function _hiddenKey(){var _td=new Date();return 'tf_mydayhidden_'+org.id+'_'+(_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0'));}
+  function addToMyDay(rowId){
+    setMyDayIds(function(prev){if(prev.includes(rowId))return prev;var next=[...prev,rowId];localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));return next;});
+    setMyDayHidden(function(prev){if(!prev.includes(rowId))return prev;var next=prev.filter(function(x){return x!==rowId;});localStorage.setItem(_hiddenKey(),JSON.stringify(next));return next;});
   }
+  function removeFromMyDay(rowId){
+    setMyDayIds(function(prev){if(!prev.includes(rowId))return prev;var next=prev.filter(function(x){return x!==rowId;});localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));return next;});
+    setMyDayHidden(function(prev){if(prev.includes(rowId))return prev;var next=[...prev,rowId];localStorage.setItem(_hiddenKey(),JSON.stringify(next));return next;});
+  }
+  function toggleMyDay(rowId){
+    var inDay=myDayIds.includes(rowId)||(rows.find(function(r){return r.id===rowId;})||{}).due_date===todayLocalStr2();
+    var hidden=myDayHidden.includes(rowId);
+    if(inDay&&!hidden)removeFromMyDay(rowId);else addToMyDay(rowId);
+  }
+  function todayLocalStr2(){var _td=new Date();return _td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');}
 
   // Greeting
   var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?(cu.email||'').split('@')[0]:'')||'there';
@@ -7969,10 +7978,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   function clientColor(id){var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return clientPillColors[n%clientPillColors.length];}
 
   // My Day planned tasks
-  var myDayTasks=rows.filter(function(r){return r.due_date===todayStr||myDayIds.includes(r.id);});
+  var myDayTasks=rows.filter(function(r){if(myDayHidden.includes(r.id))return false;return r.due_date===todayStr||myDayIds.includes(r.id);});
   var morningTasks=myDayTasks.slice(0,Math.ceil(myDayTasks.length/2));
   var afternoonTasks=myDayTasks.slice(Math.ceil(myDayTasks.length/2));
-  var suggestedTasks=rows.filter(function(r){return r.due_date&&r.due_date<todayStr&&!myDayIds.includes(r.id);}).slice(0,5);
+  var suggestedTasks=rows.filter(function(r){return r.due_date&&r.due_date<todayStr&&!myDayIds.includes(r.id)&&!myDayHidden.includes(r.id);}).slice(0,5);
 
   // Mini calendar data (2-week grid)
   var calStart=new Date(today);
@@ -8065,10 +8074,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           })}
           <div style={{flex:1}}/>
           <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:2}}>
-            {[{id:'list',icon:'≡'},{id:'urgency',icon:'◉'},{id:'kanban',icon:'▦'}].map(function(v){
+            {[{id:'list',icon:'☰',label:'List'},{id:'board',icon:'⬚',label:'Board'},{id:'calendar',icon:'▦',label:'Calendar'},{id:'grid',icon:'▤',label:'Grid'}].map(function(v){
               var active=dashView===v.id;
-              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.id}
-                style={{padding:'3px 8px',borderRadius:4,border:'none',background:active?'rgba(107,140,173,0.18)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,fontFamily:'inherit'}}>
+              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label}
+                style={{padding:'3px 8px',borderRadius:4,border:'none',background:active?'rgba(107,140,173,0.18)':'transparent',color:active?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:active?700:500,fontFamily:'inherit'}}>
                 {v.icon}
               </button>;
             })}
@@ -8104,8 +8113,8 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           <kbd style={{fontSize:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'2px 5px',color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>Enter</kbd>
         </div>
 
-        {/* Task groups */}
-        {railFiltered.length===0
+        {/* Task groups — LIST VIEW */}
+        {dashView==='list'&&(railFiltered.length===0
           ?<div style={{textAlign:'center',padding:48,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,color:'var(--tf-text-sub)'}}>
             <div style={{fontSize:36,marginBottom:10}}>✓</div>
             <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Nothing to do here</div>
@@ -8304,7 +8313,130 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 })}
               </div>;
             })}
-          </div>}
+          </div>)}
+
+        {/* BOARD VIEW — kanban by status */}
+        {dashView==='board'&&<div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:8}}>
+          {[
+            {id:'pending',label:'Pending',color:'#94a3b8'},
+            {id:'in_progress',label:'In Progress',color:'#3b82f6'},
+            {id:'under_review',label:'Under Review',color:'#f59e0b'}
+          ].map(function(col){
+            var colRows=railFiltered.filter(function(r){return (r.status||'pending')===col.id;});
+            return<div key={col.id}
+              onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='move';}}
+              onDrop={function(e){e.preventDefault();var id=e.dataTransfer.getData('text/plain');if(id)updateStatus(id,col.id);}}
+              style={{flex:'0 0 280px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,display:'flex',flexDirection:'column',minHeight:0,maxHeight:'calc(100vh - 240px)'}}>
+              <div style={{padding:'10px 12px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
+                  <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{col.label}</span>
+                </div>
+                <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',padding:'2px 7px',borderRadius:10,fontFamily:"'JetBrains Mono',monospace"}}>{colRows.length}</span>
+              </div>
+              <div style={{flex:1,overflowY:'auto',padding:10}}>
+                {colRows.length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',padding:'20px 0'}}>—</div>}
+                {colRows.map(function(r){
+                  var rd=r.data||{};var c=clientMap[r.client_id]||{};var ws=wsMap[r.worksheet_id]||{};
+                  var isOver=r.due_date&&r.due_date<todayStr;
+                  var inMyDay=myDayIds.includes(r.id)||r.due_date===todayStr;var isHidden=myDayHidden.includes(r.id);
+                  var showInDay=inMyDay&&!isHidden;
+                  return<div key={r.id} draggable onDragStart={function(e){e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';}}
+                    onClick={function(){toggleExpand(r.id);}}
+                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(isOver?'#ef4444':col.color),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:'grab'}}>
+                    <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rd.__title||c.display_name||c.name||'Task'}</div>
+                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:6}}>
+                      {ws.work_type&&<span style={{fontSize:10,fontWeight:700,color:'#6b8cad',background:'rgba(107,140,173,0.12)',padding:'1px 6px',borderRadius:4}}>{ws.work_type}</span>}
+                      {showInDay&&<span style={{fontSize:9,fontWeight:800,color:'#f59e0b',letterSpacing:'0.04em'}}>☀ IN MY DAY</span>}
+                    </div>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.display_name||c.name||''}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                        {r.due_date&&<span style={{fontSize:10,fontWeight:600,color:isOver?'#ef4444':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{isOver?'⚠ ':''}{r.due_date}</span>}
+                        <button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from My Day':'Add to My Day'}
+                          style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 5px',color:showInDay?'#f59e0b':'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>☀</button>
+                      </div>
+                    </div>
+                  </div>;
+                })}
+              </div>
+            </div>;
+          })}
+        </div>}
+
+        {/* CALENDAR VIEW — month grid with tasks on due dates */}
+        {dashView==='calendar'&&(function(){
+          var cd=new Date(today.getFullYear(),today.getMonth(),1);
+          var startDow=cd.getDay();var startOffset=startDow===0?6:startDow-1; // Monday first
+          var firstCell=new Date(cd);firstCell.setDate(firstCell.getDate()-startOffset);
+          var cells=[];for(var i=0;i<42;i++){var dd=new Date(firstCell);dd.setDate(dd.getDate()+i);cells.push(dd);}
+          var monthLabel=today.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+          var monthRows={};railFiltered.forEach(function(r){if(!r.due_date)return;(monthRows[r.due_date]=monthRows[r.due_date]||[]).push(r);});
+          var noDate=railFiltered.filter(function(r){return !r.due_date;});
+          return<div>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)'}}>{monthLabel}</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{railFiltered.filter(function(r){return r.due_date;}).length} dated · {noDate.length} no date</div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+              {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){return<div key={d} style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',padding:'4px 6px'}}>{d}</div>;})}
+              {cells.map(function(dd,i){
+                var dStr=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
+                var inMonth=dd.getMonth()===today.getMonth();var isT=dStr===todayStr;
+                var dayRows=monthRows[dStr]||[];
+                return<div key={i} style={{minHeight:88,background:isT?'rgba(107,140,173,0.08)':'var(--tf-panel)',border:'1px solid '+(isT?'#6b8cad':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
+                  <div style={{fontSize:11,fontWeight:isT?800:600,color:isT?'#6b8cad':'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{dd.getDate()}</div>
+                  {dayRows.slice(0,3).map(function(r){
+                    var rd=r.data||{};var c=clientMap[r.client_id]||{};
+                    var isOver=r.due_date<todayStr;
+                    return<div key={r.id} onClick={function(){toggleExpand(r.id);}} title={(rd.__title||c.display_name||c.name||'Task')+(c.name?(' — '+(c.display_name||c.name)):'')}
+                      style={{fontSize:10,fontWeight:600,padding:'2px 5px',background:isOver?'rgba(239,68,68,0.08)':'rgba(107,140,173,0.1)',color:isOver?'#ef4444':'#6b8cad',borderRadius:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>
+                      {rd.__title||c.display_name||c.name||'Task'}
+                    </div>;
+                  })}
+                  {dayRows.length>3&&<div style={{fontSize:9,color:'var(--tf-text-sub)',fontWeight:600}}>+{dayRows.length-3} more</div>}
+                </div>;
+              })}
+            </div>
+            {noDate.length>0&&<div style={{marginTop:14,padding:'10px 12px',background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10}}>
+              <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>No due date ({noDate.length})</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                {noDate.map(function(r){var rd=r.data||{};var c=clientMap[r.client_id]||{};return<span key={r.id} onClick={function(){toggleExpand(r.id);}} style={{fontSize:11,padding:'3px 8px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer'}}>{rd.__title||c.display_name||c.name||'Task'}</span>;})}
+              </div>
+            </div>}
+          </div>;
+        })()}
+
+        {/* GRID VIEW — dense table */}
+        {dashView==='grid'&&<div style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 160px 120px 90px 90px 90px 32px',gap:0,padding:'8px 12px',background:'var(--tf-surface)',borderBottom:'1px solid var(--tf-border)',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>
+            <div>Title</div><div>Client</div><div>Work Type</div><div>Assignee</div><div>Due</div><div>Status</div><div></div>
+          </div>
+          {railFiltered.length===0?<div style={{padding:30,textAlign:'center',color:'var(--tf-text-sub)',fontSize:12}}>No tasks</div>:railFiltered.map(function(r){
+            var rd=r.data||{};var c=clientMap[r.client_id]||{};var ws=wsMap[r.worksheet_id]||{};
+            var aId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
+            var am=aId?orgMembers.find(function(m){return m.id===aId;}):null;
+            var isOver=r.due_date&&r.due_date<todayStr;
+            var inMyDay=myDayIds.includes(r.id)||r.due_date===todayStr;var isHidden=myDayHidden.includes(r.id);
+            var showInDay=inMyDay&&!isHidden;
+            return<div key={r.id} onClick={function(){toggleExpand(r.id);}}
+              style={{display:'grid',gridTemplateColumns:'1fr 160px 120px 90px 90px 90px 32px',gap:0,padding:'8px 12px',borderBottom:'1px solid var(--tf-border)',fontSize:12,cursor:'pointer',alignItems:'center',background:isOver?'rgba(239,68,68,0.03)':'transparent',borderLeft:isOver?'2px solid #ef4444':'2px solid transparent'}}
+              onMouseEnter={function(e){e.currentTarget.style.background=isOver?'rgba(239,68,68,0.06)':'var(--tf-surface)';}}
+              onMouseLeave={function(e){e.currentTarget.style.background=isOver?'rgba(239,68,68,0.03)':'transparent';}}>
+              <div style={{fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rd.__title||c.display_name||c.name||'Task'}{showInDay&&<span style={{fontSize:9,fontWeight:800,color:'#f59e0b',marginLeft:6}}>☀</span>}</div>
+              <div style={{color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.display_name||c.name||'—'}</div>
+              <div style={{color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ws.work_type||'—'}</div>
+              <div style={{color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{am?(am.name||am.email||'').split(' ')[0]:'—'}</div>
+              <div style={{fontFamily:"'JetBrains Mono',monospace",fontSize:11,color:isOver?'#ef4444':'var(--tf-text-sub)',fontWeight:isOver?700:500}}>{r.due_date||'—'}</div>
+              <div><select value={r.status||'pending'} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(r.id,e.target.value);}}
+                style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 4px',fontSize:10,fontWeight:600,color:'var(--tf-text)',fontFamily:'inherit',cursor:'pointer',width:'100%'}}>
+                <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Review</option><option value="completed">Done</option>
+              </select></div>
+              <div><button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from My Day':'Add to My Day'}
+                style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 5px',color:showInDay?'#f59e0b':'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>☀</button></div>
+            </div>;
+          })}
+        </div>}
       </div>
     </div>
 
@@ -8355,10 +8487,16 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
             var statusLabel=row.status==='in_progress'?'● Now':row.status==='completed'?'✓ Done':idx===0?'Up next':'Pending';
             var statusColor=row.status==='in_progress'?'#22c55e':row.status==='completed'?'#94a3b8':idx===0?'#f59e0b':'var(--tf-text-sub)';
-            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7}}>
+            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,marginBottom:4}}>
                 <span style={{fontSize:10,fontWeight:700,color:statusColor,fontFamily:"'JetBrains Mono',monospace"}}>{statusLabel}</span>
-                {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
+                  <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
+                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}
+                    onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
+                    onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+                </div>
               </div>
               <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
               {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
@@ -8371,9 +8509,15 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Afternoon</div>
           {afternoonTasks.map(function(row){
             var rd=row.data||{};var client=clientMap[row.client_id];
-            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7}}>
-              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
-              {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative',display:'flex',alignItems:'flex-start',gap:6}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
+                {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+              </div>
+              <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
+                style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1,flexShrink:0}}
+                onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
+                onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
             </div>;
           })}
         </div>}
@@ -8398,7 +8542,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
                 <div style={{fontSize:10,color:'#ef4444',fontWeight:600}}>Due {row.due_date?new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>
               </div>
-              <button onClick={function(){toggleMyDay(row.id);}} title="Add to My Day"
+              <button onClick={function(){addToMyDay(row.id);}} title="Add to My Day"
                 style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>
                 ☀ Add
               </button>
