@@ -7432,6 +7432,181 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 </div>;
 }
 
+// ── ERP Board — Kanban view of worksheet_rows across all work types ──
+function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
+  var [loading,setLoading]=useState(true);
+  var [rows,setRows]=useState([]);
+  var [worksheets,setWorksheets]=useState([]);
+  var [clients,setClients]=useState([]);
+  var [members,setMembers]=useState([]);
+  var [groupBy,setGroupBy]=useState('status'); // 'status' | 'worktype'
+  var [assigneeFilter,setAssigneeFilter]=useState('all'); // 'all' | 'mine' | userId
+  var [clientQuery,setClientQuery]=useState('');
+  var [hideCompleted,setHideCompleted]=useState(true);
+  var [toast,setToast]=useState(null);
+  var wfHier=workflowHierarchy||[];
+
+  function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
+
+  useEffect(function(){load();},[org.id]);
+
+  async function load(){
+    setLoading(true);
+    try{
+      var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
+      var mlist=rm.data||[];
+      if(mlist.length>0){
+        var ids=mlist.map(function(m){return m.user_id;});
+        var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);
+        setMembers(rp.data||[]);
+      }
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date').eq('org_id',org.id).limit(5000);
+      if(rr.error){showToast('Failed to load board: '+rr.error.message,'err');setLoading(false);return;}
+      setRows(rr.data||[]);
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency,period_year,period_month').eq('org_id',org.id).limit(1000);
+      setWorksheets(rw.data||[]);
+      var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
+      setClients(rc.data||[]);
+    }finally{setLoading(false);}
+  }
+
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+  var wsMap={};worksheets.forEach(function(w){wsMap[w.id]=w;});
+  var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
+
+  function getAssignee(r){
+    var d=r.data||{};
+    if(d.__assignee)return d.__assignee;
+    var ks=Object.keys(d);
+    for(var i=0;i<ks.length;i++){if(ks[i].indexOf('__h_')===0&&d[ks[i]])return d[ks[i]];}
+    return null;
+  }
+  function rowMatchesUser(r,uid){
+    var d=r.data||{};
+    if(d.__assignee===uid)return true;
+    var ks=Object.keys(d);
+    for(var i=0;i<ks.length;i++){if(ks[i].indexOf('__h_')===0&&d[ks[i]]===uid)return true;}
+    return false;
+  }
+
+  var filtered=rows.filter(function(r){
+    if(hideCompleted&&r.status==='completed')return false;
+    if(assigneeFilter==='mine'){if(!rowMatchesUser(r,cu.id))return false;}
+    else if(assigneeFilter!=='all'){if(!rowMatchesUser(r,assigneeFilter))return false;}
+    if(clientQuery.trim()){
+      var c=clientMap[r.client_id];if(!c)return false;
+      var hay=((c.display_name||c.name||'')+' '+(c.pan||'')).toLowerCase();
+      if(hay.indexOf(clientQuery.trim().toLowerCase())<0)return false;
+    }
+    return true;
+  });
+
+  var STATUS_COLS=[
+    {key:'pending',label:'Pending',color:'#94a3b8'},
+    {key:'in_progress',label:'In Progress',color:'#3b82f6'},
+    {key:'under_review',label:'Under Review',color:'#f59e0b'},
+    {key:'completed',label:'Completed',color:'#22c55e'}
+  ];
+
+  var columns;
+  if(groupBy==='status'){
+    columns=STATUS_COLS.filter(function(s){return !(hideCompleted&&s.key==='completed');}).map(function(s){
+      return{key:s.key,label:s.label,color:s.color,rows:filtered.filter(function(r){return (r.status||'pending')===s.key;})};
+    });
+  }else{
+    var byWT={};
+    filtered.forEach(function(r){
+      var ws=wsMap[r.worksheet_id];var wt=(ws&&ws.work_type)||'Unclassified';
+      if(!byWT[wt])byWT[wt]=[];byWT[wt].push(r);
+    });
+    columns=Object.keys(byWT).sort().map(function(wt){return{key:wt,label:wt,color:'#6b8cad',rows:byWT[wt]};});
+  }
+
+  async function updateRowStatus(rowId,newStatus){
+    var patch={status:newStatus};
+    if(newStatus==='completed')patch.completed_at=new Date().toISOString();
+    else patch.completed_at=null;
+    var res=await supabase.from('worksheet_rows').update(patch).eq('id',rowId);
+    if(res.error){showToast('Update failed','err');return;}
+    setRows(function(p){return p.map(function(r){return r.id===rowId?Object.assign({},r,patch):r;});});
+  }
+
+  var today=new Date().toISOString().slice(0,10);
+  var pillStyle={fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:4,letterSpacing:'0.04em'};
+
+  function Card(r){
+    var c=clientMap[r.client_id]||{};
+    var ws=wsMap[r.worksheet_id]||{};
+    var aId=getAssignee(r);
+    var assignee=aId?memberMap[aId]:null;
+    var overdue=r.due_date&&r.due_date<today&&r.status!=='completed';
+    var title=(r.data&&r.data.__title)||c.display_name||c.name||'Untitled';
+    return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#6b8cad'),borderRadius:8,padding:10,marginBottom:8,fontSize:12}}>
+      <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</div>
+      <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:6}}>
+        <span style={Object.assign({},pillStyle,{background:'rgba(107,140,173,0.12)',color:'#6b8cad'})}>{ws.work_type||'—'}</span>
+        {ws.period_label&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{ws.period_label}</span>}
+      </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{assignee?assignee.name||assignee.email:'Unassigned'}</div>
+        {r.due_date&&<div style={{fontSize:10,fontWeight:600,color:overdue?'#ef4444':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{overdue?'⚠ ':''}{r.due_date}</div>}
+      </div>
+      <div style={{marginTop:6,display:'flex',gap:4}}>
+        <select value={r.status||'pending'} onChange={function(e){updateRowStatus(r.id,e.target.value);}} style={{flex:1,fontSize:10,padding:'2px 4px',background:'var(--tf-bg)',color:'var(--tf-text)',border:'1px solid var(--tf-border)',borderRadius:4}}>
+          {STATUS_COLS.map(function(s){return<option key={s.key} value={s.key}>{s.label}</option>;})}
+        </select>
+      </div>
+    </div>;
+  }
+
+  if(loading)return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)'}}>Loading board…</div>;
+
+  return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,padding:'12px 16px'}}>
+    {/* Toolbar */}
+    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,flexWrap:'wrap'}}>
+      <div style={{display:'flex',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:2}}>
+        <button onClick={function(){setGroupBy('status');}} style={{background:groupBy==='status'?'rgba(107,140,173,0.18)':'transparent',color:groupBy==='status'?'#6b8cad':'var(--tf-text-sub)',border:'none',padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>By Status</button>
+        <button onClick={function(){setGroupBy('worktype');}} style={{background:groupBy==='worktype'?'rgba(107,140,173,0.18)':'transparent',color:groupBy==='worktype'?'#6b8cad':'var(--tf-text-sub)',border:'none',padding:'6px 12px',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>By Work Type</button>
+      </div>
+      <select value={assigneeFilter} onChange={function(e){setAssigneeFilter(e.target.value);}} style={{background:'var(--tf-surface)',color:'var(--tf-text)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',fontSize:12,fontFamily:'inherit'}}>
+        <option value="all">Everyone</option>
+        <option value="mine">Mine only</option>
+        <optgroup label="Members">
+          {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+        </optgroup>
+      </select>
+      <input value={clientQuery} onChange={function(e){setClientQuery(e.target.value);}} placeholder="Search client…" style={{background:'var(--tf-surface)',color:'var(--tf-text)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',fontSize:12,fontFamily:'inherit',minWidth:180}}/>
+      <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--tf-text-sub)',cursor:'pointer'}}>
+        <input type="checkbox" checked={hideCompleted} onChange={function(e){setHideCompleted(e.target.checked);}}/>
+        Hide completed
+      </label>
+      <div style={{marginLeft:'auto',fontSize:12,color:'var(--tf-text-sub)'}}>{filtered.length} task{filtered.length===1?'':'s'}</div>
+    </div>
+
+    {/* Board */}
+    <div style={{flex:1,overflowX:'auto',overflowY:'hidden',display:'flex',gap:12,paddingBottom:8}}>
+      {columns.length===0&&<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)'}}>No tasks match the current filters.</div>}
+      {columns.map(function(col){
+        return<div key={col.key} style={{flex:'0 0 280px',display:'flex',flexDirection:'column',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,minHeight:0}}>
+          <div style={{padding:'10px 12px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
+              <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{col.label}</span>
+            </div>
+            <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',padding:'2px 7px',borderRadius:10}}>{col.rows.length}</span>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:10}}>
+            {col.rows.length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',padding:'20px 0'}}>—</div>}
+            {col.rows.map(Card)}
+          </div>
+        </div>;
+      })}
+    </div>
+
+    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 16px',borderRadius:8,fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
 function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
@@ -11645,7 +11820,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
 
   var MODULES=[
     {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
-    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
+    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#6b8cad,#4a7a9b)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
     {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
     {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   ];
@@ -11715,6 +11890,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
       {orgModule==='diary'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
