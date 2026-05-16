@@ -7919,6 +7919,19 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     await load();
   }
 
+  // New 3-column layout state
+  var [wsRailFilter,setWsRailFilter]=useState('all'); // 'all' | 'today' | work_type_name
+  var [myDayIds,setMyDayIds]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_mydayids_'+org.id)||'[]');}catch(e){return[];}});
+  var [quickAdd,setQuickAdd]=useState('');
+
+  function toggleMyDay(rowId){
+    setMyDayIds(function(prev){
+      var next=prev.includes(rowId)?prev.filter(function(x){return x!==rowId;}):[...prev,rowId];
+      localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));
+      return next;
+    });
+  }
+
   // Greeting
   var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?(cu.email||'').split('@')[0]:'')||'there';
   var firstName=displayName.split(' ')[0];
@@ -7931,7 +7944,47 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var viewingName=viewMemberId===cu.id?firstName:(viewingMember?(viewingMember.name||viewingMember.email||'Member').split(' ')[0]:'Member');
   var isSelf=viewMemberId===cu.id;
 
-  return<div style={{padding:'0 0 60px'}}>
+  // Rail-filtered rows for middle column
+  var railFiltered=filteredRows.filter(function(r){
+    if(wsRailFilter==='all')return true;
+    if(wsRailFilter==='today')return r.due_date===todayStr;
+    var ws=wsMap[r.worksheet_id];
+    return ws&&ws.work_type===wsRailFilter;
+  });
+  var railGrouped={};
+  railFiltered.forEach(function(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws?ws.work_type:'Unknown';
+    if(!railGrouped[wt])railGrouped[wt]=[];
+    railGrouped[wt].push(r);
+  });
+  Object.keys(railGrouped).forEach(function(k){railGrouped[k].sort(function(a,b){if(!a.due_date&&!b.due_date)return 0;if(!a.due_date)return 1;if(!b.due_date)return -1;return a.due_date<b.due_date?-1:1;});});
+
+  // Avatar color helper
+  var avatarColors=['#6b8cad','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b','#ef4444'];
+  function avatarColor(id){var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return avatarColors[n%avatarColors.length];}
+
+  // Client pill color helper
+  var clientPillColors=['#6b8cad','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b'];
+  function clientColor(id){var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return clientPillColors[n%clientPillColors.length];}
+
+  // My Day planned tasks
+  var myDayTasks=rows.filter(function(r){return r.due_date===todayStr||myDayIds.includes(r.id);});
+  var morningTasks=myDayTasks.slice(0,Math.ceil(myDayTasks.length/2));
+  var afternoonTasks=myDayTasks.slice(Math.ceil(myDayTasks.length/2));
+  var suggestedTasks=rows.filter(function(r){return r.due_date&&r.due_date<todayStr&&!myDayIds.includes(r.id);}).slice(0,5);
+
+  // Mini calendar data (2-week grid)
+  var calStart=new Date(today);
+  var calDow=calStart.getDay();var mondayOffset=calDow===0?-6:1-calDow;
+  calStart.setDate(calStart.getDate()+mondayOffset);
+  var calDays=[];
+  for(var ci=0;ci<14;ci++){var cd=new Date(calStart);cd.setDate(calStart.getDate()+ci);calDays.push(cd);}
+  var calDayStrings=calDays.map(function(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');});
+  var calDotMap={};
+  rows.forEach(function(r){if(r.due_date&&calDayStrings.includes(r.due_date)){if(!calDotMap[r.due_date])calDotMap[r.due_date]=0;calDotMap[r.due_date]++;}});
+
+  return<div style={{display:'flex',height:'100%',overflow:'hidden'}}>
     {/* Greeting header */}
     <div style={{marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between',gap:14,flexWrap:'wrap'}}>
       <div>
