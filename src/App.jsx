@@ -12840,7 +12840,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
               </div>
 
               {/* Expanded section */}
-              {isExpanded&&<div style={{marginTop:12,marginLeft:30,borderTop:'1px solid var(--tf-border)',paddingTop:12}}>
+              {isExpanded&&<div onClick={function(e){e.stopPropagation();}} style={{marginTop:12,marginLeft:30,borderTop:'1px solid var(--tf-border)',paddingTop:12}}>
                 {item._description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:10,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{item._description}</div>}
 
                 {/* Worksheet row data fields */}
@@ -12862,7 +12862,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:5}}>
                     {cl.map(function(citem,i){
-                      return<div key={i} onClick={function(){toggleChecklistItem(item._id,i,citem.done);}} style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'4px 6px',borderRadius:6,transition:'background 0.1s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                      return<div key={i} onClick={function(e){e.stopPropagation();toggleChecklistItem(item._id,i,citem.done);}} style={{display:'flex',alignItems:'flex-start',gap:8,cursor:'pointer',padding:'4px 6px',borderRadius:6,transition:'background 0.1s'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
                         <div style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:citem.done?'#22c55e':'var(--tf-border)',background:citem.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:1,transition:'all 0.15s'}}>
                           {citem.done&&<span style={{color:'#fff',fontSize:10,fontWeight:900,lineHeight:1}}>✓</span>}
                         </div>
