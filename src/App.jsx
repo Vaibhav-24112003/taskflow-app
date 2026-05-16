@@ -7444,6 +7444,8 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [clientQuery,setClientQuery]=useState('');
   var [hideCompleted,setHideCompleted]=useState(true);
   var [toast,setToast]=useState(null);
+  var [dragId,setDragId]=useState(null);
+  var [dragOverCol,setDragOverCol]=useState(null);
   var wfHier=workflowHierarchy||[];
 
   function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
@@ -7541,7 +7543,12 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     var assignee=aId?memberMap[aId]:null;
     var overdue=r.due_date&&r.due_date<today&&r.status!=='completed';
     var title=(r.data&&r.data.__title)||c.display_name||c.name||'Untitled';
-    return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#6b8cad'),borderRadius:8,padding:10,marginBottom:8,fontSize:12}}>
+    var isDragging=dragId===r.id;
+    return<div key={r.id}
+      draggable
+      onDragStart={function(e){setDragId(r.id);e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',r.id);}catch(_){}}}
+      onDragEnd={function(){setDragId(null);setDragOverCol(null);}}
+      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#6b8cad'),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:'grab',opacity:isDragging?0.5:1,transition:'opacity 0.12s'}}>
       <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</div>
       <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:6}}>
         <span style={Object.assign({},pillStyle,{background:'rgba(107,140,173,0.12)',color:'#6b8cad'})}>{ws.work_type||'—'}</span>
@@ -7587,7 +7594,13 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     <div style={{flex:1,overflowX:'auto',overflowY:'hidden',display:'flex',gap:12,paddingBottom:8}}>
       {columns.length===0&&<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)'}}>No tasks match the current filters.</div>}
       {columns.map(function(col){
-        return<div key={col.key} style={{flex:'0 0 280px',display:'flex',flexDirection:'column',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,minHeight:0}}>
+        var canDrop=groupBy==='status';
+        var isOver=dragOverCol===col.key&&canDrop;
+        return<div key={col.key}
+          onDragOver={canDrop?function(e){e.preventDefault();e.dataTransfer.dropEffect='move';if(dragOverCol!==col.key)setDragOverCol(col.key);}:undefined}
+          onDragLeave={canDrop?function(){setDragOverCol(function(p){return p===col.key?null:p;});}:undefined}
+          onDrop={canDrop?function(e){e.preventDefault();var id=dragId||e.dataTransfer.getData('text/plain');setDragOverCol(null);setDragId(null);if(!id)return;var r=rows.find(function(x){return x.id===id;});if(!r)return;if((r.status||'pending')===col.key)return;updateRowStatus(id,col.key);}:undefined}
+          style={{flex:'0 0 280px',display:'flex',flexDirection:'column',background:'var(--tf-panel)',border:'1px solid '+(isOver?'#6b8cad':'var(--tf-border)'),borderRadius:10,minHeight:0,boxShadow:isOver?'0 0 0 2px rgba(107,140,173,0.25)':'none',transition:'border-color 0.12s, box-shadow 0.12s'}}>
           <div style={{padding:'10px 12px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <span style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
