@@ -7924,6 +7924,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [myDayIds,setMyDayIds]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_mydayids_'+org.id)||'[]');}catch(e){return[];}});
   var [myDayHidden,setMyDayHidden]=useState(function(){try{var _td=new Date();var _ts=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');var raw=localStorage.getItem('tf_mydayhidden_'+org.id+'_'+_ts);return raw?JSON.parse(raw):[];}catch(e){return[];}});
   var [quickAdd,setQuickAdd]=useState('');
+  var [myDayLogId,setMyDayLogId]=useState(null);
+  var [myDayLogForm,setMyDayLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
+  var [myDayLoggingId,setMyDayLoggingId]=useState(null);
 
   function _hiddenKey(){var _td=new Date();return 'tf_mydayhidden_'+org.id+'_'+(_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0'));}
   function addToMyDay(rowId){
@@ -7933,6 +7936,26 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   function removeFromMyDay(rowId){
     setMyDayIds(function(prev){if(!prev.includes(rowId))return prev;var next=prev.filter(function(x){return x!==rowId;});localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));return next;});
     setMyDayHidden(function(prev){if(prev.includes(rowId))return prev;var next=[...prev,rowId];localStorage.setItem(_hiddenKey(),JSON.stringify(next));return next;});
+  }
+  async function sendMyDayLog(row){
+    var f=myDayLogForm;
+    if(!f.work_type.trim()&&!f.client_id){showToast('Enter work type or client','err');return;}
+    var hrs=Number(f.hours)||0;var mins=Number(f.minutes)||0;
+    if(hrs===0&&mins===0){showToast('Enter time spent','err');return;}
+    var ws=wsMap[row.worksheet_id]||{};
+    setMyDayLoggingId(row.id);
+    var r=await supabase.from('attendance_time_logs').insert({
+      org_id:org.id,user_id:cu.id,date:todayStr,
+      client_id:f.client_id||row.client_id||null,
+      work_type:f.work_type.trim()||ws.work_type||'Work',
+      hours:hrs,minutes:mins,
+      notes:f.notes.trim()||null
+    }).select('id').single();
+    setMyDayLoggingId(null);
+    if(r.error){showToast('Log failed: '+r.error.message,'err');return;}
+    setMyDayLogId(null);
+    setMyDayLogForm({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
+    showToast('Logged ✓');
   }
   function toggleMyDay(rowId){
     var inDay=myDayIds.includes(rowId)||(rows.find(function(r){return r.id===rowId;})||{}).due_date===todayLocalStr2();
@@ -7995,37 +8018,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   return<div style={{display:'flex',height:'100%',overflow:'hidden'}}>
 
-    {/* ══ LEFT COLUMN: Worksheets Rail 240px ══ */}
-    <div style={{width:240,flexShrink:0,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <div style={{padding:'16px 16px 10px',display:'flex',alignItems:'center',gap:8,borderBottom:'1px solid var(--tf-border)'}}>
-        <span style={{flex:1,fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.08em'}}>Worksheets</span>
-        {isSelf&&<button onClick={function(){setShowCreate(true);}} title="Create task" style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:22,height:22,cursor:'pointer',color:'var(--tf-text-sub)',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:0}}>+</button>}
-      </div>
-      <div style={{flex:1,overflowY:'auto',padding:'6px 8px 10px'}}>
-        {[
-          {id:'all',label:'All',count:stats.total,icon:'≡'},
-          {id:'today',label:'Today',count:stats.today,icon:'◉'},
-        ].concat(
-          Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
-            var overdueCount=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
-            return{id:wt,label:wt,count:(grouped[wt]||[]).length,icon:'▪',overdue:overdueCount};
-          })
-        ).map(function(item){
-          var active=wsRailFilter===item.id;
-          return<div key={item.id} onClick={function(){setWsRailFilter(item.id);}}
-            style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:7,cursor:'pointer',marginBottom:1,
-              background:active?'rgba(107,140,173,0.1)':'transparent',
-              borderLeft:active?'2px solid #6b8cad':'2px solid transparent'}}>
-            <span style={{fontSize:12,color:active?'#6b8cad':'var(--tf-text-sub)',flexShrink:0}}>{item.icon}</span>
-            <span style={{flex:1,fontSize:12,fontWeight:active?700:500,color:active?'#6b8cad':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.label}</span>
-            {item.overdue>0&&<span style={{width:6,height:6,borderRadius:'50%',background:'#ef4444',flexShrink:0,display:'inline-block'}} title={item.overdue+' overdue'}/>}
-            <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{item.count}</span>
-          </div>;
-        })}
-      </div>
-    </div>
-
-    {/* ══ MIDDLE COLUMN: Task List 1fr ══ */}
+    {/* ══ MAIN COLUMN: Worksheets + Task List ══ */}
     <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
       {/* Sticky header */}
       <div style={{flexShrink:0,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'14px 18px 10px'}}>
@@ -8099,6 +8092,28 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
           </select>}
         </div>
+        {/* Row 3: Work-type filter strip */}
+        <div style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:2,marginTop:8}}>
+          {[{id:'all',label:'All Work Types',count:stats.total},{id:'today',label:'Due Today',count:stats.today}]
+            .concat(Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
+              var ov=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
+              return{id:wt,label:wt,count:(grouped[wt]||[]).length,overdue:ov};
+            }))
+            .map(function(item){
+              var active=wsRailFilter===item.id;
+              return<button key={item.id} onClick={function(){setWsRailFilter(item.id);}}
+                style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:100,border:'1px solid',flexShrink:0,
+                  borderColor:active?'#6b8cad':'var(--tf-border)',
+                  background:active?'rgba(107,140,173,0.12)':'transparent',
+                  color:active?'#6b8cad':'var(--tf-text-sub)',
+                  cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit'}}>
+                {item.label==='Unclassified'&&<span style={{fontSize:10,color:'#f59e0b'}}>🏷</span>}
+                <span>{item.label}</span>
+                {item.overdue>0&&<span style={{width:5,height:5,borderRadius:'50%',background:'#ef4444',display:'inline-block'}} title={item.overdue+' overdue'}/>}
+                <span style={{fontSize:9,fontWeight:700,opacity:0.7,fontFamily:"'JetBrains Mono',monospace"}}>{item.count}</span>
+              </button>;
+            })}
+        </div>
       </div>
 
       {/* Scrollable body */}
@@ -8138,11 +8153,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',background:'rgba(107,140,173,0.1)',padding:'2px 7px',borderRadius:10,fontFamily:"'JetBrains Mono',monospace"}}>{gRows.length}</span>
                   {gOverdue>0&&<span style={{fontSize:10,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',padding:'2px 7px',borderRadius:10}}>● {gOverdue}</span>}
                   {gReview>0&&<span style={{fontSize:10,fontWeight:700,color:'#0ea5e9',background:'rgba(14,165,233,0.1)',padding:'2px 7px',borderRadius:10}}>⊙ {gReview}</span>}
-                  {onOpenWorkType&&!isUnclassified&&<span onClick={function(e){e.stopPropagation();onOpenWorkType(wt);}} title={"Open "+wt+" worksheet"}
-                    style={{fontSize:10,fontWeight:700,color:'#6b8cad',opacity:0.7,padding:'2px 7px',borderRadius:5,cursor:'pointer',whiteSpace:'nowrap'}}
-                    onMouseEnter={function(e){e.currentTarget.style.opacity='1';e.currentTarget.style.background='rgba(107,140,173,0.1)';}}
+                  {onOpenWorkType&&<span onClick={function(e){e.stopPropagation();onOpenWorkType(wt);}} title={"Open "+(isUnclassified?'Unclassified':wt)+" worksheet"}
+                    style={{fontSize:10,fontWeight:700,color:isUnclassified?'#f59e0b':'#6b8cad',opacity:0.7,padding:'2px 7px',borderRadius:5,cursor:'pointer',whiteSpace:'nowrap',border:isUnclassified?'1px solid rgba(245,158,11,0.3)':'none'}}
+                    onMouseEnter={function(e){e.currentTarget.style.opacity='1';e.currentTarget.style.background=isUnclassified?'rgba(245,158,11,0.1)':'rgba(107,140,173,0.1)';}}
                     onMouseLeave={function(e){e.currentTarget.style.opacity='0.7';e.currentTarget.style.background='transparent';}}>
-                    Open →
+                    {isUnclassified?'Open Unclassified →':'Open →'}
                   </span>}
                 </button>
                 {/* Row list */}
@@ -8480,18 +8495,23 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
         {morningTasks.length>0&&<div style={{marginBottom:14}}>
           <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Morning</div>
           {morningTasks.map(function(row,idx){
-            var rd=row.data||{};var client=clientMap[row.client_id];
+            var rd=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id]||{};
             var assigneeId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
             var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
             var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
             var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
             var statusLabel=row.status==='in_progress'?'● Now':row.status==='completed'?'✓ Done':idx===0?'Up next':'Pending';
             var statusColor=row.status==='in_progress'?'#22c55e':row.status==='completed'?'#94a3b8':idx===0?'#f59e0b':'var(--tf-text-sub)';
-            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative'}}>
+            var showLog=myDayLogId===row.id;
+            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid '+(showLog?'#6b8cad':'var(--tf-border)'),borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,marginBottom:4}}>
                 <span style={{fontSize:10,fontWeight:700,color:statusColor,fontFamily:"'JetBrains Mono',monospace"}}>{statusLabel}</span>
-                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:5}}>
                   {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
+                  <button onClick={function(){var next=!showLog;setMyDayLogId(next?row.id:null);if(next)setMyDayLogForm({client_id:row.client_id||'',work_type:ws.work_type||rd.__title||'',hours:1,minutes:0,notes:''}); }} title="Send to Log"
+                    style={{background:showLog?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLog?'#6b8cad':'var(--tf-border)'),color:showLog?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap',lineHeight:1}}>
+                    → Log
+                  </button>
                   <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
                     style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}
                     onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
@@ -8499,7 +8519,32 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 </div>
               </div>
               <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
-              {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+              {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:showLog?6:0}}>{client.display_name||client.name}</div>}
+              {showLog&&<div style={{marginTop:8,background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:8,padding:'10px 12px'}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>→ Send to Daily Log</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Work Type / Task</div>
+                    <input value={myDayLogForm.work_type} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{work_type:e.target.value});});}} placeholder="e.g. ITR Filing…" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Hours</div>
+                    <input type="number" min="0" max="24" value={myDayLogForm.hours} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{hours:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Mins</div>
+                    <input type="number" min="0" max="59" value={myDayLogForm.minutes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{minutes:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Notes</div>
+                    <input value={myDayLogForm.notes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{notes:e.target.value});});}} placeholder="What did you do?" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={function(){sendMyDayLog(row);}} disabled={myDayLoggingId===row.id} style={{background:'#6b8cad',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,opacity:myDayLoggingId===row.id?0.6:1}}>{myDayLoggingId===row.id?'Logging…':'Save to Log'}</button>
+                  <button onClick={function(){setMyDayLogId(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>Cancel</button>
+                </div>
+              </div>}
             </div>;
           })}
         </div>}
@@ -8508,16 +8553,50 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
         {afternoonTasks.length>0&&<div style={{marginBottom:14}}>
           <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Afternoon</div>
           {afternoonTasks.map(function(row){
-            var rd=row.data||{};var client=clientMap[row.client_id];
-            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative',display:'flex',alignItems:'flex-start',gap:6}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
-                {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+            var rd=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id]||{};
+            var showLog=myDayLogId===row.id;
+            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid '+(showLog?'#6b8cad':'var(--tf-border)'),borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative'}}>
+              <div style={{display:'flex',alignItems:'flex-start',gap:6}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
+                  {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+                  <button onClick={function(){var next=!showLog;setMyDayLogId(next?row.id:null);if(next)setMyDayLogForm({client_id:row.client_id||'',work_type:ws.work_type||rd.__title||'',hours:1,minutes:0,notes:''}); }} title="Send to Log"
+                    style={{background:showLog?'rgba(107,140,173,0.15)':'none',border:'1px solid '+(showLog?'#6b8cad':'var(--tf-border)'),color:showLog?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap',lineHeight:1}}>
+                    → Log
+                  </button>
+                  <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
+                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}
+                    onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
+                    onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+                </div>
               </div>
-              <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
-                style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1,flexShrink:0}}
-                onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
-                onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
+              {showLog&&<div style={{marginTop:8,background:'rgba(107,140,173,0.06)',border:'1px solid rgba(107,140,173,0.2)',borderRadius:8,padding:'10px 12px'}}>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>→ Send to Daily Log</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Work Type / Task</div>
+                    <input value={myDayLogForm.work_type} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{work_type:e.target.value});});}} placeholder="e.g. ITR Filing…" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Hours</div>
+                    <input type="number" min="0" max="24" value={myDayLogForm.hours} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{hours:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Mins</div>
+                    <input type="number" min="0" max="59" value={myDayLogForm.minutes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{minutes:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Notes</div>
+                    <input value={myDayLogForm.notes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{notes:e.target.value});});}} placeholder="What did you do?" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={function(){sendMyDayLog(row);}} disabled={myDayLoggingId===row.id} style={{background:'#6b8cad',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,opacity:myDayLoggingId===row.id?0.6:1}}>{myDayLoggingId===row.id?'Logging…':'Save to Log'}</button>
+                  <button onClick={function(){setMyDayLogId(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>Cancel</button>
+                </div>
+              </div>}
             </div>;
           })}
         </div>}
