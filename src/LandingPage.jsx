@@ -58,6 +58,20 @@ const CSS = `
   @keyframes lp-modal-in { from { opacity:0; transform:scale(.97) translateY(10px) } }
   .lp-modal-overlay { position:fixed; inset:0; background:rgba(3,5,14,.93); backdrop-filter:blur(18px); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; animation:lp-fadeUp .16s ease; }
   .lp-modal-box { width:100%; max-width:1020px; border-radius:16px; overflow:hidden; background:#080b18; border:1px solid rgba(255,255,255,.1); box-shadow:0 40px 120px rgba(0,0,0,.9); display:flex; flex-direction:column; animation:lp-modal-in .2s ease; max-height:92vh; }
+  @keyframes lp-tour-imgIn { from { opacity:0; transform: scale(.985); } to { opacity:1; transform: scale(1); } }
+  @keyframes lp-tour-textIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+  .lp-tour-img { animation: lp-tour-imgIn .4s ease both; }
+  .lp-tour-text > * { animation: lp-tour-textIn .4s ease both; }
+  .lp-tour-text > *:nth-child(2) { animation-delay: .05s; }
+  .lp-tour-text > *:nth-child(3) { animation-delay: .1s; }
+  .lp-tour-text > *:nth-child(4) { animation-delay: .15s; }
+  .lp-tour-text > *:nth-child(5) { animation-delay: .2s; }
+  .lp-tour-bullet:hover { background: rgba(255,255,255,.025); }
+  .lp-tour-nav-btn { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; color: #cbd2e0; cursor: pointer; padding: 9px 18px; font-size: 13px; font-weight: 600; transition: all .15s ease; font-family: inherit; }
+  .lp-tour-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); color: #eef0f8; }
+  .lp-tour-nav-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .lp-tour-nav-btn.primary { background: #6366f1; border-color: #6366f1; color: #fff; }
+  .lp-tour-nav-btn.primary:hover:not(:disabled) { background: #4f46e5; border-color: #4f46e5; }
 `
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
@@ -969,48 +983,215 @@ const SCRN_TABS = [
   { label: 'Billing',   icon: '◒', color: '#ec4899', Screen: ScrnBilling },
 ]
 
+const TOUR_SLIDES = [
+  { img: '/tour/slide-00.png', module: 'Your Diary',         color: '#6366f1', title: 'Personal Dashboard & Plan My Day',
+    bullets: ["Today's tasks at a glance — across every workspace", 'Plan My Day side panel for focused execution', 'Overdue, today, this-week filters built-in'],
+    desc: 'Open TaskFlowCo and your Diary greets you with a personalised dashboard. Every task you own, sorted by status, work type, or due date. The Plan My Day sidebar lets you batch tasks for focused execution.' },
+  { img: '/tour/slide-01.png', module: 'Your Diary',         color: '#6366f1', title: 'Kanban Board by Status',
+    bullets: ['Pending · In Progress · Under Review · Done columns', 'Client + work type stamped on every card', 'Drag any card to update its status'],
+    desc: 'The Board view brings classic Kanban organisation to compliance work. See every task as a card, organised by status. Drag cards across columns to update progress — never lose track of where a return stands.' },
+  { img: '/tour/slide-02.png', module: 'Your Diary',         color: '#6366f1', title: 'Group by Work Type',
+    bullets: ['GSTR 1 · GSTR 3B · ITR · TDS columns', 'Same data, completely different lens', 'One toggle switches the entire view'],
+    desc: 'Switch from status grouping to work-type grouping with a single toggle. Now you see all GSTR 1 tasks together, all TDS returns together — perfect for week-end compliance reviews and capacity planning.' },
+  { img: '/tour/slide-03.png', module: 'Your Diary',         color: '#6366f1', title: 'Monthly Deadline Calendar',
+    bullets: ['Every due date mapped onto the month', 'Click any date to see what is due', 'Spot crunch days before they arrive'],
+    desc: 'The Calendar view maps every compliance deadline across the month. Hover or click any date to see exactly what is due. Plan the next week, anticipate the GSTR-3B crunch, and never miss filing dates.' },
+  { img: '/tour/slide-04.png', module: 'WorkZone',           color: '#0ea5e9', title: 'Master Worksheets Grid',
+    bullets: ['Every client × every work type in one grid', 'Status, assignee, due date per cell', 'Grid · Pipeline · Funnel views — one click'],
+    desc: 'WorkZone Worksheets are your master compliance grid. Every client across every work type, one period at a time. Switch between Grid (table), Pipeline (kanban) and Funnel (stages) views without losing context.' },
+  { img: '/tour/slide-05.png', module: 'WorkZone',           color: '#0ea5e9', title: 'Stage-by-Stage Pipeline',
+    bullets: ['Not Started → Data Collection → Working → Done', 'Drag cards to advance the stage', 'Filter by period, assignee, or work type'],
+    desc: 'The Pipeline view turns compliance work into a visual progress board. Drag client cards through stages: Not Started, Data Collection, Working, Review, Done. See bottlenecks at a glance and re-assign work in seconds.' },
+  { img: '/tour/slide-06.png', module: 'WorkZone',           color: '#0ea5e9', title: 'Funnel View — Spot Bottlenecks',
+    bullets: ['Total clients at every stage', 'Colour-coded completion percentage', 'Identify stuck clients before deadlines'],
+    desc: 'The Funnel view shows completion rates at each stage. Spot where work is piling up before it becomes a deadline crisis. Drill into any stage to see which clients are stuck and why.' },
+  { img: '/tour/slide-07.png', module: 'WorkZone',           color: '#0ea5e9', title: 'Big Clients — Monthly Checklist',
+    bullets: ['Accounting · Reconciliation · Finalisation', 'Per-client structured monthly checklist', 'Every recurring deliverable, tracked'],
+    desc: 'For your major retainer clients — those needing monthly accounting, reconciliation, and finalisation — Big Clients provides a dedicated structured checklist. Never miss a recurring deliverable again.' },
+  { img: '/tour/slide-08.png', module: 'WorkZone',           color: '#0ea5e9', title: 'Team Workload Heatmap',
+    bullets: ['Active tasks per team member', '7d · 14d · 30d capacity views', 'Spot overloaded and idle members fast'],
+    desc: "Team Workload shows every member's active tasks, overdue count, and capacity utilisation. Delegate smartly — see who has room, redistribute before bottlenecks become missed deadlines." },
+  { img: '/tour/slide-09.png', module: 'Team',               color: '#f59e0b', title: 'Daily Logs — Attendance & Hours',
+    bullets: ['Auto-tracked working days per member', 'Leaves and overtime captured', 'Per-member time entries on tasks'],
+    desc: 'Daily Logs automatically track attendance, leaves, and time entries. Useful for billing, payroll calculations, and understanding which work types consume the most team hours.' },
+  { img: '/tour/slide-10.png', module: 'Library',            color: '#10b981', title: 'Credentials Vault',
+    bullets: ['GST · Income Tax · MCA · Banking', 'Searchable by client name or PAN', 'Encrypted at rest, audit-logged access'],
+    desc: 'The Credentials Library stores every portal password — GST portal, Income Tax, MCA, banking — encrypted and instant to retrieve. Stop the WhatsApp scramble when a client asks for a download.' },
+  { img: '/tour/slide-11.png', module: 'Analytics',          color: '#10b981', title: 'Org-Wide Performance Dashboard',
+    bullets: ['Tasks completed · pending · overdue', 'Breakdown by work type', 'Drill into any segment for details'],
+    desc: 'Analytics gives owners and partners an org-wide compliance dashboard. See total tasks completed this FY, pending breakdown by work type, and overdue heatmap — all in real-time, all auto-computed.' },
+  { img: '/tour/slide-12.png', module: 'Communication',      color: '#06b6d4', title: 'Client Connect — Document Requests',
+    bullets: ['Raise GST / IT data requests directly', 'Track per-client request status', 'Reminders auto-sent on schedule'],
+    desc: 'Client Connect lets you raise document requests directly to clients. No more WhatsApp follow-ups — track every request status and let TaskFlowCo auto-send reminders on a schedule you define.' },
+  { img: '/tour/slide-13.png', module: 'Communication',      color: '#06b6d4', title: 'Shareable Client Portal',
+    bullets: ['One simple shareable link per client', 'Upload without login or signup', 'No app download required'],
+    desc: 'Clients receive a simple shareable link. They upload documents directly — no login, no app, no friction. Documents land in your TaskFlowCo workspace, automatically tagged to the right task.' },
+  { img: '/tour/slide-14.png', module: 'Communication',      color: '#06b6d4', title: 'Bulk Email to Clients',
+    bullets: ['Filter clients by work type', 'Templates for common messages', 'BCC by default for client privacy'],
+    desc: 'Bulk Email lets you compose once and send to all your clients — filter by work type, use templates for common messages, BCC by default for privacy. Perfect for filing-deadline reminders.' },
+  { img: '/tour/slide-15.png', module: 'Billing',            color: '#ec4899', title: 'GST-Compliant Tax Invoice',
+    bullets: ['Auto-calculated GST + TDS deductions', 'Partial payments tracked per invoice', 'Send · Share · Mark Paid — all in one panel'],
+    desc: 'Generate GST-compliant tax invoices in seconds with automatic TDS deduction and GST rate selection. Track partial payments, send via email, and share secure PDF links — all from one panel.' },
+  { img: '/tour/slide-16.png', module: 'Billing',            color: '#ec4899', title: 'Complete Client Statement',
+    bullets: ['Invoiced · Paid · TDS Credit · Balance', 'Outstanding amount calculated automatically', 'Generate & print in a single click'],
+    desc: 'Pull a full client statement in one click — total invoiced, amounts paid, TDS credit available, and outstanding balance. Useful for year-end reconciliation, dispute resolution, and client review meetings.' },
+  { img: '/tour/slide-17.png', module: 'Billing',            color: '#ec4899', title: 'Export to Tally · Zoho · Excel',
+    bullets: ['Tally JSON · Zoho Books CSV · Excel XLSX', 'Import-ready format, no clean-up needed', 'All formats always current'],
+    desc: 'Export all your TaskFlowCo billing data to Tally, Zoho Books, or Excel — import-ready, with one click. Stop the manual data entry between systems. Save 2-3 hours per month, every month.' },
+  { img: '/tour/slide-18.png', module: 'TaskFlowCo',         color: '#6366f1', title: 'One Platform, Zero Chaos',
+    bullets: ['Work · Clients · Team · Billing in one platform', 'Built specifically for Indian CAs', 'Setup in under 10 minutes'],
+    desc: 'TaskFlowCo is the operating system for your accounting practice — work, clients, team, and billing in one platform. Built specifically for the way Indian chartered accountants actually work.' },
+]
+
 function TourModal({ open, onClose }) {
-  const [tab, setTab] = useState(0)
-  const [prog, setProg] = useState(0)
-  const INTERVAL = 5500
+  const [idx, setIdx] = useState(0)
+  const total = TOUR_SLIDES.length
+
+  const goPrev = () => setIdx(i => Math.max(0, i - 1))
+  const goNext = () => setIdx(i => Math.min(total - 1, i + 1))
 
   useEffect(() => {
     if (!open) return
-    setProg(0)
-    const adv = setInterval(() => { setTab(t => (t + 1) % SCRN_TABS.length); setProg(0) }, INTERVAL)
-    const tick = setInterval(() => setProg(p => Math.min(p + 1, 100)), INTERVAL / 100)
-    return () => { clearInterval(adv); clearInterval(tick) }
-  }, [open, tab])
-
-  useEffect(() => {
-    if (!open) return
-    const onKey = e => { if (e.key === 'Escape') onClose() }
+    const onKey = e => {
+      if (e.key === 'Escape')      onClose()
+      if (e.key === 'ArrowRight')  goNext()
+      if (e.key === 'ArrowLeft')   goPrev()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  }, [open, idx, onClose])
+
+  useEffect(() => { if (open) setIdx(0) }, [open])
 
   if (!open) return null
-  const { Screen, color } = SCRN_TABS[tab]
+  const s = TOUR_SLIDES[idx]
+
   return (
     <div className="lp-modal-overlay" onClick={onClose}>
-      <div className="lp-modal-box" onClick={e => e.stopPropagation()}>
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-            {SCRN_TABS.map((t, i) => (
-              <button key={t.label} onClick={() => { setTab(i); setProg(0) }}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: i === tab ? `rgba(${hex2rgb(t.color)},.18)` : 'transparent', color: i === tab ? t.color : '#3a4663', fontSize: 12, fontWeight: 700 }}>
-                <span>{t.icon}</span><span>{t.label}</span>
-              </button>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 1280, height: 'min(740px, 92vh)',
+          background: '#080b18', border: '1px solid rgba(255,255,255,.1)',
+          borderRadius: 16, overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: '0 50px 120px rgba(0,0,0,.92)',
+          animation: 'lp-modal-in .22s ease',
+        }}
+      >
+        {/* Header */}
+        <div style={{padding:'14px 18px',borderBottom:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',gap:14,flexShrink:0,background:'#070a14'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+            <div style={{width:24,height:24,borderRadius:7,background:'linear-gradient(135deg,#6366f1,#4f46e5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>✦</div>
+            <span style={{fontSize:13,fontWeight:700,color:'#eef0f8',letterSpacing:'-0.01em'}}>Product Tour</span>
+            <span style={{fontSize:11,color:'#3a4663',fontFamily:"'JetBrains Mono',monospace"}}>· 19 modules</span>
+          </div>
+
+          {/* Progress segments */}
+          <div style={{display:'flex',gap:3,flex:1,alignItems:'center'}}>
+            {TOUR_SLIDES.map((t, i) => (
+              <button
+                key={i}
+                onClick={() => setIdx(i)}
+                title={`${t.module} — ${t.title}`}
+                style={{
+                  height: 4, flex: i === idx ? 3 : 1, border: 'none', borderRadius: 2, padding: 0,
+                  background: i === idx ? s.color : i < idx ? 'rgba(255,255,255,.32)' : 'rgba(255,255,255,.08)',
+                  cursor: 'pointer', transition: 'flex .3s ease, background .2s ease',
+                }}
+              />
             ))}
           </div>
-          <div style={{ flex: 1 }} />
-          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, color: '#8693b0', cursor: 'pointer', padding: '4px 10px', fontSize: 11 }}>✕ Esc</button>
+
+          <button onClick={onClose} style={{background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',borderRadius:6,color:'#8693b0',cursor:'pointer',padding:'5px 10px',fontSize:11,fontFamily:'inherit',flexShrink:0}}>✕ Esc</button>
         </div>
-        <div style={{ height: 2, background: 'rgba(255,255,255,.05)', flexShrink: 0 }}>
-          <div style={{ height: '100%', width: `${prog}%`, background: color, transition: 'width .1s linear' }} />
+
+        {/* Body: left/right split */}
+        <div style={{flex:1,display:'flex',overflow:'hidden',minHeight:0}}>
+          {/* LEFT — explanation */}
+          <div
+            key={`left-${idx}`}
+            className="lp-tour-text"
+            style={{
+              flex:'0 0 420px',padding:'34px 32px 28px',display:'flex',flexDirection:'column',
+              borderRight:'1px solid rgba(255,255,255,.06)',
+              background:`linear-gradient(160deg, ${s.color}0a 0%, transparent 50%)`,
+              overflowY:'auto',minWidth:0,
+            }}
+          >
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
+              <span style={{
+                fontSize:10, fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase',
+                color:s.color, background:`${s.color}1F`, padding:'4px 10px', borderRadius:4,
+                fontFamily:"'JetBrains Mono',monospace",
+              }}>{s.module}</span>
+              <span style={{fontSize:11,color:'#3a4663',fontFamily:"'JetBrains Mono',monospace"}}>
+                Step {String(idx+1).padStart(2,'0')} / {total}
+              </span>
+            </div>
+
+            <h2 style={{fontSize:26,fontWeight:800,color:'#eef0f8',letterSpacing:'-0.025em',lineHeight:1.18,margin:'0 0 14px'}}>
+              {s.title}
+            </h2>
+
+            <p style={{fontSize:14,color:'#a4afc8',lineHeight:1.62,margin:'0 0 22px'}}>
+              {s.desc}
+            </p>
+
+            <div style={{display:'flex',flexDirection:'column',gap:2}}>
+              {s.bullets.map((b, i) => (
+                <div key={i} className="lp-tour-bullet" style={{display:'flex',alignItems:'flex-start',gap:11,padding:'9px 10px',borderRadius:7,transition:'background .15s ease'}}>
+                  <span style={{color:s.color,fontSize:12,fontWeight:700,marginTop:2,flexShrink:0,width:14,height:14,borderRadius:4,background:`${s.color}22`,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</span>
+                  <span style={{fontSize:13,color:'#cbd2e0',lineHeight:1.5}}>{b}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{flex:1,minHeight:18}}/>
+
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:10,color:'#3a4663',fontFamily:"'JetBrains Mono',monospace",letterSpacing:'.04em'}}>
+              <kbd style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:3,padding:'2px 6px',fontSize:9,color:'#5b6580'}}>←</kbd>
+              <kbd style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:3,padding:'2px 6px',fontSize:9,color:'#5b6580'}}>→</kbd>
+              <span style={{marginLeft:4}}>to navigate</span>
+              <span style={{marginLeft:12}}>·</span>
+              <kbd style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:3,padding:'2px 6px',fontSize:9,color:'#5b6580'}}>Esc</kbd>
+              <span>to close</span>
+            </div>
+          </div>
+
+          {/* RIGHT — screenshot */}
+          <div style={{flex:1,background:'#0a0d1a',display:'flex',alignItems:'center',justifyContent:'center',padding:24,position:'relative',minWidth:0,overflow:'hidden'}}>
+            <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 50%, ${s.color}10 0%, transparent 60%)`,pointerEvents:'none'}}/>
+            <img
+              key={`img-${idx}`}
+              className="lp-tour-img"
+              src={s.img}
+              alt={s.title}
+              style={{
+                maxWidth:'100%',maxHeight:'100%',objectFit:'contain',
+                borderRadius:10,
+                boxShadow:`0 24px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06), 0 0 80px ${s.color}14`,
+                display:'block',
+              }}
+              draggable={false}
+            />
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: 'hidden', padding: 14 }}>
-          <Screen />
+
+        {/* Footer nav */}
+        <div style={{padding:'12px 18px',borderTop:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,background:'#070a14'}}>
+          <button onClick={goPrev} disabled={idx === 0} className="lp-tour-nav-btn">‹  Prev</button>
+
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            <span style={{fontSize:11,color:'#5b6580',fontFamily:"'JetBrains Mono',monospace"}}>
+              {String(idx+1).padStart(2,'0')} / {String(total).padStart(2,'0')}
+            </span>
+          </div>
+
+          {idx === total - 1
+            ? <button onClick={onClose} className="lp-tour-nav-btn primary">Finish ✓</button>
+            : <button onClick={goNext} className="lp-tour-nav-btn primary">Next  ›</button>
+          }
         </div>
       </div>
     </div>

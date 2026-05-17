@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import LandingPage from './LandingPage.jsx'
-import TourModal from './TourModal.jsx'
 import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
@@ -1313,7 +1312,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [activeOrg,setActiveOrg]=useState(null)
   const [restoringOrg,setRestoringOrg]=useState(true)
   const [showCreateOrg,setShowCreateOrg]=useState(false)
-  const [showTour,setShowTour]=useState(false)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1740,20 +1738,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
 
-        {/* TOUR BANNER */}
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'linear-gradient(135deg,rgba(37,99,235,0.07),rgba(30,58,138,0.04))',border:'1px solid rgba(37,99,235,0.18)',borderRadius:12,padding:'14px 18px 14px 20px',marginBottom:28,gap:12}}>
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
-            <div style={{width:38,height:38,borderRadius:10,background:'linear-gradient(135deg,#2563eb,#1e3a8a)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>▶</div>
-            <div>
-              <div style={{fontWeight:700,fontSize:14,color:'var(--tf-text)',letterSpacing:'-0.01em'}}>New to TaskFlowCo?</div>
-              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>See every feature — Work, Clients, Team, Billing — in 90 seconds</div>
-            </div>
-          </div>
-          <button onClick={()=>setShowTour(true)} style={{background:'#2563eb',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,letterSpacing:'-0.01em',whiteSpace:'nowrap',flexShrink:0,display:'flex',alignItems:'center',gap:7}}>
-            <span style={{fontSize:11}}>▶</span> Watch 90 sec tour
-          </button>
-        </div>
-
         {/* YOUR ORGANISATIONS */}
         <div style={{marginBottom:40}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
@@ -2004,7 +1988,6 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
-      {showTour&&<TourModal onClose={()=>setShowTour(false)}/>}
   </div>
 }
 
