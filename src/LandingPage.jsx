@@ -248,7 +248,7 @@ function Hero({ onSignIn, loading, onOpenTour }) {
             <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
               {loading ? 'Signing in…' : 'Start free trial →'}
             </button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenTour}>▶ Watch 90-sec tour</button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenTour}>Website tour →</button>
             <button className="lp-btn lp-btn-link">Book a demo</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
@@ -1098,7 +1098,7 @@ function TourModal({ open, onClose }) {
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
             <div style={{width:24,height:24,borderRadius:7,background:'linear-gradient(135deg,#6366f1,#4f46e5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff'}}>✦</div>
             <span style={{fontSize:13,fontWeight:700,color:'var(--lp-text)',letterSpacing:'-0.01em'}}>Product Tour</span>
-            <span style={{fontSize:11,color:'var(--lp-text-mut)',fontFamily:"'JetBrains Mono',monospace"}}>· 19 modules</span>
+            <span style={{fontSize:11,color:'var(--lp-text-mut)',fontFamily:"'JetBrains Mono',monospace"}}>· 19 slides</span>
           </div>
 
           {/* Progress segments */}
