@@ -191,8 +191,23 @@ export const upsertUserWorksheetPref = (pref) =>
   supabase.from('user_worksheet_prefs').upsert(pref, { onConflict: 'user_id,org_id,work_type' }).select().single()
 
 // ── Support Tickets ────────────────────────────────────────────────────────
-export const createSupportTicket = (payload) =>
-  supabase.from('support_tickets').insert(payload).select().single()
+// Note: we don't chain .select() after insert because anon has no SELECT
+// policy on the table — that would make PostgREST fail the whole call.
+// Instead we synthesise the returned row from the payload (good enough
+// for the notify-admin email).
+export const createSupportTicket = async (payload) => {
+  const { error } = await supabase.from('support_tickets').insert(payload)
+  if (error) return { data: null, error }
+  return {
+    error: null,
+    data: {
+      ...payload,
+      priority: 'normal',
+      status: 'open',
+      created_at: new Date().toISOString(),
+    },
+  }
+}
 
 // Logged-in users — RLS auto-filters to their own tickets
 export const getMyTickets = () =>
