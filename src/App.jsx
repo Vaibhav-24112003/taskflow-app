@@ -209,7 +209,7 @@ function AuthScreen({ inviteToken }){
     <div style={{position:'absolute',bottom:'10%',right:'20%',width:350,height:350,background:'radial-gradient(ellipse,rgba(16,185,129,0.05) 0%,transparent 65%)',pointerEvents:'none'}}/>
     <div style={{maxWidth:420,width:'100%',padding:'44px 40px',textAlign:'center',position:'relative'}}>
       <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 20px',boxShadow:'0 8px 32px rgba(107,140,173,0.4)'}}>✦</div>
-      <h1 style={{fontSize:32,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.04em',fontFamily:G.fontDisplay}}>TaskFlowco</h1>
+      <h1 style={{fontSize:32,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.04em',fontFamily:G.fontDisplay}}>TaskFlowCo</h1>
       {inviteToken
         ?<div style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.22)',borderRadius:G.radiusMd,padding:'12px 16px',marginBottom:24}}>
           <p style={{fontSize:13,color:'#8fa5be',margin:0,lineHeight:1.6}}>🎉 You've been invited!<br/>Sign in to accept your workspace invitation.</p>
@@ -1600,7 +1600,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     <nav style={{height:52,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 16px',gap:5,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
       <div style={{display:'flex',alignItems:'center',gap:8,marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}>
         <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(107,140,173,0.35)'}}>✦</div>
-        <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlowco</span>
+        <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlowCo</span>
       </div>
       <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(107,140,173,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#6b8cad':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
       {!activeOrg&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
@@ -10797,7 +10797,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         {!gmailToken?<div style={{textAlign:'center',padding:'80px 20px'}}>
           <div style={{fontSize:48,marginBottom:12}}>📧</div>
           <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>Gmail Integration</div>
-          <div style={{fontSize:13,color:'var(--tf-text-sub)',maxWidth:400,margin:'0 auto'}}>Connect your Google account to view, send, and reply to emails directly from TaskFlowco. Set up your Client ID and sign in from the left panel.</div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',maxWidth:400,margin:'0 auto'}}>Connect your Google account to view, send, and reply to emails directly from TaskFlowCo. Set up your Client ID and sign in from the left panel.</div>
         </div>:gmailCompose?<div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>New Email</div>
@@ -12477,7 +12477,7 @@ function ClientPortal({supabase}){
           </div>
           <button onClick={doLogin} disabled={logging} style={{width:'100%',background:'linear-gradient(135deg,#06b6d4,#0891b2)',border:'none',borderRadius:8,padding:'11px 0',color:'#fff',fontSize:13,fontWeight:700,cursor:logging?'not-allowed':'pointer',boxShadow:'0 4px 14px rgba(6,182,212,0.3)'}}>{logging?'Logging in...':'Login'}</button>
         </div>
-        <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#2a3655'}}>Powered by TaskFlowco</div>
+        <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#2a3655'}}>Powered by TaskFlowCo</div>
       </div>
     </div>;
   }
@@ -12655,7 +12655,7 @@ function ClientPortal({supabase}){
           <div style={{fontSize:12}}>Your firm will send requests here when they need data, documents or responses from you.</div>
         </div>}
       </>}
-      <div style={{textAlign:'center',marginTop:40,fontSize:10,color:'var(--tf-text-mut)'}}>Powered by TaskFlowco</div>
+      <div style={{textAlign:'center',marginTop:40,fontSize:10,color:'var(--tf-text-mut)'}}>Powered by TaskFlowCo</div>
     </div>
   </div>;
 }
@@ -12815,7 +12815,7 @@ function ClientFormPublic({supabase,token}){
         <button onClick={submit} disabled={submitting} style={{width:'100%',padding:'13px',background:'#6b8cad',border:'none',borderRadius:10,cursor:submitting?'wait':'pointer',fontSize:15,fontWeight:800,color:'#fff',fontFamily:'inherit',opacity:submitting?0.7:1,marginTop:8}}>{submitting?'Uploading & Submitting…':'Submit Response'}</button>
       </div>
 
-      <div style={{textAlign:'center',fontSize:12,color:'#94a3b8'}}>Powered by TaskFlowco</div>
+      <div style={{textAlign:'center',fontSize:12,color:'#94a3b8'}}>Powered by TaskFlowCo</div>
     </div>
   </div>;
 }

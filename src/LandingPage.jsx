@@ -166,7 +166,7 @@ function HeroMosaic() {
               </span>
               <span style={{ width: 24, height: 24, borderRadius: '50%', background: `linear-gradient(135deg,${col},${col}99)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>{a}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.05)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ flex: 1, height: 4, background: 'var(--lp-track)', borderRadius: 4, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${p}%`, background: col }} />
                 </div>
                 <span className="lp-mono" style={{ fontSize: 10.5, color: 'var(--lp-text-sub)', width: 30, textAlign: 'right' }}>{p}%</span>
@@ -413,7 +413,7 @@ function Features() {
 function ScCapture() {
   return (
     <div style={{ height: '100%', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 30 }}>
-      <div style={{ width: '90%', maxWidth: 480, background: 'rgba(15,18,32,.96)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,.7)', overflow: 'hidden', animation: 'lp-fadeUp .4s ease' }}>
+      <div style={{ width: '90%', maxWidth: 480, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,.25)', overflow: 'hidden', animation: 'lp-fadeUp .4s ease' }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--lp-border)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="lp-mono" style={{ color: 'var(--lp-text-sub)' }}>›</span>
           <span style={{ fontSize: 14, flex: 1 }}>GSTR Acme<span style={{ color: '#6b8cad', animation: 'lp-blink 1s steps(2) infinite' }}>|</span></span>
@@ -448,7 +448,7 @@ function ScSheet() {
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: col }} />{s}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,.05)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ flex: 1, height: 4, background: 'var(--lp-track)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${p}%`, background: col }} />
             </div>
             <span className="lp-mono" style={{ fontSize: 10.5, color: 'var(--lp-text-sub)', width: 30, textAlign: 'right' }}>{p}%</span>
@@ -473,7 +473,7 @@ function ScRecurring() {
         <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Auto-generates</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map((m, i) => (
-            <span key={m} className="lp-mono" style={{ flex: 1, padding: '8px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6366f1' : 'rgba(99,102,241,.08)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 5, fontWeight: 700, border: i === 1 ? 'none' : '1px solid rgba(99,102,241,.18)' }}>{m}</span>
+            <span key={m} className="lp-mono" style={{ flex: 1, padding: '8px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6366f1' : 'rgba(99,102,241,.08)', color: i === 1 ? '#fff' : 'var(--lp-text-sub)', borderRadius: 5, fontWeight: 700, border: i === 1 ? 'none' : '1px solid rgba(99,102,241,.18)' }}>{m}</span>
           ))}
         </div>
       </div>
@@ -500,7 +500,7 @@ function ScInvoice() {
         <span style={{ flex: 1 }}>Total</span>
         <span className="lp-mono">₹20,500</span>
       </div>
-      <div style={{ marginTop: 18, padding: '10px 14px', background: 'rgba(255,255,255,.03)', border: '1px dashed rgba(255,255,255,.14)', borderRadius: 8, fontSize: 11.5, color: 'var(--lp-text-sub)' }}>
+      <div style={{ marginTop: 18, padding: '10px 14px', background: 'var(--lp-surface)', border: '1px dashed var(--lp-border-hov)', borderRadius: 8, fontSize: 11.5, color: 'var(--lp-text-sub)' }}>
         ✓ Pulled from completed works · ✓ Tally export ready · ✓ Sent via Gmail
       </div>
     </div>
@@ -529,11 +529,11 @@ function TourVideo() {
         <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 32, alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {steps.map((s, i) => (
-              <div key={i} onClick={() => setStep(i)} style={{ cursor: 'pointer', padding: '14px 16px', background: i === step ? '#131825' : 'transparent', border: `1px solid ${i === step ? 'rgba(107,140,173,.3)' : 'rgba(255,255,255,.07)'}`, borderRadius: 10, position: 'relative', overflow: 'hidden' }}>
+              <div key={i} onClick={() => setStep(i)} style={{ cursor: 'pointer', padding: '14px 16px', background: i === step ? 'var(--lp-panel)' : 'transparent', border: `1px solid ${i === step ? 'rgba(107,140,173,.3)' : 'var(--lp-border)'}`, borderRadius: 10, position: 'relative', overflow: 'hidden' }}>
                 {i === step && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#6b8cad' }} />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#6b8cad' : '#3a4663', fontWeight: 700 }}>0{i + 1}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: i === step ? '#eef0f8' : '#8693b0' }}>{s.t}</span>
+                  <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#6b8cad' : 'var(--lp-text-mut)', fontWeight: 700 }}>0{i + 1}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: i === step ? 'var(--lp-text)' : 'var(--lp-text-sub)' }}>{s.t}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', paddingLeft: 24 }}>{s.d}</div>
                 {i === step && <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: '#6b8cad', animation: 'lp-fillBar 3s linear' }} />}
@@ -1215,7 +1215,18 @@ function TourModal({ open, onClose }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function LandingPage({ onSignIn, loading }) {
-  const [dark, setDark] = useState(true)
+  const [dark, setDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const saved = localStorage.getItem('lp_theme')
+      if (saved === 'dark') return true
+      if (saved === 'light') return false
+    } catch (_) {}
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(() => {
+    try { localStorage.setItem('lp_theme', dark ? 'dark' : 'light') } catch (_) {}
+  }, [dark])
   const [tourOpen, setTourOpen] = useState(false)
   return (
     <div className="lp-root" data-theme={dark ? 'dark' : 'light'}>
