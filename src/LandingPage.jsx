@@ -55,6 +55,9 @@ const CSS = `
   @keyframes lp-fillBar { from { width: 0 } to { width: 100% } }
   @keyframes lp-fadeUp { from { opacity: 0; transform: translateY(8px) } }
   @keyframes lp-blink { 50% { opacity: 0 } }
+  @keyframes lp-modal-in { from { opacity:0; transform:scale(.97) translateY(10px) } }
+  .lp-modal-overlay { position:fixed; inset:0; background:rgba(3,5,14,.93); backdrop-filter:blur(18px); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; animation:lp-fadeUp .16s ease; }
+  .lp-modal-box { width:100%; max-width:1020px; border-radius:16px; overflow:hidden; background:#080b18; border:1px solid rgba(255,255,255,.1); box-shadow:0 40px 120px rgba(0,0,0,.9); display:flex; flex-direction:column; animation:lp-modal-in .2s ease; max-height:92vh; }
 `
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
@@ -78,7 +81,7 @@ function Nav({ onSignIn, loading, dark, onToggleTheme }) {
       <div className="lp-container" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 32px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
-          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--lp-text)' }}>TaskFlowco</span>
+          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--lp-text)' }}>TaskFlowCo</span>
         </div>
         <div style={{ flex: 1, display: 'flex', gap: 4, marginLeft: 32 }}>
           {NAV_LINKS.map(({ label, href }) => (
@@ -201,7 +204,7 @@ function HeroMosaic() {
   )
 }
 
-function Hero({ onSignIn, loading }) {
+function Hero({ onSignIn, loading, onOpenTour }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(107,140,173,.18),transparent 60%)', pointerEvents: 'none' }} />
@@ -217,7 +220,7 @@ function Hero({ onSignIn, loading }) {
             <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
               {loading ? 'Signing in…' : 'Start free trial →'}
             </button>
-            <button className="lp-btn lp-btn-ghost">▶ Watch 90-sec tour</button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenTour}>▶ Watch 90-sec tour</button>
             <button className="lp-btn lp-btn-link">Book a demo</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
@@ -272,7 +275,7 @@ function Problem() {
           <div style={{ padding: '24px 26px', background: 'rgba(239,68,68,.04)', border: '1px solid rgba(239,68,68,.18)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(239,68,68,.16)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>×</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before TaskFlowco</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before TaskFlowCo</span>
             </div>
             {before.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(239,68,68,.12)' }}>
@@ -284,7 +287,7 @@ function Problem() {
           <div style={{ padding: '24px 26px', background: 'rgba(16,185,129,.04)', border: '1px solid rgba(16,185,129,.22)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(16,185,129,.16)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>✓</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With TaskFlowco</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With TaskFlowCo</span>
             </div>
             {after.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(16,185,129,.12)' }}>
@@ -603,7 +606,7 @@ function FAQ() {
   const qs = [
     ['How long does setup take?', 'Most firms are live in under 30 minutes. Import your client list as CSV, pick the work types you handle, invite your team.'],
     ['Can we migrate from Excel / existing tools?', 'Yes. CSV import for clients and master data. We also help migrate from Practice Pro, Munimji, and similar tools — included in onboarding.'],
-    ['Do clients need an account?', 'Only if they use the Client Portal. You can also operate TaskFlowco entirely internally without exposing it to clients.'],
+    ['Do clients need an account?', 'Only if they use the Client Portal. You can also operate TaskFlowCo entirely internally without exposing it to clients.'],
     ['What about pricing?', 'Per-user monthly pricing. The first 14 days are free with no credit card. We have firm-wide plans starting at 5 seats.'],
     ['Where is our data stored?', 'In AWS Mumbai (ap-south-1). Encrypted at rest with AES-256. Daily backups. Your data is yours — full export available any time.'],
     ['Does it integrate with Tally / Zoho?', 'Yes. Billing exports to Tally XML and Zoho Books. We also support Gmail OAuth for client communication.'],
@@ -659,7 +662,7 @@ function Footer() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: '#fff' }}>✦</div>
-              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlowco</span>
+              <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em' }}>TaskFlowCo</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants.</div>
           </div>
@@ -678,7 +681,7 @@ function Footer() {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
-          <span>© 2026 TaskFlowco Technologies Pvt Ltd · Made in India 🇮🇳</span>
+          <span>© 2026 TaskFlowCo Technologies Pvt Ltd · Made in India 🇮🇳</span>
           <span>v 2.4.1 · all systems operational</span>
         </div>
       </div>
@@ -686,14 +689,344 @@ function Footer() {
   )
 }
 
+// ── Tour Modal ────────────────────────────────────────────────────────────────
+const HM_DATA = [
+  [1,3,2,4,2,1,3,2,4,3,2,1,3,2,4,2,3,1,2,3],
+  [2,4,1,3,4,2,1,3,2,4,3,2,4,1,3,2,4,3,1,2],
+  [3,2,4,1,2,3,4,2,1,3,4,2,1,3,2,4,1,3,2,4],
+  [1,3,2,4,3,1,2,4,3,2,1,4,2,3,1,4,2,3,4,1],
+  [4,1,3,2,1,4,3,1,2,4,2,3,1,4,2,3,1,4,2,3],
+]
+const HM_COLS = ['#1a2035','#2d4a6b','#4a7a9b','#6b8cad','#a5c4de']
+
+const SIDEBAR_NAV = [
+  { label: 'Diary',         glyph: '◐', color: '#6366f1' },
+  { label: 'WorkZone',      glyph: '◧', color: '#6b8cad' },
+  { label: 'Team',          glyph: '◔', color: '#f59e0b' },
+  { label: 'Master Data',   glyph: '◓', color: '#8b5cf6' },
+  { label: 'Communication', glyph: '◑', color: '#06b6d4' },
+  { label: 'Billing',       glyph: '◒', color: '#ec4899' },
+  { label: 'Library',       glyph: '◇', color: '#0ea5e9' },
+  { label: 'Analytics',     glyph: '◰', color: '#10b981' },
+]
+
+function AppChrome({ module, topContent, children, noContentPad }) {
+  return (
+    <div style={{ display: 'flex', height: '100%', background: '#080b18', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
+      <div style={{ width: 44, background: '#0a0d1a', borderRight: '1px solid rgba(255,255,255,.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 10, gap: 3, flexShrink: 0 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', marginBottom: 10 }}>✦</div>
+        {SIDEBAR_NAV.map(n => {
+          const active = n.label === module
+          return (
+            <div key={n.label} title={n.label} style={{ width: 34, height: 34, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, background: active ? `rgba(${hex2rgb(n.color)},.18)` : 'transparent', color: active ? n.color : '#2a3350' }}>{n.glyph}</div>
+          )
+        })}
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ height: 40, borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, flexShrink: 0, background: '#0a0d1a' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#eef0f8' }}>{module}</span>
+          <div style={{ flex: 1 }}>{topContent}</div>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>PM</div>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', padding: noContentPad ? 0 : '14px 16px' }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function ScrnWorkZone() {
+  const cols = [
+    { label: 'Backlog',     color: '#3a4663', tasks: ['GSTR-1 · Patel Trading', 'Audit · Sharma Ltd'] },
+    { label: 'In Progress', color: '#6b8cad', tasks: ['GSTR-3B · Acme', 'TDS Q4 · Singh & Co', 'ITR · Mehta'] },
+    { label: 'Review',      color: '#f59e0b', tasks: ['Payroll Jun · Acme', 'ROC Filing · Tata'] },
+    { label: 'Filed',       color: '#10b981', tasks: ['GSTR-3B · Reliance', 'TDS Apr · Acme', 'ITR FY26 · Patel'] },
+  ]
+  const topContent = (
+    <div style={{ display: 'flex', gap: 3, marginLeft: 14 }}>
+      {['Stage', 'Board', 'Calendar', 'List'].map((v, i) => (
+        <span key={v} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 5, background: i === 1 ? 'rgba(107,140,173,.22)' : 'transparent', color: i === 1 ? '#6b8cad' : '#3a4663', fontWeight: 600 }}>{v}</span>
+      ))}
+    </div>
+  )
+  return (
+    <AppChrome module="WorkZone" topContent={topContent}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, alignItems: 'start' }}>
+        {cols.map(col => (
+          <div key={col.label}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: col.color }} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: col.color, textTransform: 'uppercase', letterSpacing: '.07em' }}>{col.label}</span>
+              <span style={{ fontSize: 9, color: '#3a4663', marginLeft: 'auto' }}>{col.tasks.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {col.tasks.map(t => (
+                <div key={t} style={{ padding: '8px 9px', background: '#0a0d1a', border: '1px solid rgba(255,255,255,.06)', borderRadius: 6, fontSize: 11, color: '#b8c4d8', lineHeight: 1.4 }}>{t}</div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </AppChrome>
+  )
+}
+
+function ScrnTeam() {
+  const members = [
+    { name: 'Priya Mehta',  role: 'Senior CA', tasks: 14, hrs: 38, color: '#6b8cad' },
+    { name: 'Rahul Singh',  role: 'Article',    tasks: 9,  hrs: 42, color: '#f59e0b' },
+    { name: 'Sneha Patel',  role: 'Staff',      tasks: 11, hrs: 36, color: '#10b981' },
+    { name: 'Amit Joshi',   role: 'Manager',    tasks: 7,  hrs: 29, color: '#8b5cf6' },
+  ]
+  return (
+    <AppChrome module="Team">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ background: '#0a0d1a', border: '1px solid rgba(255,255,255,.06)', borderRadius: 9, padding: 12 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#8693b0', marginBottom: 8 }}>Workload · last 4 weeks</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {HM_DATA.map((row, ri) => (
+              <div key={ri} style={{ display: 'flex', gap: 3 }}>
+                {row.map((v, ci) => (
+                  <div key={ci} style={{ flex: 1, height: 10, borderRadius: 2, background: HM_COLS[v - 1] }} />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 9, color: '#3a4663' }}>
+            <span>4 weeks ago</span><span>Today</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {members.map(m => (
+            <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', background: '#0a0d1a', border: '1px solid rgba(255,255,255,.06)', borderRadius: 7 }}>
+              <div style={{ width: 26, height: 26, borderRadius: '50%', background: `linear-gradient(135deg,${m.color},${m.color}88)`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>{m.name.split(' ').map(n => n[0]).join('')}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, fontWeight: 700 }}>{m.name}</div>
+                <div style={{ fontSize: 10, color: '#8693b0' }}>{m.role}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.tasks} tasks</div>
+                <div style={{ fontSize: 9, color: '#8693b0' }}>{m.hrs}h</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </AppChrome>
+  )
+}
+
+function ScrnComms() {
+  const clients = ['Acme Pvt Ltd', 'Singh & Co', 'Mehta Industries', 'Patel Trading', 'Reliance Holdings']
+  const msgs = [
+    { text: 'Please share the bank statements for April.', time: '10:02', out: true },
+    { text: 'Sure, attaching now.', time: '10:18', out: false },
+    { text: '📎 BankStmt_Apr26.pdf · 1.2 MB', time: '10:18', out: false },
+    { text: 'Got it, will update the worksheet.', time: '10:22', out: true },
+  ]
+  return (
+    <AppChrome module="Communication" noContentPad>
+      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', height: '100%' }}>
+        <div style={{ borderRight: '1px solid rgba(255,255,255,.06)', overflow: 'auto' }}>
+          {clients.map((c, i) => (
+            <div key={c} style={{ padding: '9px 11px', borderBottom: '1px solid rgba(255,255,255,.03)', background: i === 0 ? 'rgba(107,140,173,.12)' : 'transparent', cursor: 'pointer' }}>
+              <div style={{ fontSize: 11, fontWeight: 600 }}>{c}</div>
+              <div style={{ fontSize: 9, color: '#8693b0', marginTop: 2 }}>via Client Portal</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '9px 13px', borderBottom: '1px solid rgba(255,255,255,.06)', fontSize: 11, fontWeight: 700 }}>Acme Pvt Ltd</div>
+          <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7, overflow: 'auto' }}>
+            {msgs.map((m, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: m.out ? 'flex-end' : 'flex-start' }}>
+                <div style={{ maxWidth: '72%', padding: '7px 11px', borderRadius: 9, background: m.out ? 'rgba(107,140,173,.22)' : '#0a0d1a', border: `1px solid ${m.out ? 'rgba(107,140,173,.3)' : 'rgba(255,255,255,.06)'}`, fontSize: 11 }}>
+                  {m.text}
+                  <div style={{ fontSize: 9, color: '#3a4663', marginTop: 3, textAlign: 'right' }}>{m.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '9px 12px', borderTop: '1px solid rgba(255,255,255,.06)', display: 'flex', gap: 7 }}>
+            <div style={{ flex: 1, height: 30, background: '#0a0d1a', border: '1px solid rgba(255,255,255,.08)', borderRadius: 6, padding: '0 9px', fontSize: 11, color: '#3a4663', display: 'flex', alignItems: 'center' }}>Type a message…</div>
+            <div style={{ width: 30, height: 30, background: '#6b8cad', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#fff' }}>↑</div>
+          </div>
+        </div>
+      </div>
+    </AppChrome>
+  )
+}
+
+function ScrnLibrary() {
+  const sections = [
+    { label: 'SOPs',        color: '#6366f1', items: ['GSTR-3B filing SOP', 'TDS payment checklist', 'ITR data prep guide', 'Audit planning SOP'] },
+    { label: 'Credentials', color: '#ec4899', items: ['Income Tax portal', 'GST portal', 'MCA21 login', 'Traces – TDS'] },
+    { label: 'Resources',   color: '#0ea5e9', items: ['ICAI guidance notes', 'Budget 2026 summary', 'GST circulars FY26', 'Ind AS reference'] },
+  ]
+  return (
+    <AppChrome module="Library">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
+        {sections.map(sec => (
+          <div key={sec.label} style={{ background: '#0a0d1a', border: '1px solid rgba(255,255,255,.06)', borderRadius: 9, padding: 11 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: sec.color, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 9 }}>{sec.label}</div>
+            {sec.items.map(it => (
+              <div key={it} style={{ padding: '7px 0', borderTop: '1px solid rgba(255,255,255,.03)', fontSize: 11, color: '#b8c4d8', display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 14, height: 14, borderRadius: 3, background: `rgba(${hex2rgb(sec.color)},.16)`, color: sec.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, flexShrink: 0 }}>◇</span>
+                {it}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </AppChrome>
+  )
+}
+
+function ScrnAnalytics() {
+  const kpis = [['147', 'Works filed', '#10b981'], ['₹4.2L', 'Billed MTD', '#6b8cad'], ['92h', 'Hours logged', '#f59e0b'], ['8', 'Overdue', '#ef4444']]
+  const bars = [['Priya M', 95], ['Rahul S', 72], ['Sneha P', 83], ['Amit J', 61]]
+  return (
+    <AppChrome module="Analytics">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 9 }}>
+          {kpis.map(([v, l, c]) => (
+            <div key={l} style={{ background: '#0a0d1a', border: '1px solid rgba(255,255,255,.06)', borderRadius: 8, padding: '11px 13px' }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: c, letterSpacing: '-.02em' }}>{v}</div>
+              <div style={{ fontSize: 10, color: '#8693b0', marginTop: 3 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: '#0a0d1a', border: '1px solid rgba(255,255,255,.06)', borderRadius: 9, padding: '11px 13px' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#8693b0', marginBottom: 10 }}>Staff performance · this month</div>
+          {bars.map(([n, p]) => (
+            <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: '#b8c4d8', width: 56, flexShrink: 0 }}>{n}</span>
+              <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,.05)', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${p}%`, background: 'linear-gradient(90deg,#6b8cad,#a5b4fc)', borderRadius: 3 }} />
+              </div>
+              <span style={{ fontSize: 10, color: '#6b8cad', width: 28, textAlign: 'right', fontWeight: 700 }}>{p}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </AppChrome>
+  )
+}
+
+function ScrnBilling() {
+  const invoices = [
+    { client: 'Acme Pvt Ltd',     num: 'INV-142', amt: '₹20,500', status: 'Paid',    col: '#10b981' },
+    { client: 'Singh & Co',       num: 'INV-143', amt: '₹8,000',  status: 'Sent',    col: '#6b8cad' },
+    { client: 'Mehta Industries', num: 'INV-144', amt: '₹15,000', status: 'Draft',   col: '#f59e0b' },
+    { client: 'Patel Trading',    num: 'INV-145', amt: '₹5,500',  status: 'Overdue', col: '#ef4444' },
+  ]
+  return (
+    <AppChrome module="Billing" noContentPad>
+      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', height: '100%' }}>
+        <div style={{ borderRight: '1px solid rgba(255,255,255,.06)', overflow: 'auto' }}>
+          {invoices.map(inv => (
+            <div key={inv.num} style={{ padding: '9px 11px', borderBottom: '1px solid rgba(255,255,255,.03)', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                <span style={{ fontSize: 11, fontWeight: 600 }}>{inv.client}</span>
+                <span style={{ fontSize: 11, color: inv.col, fontWeight: 700 }}>{inv.amt}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 9, color: '#8693b0' }}>{inv.num}</span>
+                <span style={{ fontSize: 9, color: inv.col }}>{inv.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 800 }}>INV-142 · Acme Pvt Ltd</span>
+            <span style={{ padding: '2px 9px', background: 'rgba(16,185,129,.16)', border: '1px solid rgba(16,185,129,.3)', borderRadius: 100, fontSize: 10, color: '#10b981', fontWeight: 700 }}>Paid</span>
+          </div>
+          {[['GSTR-3B · April 2026', '5,000'], ['TDS Q4 payment', '3,500'], ['ITR data preparation', '12,000']].map(([l, a]) => (
+            <div key={l} style={{ display: 'flex', padding: '7px 0', borderTop: '1px solid rgba(255,255,255,.04)', fontSize: 11 }}>
+              <span style={{ flex: 1 }}>{l}</span><span style={{ fontWeight: 700 }}>₹{a}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', padding: '9px 0', borderTop: '1px solid rgba(255,255,255,.1)', fontSize: 12, fontWeight: 800 }}>
+            <span style={{ flex: 1 }}>Total</span><span>₹20,500</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+            {['Tally XML', 'Zoho', 'Email', 'Print'].map(b => (
+              <div key={b} style={{ padding: '4px 9px', background: '#0a0d1a', border: '1px solid rgba(255,255,255,.08)', borderRadius: 5, fontSize: 10, color: '#8693b0', cursor: 'pointer' }}>{b}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </AppChrome>
+  )
+}
+
+const SCRN_TABS = [
+  { label: 'WorkZone',  icon: '◧', color: '#6b8cad', Screen: ScrnWorkZone },
+  { label: 'Team',      icon: '◔', color: '#f59e0b', Screen: ScrnTeam },
+  { label: 'Chat',      icon: '◑', color: '#06b6d4', Screen: ScrnComms },
+  { label: 'Library',   icon: '◇', color: '#0ea5e9', Screen: ScrnLibrary },
+  { label: 'Analytics', icon: '◰', color: '#10b981', Screen: ScrnAnalytics },
+  { label: 'Billing',   icon: '◒', color: '#ec4899', Screen: ScrnBilling },
+]
+
+function TourModal({ open, onClose }) {
+  const [tab, setTab] = useState(0)
+  const [prog, setProg] = useState(0)
+  const INTERVAL = 5500
+
+  useEffect(() => {
+    if (!open) return
+    setProg(0)
+    const adv = setInterval(() => { setTab(t => (t + 1) % SCRN_TABS.length); setProg(0) }, INTERVAL)
+    const tick = setInterval(() => setProg(p => Math.min(p + 1, 100)), INTERVAL / 100)
+    return () => { clearInterval(adv); clearInterval(tick) }
+  }, [open, tab])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = e => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  if (!open) return null
+  const { Screen, color } = SCRN_TABS[tab]
+  return (
+    <div className="lp-modal-overlay" onClick={onClose}>
+      <div className="lp-modal-box" onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+            {SCRN_TABS.map((t, i) => (
+              <button key={t.label} onClick={() => { setTab(i); setProg(0) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: i === tab ? `rgba(${hex2rgb(t.color)},.18)` : 'transparent', color: i === tab ? t.color : '#3a4663', fontSize: 12, fontWeight: 700 }}>
+                <span>{t.icon}</span><span>{t.label}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 6, color: '#8693b0', cursor: 'pointer', padding: '4px 10px', fontSize: 11 }}>✕ Esc</button>
+        </div>
+        <div style={{ height: 2, background: 'rgba(255,255,255,.05)', flexShrink: 0 }}>
+          <div style={{ height: '100%', width: `${prog}%`, background: color, transition: 'width .1s linear' }} />
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden', padding: 14 }}>
+          <Screen />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function LandingPage({ onSignIn, loading }) {
   const [dark, setDark] = useState(true)
+  const [tourOpen, setTourOpen] = useState(false)
   return (
     <div className="lp-root" data-theme={dark ? 'dark' : 'light'}>
       <style>{CSS}</style>
+      <TourModal open={tourOpen} onClose={() => setTourOpen(false)} />
       <Nav onSignIn={onSignIn} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
-      <Hero onSignIn={onSignIn} loading={loading} />
+      <Hero onSignIn={onSignIn} loading={loading} onOpenTour={() => setTourOpen(true)} />
       <Stats />
       <Problem />
       <Modules />
