@@ -1742,17 +1742,17 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <div style={{marginBottom:40}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
             <div>
-              <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.04em'}}>Organisations</h1>
+              <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.04em'}}>Practice Hub</h1>
               <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0}}>Clients &middot; Work Types &middot; Members &middot; Billing &middot; Time Tracking</p>
             </div>
-            <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Organisation</button>
+            <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Practice</button>
           </div>
           {orgs.length===0
             ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}>
               <div style={{fontSize:32,marginBottom:10}}>&#x1F3E2;</div>
-              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No organisations yet</div>
-              <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create an organisation to manage clients, work types and members.</div>
-              <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create Organisation</button>
+              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No practices yet</div>
+              <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create a practice to manage clients, work types, billing and your team.</div>
+              <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create Practice</button>
             </div>
             :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
               {orgs.map(org=>{
