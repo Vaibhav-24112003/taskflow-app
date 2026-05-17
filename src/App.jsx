@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import LandingPage from './LandingPage.jsx'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key } from 'lucide-react'
+import SupportContactForm from './SupportContactForm.jsx'
+import SupportAdminView from './SupportAdminView.jsx'
+import { isAdminEmail } from './lib/supabase'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -1312,6 +1315,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [activeOrg,setActiveOrg]=useState(null)
   const [restoringOrg,setRestoringOrg]=useState(true)
   const [showCreateOrg,setShowCreateOrg]=useState(false)
+  const [showSupportModal,setShowSupportModal]=useState(false)
+  const [showSupportAdmin,setShowSupportAdmin]=useState(false)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1700,6 +1705,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
         </div>;
       })()}
+      {/* Support / help icon */}
+      <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#6b8cad'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
+        <LifeBuoy size={14}/>
+      </button>
       {/* Light/dark toggle */}
       <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
@@ -1995,6 +2004,30 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
+      {showSupportModal && (
+        <div onClick={()=>setShowSupportModal(false)} style={{position:'fixed',inset:0,background:'rgba(5,8,20,0.7)',backdropFilter:'blur(6px)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:520,maxHeight:'92vh',overflowY:'auto',boxShadow:'0 30px 90px rgba(0,0,0,.45)'}}>
+            <div style={{padding:'18px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-.01em'}}>Get help</div>
+                <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>We'll reply within one business day</div>
+              </div>
+              <button onClick={()=>setShowSupportModal(false)} style={{background:'transparent',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,padding:'2px 8px',fontFamily:'inherit'}}>×</button>
+            </div>
+            <div style={{padding:22}}>
+              <SupportContactForm
+                source="app"
+                defaultName={cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}
+                defaultEmail={cu.email||''}
+                userId={cu.id}
+                orgId={activeOrg?.id||null}
+                onSubmitted={()=>{ setTimeout(()=>setShowSupportModal(false), 1800) }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {showSupportAdmin && <SupportAdminView onClose={()=>setShowSupportAdmin(false)}/>}
   </div>
 }
 

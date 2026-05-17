@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import SupportContactForm from './SupportContactForm.jsx'
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 const hex2rgb = hex => {
@@ -95,7 +96,7 @@ const NAV_LINKS = [
   { label: 'Pricing',   href: '#pricing'    },
   { label: 'Customers', href: '#customers'  },
   { label: 'Docs',      href: '#faq'        },
-  { label: 'Contact',   href: '#contact'    },
+  { label: 'Support',   href: '#support'    },
 ]
 
 function scrollTo(id) {
@@ -662,10 +663,60 @@ function FAQ() {
   )
 }
 
+// ── Support ───────────────────────────────────────────────────────────────────
+function Support() {
+  return (
+    <section id="support" className="lp-sec" style={{ background: 'var(--lp-alt)', borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)' }}>
+      <div className="lp-container">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'start' }}>
+          <div>
+            <div className="lp-eyebrow">Support</div>
+            <h2 className="lp-h2" style={{ marginTop: 8 }}>We're a quick<br/>email away.</h2>
+            <p className="lp-lede" style={{ marginTop: 18, maxWidth: 460 }}>
+              Stuck on something? Found a bug? Want a feature? Drop us a line and we'll get back to you within one business day.
+            </p>
+            <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <a href="mailto:support@taskflowco.in" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11, textDecoration: 'none', transition: 'all .15s ease' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>✉</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text)' }}>support@taskflowco.in</div>
+                  <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginTop: 2 }}>Reply within 1 business day</div>
+                </div>
+                <span style={{ fontSize: 15, color: 'var(--lp-text-mut)' }}>↗</span>
+              </a>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(99,102,241,.14)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>?</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text)' }}>Check the FAQ first</div>
+                  <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginTop: 2 }}>Many common questions are already answered above</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,.14)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>★</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text)' }}>Existing customers</div>
+                  <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginTop: 2 }}>Use the help icon inside the app for faster, context-aware support</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style={{ background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 14, padding: 28 }}>
+            <div style={{ marginBottom: 18 }}>
+              <div className="lp-eyebrow" style={{ marginBottom: 6 }}>Send a message</div>
+              <div style={{ fontSize: 13, color: 'var(--lp-text-sub)' }}>Lands directly in our inbox.</div>
+            </div>
+            <SupportContactForm source="landing" />
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 // ── Final CTA ─────────────────────────────────────────────────────────────────
 function FinalCTA({ onSignIn, loading }) {
   return (
-    <section id="contact" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
+    <section id="trial" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(107,140,173,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ textAlign: 'center', position: 'relative' }}>
         <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />deadline day quiet.</h2>
@@ -1242,6 +1293,7 @@ export default function LandingPage({ onSignIn, loading }) {
       <Compliance />
       <Security />
       <FAQ />
+      <Support />
       <FinalCTA onSignIn={onSignIn} loading={loading} />
       <Footer />
     </div>

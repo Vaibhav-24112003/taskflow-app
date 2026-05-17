@@ -189,3 +189,30 @@ export const getUserWorksheetPrefs = (userId, orgId) =>
 
 export const upsertUserWorksheetPref = (pref) =>
   supabase.from('user_worksheet_prefs').upsert(pref, { onConflict: 'user_id,org_id,work_type' }).select().single()
+
+// ── Support Tickets ────────────────────────────────────────────────────────
+export const createSupportTicket = (payload) =>
+  supabase.from('support_tickets').insert(payload).select().single()
+
+// Logged-in users — RLS auto-filters to their own tickets
+export const getMyTickets = () =>
+  supabase.from('support_tickets').select('*').order('created_at', { ascending: false })
+
+// Admin only — RLS allows full read for @taskflowco.in emails
+export const getAllTickets = (filters = {}) => {
+  let q = supabase.from('support_tickets').select('*').order('created_at', { ascending: false })
+  if (filters.status)   q = q.eq('status',   filters.status)
+  if (filters.category) q = q.eq('category', filters.category)
+  if (filters.priority) q = q.eq('priority', filters.priority)
+  return q
+}
+
+export const updateSupportTicket = (id, updates) =>
+  supabase.from('support_tickets').update(updates).eq('id', id).select().single()
+
+export const notifyAdminOfTicket = (ticket) =>
+  supabase.functions.invoke('notify-support-ticket', { body: { ticket } })
+
+// Admin = any @taskflowco.in email
+export const isAdminEmail = (email) =>
+  !!email && /@taskflowco\.in$/i.test(String(email).trim())
