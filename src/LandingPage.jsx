@@ -57,7 +57,21 @@ const CSS = `
   @keyframes lp-blink { 50% { opacity: 0 } }
   @keyframes lp-modal-in { from { opacity:0; transform:scale(.97) translateY(10px) } }
   .lp-modal-overlay { position:fixed; inset:0; background:rgba(3,5,14,.93); backdrop-filter:blur(18px); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; animation:lp-fadeUp .16s ease; }
+  .lp-root[data-theme="light"] .lp-modal-overlay { background:rgba(200,212,228,.78); }
   .lp-modal-box { width:100%; max-width:1020px; border-radius:16px; overflow:hidden; background:#080b18; border:1px solid rgba(255,255,255,.1); box-shadow:0 40px 120px rgba(0,0,0,.9); display:flex; flex-direction:column; animation:lp-modal-in .2s ease; max-height:92vh; }
+  .lp-root[data-theme="light"] .lp-modal-box { background:#ffffff; border-color:rgba(0,0,0,.1); box-shadow:0 40px 120px rgba(0,0,0,.18); }
+
+  /* Tour modal — theme-aware tokens */
+  .lp-tour-shell { background: var(--lp-panel); border:1px solid var(--lp-border); }
+  .lp-tour-bar  { background: var(--lp-bg); border-color: var(--lp-border); }
+  .lp-tour-img-bg { background: var(--lp-bg); }
+  .lp-tour-left-bg { background: var(--lp-panel); }
+  .lp-tour-kbd { background: var(--lp-surface); border:1px solid var(--lp-border); color: var(--lp-text-mut); }
+  .lp-tour-seg-empty { background: var(--lp-track); }
+  .lp-tour-seg-done  { background: var(--lp-text-mut); opacity: .55; }
+  .lp-tour-close { background: var(--lp-surface); border:1px solid var(--lp-border); color: var(--lp-text-sub); }
+  .lp-tour-close:hover { background: var(--lp-alt); color: var(--lp-text); }
+
   @keyframes lp-tour-imgIn { from { opacity:0; transform: scale(.985); } to { opacity:1; transform: scale(1); } }
   @keyframes lp-tour-textIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
   .lp-tour-img { animation: lp-tour-imgIn .4s ease both; }
@@ -66,9 +80,9 @@ const CSS = `
   .lp-tour-text > *:nth-child(3) { animation-delay: .1s; }
   .lp-tour-text > *:nth-child(4) { animation-delay: .15s; }
   .lp-tour-text > *:nth-child(5) { animation-delay: .2s; }
-  .lp-tour-bullet:hover { background: rgba(255,255,255,.025); }
-  .lp-tour-nav-btn { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; color: #cbd2e0; cursor: pointer; padding: 9px 18px; font-size: 13px; font-weight: 600; transition: all .15s ease; font-family: inherit; }
-  .lp-tour-nav-btn:hover:not(:disabled) { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); color: #eef0f8; }
+  .lp-tour-bullet:hover { background: var(--lp-alt); }
+  .lp-tour-nav-btn { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 8px; color: var(--lp-text); cursor: pointer; padding: 9px 18px; font-size: 13px; font-weight: 600; transition: all .15s ease; font-family: inherit; }
+  .lp-tour-nav-btn:hover:not(:disabled) { background: var(--lp-alt); border-color: var(--lp-border-hov); }
   .lp-tour-nav-btn:disabled { opacity: .35; cursor: not-allowed; }
   .lp-tour-nav-btn.primary { background: #6366f1; border-color: #6366f1; color: #fff; }
   .lp-tour-nav-btn.primary:hover:not(:disabled) { background: #4f46e5; border-color: #4f46e5; }
@@ -1069,22 +1083,22 @@ function TourModal({ open, onClose }) {
   return (
     <div className="lp-modal-overlay" onClick={onClose}>
       <div
+        className="lp-tour-shell"
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', maxWidth: 1280, height: 'min(740px, 92vh)',
-          background: '#080b18', border: '1px solid rgba(255,255,255,.1)',
           borderRadius: 16, overflow: 'hidden',
           display: 'flex', flexDirection: 'column',
-          boxShadow: '0 50px 120px rgba(0,0,0,.92)',
+          boxShadow: '0 50px 120px rgba(0,0,0,.4)',
           animation: 'lp-modal-in .22s ease',
         }}
       >
         {/* Header */}
-        <div style={{padding:'14px 18px',borderBottom:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',gap:14,flexShrink:0,background:'#070a14'}}>
+        <div className="lp-tour-bar" style={{padding:'14px 18px',borderBottom:'1px solid',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
           <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-            <div style={{width:24,height:24,borderRadius:7,background:'linear-gradient(135deg,#6366f1,#4f46e5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>✦</div>
-            <span style={{fontSize:13,fontWeight:700,color:'#eef0f8',letterSpacing:'-0.01em'}}>Product Tour</span>
-            <span style={{fontSize:11,color:'#3a4663',fontFamily:"'JetBrains Mono',monospace"}}>· 19 modules</span>
+            <div style={{width:24,height:24,borderRadius:7,background:'linear-gradient(135deg,#6366f1,#4f46e5)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#fff'}}>✦</div>
+            <span style={{fontSize:13,fontWeight:700,color:'var(--lp-text)',letterSpacing:'-0.01em'}}>Product Tour</span>
+            <span style={{fontSize:11,color:'var(--lp-text-mut)',fontFamily:"'JetBrains Mono',monospace"}}>· 19 modules</span>
           </div>
 
           {/* Progress segments */}
@@ -1094,16 +1108,17 @@ function TourModal({ open, onClose }) {
                 key={i}
                 onClick={() => setIdx(i)}
                 title={`${t.module} — ${t.title}`}
+                className={i === idx ? '' : i < idx ? 'lp-tour-seg-done' : 'lp-tour-seg-empty'}
                 style={{
                   height: 4, flex: i === idx ? 3 : 1, border: 'none', borderRadius: 2, padding: 0,
-                  background: i === idx ? s.color : i < idx ? 'rgba(255,255,255,.32)' : 'rgba(255,255,255,.08)',
+                  background: i === idx ? s.color : undefined,
                   cursor: 'pointer', transition: 'flex .3s ease, background .2s ease',
                 }}
               />
             ))}
           </div>
 
-          <button onClick={onClose} style={{background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',borderRadius:6,color:'#8693b0',cursor:'pointer',padding:'5px 10px',fontSize:11,fontFamily:'inherit',flexShrink:0}}>✕ Esc</button>
+          <button onClick={onClose} className="lp-tour-close" style={{borderRadius:6,cursor:'pointer',padding:'5px 10px',fontSize:11,fontFamily:'inherit',flexShrink:0}}>✕ Esc</button>
         </div>
 
         {/* Body: left/right split */}
@@ -1111,57 +1126,57 @@ function TourModal({ open, onClose }) {
           {/* LEFT — explanation */}
           <div
             key={`left-${idx}`}
-            className="lp-tour-text"
+            className="lp-tour-text lp-tour-left-bg"
             style={{
               flex:'0 0 420px',padding:'34px 32px 28px',display:'flex',flexDirection:'column',
-              borderRight:'1px solid rgba(255,255,255,.06)',
-              background:`linear-gradient(160deg, ${s.color}0a 0%, transparent 50%)`,
+              borderRight:'1px solid var(--lp-border)',
+              backgroundImage:`linear-gradient(160deg, ${s.color}14 0%, transparent 55%)`,
               overflowY:'auto',minWidth:0,
             }}
           >
             <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
               <span style={{
                 fontSize:10, fontWeight:700, letterSpacing:'.12em', textTransform:'uppercase',
-                color:s.color, background:`${s.color}1F`, padding:'4px 10px', borderRadius:4,
+                color:s.color, background:`${s.color}26`, padding:'4px 10px', borderRadius:4,
                 fontFamily:"'JetBrains Mono',monospace",
               }}>{s.module}</span>
-              <span style={{fontSize:11,color:'#3a4663',fontFamily:"'JetBrains Mono',monospace"}}>
+              <span style={{fontSize:11,color:'var(--lp-text-mut)',fontFamily:"'JetBrains Mono',monospace"}}>
                 Step {String(idx+1).padStart(2,'0')} / {total}
               </span>
             </div>
 
-            <h2 style={{fontSize:26,fontWeight:800,color:'#eef0f8',letterSpacing:'-0.025em',lineHeight:1.18,margin:'0 0 14px'}}>
+            <h2 style={{fontSize:26,fontWeight:800,color:'var(--lp-text)',letterSpacing:'-0.025em',lineHeight:1.18,margin:'0 0 14px'}}>
               {s.title}
             </h2>
 
-            <p style={{fontSize:14,color:'#a4afc8',lineHeight:1.62,margin:'0 0 22px'}}>
+            <p style={{fontSize:14,color:'var(--lp-text-sub)',lineHeight:1.62,margin:'0 0 22px'}}>
               {s.desc}
             </p>
 
             <div style={{display:'flex',flexDirection:'column',gap:2}}>
               {s.bullets.map((b, i) => (
                 <div key={i} className="lp-tour-bullet" style={{display:'flex',alignItems:'flex-start',gap:11,padding:'9px 10px',borderRadius:7,transition:'background .15s ease'}}>
-                  <span style={{color:s.color,fontSize:12,fontWeight:700,marginTop:2,flexShrink:0,width:14,height:14,borderRadius:4,background:`${s.color}22`,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</span>
-                  <span style={{fontSize:13,color:'#cbd2e0',lineHeight:1.5}}>{b}</span>
+                  <span style={{color:s.color,fontSize:12,fontWeight:700,marginTop:2,flexShrink:0,width:14,height:14,borderRadius:4,background:`${s.color}26`,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</span>
+                  <span style={{fontSize:13,color:'var(--lp-text)',lineHeight:1.5,opacity:.92}}>{b}</span>
                 </div>
               ))}
             </div>
 
             <div style={{flex:1,minHeight:18}}/>
 
-            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:10,color:'#3a4663',fontFamily:"'JetBrains Mono',monospace",letterSpacing:'.04em'}}>
-              <kbd style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:3,padding:'2px 6px',fontSize:9,color:'#5b6580'}}>←</kbd>
-              <kbd style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:3,padding:'2px 6px',fontSize:9,color:'#5b6580'}}>→</kbd>
+            <div style={{display:'flex',alignItems:'center',gap:6,fontSize:10,color:'var(--lp-text-mut)',fontFamily:"'JetBrains Mono',monospace",letterSpacing:'.04em'}}>
+              <kbd className="lp-tour-kbd" style={{borderRadius:3,padding:'2px 6px',fontSize:9}}>←</kbd>
+              <kbd className="lp-tour-kbd" style={{borderRadius:3,padding:'2px 6px',fontSize:9}}>→</kbd>
               <span style={{marginLeft:4}}>to navigate</span>
               <span style={{marginLeft:12}}>·</span>
-              <kbd style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',borderRadius:3,padding:'2px 6px',fontSize:9,color:'#5b6580'}}>Esc</kbd>
+              <kbd className="lp-tour-kbd" style={{borderRadius:3,padding:'2px 6px',fontSize:9}}>Esc</kbd>
               <span>to close</span>
             </div>
           </div>
 
           {/* RIGHT — screenshot */}
-          <div style={{flex:1,background:'#0a0d1a',display:'flex',alignItems:'center',justifyContent:'center',padding:24,position:'relative',minWidth:0,overflow:'hidden'}}>
-            <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 50%, ${s.color}10 0%, transparent 60%)`,pointerEvents:'none'}}/>
+          <div className="lp-tour-img-bg" style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:24,position:'relative',minWidth:0,overflow:'hidden'}}>
+            <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse at 50% 50%, ${s.color}1A 0%, transparent 60%)`,pointerEvents:'none'}}/>
             <img
               key={`img-${idx}`}
               className="lp-tour-img"
@@ -1170,7 +1185,7 @@ function TourModal({ open, onClose }) {
               style={{
                 maxWidth:'100%',maxHeight:'100%',objectFit:'contain',
                 borderRadius:10,
-                boxShadow:`0 24px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.06), 0 0 80px ${s.color}14`,
+                boxShadow:`0 24px 60px rgba(0,0,0,.28), 0 0 0 1px var(--lp-border), 0 0 80px ${s.color}1A`,
                 display:'block',
               }}
               draggable={false}
@@ -1179,11 +1194,11 @@ function TourModal({ open, onClose }) {
         </div>
 
         {/* Footer nav */}
-        <div style={{padding:'12px 18px',borderTop:'1px solid rgba(255,255,255,.07)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,background:'#070a14'}}>
+        <div className="lp-tour-bar" style={{padding:'12px 18px',borderTop:'1px solid',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <button onClick={goPrev} disabled={idx === 0} className="lp-tour-nav-btn">‹  Prev</button>
 
           <div style={{display:'flex',alignItems:'center',gap:14}}>
-            <span style={{fontSize:11,color:'#5b6580',fontFamily:"'JetBrains Mono',monospace"}}>
+            <span style={{fontSize:11,color:'var(--lp-text-mut)',fontFamily:"'JetBrains Mono',monospace"}}>
               {String(idx+1).padStart(2,'0')} / {String(total).padStart(2,'0')}
             </span>
           </div>
