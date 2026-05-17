@@ -1738,63 +1738,70 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
 
-        {/* YOUR ORGANISATIONS */}
-        <div style={{marginBottom:40}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-            <div>
-              <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.04em'}}>Practice Hub</h1>
-              <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0}}>Clients &middot; Work Types &middot; Members &middot; Billing &middot; Time Tracking</p>
-            </div>
-            <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Practice</button>
-          </div>
-          {orgs.length===0
-            ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}>
-              <div style={{fontSize:32,marginBottom:10}}>&#x1F3E2;</div>
-              <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No practices yet</div>
-              <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create a practice to manage clients, work types, billing and your team.</div>
-              <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create Practice</button>
-            </div>
-            :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
-              {orgs.map(org=>{
-                const wsCount=workspaces.filter(w=>w.org_id===org.id).length;
-                return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-                  <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
-                  <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
-                    <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(107,140,173,0.14)',border:'1px solid rgba(107,140,173,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#6b8cad'}}>{org.name.charAt(0).toUpperCase()}</div>
-                    <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
-                  </div>
-                  <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
-                    <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Clients</span>
-                    <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Work Types</span>
-                    <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Members</span>
-                    <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Billing</span>
-                    <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Time Tracking</span>
-                  </div>
-                </div>;
-              })}
-            </div>
-          }
-        </div>
+        {/* TWO-COLUMN: Practice Hub 70% · Workspaces 30% */}
+        <div style={{display:'flex',gap:32,marginBottom:40,alignItems:'flex-start'}}>
 
-        {/* YOUR WORKSPACES */}
-        <div style={{paddingTop:32,borderTop:'1px solid var(--tf-border)'}}>
-          <div style={{marginBottom:20}}>
-            <h2 style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.03em'}}>Workspaces</h2>
-            <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0}}>Tasks &middot; Boards &middot; Team Collaboration</p>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
-          {workspaces.map(ws=>{const wrgb=hexRgb(ws.color);return<div key={ws.id} onClick={()=>{localStorage.setItem('tf_lastWsId',ws.id);setActiveWsId(ws.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-            <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:`linear-gradient(90deg,${ws.color},${ws.color}44)`}}/>
-            <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
-              <div style={{width:42,height:42,borderRadius:'12px',background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{ws.icon}</div>
-              <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{ws.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{ws.description||'No description'}</div></div>
+          {/* LEFT — Practice Hub (70%) */}
+          <div style={{flex:'7 1 0',minWidth:0}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+              <div>
+                <h1 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.04em'}}>Practice Hub</h1>
+                <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0}}>Clients &middot; Work Types &middot; Members &middot; Billing &middot; Time Tracking</p>
+              </div>
+              <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,flexShrink:0}}>+ New Practice</button>
             </div>
-          </div>})}
-          <div onClick={()=>setWsForm('new')} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'26px 20px',cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',gap:10,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-            <div style={{width:42,height:42,borderRadius:'12px',border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,color:'var(--tf-text-mut)'}}>+</div>
-            <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
+            {orgs.length===0
+              ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'32px 20px',textAlign:'center'}}>
+                <div style={{fontSize:32,marginBottom:10}}>&#x1F3E2;</div>
+                <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No practices yet</div>
+                <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Create a practice to manage clients, work types, billing and your team.</div>
+                <button onClick={createOrg} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create Practice</button>
+              </div>
+              :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+                {orgs.map(org=>{
+                  const wsCount=workspaces.filter(w=>w.org_id===org.id).length;
+                  return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(107,140,173,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+                    <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#6b8cad,#4a7a9b)'}}/>
+                    <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
+                      <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(107,140,173,0.14)',border:'1px solid rgba(107,140,173,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#6b8cad'}}>{org.name.charAt(0).toUpperCase()}</div>
+                      <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
+                    </div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
+                      <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Clients</span>
+                      <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Work Types</span>
+                      <span style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.25)',borderRadius:4,padding:'2px 7px'}}>Members</span>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Billing</span>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.15)',borderRadius:4,padding:'2px 7px'}}>Time Tracking</span>
+                    </div>
+                  </div>;
+                })}
+              </div>
+            }
           </div>
-        </div>
+
+          {/* RIGHT — Workspaces (30%) */}
+          <div style={{flex:'3 1 0',minWidth:0,paddingLeft:32,borderLeft:'1px solid var(--tf-border)',alignSelf:'stretch'}}>
+            <div style={{marginBottom:20}}>
+              <h2 style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.02em'}}>Workspaces</h2>
+              <p style={{fontSize:12,color:'var(--tf-text-sub)',margin:0}}>Tasks &middot; Boards &middot; Team Collaboration</p>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {workspaces.map(ws=>{const wrgb=hexRgb(ws.color);return<div key={ws.id} onClick={()=>{localStorage.setItem('tf_lastWsId',ws.id);setActiveWsId(ws.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:'12px 14px',cursor:'pointer',transition:G.trans,display:'flex',alignItems:'center',gap:12,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=`rgba(${wrgb},0.4)`;e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateX(2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+                <div style={{position:'absolute',top:0,bottom:0,left:0,width:3,background:ws.color}}/>
+                <div style={{width:34,height:34,borderRadius:9,background:`rgba(${wrgb},0.14)`,border:`1px solid rgba(${wrgb},0.22)`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,marginLeft:4}}>{ws.icon}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ws.name}</div>
+                  <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ws.description||'No description'}</div>
+                </div>
+                <span style={{fontSize:14,color:'var(--tf-text-mut)',flexShrink:0}}>›</span>
+              </div>})}
+              <div onClick={()=>setWsForm('new')} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:G.radius,padding:'12px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:12,transition:G.trans}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#6b8cad';e.currentTarget.style.background='var(--tf-surface-hov)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)'}}>
+                <div style={{width:34,height:34,borderRadius:9,border:'2px dashed var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,color:'var(--tf-text-mut)',flexShrink:0,marginLeft:4}}>+</div>
+                <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text-mut)'}}>New Workspace</span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
 
