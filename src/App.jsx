@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import LandingPage from './LandingPage.jsx'
 import SupportContactForm from './SupportContactForm.jsx'
 import SupportAdminView from './SupportAdminView.jsx'
+import MyTicketsView from './MyTicketsView.jsx'
+import AnnouncementsBell from './AnnouncementsPanel.jsx'
+import AnnouncementsAdmin from './AnnouncementsAdmin.jsx'
 import { isAdminEmail } from './lib/supabase'
 import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy } from 'lucide-react'
 import {
@@ -1317,6 +1320,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [showCreateOrg,setShowCreateOrg]=useState(false)
   const [showSupportModal,setShowSupportModal]=useState(false)
   const [showSupportAdmin,setShowSupportAdmin]=useState(false)
+  const [supportTab,setSupportTab]=useState('send') // 'send' | 'mine'
+  const [showAnnouncementsAdmin,setShowAnnouncementsAdmin]=useState(false)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1705,6 +1710,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
         </div>;
       })()}
+      {/* Announcements bell (with admin shift-click to manage) */}
+      <span onClickCapture={(e)=>{ if (isAdminEmail(cu.email) && e.shiftKey) { e.preventDefault(); e.stopPropagation(); setShowAnnouncementsAdmin(true) } }} style={{display:'inline-flex'}} title={isAdminEmail(cu.email)?'Announcements · shift-click to manage':'Announcements'}>
+        <AnnouncementsBell cu={cu}/>
+      </span>
       {/* Support / help icon */}
       <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#6b8cad'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
         <LifeBuoy size={14}/>
@@ -2006,28 +2015,44 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
       {showSupportModal && (
         <div onClick={()=>setShowSupportModal(false)} style={{position:'fixed',inset:0,background:'rgba(5,8,20,0.7)',backdropFilter:'blur(6px)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:520,maxHeight:'92vh',overflowY:'auto',boxShadow:'0 30px 90px rgba(0,0,0,.45)'}}>
-            <div style={{padding:'18px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:560,maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 30px 90px rgba(0,0,0,.45)'}}>
+            <div style={{padding:'18px 22px 0',display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexShrink:0}}>
               <div>
                 <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-.01em'}}>Get help</div>
                 <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>We'll reply within one business day</div>
               </div>
               <button onClick={()=>setShowSupportModal(false)} style={{background:'transparent',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,padding:'2px 8px',fontFamily:'inherit'}}>×</button>
             </div>
-            <div style={{padding:22}}>
-              <SupportContactForm
-                source="app"
-                defaultName={cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}
-                defaultEmail={cu.email||''}
-                userId={cu.id}
-                orgId={activeOrg?.id||null}
-                onSubmitted={()=>{ setTimeout(()=>setShowSupportModal(false), 1800) }}
-              />
+            <div style={{display:'flex',gap:4,padding:'12px 22px 0',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+              {[['send','Send message'],['mine','My tickets']].map(([k,l])=>(
+                <button key={k} onClick={()=>setSupportTab(k)} style={{
+                  background:'transparent', border:'none', cursor:'pointer',
+                  padding:'8px 14px', fontFamily:'inherit', fontSize:12, fontWeight:700,
+                  color: supportTab===k ? 'var(--tf-text)' : 'var(--tf-text-sub)',
+                  borderBottom: '2px solid ' + (supportTab===k ? '#6b8cad' : 'transparent'),
+                  marginBottom:-1,
+                }}>{l}</button>
+              ))}
+            </div>
+            <div style={{padding:22,overflowY:'auto',flex:1,minHeight:0}}>
+              {supportTab === 'send' ? (
+                <SupportContactForm
+                  source="app"
+                  defaultName={cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}
+                  defaultEmail={cu.email||''}
+                  userId={cu.id}
+                  orgId={activeOrg?.id||null}
+                  onSubmitted={()=>{ setTimeout(()=>setSupportTab('mine'), 1500) }}
+                />
+              ) : (
+                <MyTicketsView />
+              )}
             </div>
           </div>
         </div>
       )}
       {showSupportAdmin && <SupportAdminView onClose={()=>setShowSupportAdmin(false)}/>}
+      {showAnnouncementsAdmin && <AnnouncementsAdmin cu={cu} onClose={()=>setShowAnnouncementsAdmin(false)}/>}
   </div>
 }
 

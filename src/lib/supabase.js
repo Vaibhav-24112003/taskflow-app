@@ -231,3 +231,37 @@ export const notifyAdminOfTicket = (ticket) =>
 // Admin = any @taskflowco.in email
 export const isAdminEmail = (email) =>
   !!email && /@taskflowco\.in$/i.test(String(email).trim())
+
+// ── Announcements ──────────────────────────────────────────────────────────
+// Logged-in users see active, non-expired announcements (RLS handles it)
+export const getActiveAnnouncements = () =>
+  supabase.from('announcements').select('*').order('published_at', { ascending: false })
+
+// Admin — see all (active + expired + draft)
+export const getAllAnnouncements = () =>
+  supabase.from('announcements').select('*').order('published_at', { ascending: false })
+
+export const createAnnouncement = async (payload) => {
+  const { error } = await supabase.from('announcements').insert(payload)
+  if (error) return { data: null, error }
+  return { data: payload, error: null }
+}
+
+export const updateAnnouncement = (id, updates) =>
+  supabase.from('announcements').update(updates).eq('id', id).select().single()
+
+export const deleteAnnouncement = (id) =>
+  supabase.from('announcements').delete().eq('id', id)
+
+// Per-user read tracking
+export const getMyReadAnnouncementIds = async () => {
+  const { data, error } = await supabase.from('announcement_reads').select('announcement_id')
+  if (error) return { data: [], error }
+  return { data: (data || []).map(r => r.announcement_id), error: null }
+}
+
+export const markAnnouncementRead = (announcementId, userId) =>
+  supabase.from('announcement_reads').upsert(
+    { user_id: userId, announcement_id: announcementId },
+    { onConflict: 'user_id,announcement_id' }
+  )
