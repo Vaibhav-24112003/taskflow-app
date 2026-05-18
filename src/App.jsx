@@ -9,7 +9,7 @@ const SupportAdminView   = lazy(() => import('./SupportAdminView.jsx'))
 const MyTicketsView      = lazy(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazy(() => import('./AnnouncementsAdmin.jsx'))
 import { isAdminEmail } from './lib/supabase'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -8151,12 +8151,15 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             </button>;
           })}
           <div style={{flex:1}}/>
-          <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:2}}>
-            {[{id:'list',icon:'☰',label:'List'},{id:'board',icon:'⬚',label:'Board'},{id:'calendar',icon:'▦',label:'Calendar'},{id:'grid',icon:'▤',label:'Grid'}].map(function(v){
+          <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3}}>
+            {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'}].map(function(v){
               var active=dashView===v.id;
-              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label}
-                style={{padding:'3px 8px',borderRadius:4,border:'none',background:active?'rgba(14,42,71,0.18)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:active?700:500,fontFamily:'inherit'}}>
-                {v.icon}
+              var Ico=v.Icon;
+              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label} aria-label={v.label}
+                style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:26,borderRadius:6,border:'none',background:active?'#fff':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit',boxShadow:active?'0 1px 3px rgba(14,42,71,0.18),0 0 0 1px rgba(14,42,71,0.12)':'none',transition:'background .15s, color .15s, box-shadow .15s'}}
+                onMouseEnter={function(e){if(!active)e.currentTarget.style.color='#0e2a47';}}
+                onMouseLeave={function(e){if(!active)e.currentTarget.style.color='var(--tf-text-sub)';}}>
+                <Ico size={15} strokeWidth={active?2.2:1.8}/>
               </button>;
             })}
           </div>
