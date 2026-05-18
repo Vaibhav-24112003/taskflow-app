@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import LandingPage from './LandingPage.jsx'
-import SupportContactForm from './SupportContactForm.jsx'
-import SupportAdminView from './SupportAdminView.jsx'
-import MyTicketsView from './MyTicketsView.jsx'
+// AnnouncementsBell is in the always-visible top nav, so it stays eager.
+// SupportContactForm is also used eagerly on the landing page, so keep it static.
+// Heavy / interaction-gated admin views are lazy so they don't bloat the initial bundle.
 import AnnouncementsBell from './AnnouncementsPanel.jsx'
-import AnnouncementsAdmin from './AnnouncementsAdmin.jsx'
+import SupportContactForm from './SupportContactForm.jsx'
+const SupportAdminView   = lazy(() => import('./SupportAdminView.jsx'))
+const MyTicketsView      = lazy(() => import('./MyTicketsView.jsx'))
+const AnnouncementsAdmin = lazy(() => import('./AnnouncementsAdmin.jsx'))
 import { isAdminEmail } from './lib/supabase'
 import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy } from 'lucide-react'
 import {
@@ -2042,24 +2045,34 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
               ))}
             </div>
             <div style={{padding:22,overflowY:'auto',flex:1,minHeight:0}}>
-              {supportTab === 'send' ? (
-                <SupportContactForm
-                  source="app"
-                  defaultName={cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}
-                  defaultEmail={cu.email||''}
-                  userId={cu.id}
-                  orgId={activeOrg?.id||null}
-                  onSubmitted={()=>{ setTimeout(()=>setSupportTab('mine'), 1500) }}
-                />
-              ) : (
-                <MyTicketsView />
-              )}
+              <Suspense fallback={<div style={{padding:24,fontSize:13,color:'var(--tf-text-sub)',textAlign:'center'}}>Loading…</div>}>
+                {supportTab === 'send' ? (
+                  <SupportContactForm
+                    source="app"
+                    defaultName={cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}
+                    defaultEmail={cu.email||''}
+                    userId={cu.id}
+                    orgId={activeOrg?.id||null}
+                    onSubmitted={()=>{ setTimeout(()=>setSupportTab('mine'), 1500) }}
+                  />
+                ) : (
+                  <MyTicketsView />
+                )}
+              </Suspense>
             </div>
           </div>
         </div>
       )}
-      {showSupportAdmin && <SupportAdminView onClose={()=>setShowSupportAdmin(false)}/>}
-      {showAnnouncementsAdmin && <AnnouncementsAdmin cu={cu} onClose={()=>setShowAnnouncementsAdmin(false)}/>}
+      {showSupportAdmin && (
+        <Suspense fallback={<div style={{position:'fixed',inset:0,zIndex:9999,background:'var(--tf-bg, #f8fafc)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontSize:13}}>Loading…</div>}>
+          <SupportAdminView onClose={()=>setShowSupportAdmin(false)}/>
+        </Suspense>
+      )}
+      {showAnnouncementsAdmin && (
+        <Suspense fallback={<div style={{position:'fixed',inset:0,zIndex:9999,background:'var(--tf-bg, #f8fafc)',display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)',fontSize:13}}>Loading…</div>}>
+          <AnnouncementsAdmin cu={cu} onClose={()=>setShowAnnouncementsAdmin(false)}/>
+        </Suspense>
+      )}
   </div>
 }
 
