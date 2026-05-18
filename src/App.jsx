@@ -1357,6 +1357,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   useEffect(()=>{localStorage.setItem('tf-light',lightMode?'1':'0')},[lightMode])
   useEffect(()=>{const h=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();setShowCmdBar(v=>!v);}};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h);},[]);
 
+  // Shorten the tab/window title once the app is mounted — keep SEO <title> long for crawlers
+  useEffect(()=>{ document.title = 'TaskFlowCo' },[]);
+
   const showToast=useCallback((msg,type='ok')=>{setToastData({msg,type});setTimeout(()=>setToastData(null),4000)},[])
   const activeWs=workspaces.find(w=>w.id===activeWsId)||null
   const wsColor=activeWs?.color||'#6b8cad';const statuses=activeWs?.custom_statuses||DEFAULT_STATUSES;const SC=scMap(statuses)
@@ -1710,10 +1713,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
         </div>;
       })()}
-      {/* Announcements bell (with admin shift-click to manage) */}
-      <span onClickCapture={(e)=>{ if (isAdminEmail(cu.email) && e.shiftKey) { e.preventDefault(); e.stopPropagation(); setShowAnnouncementsAdmin(true) } }} style={{display:'inline-flex'}} title={isAdminEmail(cu.email)?'Announcements · shift-click to manage':'Announcements'}>
-        <AnnouncementsBell cu={cu}/>
-      </span>
+      {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
+      <AnnouncementsBell cu={cu} onManage={()=>setShowAnnouncementsAdmin(true)}/>
       {/* Support / help icon */}
       <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#6b8cad'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
         <LifeBuoy size={14}/>

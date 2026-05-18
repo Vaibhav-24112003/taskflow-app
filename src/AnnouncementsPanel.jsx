@@ -4,6 +4,7 @@ import {
   getActiveAnnouncements,
   getMyReadAnnouncementIds,
   markAnnouncementRead,
+  isAdminEmail,
 } from './lib/supabase'
 
 const KIND_COL = {
@@ -13,7 +14,7 @@ const KIND_COL = {
   release: { bg: '#6b8cad1A', fg: '#6b8cad', label: 'Release' },
 }
 
-export default function AnnouncementsBell({ cu }) {
+export default function AnnouncementsBell({ cu, onManage }) {
   const [items,  setItems]  = useState([])
   const [readIds,setReadIds]= useState(new Set())
   const [open,   setOpen]   = useState(false)
@@ -136,6 +137,20 @@ export default function AnnouncementsBell({ cu }) {
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {isAdminEmail(cu?.email) && (
+            <div style={{padding:'10px 14px',borderTop:'1px solid var(--tf-border)',background:'var(--tf-surface)'}}>
+              <button
+                onClick={()=>{ setOpen(false); onManage && onManage() }}
+                style={{
+                  width:'100%', background:'transparent', border:'1px dashed var(--tf-border)',
+                  borderRadius:8, padding:'8px 12px', cursor:'pointer',
+                  color:'#6b8cad', fontSize:12, fontWeight:700, fontFamily:'inherit',
+                  display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                }}
+              >+ New / manage announcements</button>
             </div>
           )}
         </div>
