@@ -24,7 +24,7 @@ const CSS = `
   }
   .lp-root[data-theme="light"] {
     --lp-bg: #f5f7fa; --lp-panel: #ffffff; --lp-surface: rgba(0,0,0,.03);
-    --lp-text: #111827; --lp-text-sub: #6b7280; --lp-text-mut: #aab0be;
+    --lp-text: #0a1929; --lp-text-sub: #475569; --lp-text-mut: #aab0be;
     --lp-border: rgba(0,0,0,.08); --lp-border-hov: rgba(0,0,0,.16);
     --lp-nav-bg: rgba(245,247,250,0.85); --lp-alt: rgba(0,0,0,.025);
     --lp-track: rgba(0,0,0,.06);

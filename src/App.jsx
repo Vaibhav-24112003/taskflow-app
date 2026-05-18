@@ -99,7 +99,7 @@ function GlobalStyle({ lightMode }) {
   --tf-surface:#ffffff;--tf-surface-hov:#f5f7fc;
   --tf-border:rgba(0,0,0,0.09);--tf-border-hov:rgba(0,0,0,0.18);
   --tf-input:#f8f9fd;
-  --tf-text:#111827;--tf-text-sub:#6b7a99;--tf-text-mut:#c0c9dd;
+  --tf-text:#0a1929;--tf-text-sub:#475569;--tf-text-mut:#c0c9dd;
   --tf-shadow:rgba(0,0,0,0.08);--tf-shadow-lg:rgba(0,0,0,0.15);
 }
 *{box-sizing:border-box}
