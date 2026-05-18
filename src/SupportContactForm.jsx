@@ -118,7 +118,7 @@ export default function SupportContactForm({
       )}
 
       <button type="submit" disabled={busy} style={{
-        background: busy ? '#94a3b8' : '#6b8cad',
+        background: busy ? '#94a3b8' : '#0e2a47',
         border:'none', borderRadius:8, padding:'11px 18px',
         color:'#fff', cursor: busy ? 'wait' : 'pointer',
         fontSize:13, fontWeight:700, fontFamily:'inherit', marginTop:4,

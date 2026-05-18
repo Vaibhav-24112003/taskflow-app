@@ -11,7 +11,7 @@ const KIND_COL = {
   info:    { bg: '#6366f11A', fg: '#6366f1', label: 'Update'  },
   success: { bg: '#10b9811A', fg: '#10b981', label: 'Live'    },
   warn:    { bg: '#f59e0b1A', fg: '#f59e0b', label: 'Notice'  },
-  release: { bg: '#6b8cad1A', fg: '#6b8cad', label: 'Release' },
+  release: { bg: '#0e2a471A', fg: '#0e2a47', label: 'Release' },
 }
 
 export default function AnnouncementsBell({ cu, onManage }) {
@@ -94,7 +94,7 @@ export default function AnnouncementsBell({ cu, onManage }) {
             {unread > 0 && (
               <button onClick={markAllRead} style={{
                 background:'transparent', border:'none', cursor:'pointer',
-                color:'#6b8cad', fontSize:11, fontWeight:700, fontFamily:'inherit',
+                color:'#0e2a47', fontSize:11, fontWeight:700, fontFamily:'inherit',
               }}>Mark all read</button>
             )}
           </div>
@@ -130,7 +130,7 @@ export default function AnnouncementsBell({ cu, onManage }) {
                     {a.cta_label && a.cta_url && (
                       <a href={a.cta_url} target="_blank" rel="noreferrer" style={{
                         display:'inline-block', marginTop:8,
-                        background:'#6b8cad', color:'#fff', textDecoration:'none',
+                        background:'#0e2a47', color:'#fff', textDecoration:'none',
                         padding:'6px 12px', borderRadius:6, fontSize:11, fontWeight:700,
                       }}>{a.cta_label} →</a>
                     )}
@@ -147,7 +147,7 @@ export default function AnnouncementsBell({ cu, onManage }) {
                 style={{
                   width:'100%', background:'transparent', border:'1px dashed var(--tf-border)',
                   borderRadius:8, padding:'8px 12px', cursor:'pointer',
-                  color:'#6b8cad', fontSize:12, fontWeight:700, fontFamily:'inherit',
+                  color:'#0e2a47', fontSize:12, fontWeight:700, fontFamily:'inherit',
                   display:'flex', alignItems:'center', justifyContent:'center', gap:6,
                 }}
               >+ New / manage announcements</button>

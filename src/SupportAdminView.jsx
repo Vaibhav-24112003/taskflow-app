@@ -49,7 +49,7 @@ export default function SupportAdminView({ onClose }) {
       {/* Header */}
       <div style={{padding:'14px 24px',borderBottom:'1px solid var(--tf-border, #e2e8f0)',display:'flex',alignItems:'center',gap:14,flexShrink:0,background:'var(--tf-panel, #fff)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800}}>✦</div>
+          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#0e2a47,#1d4670)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800}}>✦</div>
           <div>
             <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text, #111827)',letterSpacing:'-.01em'}}>Support Tickets</div>
             <div style={{fontSize:11,color:'var(--tf-text-sub, #6b7280)'}}>Admin view · TaskFlowCo</div>
@@ -94,7 +94,7 @@ export default function SupportAdminView({ onClose }) {
               borderBottom:'1px solid var(--tf-border, #e2e8f0)',
               cursor:'pointer',
               background: sel?.id === t.id ? 'var(--tf-surface-hov, #f1f5f9)' : 'transparent',
-              borderLeft: sel?.id === t.id ? '3px solid #6b8cad' : '3px solid transparent',
+              borderLeft: sel?.id === t.id ? '3px solid #0e2a47' : '3px solid transparent',
               transition: 'background .12s ease',
             }}>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:5}}>
@@ -132,7 +132,7 @@ export default function SupportAdminView({ onClose }) {
               <h1 style={{fontSize:26,fontWeight:800,color:'var(--tf-text, #111827)',margin:'0 0 8px',letterSpacing:'-.02em',lineHeight:1.2}}>{sel.subject}</h1>
 
               <div style={{fontSize:13,color:'var(--tf-text-sub, #6b7280)',marginBottom:24}}>
-                From <a href={`mailto:${sel.email}`} style={{color:'#6b8cad',fontWeight:600,textDecoration:'none'}}>{sel.name || sel.email}</a>
+                From <a href={`mailto:${sel.email}`} style={{color:'#0e2a47',fontWeight:600,textDecoration:'none'}}>{sel.name || sel.email}</a>
                 {sel.name && <span style={{color:'var(--tf-text-mut, #94a3b8)',marginLeft:6}}>&lt;{sel.email}&gt;</span>}
                 {sel.source && <span style={{marginLeft:10,padding:'2px 8px',background:'var(--tf-surface, #f1f5f9)',border:'1px solid var(--tf-border, #e2e8f0)',borderRadius:4,fontSize:11,color:'var(--tf-text-mut, #94a3b8)'}}>via {sel.source}</span>}
               </div>
@@ -143,7 +143,7 @@ export default function SupportAdminView({ onClose }) {
 
               <div style={{display:'flex',gap:8,marginTop:24,flexWrap:'wrap',alignItems:'center'}}>
                 <a href={`mailto:${sel.email}?subject=${encodeURIComponent('Re: ' + sel.subject)}`} style={{
-                  background:'#6b8cad', border:'none', borderRadius:8,
+                  background:'#0e2a47', border:'none', borderRadius:8,
                   padding:'10px 18px', color:'#fff', textDecoration:'none',
                   fontSize:13, fontWeight:700,
                 }}>

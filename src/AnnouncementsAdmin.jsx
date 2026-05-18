@@ -13,7 +13,7 @@ const KINDS = [
   ['warn',    'Heads up / Maintenance'],
 ]
 const KIND_COL = {
-  info:    '#6366f1', success: '#10b981', warn: '#f59e0b', release: '#6b8cad',
+  info:    '#6366f1', success: '#10b981', warn: '#f59e0b', release: '#0e2a47',
 }
 
 const blank = () => ({
@@ -86,14 +86,14 @@ export default function AnnouncementsAdmin({ cu, onClose }) {
     }}>
       <div style={{padding:'14px 24px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:14,background:'var(--tf-panel)',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#6b8cad,#4a7a9b)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800}}>📣</div>
+          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#0e2a47,#1d4670)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800}}>📣</div>
           <div>
             <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-.01em'}}>Announcements</div>
             <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Manage in-app notices · {items.length} total</div>
           </div>
         </div>
         <span style={{flex:1}}/>
-        <button onClick={()=>setEditing('new')} style={{background:'#6b8cad',border:'none',borderRadius:8,padding:'8px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>+ New announcement</button>
+        <button onClick={()=>setEditing('new')} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 14px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>+ New announcement</button>
         <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:'inherit'}}>✕ Close</button>
       </div>
 
@@ -214,7 +214,7 @@ function EditPanel({ initial, isNew, onSave, onCancel }) {
           Active (visible to users)
         </label>
         <div style={{display:'flex',gap:8,marginTop:6}}>
-          <button onClick={()=>onSave(form)} style={{flex:1,background:'#6b8cad',border:'none',borderRadius:8,padding:'10px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>{isNew?'Publish':'Save'}</button>
+          <button onClick={()=>onSave(form)} style={{flex:1,background:'#0e2a47',border:'none',borderRadius:8,padding:'10px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>{isNew?'Publish':'Save'}</button>
           <button onClick={onCancel} style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancel</button>
         </div>
       </div>

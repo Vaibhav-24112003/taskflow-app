@@ -16,11 +16,11 @@ const HM_DATA = [
   [1,3,2,4,3,1,2,4,3,2,1,4,2,3,1,4,2,3,4,1],
   [4,1,3,2,1,4,3,1,2,4,2,3,1,4,2,3,1,4,2,3],
 ]
-const HM_COLS = ['#1a2035','#2d4a6b','#4a7a9b','#6b8cad','#a5c4de']
+const HM_COLS = ['#1a2035','#2d4a6b','#1d4670','#0e2a47','#a5c4de']
 
 const SIDEBAR_NAV = [
   { label: 'Diary',         glyph: '◐', color: '#6366f1' },
-  { label: 'WorkZone',      glyph: '◧', color: '#6b8cad' },
+  { label: 'WorkZone',      glyph: '◧', color: '#0e2a47' },
   { label: 'Team',          glyph: '◔', color: '#f59e0b' },
   { label: 'Master Data',   glyph: '◓', color: '#8b5cf6' },
   { label: 'Communication', glyph: '◑', color: '#06b6d4' },
@@ -33,7 +33,7 @@ function AppChrome({ module, topContent, children, noContentPad }) {
   return (
     <div style={{ display: 'flex', height: '100%', background: '#080b18', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
       <div style={{ width: 44, background: '#0a0d1a', borderRight: '1px solid rgba(255,255,255,.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 10, gap: 3, flexShrink: 0 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', marginBottom: 10 }}>✦</div>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#0e2a47,#1d4670)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', marginBottom: 10 }}>✦</div>
         {SIDEBAR_NAV.map(n => {
           const active = n.label === module
           return (
@@ -45,7 +45,7 @@ function AppChrome({ module, topContent, children, noContentPad }) {
         <div style={{ height: 40, borderBottom: '1px solid rgba(255,255,255,.06)', display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, flexShrink: 0, background: '#0a0d1a' }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: '#eef0f8' }}>{module}</span>
           <div style={{ flex: 1 }}>{topContent}</div>
-          <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#6b8cad,#4a7a9b)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>PM</div>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#0e2a47,#1d4670)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>PM</div>
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: noContentPad ? 0 : '14px 16px' }}>{children}</div>
       </div>
@@ -56,14 +56,14 @@ function AppChrome({ module, topContent, children, noContentPad }) {
 function ScrnWorkZone() {
   const cols = [
     { label: 'Backlog',     color: '#3a4663', tasks: ['GSTR-1 · Patel Trading', 'Audit · Sharma Ltd'] },
-    { label: 'In Progress', color: '#6b8cad', tasks: ['GSTR-3B · Acme', 'TDS Q4 · Singh & Co', 'ITR · Mehta'] },
+    { label: 'In Progress', color: '#0e2a47', tasks: ['GSTR-3B · Acme', 'TDS Q4 · Singh & Co', 'ITR · Mehta'] },
     { label: 'Review',      color: '#f59e0b', tasks: ['Payroll Jun · Acme', 'ROC Filing · Tata'] },
     { label: 'Filed',       color: '#10b981', tasks: ['GSTR-3B · Reliance', 'TDS Apr · Acme', 'ITR FY26 · Patel'] },
   ]
   const topContent = (
     <div style={{ display: 'flex', gap: 3, marginLeft: 14 }}>
       {['Stage', 'Board', 'Calendar', 'List'].map((v, i) => (
-        <span key={v} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 5, background: i === 1 ? 'rgba(107,140,173,.22)' : 'transparent', color: i === 1 ? '#6b8cad' : '#3a4663', fontWeight: 600 }}>{v}</span>
+        <span key={v} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 5, background: i === 1 ? 'rgba(14,42,71,.22)' : 'transparent', color: i === 1 ? '#0e2a47' : '#3a4663', fontWeight: 600 }}>{v}</span>
       ))}
     </div>
   )
@@ -91,7 +91,7 @@ function ScrnWorkZone() {
 
 function ScrnTeam() {
   const members = [
-    { name: 'Priya Mehta',  role: 'Senior CA', tasks: 14, hrs: 38, color: '#6b8cad' },
+    { name: 'Priya Mehta',  role: 'Senior CA', tasks: 14, hrs: 38, color: '#0e2a47' },
     { name: 'Rahul Singh',  role: 'Article',    tasks: 9,  hrs: 42, color: '#f59e0b' },
     { name: 'Sneha Patel',  role: 'Staff',      tasks: 11, hrs: 36, color: '#10b981' },
     { name: 'Amit Joshi',   role: 'Manager',    tasks: 7,  hrs: 29, color: '#8b5cf6' },
@@ -147,7 +147,7 @@ function ScrnComms() {
       <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', height: '100%' }}>
         <div style={{ borderRight: '1px solid rgba(255,255,255,.06)', overflow: 'auto' }}>
           {clients.map((c, i) => (
-            <div key={c} style={{ padding: '9px 11px', borderBottom: '1px solid rgba(255,255,255,.03)', background: i === 0 ? 'rgba(107,140,173,.12)' : 'transparent', cursor: 'pointer' }}>
+            <div key={c} style={{ padding: '9px 11px', borderBottom: '1px solid rgba(255,255,255,.03)', background: i === 0 ? 'rgba(14,42,71,.12)' : 'transparent', cursor: 'pointer' }}>
               <div style={{ fontSize: 11, fontWeight: 600 }}>{c}</div>
               <div style={{ fontSize: 9, color: '#8693b0', marginTop: 2 }}>via Client Portal</div>
             </div>
@@ -158,7 +158,7 @@ function ScrnComms() {
           <div style={{ flex: 1, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7, overflow: 'auto' }}>
             {msgs.map((m, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: m.out ? 'flex-end' : 'flex-start' }}>
-                <div style={{ maxWidth: '72%', padding: '7px 11px', borderRadius: 9, background: m.out ? 'rgba(107,140,173,.22)' : '#0a0d1a', border: `1px solid ${m.out ? 'rgba(107,140,173,.3)' : 'rgba(255,255,255,.06)'}`, fontSize: 11 }}>
+                <div style={{ maxWidth: '72%', padding: '7px 11px', borderRadius: 9, background: m.out ? 'rgba(14,42,71,.22)' : '#0a0d1a', border: `1px solid ${m.out ? 'rgba(14,42,71,.3)' : 'rgba(255,255,255,.06)'}`, fontSize: 11 }}>
                   {m.text}
                   <div style={{ fontSize: 9, color: '#3a4663', marginTop: 3, textAlign: 'right' }}>{m.time}</div>
                 </div>
@@ -167,7 +167,7 @@ function ScrnComms() {
           </div>
           <div style={{ padding: '9px 12px', borderTop: '1px solid rgba(255,255,255,.06)', display: 'flex', gap: 7 }}>
             <div style={{ flex: 1, height: 30, background: '#0a0d1a', border: '1px solid rgba(255,255,255,.08)', borderRadius: 6, padding: '0 9px', fontSize: 11, color: '#3a4663', display: 'flex', alignItems: 'center' }}>Type a message…</div>
-            <div style={{ width: 30, height: 30, background: '#6b8cad', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#fff' }}>↑</div>
+            <div style={{ width: 30, height: 30, background: '#0e2a47', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#fff' }}>↑</div>
           </div>
         </div>
       </div>
@@ -201,7 +201,7 @@ function ScrnLibrary() {
 }
 
 function ScrnAnalytics() {
-  const kpis = [['147', 'Works filed', '#10b981'], ['₹4.2L', 'Billed MTD', '#6b8cad'], ['92h', 'Hours logged', '#f59e0b'], ['8', 'Overdue', '#ef4444']]
+  const kpis = [['147', 'Works filed', '#10b981'], ['₹4.2L', 'Billed MTD', '#0e2a47'], ['92h', 'Hours logged', '#f59e0b'], ['8', 'Overdue', '#ef4444']]
   const bars = [['Priya M', 95], ['Rahul S', 72], ['Sneha P', 83], ['Amit J', 61]]
   return (
     <AppChrome module="Analytics">
@@ -220,9 +220,9 @@ function ScrnAnalytics() {
             <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
               <span style={{ fontSize: 11, color: '#b8c4d8', width: 56, flexShrink: 0 }}>{n}</span>
               <div style={{ flex: 1, height: 5, background: 'rgba(255,255,255,.05)', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${p}%`, background: 'linear-gradient(90deg,#6b8cad,#a5b4fc)', borderRadius: 3 }} />
+                <div style={{ height: '100%', width: `${p}%`, background: 'linear-gradient(90deg,#0e2a47,#5b8cb8)', borderRadius: 3 }} />
               </div>
-              <span style={{ fontSize: 10, color: '#6b8cad', width: 28, textAlign: 'right', fontWeight: 700 }}>{p}%</span>
+              <span style={{ fontSize: 10, color: '#0e2a47', width: 28, textAlign: 'right', fontWeight: 700 }}>{p}%</span>
             </div>
           ))}
         </div>
@@ -234,7 +234,7 @@ function ScrnAnalytics() {
 function ScrnBilling() {
   const invoices = [
     { client: 'Acme Pvt Ltd',     num: 'INV-142', amt: '₹20,500', status: 'Paid',    col: '#10b981' },
-    { client: 'Singh & Co',       num: 'INV-143', amt: '₹8,000',  status: 'Sent',    col: '#6b8cad' },
+    { client: 'Singh & Co',       num: 'INV-143', amt: '₹8,000',  status: 'Sent',    col: '#0e2a47' },
     { client: 'Mehta Industries', num: 'INV-144', amt: '₹15,000', status: 'Draft',   col: '#f59e0b' },
     { client: 'Patel Trading',    num: 'INV-145', amt: '₹5,500',  status: 'Overdue', col: '#ef4444' },
   ]
