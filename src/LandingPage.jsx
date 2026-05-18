@@ -1273,7 +1273,8 @@ export default function LandingPage({ onSignIn, loading }) {
       if (saved === 'dark') return true
       if (saved === 'light') return false
     } catch (_) {}
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    // First-time visitors always land in light mode; subsequent visits respect their choice.
+    return false
   })
   useEffect(() => {
     try { localStorage.setItem('lp_theme', dark ? 'dark' : 'light') } catch (_) {}

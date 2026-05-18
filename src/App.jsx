@@ -1335,7 +1335,13 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [loading,setLoading]=useState(true);const [toastData,setToastData]=useState(null)
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
   const [showTransferOwner,setShowTransferOwner]=useState(false)
-  const [lightMode,setLightMode]=useState(()=>localStorage.getItem('tf-light')==='1')
+  const [lightMode,setLightMode]=useState(()=>{
+    // First-time users land in light mode; choice is persisted on toggle.
+    const v = localStorage.getItem('tf-light')
+    if (v === '1') return true
+    if (v === '0') return false
+    return true
+  })
   const [showCmdBar,setShowCmdBar]=useState(false)
   const [orgNavTarget,setOrgNavTarget]=useState(null)
   // Quick Add One-time Task from Home
