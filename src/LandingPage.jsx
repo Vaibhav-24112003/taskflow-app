@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import SupportContactForm from './SupportContactForm.jsx'
+import { signInWithEmailLink } from './lib/supabase'
 
 // Heavy tour modal is only loaded when the user opens it.
 const TourModal = lazy(() => import('./LandingTour.jsx'))
@@ -107,7 +108,7 @@ function scrollTo(id) {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function Nav({ onSignIn, loading, dark, onToggleTheme }) {
+function Nav({ onSignIn, onEmailSignIn, loading, dark, onToggleTheme }) {
   return (
     <nav style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(14px)', background: 'var(--lp-nav-bg)', borderBottom: '1px solid var(--lp-border)' }}>
       <div className="lp-container" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 32px' }}>
@@ -124,6 +125,7 @@ function Nav({ onSignIn, loading, dark, onToggleTheme }) {
         <button className="lp-theme-toggle" onClick={onToggleTheme} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
           {dark ? '☀︎' : '☾'}
         </button>
+        <button className="lp-btn lp-btn-link" onClick={onEmailSignIn} title="Sign in with email — no Google required">Email link</button>
         <button className="lp-btn lp-btn-link" onClick={onSignIn}>Sign in</button>
         <button className="lp-btn lp-btn-primary" onClick={onSignIn} disabled={loading}>
           {loading ? 'Signing in…' : 'Start free'}
@@ -236,7 +238,7 @@ function HeroMosaic() {
   )
 }
 
-function Hero({ onSignIn, loading, onOpenTour }) {
+function Hero({ onSignIn, onEmailSignIn, loading, onOpenTour }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(107,140,173,.18),transparent 60%)', pointerEvents: 'none' }} />
@@ -254,6 +256,14 @@ function Hero({ onSignIn, loading, onOpenTour }) {
             </button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenTour}>Website tour →</button>
             <button className="lp-btn lp-btn-link">Book a demo</button>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 12, color: 'var(--lp-text-mut)' }}>
+            Don't use Google?{' '}
+            <button onClick={onEmailSignIn} style={{
+              background:'transparent', border:'none', padding:0, cursor:'pointer',
+              color:'#6b8cad', fontWeight:600, fontSize:12, fontFamily:'inherit',
+              textDecoration:'underline', textUnderlineOffset:3,
+            }}>Sign in with email</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
             <span>✓ No credit card</span><span>✓ 14-day trial</span><span>✓ Setup in 10 minutes</span>
@@ -782,6 +792,102 @@ const HM_DATA = [
 const HM_COLS = ['#1a2035','#2d4a6b','#4a7a9b','#6b8cad','#a5c4de']
 
 
+// ── Email magic-link sign-in modal ────────────────────────────────────────────
+// For users whose email isn't a Google account (e.g. domain mailboxes like
+// support@taskflowco.in). Sends a one-time sign-in link to their inbox.
+function EmailSignInModal({ open, onClose }) {
+  const [email, setEmail]     = useState('')
+  const [busy,  setBusy]      = useState(false)
+  const [sent,  setSent]      = useState(false)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    if (!open) { setEmail(''); setSent(false); setError(null); setBusy(false) }
+  }, [open])
+
+  if (!open) return null
+
+  const submit = async (e) => {
+    e?.preventDefault?.()
+    const v = email.trim()
+    if (!/^\S+@\S+\.\S+$/.test(v)) { setError('Please enter a valid email address.'); return }
+    setBusy(true); setError(null)
+    try {
+      const { error: err } = await signInWithEmailLink(v)
+      if (err) throw err
+      setSent(true)
+    } catch (err) {
+      setError(err?.message || 'Could not send the link. Try again in a moment.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="lp-modal-overlay" onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:'var(--lp-bg)', color:'var(--lp-text)',
+        border:'1px solid var(--lp-border)', borderRadius:14,
+        width:'100%', maxWidth:420, padding:'24px 26px',
+        boxShadow:'0 30px 90px rgba(0,0,0,.45)',
+        fontFamily:'inherit',
+      }}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:800,letterSpacing:'-.01em'}}>Sign in with email</div>
+            <div style={{fontSize:12,color:'var(--lp-text-sub)',marginTop:3}}>We'll email you a one-time sign-in link.</div>
+          </div>
+          <button onClick={onClose} style={{background:'transparent',border:'none',color:'var(--lp-text-sub)',cursor:'pointer',fontSize:18,padding:'0 4px',fontFamily:'inherit'}}>×</button>
+        </div>
+
+        {sent ? (
+          <div style={{padding:'18px 0',textAlign:'center'}}>
+            <div style={{fontSize:30,marginBottom:8}}>✓</div>
+            <div style={{fontSize:14,fontWeight:700,marginBottom:6}}>Check your inbox</div>
+            <div style={{fontSize:12,color:'var(--lp-text-sub)',lineHeight:1.5}}>
+              We sent a sign-in link to <b style={{color:'var(--lp-text)'}}>{email}</b>.<br/>
+              Click it from any device to finish signing in.
+            </div>
+            <button onClick={onClose} className="lp-btn lp-btn-ghost" style={{marginTop:18}}>Done</button>
+          </div>
+        ) : (
+          <form onSubmit={submit}>
+            <label style={{display:'block',fontSize:11,fontWeight:600,color:'var(--lp-text-sub)',marginBottom:6,letterSpacing:'.02em'}}>Email address</label>
+            <input
+              type="email"
+              autoFocus
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@yourdomain.com"
+              disabled={busy}
+              style={{
+                width:'100%', padding:'10px 12px', fontSize:14, fontFamily:'inherit',
+                background:'var(--lp-bg)', color:'var(--lp-text)',
+                border:'1px solid var(--lp-border)', borderRadius:8,
+                outline:'none', boxSizing:'border-box',
+              }}
+            />
+            {error && (
+              <div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{error}</div>
+            )}
+            <button
+              type="submit"
+              disabled={busy}
+              className="lp-btn lp-btn-primary"
+              style={{width:'100%',marginTop:14,justifyContent:'center'}}
+            >
+              {busy ? 'Sending…' : 'Send sign-in link →'}
+            </button>
+            <div style={{fontSize:11,color:'var(--lp-text-mut)',marginTop:10,textAlign:'center'}}>
+              Works with any email — no password required.
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function LandingPage({ onSignIn, loading }) {
   const [dark, setDark] = useState(() => {
@@ -798,16 +904,19 @@ export default function LandingPage({ onSignIn, loading }) {
     try { localStorage.setItem('lp_theme', dark ? 'dark' : 'light') } catch (_) {}
   }, [dark])
   const [tourOpen, setTourOpen] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(false)
+  const openEmailSignIn = () => setEmailOpen(true)
   return (
     <div className="lp-root" data-theme={dark ? 'dark' : 'light'}>
       <style>{CSS}</style>
+      <EmailSignInModal open={emailOpen} onClose={() => setEmailOpen(false)} />
       {tourOpen && (
         <Suspense fallback={<div className="lp-modal-overlay"><div style={{padding:24,color:'var(--lp-text-sub)',fontSize:13}}>Loading tour…</div></div>}>
           <TourModal open={tourOpen} onClose={() => setTourOpen(false)} />
         </Suspense>
       )}
-      <Nav onSignIn={onSignIn} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
-      <Hero onSignIn={onSignIn} loading={loading} onOpenTour={() => setTourOpen(true)} />
+      <Nav onSignIn={onSignIn} onEmailSignIn={openEmailSignIn} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
+      <Hero onSignIn={onSignIn} onEmailSignIn={openEmailSignIn} loading={loading} onOpenTour={() => setTourOpen(true)} />
       <Stats />
       <Problem />
       <Modules />

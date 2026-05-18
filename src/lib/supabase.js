@@ -15,6 +15,18 @@ export const signInWithGoogle = () =>
     options: { redirectTo: window.location.origin }
   })
 
+// Passwordless email sign-in for users whose email isn't a Google account
+// (e.g. domain mailboxes like support@taskflowco.in). The user gets a one-time
+// link in their inbox; clicking it lands them back on the app, signed in.
+export const signInWithEmailLink = (email) =>
+  supabase.auth.signInWithOtp({
+    email: String(email || '').trim(),
+    options: {
+      emailRedirectTo: window.location.origin,
+      shouldCreateUser: true,
+    },
+  })
+
 export const signOut = () => supabase.auth.signOut()
 
 // ── Profile ────────────────────────────────────────────────────────────────
