@@ -5,9 +5,22 @@ import LandingPage from './LandingPage.jsx'
 // Heavy / interaction-gated admin views are lazy so they don't bloat the initial bundle.
 import AnnouncementsBell from './AnnouncementsPanel.jsx'
 import SupportContactForm from './SupportContactForm.jsx'
-const SupportAdminView   = lazy(() => import('./SupportAdminView.jsx'))
-const MyTicketsView      = lazy(() => import('./MyTicketsView.jsx'))
-const AnnouncementsAdmin = lazy(() => import('./AnnouncementsAdmin.jsx'))
+// Wrap React.lazy so that a stale chunk hash (after a deploy) auto-reloads
+// the page once to fetch the fresh index.html instead of hanging Suspense.
+function lazyWithReload(importer) {
+  return lazy(() => importer().catch(err => {
+    const isChunkErr = /Failed to fetch dynamically imported module|Importing a module script failed/i.test(String(err?.message || err))
+    if (isChunkErr && !sessionStorage.getItem('tf-chunk-reloaded')) {
+      sessionStorage.setItem('tf-chunk-reloaded', '1')
+      window.location.reload()
+      return new Promise(() => {})  // hang while reload happens
+    }
+    throw err
+  }))
+}
+const SupportAdminView   = lazyWithReload(() => import('./SupportAdminView.jsx'))
+const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
+const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
 import { isAdminEmail } from './lib/supabase'
 import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid } from 'lucide-react'
 import {
@@ -23,8 +36,8 @@ import {
 import { handleAuthEvent, bootBlockedCheck } from './lib/authStateListener.js'
 import { useTrialGate } from './lib/useTrialGate.js'
 import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
-const UsersAdmin = lazy(() => import('./admin/UsersAdmin.jsx'))
-const OrgsAdmin  = lazy(() => import('./admin/OrgsAdmin.jsx'))
+const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
+const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
