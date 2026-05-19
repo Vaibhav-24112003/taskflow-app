@@ -7,7 +7,13 @@ let cachedGeo = null;
 async function probeGeo() {
   if (cachedGeo) return cachedGeo;
   try {
-    const r = await fetch(PROBE_IP_URL, { credentials: "omit" });
+    // Hard 2s timeout — the IP probe must NEVER block an auth-state callback.
+    // Supabase's GoTrue holds the auth lock during the callback and warns
+    // (then forcefully recovers) after 5s.
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 2000);
+    const r = await fetch(PROBE_IP_URL, { credentials: "omit", signal: ctrl.signal });
+    clearTimeout(t);
     if (!r.ok) return null;
     const j = await r.json();
     cachedGeo = { ip: j.ip, city: j.city, country: j.country_name };
@@ -15,21 +21,25 @@ async function probeGeo() {
   } catch { return null; }
 }
 
-async function logAuthEvent(user_id, event) {
+// Fire-and-forget — never awaited from auth-state callbacks so we don't hold
+// the GoTrue auth lock. If probeGeo or the insert is slow, that's fine.
+function logAuthEvent(user_id, event) {
   if (!user_id) return;
-  const geo = await probeGeo();
-  try {
-    await supabase.from("auth_events").insert({
-      user_id,
-      event,
-      user_agent: navigator.userAgent,
-      ip:         geo?.ip ?? null,
-      city:       geo?.city ?? null,
-      country:    geo?.country ?? null,
-    });
-  } catch (e) {
-    console.warn("auth_events insert failed", e);
-  }
+  (async () => {
+    const geo = await probeGeo();
+    try {
+      await supabase.from("auth_events").insert({
+        user_id,
+        event,
+        user_agent: navigator.userAgent,
+        ip:         geo?.ip ?? null,
+        city:       geo?.city ?? null,
+        country:    geo?.country ?? null,
+      });
+    } catch (e) {
+      console.warn("auth_events insert failed", e);
+    }
+  })();
 }
 
 export async function checkBlocked(user_id) {
@@ -60,16 +70,16 @@ export async function handleAuthEvent(event, session, onBlocked) {
   if (event === "SIGNED_IN") {
     const blocked = await checkBlocked(uid);
     if (blocked) {
-      await logAuthEvent(uid, "sign_in_blocked");
+      logAuthEvent(uid, "sign_in_blocked");  // fire-and-forget
       await supabase.auth.signOut();
       onBlocked?.(blocked);
       return true;
     }
-    await logAuthEvent(uid, "sign_in");
+    logAuthEvent(uid, "sign_in");  // fire-and-forget
   } else if (event === "SIGNED_OUT") {
-    await logAuthEvent(uid, "sign_out");
+    logAuthEvent(uid, "sign_out");
   } else if (event === "TOKEN_REFRESHED") {
-    await logAuthEvent(uid, "session_refresh");
+    logAuthEvent(uid, "session_refresh");
   }
   return false;
 }
