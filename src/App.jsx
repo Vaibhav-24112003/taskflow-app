@@ -20,6 +20,11 @@ import {
   getWorkTypeConfigs, getAllWorkTypeConfigs, insertWorkTypeConfig, updateWorkTypeConfig, deleteWorkTypeConfig,
   getUserWorksheetPrefs, upsertUserWorksheetPref
 } from './lib/supabase.js'
+import { handleAuthEvent, bootBlockedCheck } from './lib/authStateListener.js'
+import { useTrialGate } from './lib/useTrialGate.js'
+import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
+const UsersAdmin = lazy(() => import('./admin/UsersAdmin.jsx'))
+const OrgsAdmin  = lazy(() => import('./admin/OrgsAdmin.jsx'))
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
@@ -1327,6 +1332,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [showSupportAdmin,setShowSupportAdmin]=useState(false)
   const [supportTab,setSupportTab]=useState('send') // 'send' | 'mine'
   const [showAnnouncementsAdmin,setShowAnnouncementsAdmin]=useState(false)
+  const [adminModule,setAdminModule]=useState(null) // 'users' | 'orgs' | null
+  const trialGate=useTrialGate(activeOrg)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1583,7 +1590,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
   const loadWs=async function(){var r=await supabase.from('workspaces').select('*');if(r.data)setWorkspaces(r.data);};
   const createOrg=function(){setShowCreateOrg(true);};
-  const handleOrgBack=async function(){setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');await loadWS();var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r2.data)setOrgs(r2.data);};
+  const handleOrgBack=async function(){setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');await loadWS();var r2=await supabase.from('organizations').select('*').order('name').limit(100);if(r2.data)setOrgs(r2.data);};
   const openNew=s=>{setCreateStatus(s||statuses[0]);setEditTask(null)}
   const bf=t=>{if(fPriority&&t.priority!==fPriority)return false;if(search&&!t.title.toLowerCase().includes(search.toLowerCase()))return false;return true}
   const liveTasks=tasks.filter(t=>!t.archived_at)
@@ -1615,18 +1622,18 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       onGoWorkspace={id=>{localStorage.setItem('tf_lastWsId',id);setActiveWsId(id);setActiveOrg(null);}}
       onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);}}
       onGoOrgModule={(mod,tab,workType)=>{var o=activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab||'');setActiveWsId(null);setOrgNavTarget({module:mod,tab:tab||'',workType:workType||null,ts:Date.now()});}}
-      onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}
+      onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}
       onOpenTask={t=>{setEditTask(t);if(t.workspace_id&&t.workspace_id!==activeWsId){localStorage.setItem('tf_lastWsId',t.workspace_id);setActiveWsId(t.workspace_id);}}}
       onNewWorkspace={()=>setWsForm('new')}
     />}
 
     {/* TOP NAV */}
     <nav style={{height:52,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 16px',gap:5,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}>
         <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(14,42,71,0.35)'}}>✦</div>
         <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlowCo</span>
       </div>
-      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(14,42,71,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(14,42,71,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
+      <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(14,42,71,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(14,42,71,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
       {!activeOrg&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
       <div style={{display:'flex',alignItems:'center',gap:2,overflowX:'auto',flex:1,scrollbarWidth:'none'}}>
         {workspaces.map(ws=>{const active=ws.id===activeWsId;const wrgb=hexRgb(ws.color);return<button key={ws.id} onClick={()=>{localStorage.setItem('tf_lastWsId',ws.id);setActiveWsId(ws.id);setActiveOrg(null);setSearch('');setFPriority('')}} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,border:`1px solid ${active?`rgba(${wrgb},0.3)`:'transparent'}`,background:active?`rgba(${wrgb},0.1)`:'transparent',color:active?ws.color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?600:400,transition:G.trans,whiteSpace:'nowrap',fontFamily:G.font,flexShrink:0}} onMouseEnter={e=>{if(!active){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(!active){e.currentTarget.style.background='transparent';e.currentTarget.style.color='var(--tf-text-sub)'}}}><span>{ws.icon}</span>{ws.name}</button>})}
@@ -1724,6 +1731,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
         </div>;
       })()}
+      {/* Admin buttons — @taskflowco.in only */}
+      {isAdminEmail(cu?.email)&&<>
+        <button onClick={()=>{setAdminModule('users');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Users" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>🛡 Users</button>
+        <button onClick={()=>{setAdminModule('orgs');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Orgs" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>🏢 Orgs</button>
+      </>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAnnouncementsAdmin(true)}/>
       {/* Support / help icon */}
@@ -1762,8 +1774,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     </nav>
 
     {/* CONTENT */}
-    {!activeWs
-      ?activeOrg?<OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget}/>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+    {adminModule==='users'&&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><UsersAdmin/></Suspense>}
+    {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
+    {!adminModule&&!activeWs
+      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
@@ -13832,8 +13846,14 @@ export default function App(){
   },[session?.user?.email])
 
   useEffect(()=>{
+    const onBlocked=(b)=>alert('Your account has been blocked'+(b?.blocked_reason?': '+b.blocked_reason:'.'))
+    bootBlockedCheck(onBlocked)
+
     supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session)handleAuth(session.user);else{setLoading(false);initRef.current=true}})
-    const{data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+    const{data:{subscription}}=supabase.auth.onAuthStateChange(async(event,session)=>{
+      const wasBlocked=await handleAuthEvent(event,session,onBlocked)
+      if(wasBlocked){setSession(null);authIdRef.current=null;return}
+
       setSession(session)
       if(!session){authIdRef.current=null;setLoading(false);initRef.current=true;return}
       const isNew=authIdRef.current!==session.user.id
