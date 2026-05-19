@@ -5157,18 +5157,20 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               var wsClTotal=(d.__checklist||[]).length;
               var hasDetails=!!(d.__title||d.__description||d.__contact||wsClTotal>0);
               var totalCols=2+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStartDate?1:0)+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
-              var rowBg=allDone?'rgba(34,197,94,0.04)':ri%2?'rgba(14,42,71,0.025)':'var(--tf-bg)';
-              var startActive=!row.start_date||row.start_date<=todayS2;
               var isSel=selectedIds.has(row.id);
+              var rowBg=allDone?'linear-gradient(rgba(34,197,94,0.04),rgba(34,197,94,0.04)),var(--tf-bg)':ri%2?'linear-gradient(rgba(14,42,71,0.025),rgba(14,42,71,0.025)),var(--tf-bg)':'var(--tf-bg)';
+              var selBg='linear-gradient(rgba(99,102,241,0.08),rgba(99,102,241,0.08)),var(--tf-bg)';
+              var cellBg=isSel?selBg:rowBg;
+              var startActive=!row.start_date||row.start_date<=todayS2;
               return<React.Fragment key={row.id}>
-              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:isSel?'rgba(99,102,241,0.08)':rowBg,transition:'background 0.15s',cursor:'pointer'}}
+              <tr style={{borderBottom:wsIsExpanded?'none':'1px solid var(--tf-border)',background:cellBg,transition:'background 0.15s',cursor:'pointer'}}
                 onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='INPUT'||e.target.tagName==='BUTTON')return;toggleWsExpand(row.id);}}>
                 {/* Select checkbox — sticky left */}
-                <td style={{padding:'8px',textAlign:'center',position:'sticky',left:0,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,width:36,minWidth:36}}>
+                <td style={{padding:'8px',textAlign:'center',position:'sticky',left:0,zIndex:1,background:cellBg,width:36,minWidth:36}}>
                   <input type="checkbox" checked={isSel} onChange={function(){toggleSelect(row.id);}} onClick={function(e){e.stopPropagation();}} style={{cursor:'pointer',width:14,height:14}}/>
                 </td>
                 {/* Client — sticky left after checkbox */}
-                <td style={{padding:'10px 14px',position:'sticky',left:36,zIndex:1,background:isSel?'rgba(99,102,241,0.08)':rowBg,borderRight:'3px solid rgba(14,42,71,0.3)'}}>
+                <td style={{padding:'10px 14px',position:'sticky',left:36,zIndex:1,background:cellBg,borderRight:'3px solid rgba(14,42,71,0.3)'}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
                     <div style={{flex:1}}>
