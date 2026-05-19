@@ -93,6 +93,7 @@ function GlobalStyle({ lightMode }) {
   --tf-input:#0e1220;
   --tf-text:#eaecf5;--tf-text-sub:#5c6b87;--tf-text-mut:#26324a;
   --tf-shadow:rgba(0,0,0,0.55);--tf-shadow-lg:rgba(0,0,0,0.75);
+  --tf-table-header:#1a2538;
 }
 [data-theme="light"]{
   --tf-bg:#f5f7fa;--tf-panel:rgba(255,255,255,0.97);--tf-overlay:rgba(15,20,40,0.55);
@@ -100,6 +101,7 @@ function GlobalStyle({ lightMode }) {
   --tf-border:rgba(0,0,0,0.09);--tf-border-hov:rgba(0,0,0,0.18);
   --tf-input:#f8f9fd;
   --tf-text:#0a1929;--tf-text-sub:#475569;--tf-text-mut:#c0c9dd;
+  --tf-table-header:#e3e8ef;
   --tf-shadow:rgba(0,0,0,0.08);--tf-shadow-lg:rgba(0,0,0,0.15);
 }
 *{box-sizing:border-box}
@@ -5067,13 +5069,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',height:'calc(100vh - 240px)',minHeight:240}} onClick={function(){setHeaderFilterOpen(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead style={{position:'sticky',top:0,zIndex:5,boxShadow:'0 2px 6px rgba(0,0,0,0.08)'}}>
-            <tr style={{background:'rgba(91,120,155,0.16)'}}>
+            <tr style={{background:'var(--tf-table-header)'}}>
               {/* Select-all checkbox — sticky left */}
-              <th style={{padding:'10px 8px',textAlign:'center',position:'sticky',left:0,zIndex:6,background:'rgba(91,120,155,0.16)',borderBottom:'2px solid rgba(14,42,71,0.4)',width:36,minWidth:36}}>
+              <th style={{padding:'10px 8px',textAlign:'center',position:'sticky',left:0,zIndex:6,background:'var(--tf-table-header)',borderBottom:'2px solid rgba(14,42,71,0.4)',width:36,minWidth:36}}>
                 <input type="checkbox" checked={pagedRows.length>0&&pagedRows.every(function(r){return selectedIds.has(r.id);})} onChange={function(){toggleSelectAll(pagedRows);}} style={{cursor:'pointer',width:14,height:14}} title="Select all on this page"/>
               </th>
               {/* Client — sticky left after checkbox */}
-              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#0e2a47':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(14,42,71,0.4)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:36,zIndex:6,background:'rgba(91,120,155,0.16)',cursor:'pointer',userSelect:'none',borderRight:'3px solid rgba(14,42,71,0.35)'}}>
+              <th onClick={function(){toggleSort('client');}} style={{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:sortCol==='client'?'#0e2a47':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(14,42,71,0.4)',whiteSpace:'nowrap',minWidth:200,position:'sticky',left:36,zIndex:6,background:'var(--tf-table-header)',cursor:'pointer',userSelect:'none',borderRight:'3px solid rgba(14,42,71,0.35)'}}>
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   Client
                   <span style={{fontSize:9,opacity:0.7}}>{sortCol==='client'?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
