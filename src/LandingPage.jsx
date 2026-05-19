@@ -764,7 +764,7 @@ function Footer() {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
-          <span>© 2026 TaskFlowCo · All rights reserved</span>
+          <span>© 2026 TaskFlowCo · All rights reserved · Made in India 🇮🇳</span>
           <span>v 2.4.1 · all systems operational</span>
         </div>
       </div>
