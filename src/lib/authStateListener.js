@@ -42,8 +42,10 @@ export async function checkBlocked(user_id) {
   return data?.is_blocked ? data : null;
 }
 
-export async function bootBlockedCheck(onBlocked) {
-  const { data: { user } } = await supabase.auth.getUser();
+// IMPORTANT: pass the already-resolved user (from supabase.auth.getSession())
+// — calling supabase.auth.getUser() here would race the main getSession()
+// call and steal the auth lock, leaving the client unauthenticated.
+export async function bootBlockedCheck(user, onBlocked) {
   if (!user) return;
   const blocked = await checkBlocked(user.id);
   if (blocked) {

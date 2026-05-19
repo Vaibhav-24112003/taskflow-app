@@ -13847,9 +13847,17 @@ export default function App(){
 
   useEffect(()=>{
     const onBlocked=(b)=>alert('Your account has been blocked'+(b?.blocked_reason?': '+b.blocked_reason:'.'))
-    bootBlockedCheck(onBlocked)
 
-    supabase.auth.getSession().then(({data:{session}})=>{setSession(session);if(session)handleAuth(session.user);else{setLoading(false);initRef.current=true}})
+    supabase.auth.getSession().then(({data:{session}})=>{
+      setSession(session)
+      if(session){
+        handleAuth(session.user)
+        // Run blocked-check *after* session is established (no lock contention)
+        bootBlockedCheck(session.user, onBlocked)
+      } else {
+        setLoading(false); initRef.current=true
+      }
+    })
     const{data:{subscription}}=supabase.auth.onAuthStateChange(async(event,session)=>{
       const wasBlocked=await handleAuthEvent(event,session,onBlocked)
       if(wasBlocked){setSession(null);authIdRef.current=null;return}
