@@ -249,7 +249,8 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR }) {
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0e2a47', boxShadow: '0 0 12px #0e2a47' }} />
             Built for CA · CS · CMA · Tax & Legal Consultants · Advocates
           </div>
-          <h1 className="lp-h1">The operating system<br />for your <span style={{ background: 'linear-gradient(90deg,#0e2a47,#5b8cb8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>practice</span>.</h1>
+          <h1 className="lp-h1" style={{ marginBottom: 12 }}>Stop juggling.<br /><span style={{ background: 'linear-gradient(90deg,#0e2a47,#5b8cb8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Start flowing.</span></h1>
+          <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>The operating system for your practice.</p>
           <p className="lp-lede" style={{ margin: '24px auto 0' }}>Worksheets, recurring work, client portal, billing and team workload — all in one place. For service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
             <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
