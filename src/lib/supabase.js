@@ -6,7 +6,30 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// In-process serial lock — replaces Supabase's default navigator.locks based
+// auth lock, which causes "lock was released because another request stole it"
+// errors when the user has multiple tabs open or several internal supabase
+// calls race during boot. This keeps lock scope inside this tab only —
+// each tab maintains its own consistent auth state, which is what we want.
+const _locks = new Map()
+function processLock(name, _acquireTimeout, fn) {
+  const prev = _locks.get(name) || Promise.resolve()
+  let release
+  const next = new Promise(r => { release = r })
+  _locks.set(name, prev.then(() => next))
+  return prev.then(async () => {
+    try { return await fn() } finally { release() }
+  })
+}
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    lock: processLock,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const signInWithGoogle = () =>
