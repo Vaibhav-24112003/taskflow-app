@@ -12423,15 +12423,15 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
-      {/* Left sidebar — no separate header row, back button lives here */}
-      <div style={{width:sidebarW,flexShrink:0,background:'var(--tf-panel)',borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
-        <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
-          {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
+      {/* Left sidebar — dark navy, no separate header row, back button lives here */}
+      <div style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
+        <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
+          {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'#8696b3',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
             <span style={{flexShrink:0}}>&#x2190;</span>
-            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#0e2a47',fontWeight:700}}>{currentModule?currentModule.label:'Modules'}</span>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#7fa3c7',fontWeight:700}}>{currentModule?currentModule.label:'Modules'}</span>
           </button>}
           <button onClick={function(){setSidebarOpen(!sidebarOpen);}} title={sidebarOpen?'Minimize sidebar':'Expand sidebar'}
-            style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:11,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
+            style={{background:'none',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#8696b3',fontSize:11,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
         </div>
         <div style={{flex:1,overflowY:'auto',padding:sidebarOpen?'0 6px 10px':'0 4px 10px'}}>
           {MODULES.map(function(m){
@@ -12439,15 +12439,15 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             var hasTabs=m.tabs&&m.tabs.length>1;
             return<div key={m.id}>
               <button onClick={function(){openModule(m);if(!sidebarOpen)setSidebarOpen(true);}} title={sidebarOpen?'':m.label}
-                style={{width:'100%',textAlign:'left',background:isActive?'rgba(14,42,71,0.12)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
-                onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(14,42,71,0.06)';}}
+                style={{width:'100%',textAlign:'left',background:isActive?'rgba(255,255,255,0.08)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
+                onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.04)';}}
                 onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-                <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{flexShrink:0,color:isActive?'#0e2a47':'var(--tf-text-sub)'}}/>
-                {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#0e2a47':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
+                <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{flexShrink:0,color:isActive?'#7fa3c7':'#8696b3'}}/>
+                {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#ffffff':'#c7d2e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:32,marginBottom:6}}>
                 {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
-                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'6px 10px',cursor:'pointer',fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?'#0e2a47':'var(--tf-text-sub)',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #0e2a47':'2px solid transparent',marginBottom:1}}>
+                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'6px 10px',cursor:'pointer',fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?'#ffffff':'#8696b3',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #7fa3c7':'2px solid transparent',marginBottom:1}}>
                   {t.label}
                 </button>;})}
               </div>}
