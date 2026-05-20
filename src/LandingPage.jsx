@@ -6,6 +6,7 @@ import { signInWithEmailLink } from './lib/supabase'
 // Heavy tour modals are only loaded when the user opens them.
 const TourModal   = lazy(() => import('./LandingTour.jsx'))
 const LaunchTour  = lazy(() => import('./LaunchTour.jsx'))
+const ITRTour     = lazy(() => import('./ITRTour.jsx'))
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 const hex2rgb = hex => {
@@ -238,7 +239,7 @@ function HeroMosaic() {
   )
 }
 
-function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch }) {
+function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
@@ -255,6 +256,7 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch }) {
               {loading ? 'Signing in…' : 'Start free trial →'}
             </button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Launch tour</button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenITR} style={{ background: 'rgba(14,42,71,.08)', borderColor: 'rgba(14,42,71,.3)', color: '#0e2a47' }}>📊 ITR Season</button>
             <button className="lp-btn lp-btn-link" onClick={onOpenTour}>Website tour →</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
@@ -928,6 +930,7 @@ export default function LandingPage({ onSignIn, loading }) {
   }, [dark])
   const [tourOpen,   setTourOpen]   = useState(false)
   const [launchOpen, setLaunchOpen] = useState(false)
+  const [itrOpen,    setItrOpen]    = useState(false)
   const [authOpen,   setAuthOpen]   = useState(false)
   const openAuth = () => setAuthOpen(true)
   return (
@@ -949,8 +952,13 @@ export default function LandingPage({ onSignIn, loading }) {
           <LaunchTour open={launchOpen} onClose={() => setLaunchOpen(false)} />
         </Suspense>
       )}
+      {itrOpen && (
+        <Suspense fallback={<div className="lp-modal-overlay"><div style={{padding:24,color:'var(--lp-text-sub)',fontSize:13}}>Loading…</div></div>}>
+          <ITRTour open={itrOpen} onClose={() => setItrOpen(false)} />
+        </Suspense>
+      )}
       <Nav onOpenAuth={openAuth} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
-      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} />
+      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} onOpenITR={() => setItrOpen(true)} />
       <Stats />
       <Problem />
       <Modules />
