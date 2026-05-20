@@ -1,5 +1,6 @@
 // ITRTour.jsx — ITR Season 2025-26 animated demo (light mode, 50s)
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import TaskflowLogo from './components/TaskflowLogo.jsx'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const Easing = {
@@ -82,17 +83,7 @@ function AppShell({ view, children }) {
       {/* Sidebar */}
       <div style={{ width:216, background:C.sidebar, flexShrink:0, display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'17px 18px 14px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:9 }}>
-            <div style={{ width:28, height:28, borderRadius:7, background:'rgba(255,255,255,0.1)',
-              display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <svg width="15" height="15" viewBox="0 0 100 100" fill="none">
-                <path d="M12 10 Q29 50 50 90 Q71 50 88 10" stroke="#fff" strokeWidth="15" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <span style={{ fontFamily:FD, fontSize:15, fontWeight:800, color:'#fff', letterSpacing:'-0.04em' }}>
-              taskflo<span style={{ color:'#7fa3c7' }}>vco</span>
-            </span>
-          </div>
+          <TaskflowLogo size={15} inkColor="#fff" coColor="#7fa3c7" />
         </div>
         <div style={{ padding:'12px 10px', display:'flex', flexDirection:'column', gap:2 }}>
           {[
@@ -140,7 +131,7 @@ function AppShell({ view, children }) {
           <div style={{ display:'flex', alignItems:'center', marginBottom:12 }}>
             <div>
               <div style={{ fontSize:21, fontWeight:800, color:C.text, letterSpacing:'-0.02em' }}>Worksheets</div>
-              <div style={{ fontSize:12, color:C.sub, marginTop:1 }}>10 clients · 5 work types</div>
+              <div style={{ fontSize:12, color:C.sub, marginTop:1 }}>ITR 2025-26 · All clients</div>
             </div>
             <div style={{ flex:1 }}/>
             {['↻ Recalc Dates','Archive','↓ Export'].map((b,i) => (
@@ -413,7 +404,7 @@ function FunnelView({ t }) {
       })}
       <div style={{ marginTop:4, paddingTop:10, borderTop:`1px solid ${C.border}`,
         fontFamily:FM, fontSize:11, color:C.sub, textAlign:'center' }}>
-        Total: {CLIENTS.length} clients across all stages · Deadline: 31 Jul 2026
+        All clients across all stages · Deadline: 31 Jul 2026
       </div>
     </div>
   )
@@ -455,17 +446,7 @@ function SceneIntro() {
               backgroundSize:'80px 80px', opacity:0.7,
               maskImage:'radial-gradient(ellipse at center,black,transparent 70%)' }}/>
             <div style={{ opacity:logo, transform:`scale(${0.9+0.1*logo})`, marginBottom:36 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-                <div style={{ width:54, height:54, borderRadius:14, background:'rgba(255,255,255,0.1)',
-                  border:'1px solid rgba(255,255,255,0.14)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <svg width="28" height="28" viewBox="0 0 100 100" fill="none">
-                    <path d="M12 10 Q29 50 50 90 Q71 50 88 10" stroke="#fff" strokeWidth="14" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <span style={{ fontFamily:FD, fontSize:40, fontWeight:800, color:'#fff', letterSpacing:'-0.04em' }}>
-                  taskflo<span style={{ color:'#7fa3c7' }}>vco</span>
-                </span>
-              </div>
+              <TaskflowLogo size={40} inkColor="#fff" coColor="#7fa3c7" />
             </div>
             <div style={{ textAlign:'center', opacity:h1, transform:`translateY(${(1-h1)*22}px)`, marginBottom:24 }}>
               <div style={{ fontFamily:FD, fontSize:92, fontWeight:800, color:'#fff',
@@ -479,7 +460,7 @@ function SceneIntro() {
                 fontFamily:FM, fontSize:14, color:'#fca5a5', fontWeight:700, letterSpacing:'0.07em' }}>
                 <span style={{ width:8, height:8, borderRadius:8, background:'#ef4444',
                   boxShadow:'0 0 0 4px rgba(239,68,68,0.22)' }}/>
-                Deadline: 31 July 2026 · 10 clients · ITR filings
+                Deadline: 31 July 2026 · ITR filings
               </div>
             </div>
             <div style={{ display:'flex', gap:10, opacity:chips, transform:`translateY(${(1-chips)*10}px)` }}>
