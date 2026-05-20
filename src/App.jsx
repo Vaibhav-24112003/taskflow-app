@@ -36,6 +36,7 @@ import {
 import { handleAuthEvent, bootBlockedCheck } from './lib/authStateListener.js'
 import { useTrialGate } from './lib/useTrialGate.js'
 import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
+import TaskflowLogo from './components/TaskflowLogo.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 
@@ -237,8 +238,9 @@ function AuthScreen({ inviteToken }){
     <div style={{position:'absolute',top:'15%',left:'30%',width:500,height:500,background:'radial-gradient(ellipse,rgba(14,42,71,0.08) 0%,transparent 65%)',pointerEvents:'none'}}/>
     <div style={{position:'absolute',bottom:'10%',right:'20%',width:350,height:350,background:'radial-gradient(ellipse,rgba(16,185,129,0.05) 0%,transparent 65%)',pointerEvents:'none'}}/>
     <div style={{maxWidth:420,width:'100%',padding:'44px 40px',textAlign:'center',position:'relative'}}>
-      <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 20px',boxShadow:'0 8px 32px rgba(14,42,71,0.4)'}}>✦</div>
-      <h1 style={{fontSize:32,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.04em',fontFamily:G.fontDisplay}}>TaskFlowCo</h1>
+      <div style={{margin:'0 auto 16px',display:'flex',justifyContent:'center'}}>
+        <TaskflowLogo size={40} inkColor="var(--tf-text)" />
+      </div>
       {inviteToken
         ?<div style={{background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.22)',borderRadius:G.radiusMd,padding:'12px 16px',marginBottom:24}}>
           <p style={{fontSize:13,color:'#8fa5be',margin:0,lineHeight:1.6}}>🎉 You've been invited!<br/>Sign in to accept your workspace invitation.</p>
@@ -1642,9 +1644,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
 
     {/* TOP NAV */}
     <nav style={{height:52,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',backdropFilter:G.blur,WebkitBackdropFilter:G.blur,display:'flex',alignItems:'center',padding:'0 16px',gap:5,flexShrink:0,position:'sticky',top:0,zIndex:100}}>
-      <div style={{display:'flex',alignItems:'center',gap:8,marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}>
-        <div style={{width:28,height:28,borderRadius:8,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,boxShadow:'0 2px 10px rgba(14,42,71,0.35)'}}>✦</div>
-        <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',letterSpacing:'-0.03em',fontFamily:G.fontDisplay}}>TaskFlowCo</span>
+      <div style={{display:'flex',alignItems:'center',marginRight:6,flexShrink:0,cursor:'pointer'}} onClick={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}>
+        <TaskflowLogo size={18} inkColor="var(--tf-text)" />
       </div>
       <button onClick={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}} title="Home — All Modules" style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:G.radiusSm,background:!activeWsId&&!activeOrg?'rgba(14,42,71,0.12)':'var(--tf-surface)',border:'1px solid '+ (!activeWsId&&!activeOrg?'rgba(14,42,71,0.3)':'var(--tf-border)'),color:!activeWsId&&!activeOrg?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:!activeWsId&&!activeOrg?700:500,flexShrink:0,fontFamily:G.font,transition:G.trans,whiteSpace:'nowrap'}} onMouseEnter={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='var(--tf-text)'}}} onMouseLeave={e=>{if(activeWsId||activeOrg){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>⌂ Home</button>
       {!activeOrg&&<><div style={{width:1,height:16,background:'var(--tf-border)',marginRight:3,flexShrink:0}}/>
