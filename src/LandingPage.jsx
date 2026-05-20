@@ -305,7 +305,7 @@ function Problem() {
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">The problem</div>
-          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your firm runs on willpower.<br /><span style={{ color: 'var(--lp-text-sub)' }}>It shouldn't.</span></h2>
+          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your team works hard.<br /><span style={{ color: 'var(--lp-text-sub)' }}>Your systems should too.</span></h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ padding: '24px 26px', background: 'rgba(239,68,68,.04)', border: '1px solid rgba(239,68,68,.18)', borderRadius: 14 }}>
