@@ -253,14 +253,14 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR }) {
           <p className="lp-lede" style={{ margin: '24px auto 0' }}>Worksheets, recurring work, client portal, billing and team workload — all in one place. For service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
             <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
-              {loading ? 'Signing in…' : 'Start free trial →'}
+              {loading ? 'Signing in…' : 'Start free →'}
             </button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Launch tour</button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenITR} style={{ background: 'rgba(14,42,71,.08)', borderColor: 'rgba(14,42,71,.3)', color: '#0e2a47' }}>📊 ITR Season</button>
             <button className="lp-btn lp-btn-link" onClick={onOpenTour}>Website tour →</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
-            <span>✓ No credit card</span><span>✓ 14-day trial</span><span>✓ Setup in 10 minutes</span>
+            <span>✓ No credit card</span><span>✓ Setup in 10 minutes</span>
           </div>
         </div>
         <HeroMosaic />
@@ -643,7 +643,7 @@ function FAQ() {
     ['How long does setup take?', 'Most firms are live in under 30 minutes. Import your client list as CSV, pick the work types you handle, invite your team.'],
     ['Can we migrate from Excel / existing tools?', 'Yes. CSV import for clients and master data. We also help migrate from Practice Pro, Munimji, and similar tools — included in onboarding.'],
     ['Do clients need an account?', 'Only if they use the Client Portal. You can also operate TaskFlowCo entirely internally without exposing it to clients.'],
-    ['What about pricing?', 'Per-user monthly pricing. The first 14 days are free with no credit card. We have firm-wide plans starting at 5 seats.'],
+    ['What about pricing?', 'Per-user monthly pricing with no credit card required to start. We have firm-wide plans starting at 5 seats.'],
     ['Where is our data stored?', 'In AWS Mumbai (ap-south-1). Encrypted at rest with AES-256. Daily backups. Your data is yours — full export available any time.'],
     ['Does it integrate with Tally / Zoho?', 'Yes. Billing exports to Tally XML and Zoho Books. We also support Gmail OAuth for client communication.'],
   ]
@@ -727,7 +727,7 @@ function FinalCTA({ onOpenAuth, loading }) {
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ textAlign: 'center', position: 'relative' }}>
         <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />deadline day quiet.</h2>
-        <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Start free for 14 days. No credit card. Bring your team. We'll get out of the way.</p>
+        <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Get started in minutes. No credit card. Bring your team. We'll get out of the way.</p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
             {loading ? 'Signing in…' : 'Start free trial →'}
