@@ -12407,11 +12407,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             {tab==='portal'&&<ClientConnectModule org={org} supabase={supabase} cu={cu}/>}
             {tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
           </>
-        : <ModuleLock module="comms" onContactSales={()=>{setLockedModule('comms');window.open('mailto:sales@taskflowco.in?subject=Activate Comms for '+(org?.name||''),'_blank');}}/>)}
+        : <ModuleLock module="comms" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Comms for '+(org?.name||''),'_blank')}/>)}
       {/* Billing — paid module */}
       {orgModule==='billing'&&(hasModule('billing')
         ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
-        : <ModuleLock module="billing" onContactSales={()=>{setLockedModule('billing');window.open('mailto:sales@taskflowco.in?subject=Activate Billing for '+(org?.name||''),'_blank');}}/>)}
+        : <ModuleLock module="billing" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Billing for '+(org?.name||''),'_blank')}/>)}
       {/* Master Data */}
       {orgModule==='masterdata'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}

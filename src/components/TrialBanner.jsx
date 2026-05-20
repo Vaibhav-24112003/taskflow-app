@@ -42,7 +42,7 @@ export default function TrialBanner({ gate, org, onRenew }) {
   );
 }
 
-export function ModuleLock({ module, onContactSales }) {
+export function ModuleLock({ module, onContactSales, onBack }) {
   const cfg = {
     comms:   { title: "Comms", tagline: "Reach 1,000 clients in one go.", price: "From ₹2,000/month" },
     billing: { title: "Billing", tagline: "GST-ready invoicing your accountant won't curse at.", price: "From ₹2,500/month" },
@@ -50,20 +50,41 @@ export function ModuleLock({ module, onContactSales }) {
   }[module] ?? { title: module, tagline: "Paid add-on for TaskFlow.", price: "Contact sales" };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(5,7,18,.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 900 }}>
-      <div style={{ width: 560, background: "rgba(11,15,28,.97)", border: "1px solid var(--tf-border-hov)", borderRadius: 16, padding: "32px 36px", boxShadow: "0 30px 80px rgba(0,0,0,.7)" }}>
-        <div className="mono" style={{ fontSize: 11, color: "var(--tf-accent)", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700 }}>{cfg.title} · paid module</div>
-        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>{cfg.tagline}</div>
-        <div style={{ fontSize: 14, color: "var(--tf-text-sub)", lineHeight: 1.6, margin: "14px 0 20px" }}>
+    <div
+      style={{ position: "fixed", inset: 0, background: "var(--tf-overlay)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 900 }}
+      onClick={(e) => { if (e.target === e.currentTarget) onBack?.(); }}
+    >
+      <div style={{ width: 520, maxWidth: "calc(100vw - 32px)", background: "var(--tf-panel)", border: "1px solid var(--tf-border-hov)", borderRadius: 16, padding: "28px 32px", boxShadow: "0 24px 64px var(--tf-shadow-lg)" }}>
+        {/* Header row with back button */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <div className="mono" style={{ fontSize: 11, color: "var(--tf-accent)", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700 }}>{cfg.title} · paid module</div>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6, color: "var(--tf-text)" }}>{cfg.tagline}</div>
+          </div>
+          {onBack && (
+            <button onClick={onBack}
+              style={{ flexShrink: 0, marginLeft: 16, padding: "6px 10px", fontSize: 18, lineHeight: 1, background: "transparent", color: "var(--tf-text-sub)", border: "1px solid var(--tf-border)", borderRadius: 8, cursor: "pointer" }}
+              title="Go back">
+              ✕
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: 14, color: "var(--tf-text-sub)", lineHeight: 1.6, marginBottom: 20 }}>
           This module isn't included in your current plan. Talk to our team and we'll have you up in 24 hours.
         </div>
         <div style={{ display: "flex", gap: 10 }}>
+          {onBack && (
+            <button onClick={onBack}
+              style={{ padding: "11px 18px", fontSize: 13, fontWeight: 600, background: "transparent", color: "var(--tf-text-sub)", border: "1px solid var(--tf-border)", borderRadius: 9, cursor: "pointer" }}>
+              ← Go back
+            </button>
+          )}
           <button onClick={onContactSales}
-            style={{ flex: 1, padding: "12px 18px", fontSize: 13, fontWeight: 700, background: "var(--tf-accent)", color: "#fff", border: 0, borderRadius: 9, cursor: "pointer" }}>
+            style={{ flex: 1, padding: "11px 18px", fontSize: 13, fontWeight: 700, background: "var(--tf-accent)", color: "#fff", border: 0, borderRadius: 9, cursor: "pointer" }}>
             Talk to sales · 15 min call
           </button>
         </div>
-        <div className="mono" style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--tf-border)", fontSize: 11, color: "var(--tf-text-mut)", textAlign: "center" }}>
+        <div className="mono" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--tf-border)", fontSize: 11, color: "var(--tf-text-mut)", textAlign: "center" }}>
           {cfg.price} · billed annually
         </div>
       </div>
