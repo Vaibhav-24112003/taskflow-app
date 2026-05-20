@@ -1790,7 +1790,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {adminModule==='users'&&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><UsersAdmin/></Suspense>}
     {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
     {!adminModule&&!activeWs
-      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
@@ -12269,7 +12269,8 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
 }
 
 // ── Org Dashboard ──────────────────────────────────────────────────
-function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
+function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}){
+  const hasModule=(m)=>trialGate?.hasModule?.(m)??false;
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
@@ -12400,11 +12401,17 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget}){
       {orgModule==='team'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
       {/* Analytics */}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {/* Communication */}
-      {orgModule==='comms'&&tab==='portal'&&<ClientConnectModule org={org} supabase={supabase} cu={cu}/>}
-      {orgModule==='comms'&&tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {/* Billing */}
-      {orgModule==='billing'&&<BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>}
+      {/* Communication — paid module */}
+      {orgModule==='comms'&&(hasModule('comms')
+        ? <>
+            {tab==='portal'&&<ClientConnectModule org={org} supabase={supabase} cu={cu}/>}
+            {tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+          </>
+        : <ModuleLock module="comms" onContactSales={()=>{setLockedModule('comms');window.open('mailto:sales@taskflowco.in?subject=Activate Comms for '+(org?.name||''),'_blank');}}/>)}
+      {/* Billing — paid module */}
+      {orgModule==='billing'&&(hasModule('billing')
+        ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
+        : <ModuleLock module="billing" onContactSales={()=>{setLockedModule('billing');window.open('mailto:sales@taskflowco.in?subject=Activate Billing for '+(org?.name||''),'_blank');}}/>)}
       {/* Master Data */}
       {orgModule==='masterdata'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
