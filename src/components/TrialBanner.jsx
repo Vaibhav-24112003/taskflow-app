@@ -14,7 +14,7 @@ export default function TrialBanner({ gate, org, onRenew }) {
     critical: { color: "#f59e0b", bg: "rgba(245,158,11,.1)", border: "rgba(245,158,11,.3)", icon: "!",
       title: `Trial ends in ${gate.daysLeft} ${gate.daysLeft === 1 ? "day" : "days"} — your team will lose write access.`,
       sub: "You'll keep read-only access for 60 days after that. Renew now to avoid the lock.",
-      cta: "Renew · ₹48,000/yr", dismissable: false },
+      cta: "Renew now", dismissable: false },
     expired:  { color: "#ef4444", bg: "rgba(239,68,68,.1)", border: "rgba(239,68,68,.3)", icon: "✕",
       title: `Your trial ended. ${org.name} is read-only.`,
       sub: "You can still browse and export data. New tasks, edits, and invoices are paused until you renew.",
@@ -44,10 +44,10 @@ export default function TrialBanner({ gate, org, onRenew }) {
 
 export function ModuleLock({ module, onContactSales, onBack }) {
   const cfg = {
-    comms:   { title: "Comms", tagline: "Reach 1,000 clients in one go.", price: "From ₹2,000/month" },
-    billing: { title: "Billing", tagline: "GST-ready invoicing your accountant won't curse at.", price: "From ₹2,500/month" },
-    portal:  { title: "Client Portal", tagline: "Let clients see status and upload documents themselves.", price: "From ₹1,500/month" },
-  }[module] ?? { title: module, tagline: "Paid add-on for TaskFlow.", price: "Contact sales" };
+    comms:   { title: "Comms", tagline: "Reach 1,000 clients in one go." },
+    billing: { title: "Billing", tagline: "GST-ready invoicing your accountant won't curse at." },
+    portal:  { title: "Client Portal", tagline: "Let clients see status and upload documents themselves." },
+  }[module] ?? { title: module, tagline: "Paid add-on for TaskFlow." };
 
   return (
     <div
@@ -83,9 +83,6 @@ export function ModuleLock({ module, onContactSales, onBack }) {
             style={{ flex: 1, padding: "11px 18px", fontSize: 13, fontWeight: 700, background: "var(--tf-accent)", color: "#fff", border: 0, borderRadius: 9, cursor: "pointer" }}>
             Talk to sales · 15 min call
           </button>
-        </div>
-        <div className="mono" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--tf-border)", fontSize: 11, color: "var(--tf-text-mut)", textAlign: "center" }}>
-          {cfg.price} · billed annually
         </div>
       </div>
     </div>
