@@ -3,8 +3,9 @@ import SupportContactForm from './SupportContactForm.jsx'
 import TaskflowLogo from './components/TaskflowLogo.jsx'
 import { signInWithEmailLink } from './lib/supabase'
 
-// Heavy tour modal is only loaded when the user opens it.
-const TourModal = lazy(() => import('./LandingTour.jsx'))
+// Heavy tour modals are only loaded when the user opens them.
+const TourModal   = lazy(() => import('./LandingTour.jsx'))
+const LaunchTour  = lazy(() => import('./LaunchTour.jsx'))
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 const hex2rgb = hex => {
@@ -237,7 +238,7 @@ function HeroMosaic() {
   )
 }
 
-function Hero({ onOpenAuth, loading, onOpenTour }) {
+function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
@@ -253,8 +254,8 @@ function Hero({ onOpenAuth, loading, onOpenTour }) {
             <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
               {loading ? 'Signing in…' : 'Start free trial →'}
             </button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenTour}>Website tour →</button>
-            <button className="lp-btn lp-btn-link">Book a demo</button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Launch tour</button>
+            <button className="lp-btn lp-btn-link" onClick={onOpenTour}>Website tour →</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
             <span>✓ No credit card</span><span>✓ 14-day trial</span><span>✓ Setup in 10 minutes</span>
@@ -925,8 +926,9 @@ export default function LandingPage({ onSignIn, loading }) {
   useEffect(() => {
     try { localStorage.setItem('lp_theme', dark ? 'dark' : 'light') } catch (_) {}
   }, [dark])
-  const [tourOpen, setTourOpen] = useState(false)
-  const [authOpen, setAuthOpen] = useState(false)
+  const [tourOpen,   setTourOpen]   = useState(false)
+  const [launchOpen, setLaunchOpen] = useState(false)
+  const [authOpen,   setAuthOpen]   = useState(false)
   const openAuth = () => setAuthOpen(true)
   return (
     <div className="lp-root" data-theme={dark ? 'dark' : 'light'}>
@@ -942,8 +944,13 @@ export default function LandingPage({ onSignIn, loading }) {
           <TourModal open={tourOpen} onClose={() => setTourOpen(false)} />
         </Suspense>
       )}
+      {launchOpen && (
+        <Suspense fallback={<div className="lp-modal-overlay"><div style={{padding:24,color:'var(--lp-text-sub)',fontSize:13}}>Loading…</div></div>}>
+          <LaunchTour open={launchOpen} onClose={() => setLaunchOpen(false)} />
+        </Suspense>
+      )}
       <Nav onOpenAuth={openAuth} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
-      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} />
+      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} />
       <Stats />
       <Problem />
       <Modules />
