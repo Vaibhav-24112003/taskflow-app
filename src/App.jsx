@@ -7639,8 +7639,10 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan}){
   var [rows,setRows]=useState([]);
   var [clients,setClients]=useState([]);
-  var [allClients,setAllClients]=useState([]); // all org clients (for Create Task dropdown)
+  var [allClients,setAllClients]=useState([]);
   var [worksheets,setWorksheets]=useState([]);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
   var [orgMembers,setOrgMembers]=useState([]);
   var [loading,setLoading]=useState(true);
   var [filter,setFilter]=useState('all');
@@ -7679,46 +7681,44 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   },[org.id,cu.id]);
 
   async function load(){
-    setLoading(true);
+    setLoading(true);setLoadError(null);
+    if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');},12000);
     try{
-    var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(3000);
-    if(rr.error){showToast('Failed to load tasks: '+rr.error.message,'err');setLoading(false);return;}
-    var rowData=rr.data||[];
-    // Step 1: filter to rows where the viewed member is assigned
-    var targetId=viewMemberId;
-    var assignedRows=rowData.filter(function(r){
-      var d=r.data||{};
-      if(d.__assignee===targetId)return true;
-      var keys=Object.keys(d);
-      for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===targetId)return true;}
-      return false;
-    });
-    // Step 2: load worksheets for those rows to get work_type
-    var wsIds=Array.from(new Set(assignedRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
-    var wsData=[];
-    if(wsIds.length>0){
-      var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds.slice(0,500)).limit(500);
-      wsData=rw.data||[];
-    }
-    setWorksheets(wsData);
-    // Filter by start_date: only show rows where today >= start_date (or no start_date set)
-    var todayLocal2=new Date();todayLocal2.setHours(0,0,0,0);
-    var todayStr2=todayLocal2.getFullYear()+'-'+String(todayLocal2.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal2.getDate()).padStart(2,'0');
-    setRows(assignedRows.filter(function(r){return !r.start_date||r.start_date<=todayStr2;}));
-    // Load all clients of this org (for task creation dropdown + row display)
-    var rcAll=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
-    setAllClients(rcAll.data||[]);
-    setClients(rcAll.data||[]);
-    // Load org members (for hierarchy dropdowns in Create Task form)
-    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
-    var mlist=rm.data||[];
-    if(mlist.length>0){
-      var ids=mlist.map(function(m){return m.user_id;});
-      var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
-      setOrgMembers(rp.data||[]);
-    }
-    }catch(e){console.error('Dashboard load error:',e);}
-    setLoading(false);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(3000);
+      if(rr.error){showToast('Failed to load tasks: '+rr.error.message,'err');return;}
+      var rowData=rr.data||[];
+      var targetId=viewMemberId;
+      var assignedRows=rowData.filter(function(r){
+        var d=r.data||{};
+        if(d.__assignee===targetId)return true;
+        var keys=Object.keys(d);
+        for(var i=0;i<keys.length;i++){if(keys[i].indexOf('__h_')===0&&d[keys[i]]===targetId)return true;}
+        return false;
+      });
+      var wsIds=Array.from(new Set(assignedRows.map(function(r){return r.worksheet_id;}).filter(Boolean)));
+      var wsData=[];
+      if(wsIds.length>0){
+        var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds.slice(0,500)).limit(500);
+        wsData=rw.data||[];
+      }
+      setWorksheets(wsData);
+      var todayLocal2=new Date();todayLocal2.setHours(0,0,0,0);
+      var todayStr2=todayLocal2.getFullYear()+'-'+String(todayLocal2.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal2.getDate()).padStart(2,'0');
+      setRows(assignedRows.filter(function(r){return !r.start_date||r.start_date<=todayStr2;}));
+      var [rcAll,rmAll]=await Promise.all([
+        supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000),
+        supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200)
+      ]);
+      setAllClients(rcAll.data||[]);setClients(rcAll.data||[]);
+      var mlist=rmAll.data||[];
+      if(mlist.length>0){
+        var ids=mlist.map(function(m){return m.user_id;});
+        var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
+        setOrgMembers(rp.data||[]);
+      }
+    }catch(e){console.error('Dashboard load error:',e);setLoadError('error');}
+    finally{clearTimeout(loadTimerRef.current);setLoading(false);}
   }
 
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -8001,7 +8001,8 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var hr=new Date().getHours();
   var greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
 
-  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading your dashboard...</div>;
+  if(loadError)return<div style={{textAlign:'center',padding:48}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load dashboard.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading your dashboard…</div>;
 
   var viewingMember=orgMembers.find(function(m){return m.id===viewMemberId;})||null;
   var viewingName=viewMemberId===cu.id?firstName:(viewingMember?(viewingMember.name||viewingMember.email||'Member').split(' ')[0]:'Member');
@@ -9195,6 +9196,8 @@ return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-bor
 function BillingModule({org,supabase,cu,activeTab}){
 var tab=activeTab||'invoices';
 var [loading,setLoading]=useState(true);
+var [loadError,setLoadError]=useState(null);
+var loadTimerRef=useRef(null);
 var [toast,setToast]=useState(null);
 var [clients,setClients]=useState([]);
 var [invoices,setInvoices]=useState([]);
@@ -9215,7 +9218,7 @@ function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){set
 
 useEffect(function(){loadAll();},[org.id]);
 
-async function loadAll(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setClients(rc.data||[]);setInvoices(ri.data||[]);setPayments(rp.data||[]);setProposals(rpr.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+async function loadAll(){setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setClients(rc.data||[]);setInvoices(ri.data||[]);setPayments(rp.data||[]);setProposals(rpr.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);}}
 
 var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
 var TABS=[{id:'invoices',l:'Invoices'},{id:'proposals',l:'Proposals'},{id:'payments',l:'Payments'},{id:'statements',l:'Statements'},{id:'export',l:'Export'}];
@@ -9223,6 +9226,7 @@ var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',bord
 var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4,display:'block'};
 var BTN={padding:'7px 16px',borderRadius:8,border:'none',fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit'};
 
+if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load billing.'}</div><button onClick={loadAll} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
 if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading billing...</div>;
 
 return<div style={{padding:'0 0 60px'}}>
@@ -11288,8 +11292,10 @@ function ClientConnectModule({org,supabase,cu}){
   var [requests,setRequests]=useState([]);
   var [responses,setResponses]=useState([]);
   var [ccMessages,setCcMessages]=useState([]);
-  var [cloudStorages,setCloudStorages]=useState([]); // array of org_cloud_storage rows
+  var [cloudStorages,setCloudStorages]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
   var [toast,setToast]=useState(null);
   var [selClientId,setSelClientId]=useState(null);
   var [clientSearch,setClientSearch]=useState('');
@@ -11323,7 +11329,7 @@ function ClientConnectModule({org,supabase,cu}){
     else{setStorToken('');setStorRootPath('/TaskFlow Uploads');setStorEmail('');}
   },[showStorage,storTab,cloudStorages]);
 
-  async function loadAll(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}setClients(rc.data||[]);setRequests(rr.data||[]);setResponses(resData);setCcMessages(msgData);setCloudStorages(sc.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function loadAll(){setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}setClients(rc.data||[]);setRequests(rr.data||[]);setResponses(resData);setCcMessages(msgData);setCloudStorages(sc.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);}}
 
   function getActiveStorage(){return cloudStorages.find(function(s){return s.is_active;})||null;}
 
@@ -11391,6 +11397,7 @@ function ClientConnectModule({org,supabase,cu}){
   var reqResponses=showResponses?responses.filter(function(r){return r.request_id===showResponses.id;}):[];
   var INP2={width:'100%',boxSizing:'border-box',padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none'};
 
+  if(loadError)return<div style={{textAlign:'center',padding:48}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadAll} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading Client Connect…</div>;
 
   return<div style={{display:'flex',height:'calc(100vh - 110px)',minHeight:0}}>
