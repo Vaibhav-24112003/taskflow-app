@@ -3921,6 +3921,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
 
   async function loadClients(){
     setLoading(true);
+    try{
     var r=await supabase.from('clients').select('*').eq('org_id',org.id).order('name').limit(500);
     if(r.data){
       setClients(r.data);
@@ -3960,6 +3961,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         if(p.quarter)setPeriodQuarter(p.quarter);
       }
     }
+    }catch(e){console.error('Worksheets loadClients error:',e);}
     setLoading(false);
   }
 
@@ -7781,6 +7783,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   async function load(){
     setLoading(true);
+    try{
     var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(3000);
     if(rr.error){showToast('Failed to load tasks: '+rr.error.message,'err');setLoading(false);return;}
     var rowData=rr.data||[];
@@ -7817,6 +7820,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
       setOrgMembers(rp.data||[]);
     }
+    }catch(e){console.error('Dashboard load error:',e);}
     setLoading(false);
   }
 
@@ -13211,6 +13215,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
 
   async function loadPlan(){
     setLoading(true);
+    try{
     var r=await supabase.from('daily_plans').select('*').eq('user_id',planUserId).eq('plan_date',planDate).order('sort_order');
     var planRows=r.data||[];
     if(planRows.length===0){setPlan([]);setLoading(false);return;}
@@ -13278,6 +13283,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       });
     }
     setPlan(enriched);
+    }catch(e){console.error('Plan load error:',e);}
     setLoading(false);
   }
 
