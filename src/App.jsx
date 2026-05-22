@@ -2141,26 +2141,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
   var [showImport,setShowImport]=useState(false);
   var [toastMsg,setToastMsg]=useState(null);
   useEffect(function(){load();},[orgId]);
-  async function load(){
-    setLoading(true);
-    if(!orgId){setClients([]);setLoading(false);return;}
-    var [rc,rw]=await Promise.all([
-      supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500),
-      supabase.from('worksheet_rows').select('client_id,worksheets!inner(work_type,org_id)').eq('worksheets.org_id',orgId).limit(5000)
-    ]);
-    if(!rc.error)setClients(rc.data||[]);
-    var enroll={};
-    (rw.data||[]).forEach(function(row){
-      var wt=row.worksheets&&row.worksheets.work_type;
-      if(!wt)return;
-      if(!enroll[row.client_id])enroll[row.client_id]=new Set();
-      enroll[row.client_id].add(wt);
-    });
-    var enrollArr={};
-    Object.keys(enroll).forEach(function(k){enrollArr[k]=Array.from(enroll[k]).sort();});
-    setWtEnrollment(enrollArr);
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{if(!orgId){setClients([]);return;}var [rc,rw]=await Promise.all([supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500),supabase.from('worksheet_rows').select('client_id,worksheets!inner(work_type,org_id)').eq('worksheets.org_id',orgId).limit(5000)]);if(!rc.error)setClients(rc.data||[]);var enroll={};(rw.data||[]).forEach(function(row){var wt=row.worksheets&&row.worksheets.work_type;if(!wt)return;if(!enroll[row.client_id])enroll[row.client_id]=new Set();enroll[row.client_id].add(wt);});var enrollArr={};Object.keys(enroll).forEach(function(k){enrollArr[k]=Array.from(enroll[k]).sort();});setWtEnrollment(enrollArr);}catch(e){console.error(e);}finally{setLoading(false);}}
   function toast(msg,type){setToastMsg({msg,type:type||'ok'});setTimeout(function(){setToastMsg(null);},3000);}
   async function del(id){
     if(!window.confirm('Delete this client?'))return;
@@ -2436,14 +2417,7 @@ function OrgManagementPanel({cu,supabase,allWorkspaces}){
   var [editOrg,setEditOrg]=useState(null);
   var [localWs,setLocalWs]=useState(allWorkspaces||[]);
   useEffect(function(){load();},[]);
-  async function load(){
-    setLoading(true);
-    var r=await supabase.from('organizations').select('*').order('name').limit(100);
-    var rw=await supabase.from('workspaces').select('*').order('name').limit(200);
-    if(r.data)setOrgs(r.data);
-    if(rw.data)setLocalWs(rw.data);
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var r=await supabase.from('organizations').select('*').order('name').limit(100);var rw=await supabase.from('workspaces').select('*').order('name').limit(200);if(r.data)setOrgs(r.data);if(rw.data)setLocalWs(rw.data);}catch(e){console.error(e);}finally{setLoading(false);}}
   async function assign(wsId,orgId){await supabase.from('workspaces').update({org_id:orgId||null}).eq('id',wsId);load();}
   async function delOrg(org){if(!window.confirm('Delete "'+org.name+'"?'))return;await supabase.from('workspaces').update({org_id:null}).eq('org_id',org.id);await supabase.from('organizations').delete().eq('id',org.id);load();}
   var personalWs=localWs.filter(function(w){return !w.org_id;});
@@ -2519,23 +2493,7 @@ function OrgGroupsPanel({org,cu,supabase}){
 
   useEffect(function(){load();},[org.id]);
 
-  async function load(){
-    setLoading(true);
-    var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');
-    setGroups(rg.data||[]);
-    var gids=(rg.data||[]).map(function(g){return g.id;});
-    if(gids.length){
-      var rm=await supabase.from('org_group_members').select('*').in('group_id',gids);
-      setMemberships(rm.data||[]);
-    }
-    var rme=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
-    var uids=(rme.data||[]).map(function(m){return m.user_id;});
-    if(uids.length){
-      var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(200);
-      setOrgMembers(rp.data||[]);
-    }
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');setGroups(rg.data||[]);var gids=(rg.data||[]).map(function(g){return g.id;});if(gids.length){var rm=await supabase.from('org_group_members').select('*').in('group_id',gids);setMemberships(rm.data||[]);}var rme=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);}finally{setLoading(false);}}
 
   async function addGroup(){
     if(!newGroupName.trim())return;
@@ -2848,23 +2806,7 @@ function OrgMembersPanel({org,cu,supabase}){
   var [err,setErr]=useState('');
   var [toast,setToast]=useState(null);
   useEffect(function(){loadAll();},[ org.id]);
-  async function loadAll(){
-    setLoading(true);
-    var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);
-    var mlist=rm.data||[];
-    var enriched=mlist;
-    if(mlist.length>0){
-      var ids=mlist.map(function(m){return m.user_id;});
-      var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);
-      var profMap={};
-      (rp.data||[]).forEach(function(p){profMap[p.id]=p;});
-      enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});
-    }
-    setMembers(enriched);
-    var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);
-    setInvites(ri.data||[]);
-    setLoading(false);
-  }
+  async function loadAll(){setLoading(true);try{var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);var mlist=rm.data||[];var enriched=mlist;if(mlist.length>0){var ids=mlist.map(function(m){return m.user_id;});var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});}setMembers(enriched);var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);setInvites(ri.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
   var myMembership=members.find(function(m){return m.user_id===cu.id;});
   var myRole=myMembership?myMembership.role:'';
@@ -6222,15 +6164,7 @@ function AttendanceModule({org,supabase,cu}){
     }
   }
 
-  async function load(){
-    setLoading(true);
-    var start=year+'-'+String(month).padStart(2,'0')+'-01';
-    var lastDay=new Date(year,month,0).getDate();
-    var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
-    var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);
-    setEntries(re.data||[]);
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var start=year+'-'+String(month).padStart(2,'0')+'-01';var lastDay=new Date(year,month,0).getDate();var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);setEntries(re.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   var daysInMonth=new Date(year,month,0).getDate();
   var days=[];
@@ -6409,19 +6343,7 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
     }
   }
 
-  async function load(){
-    setLoading(true);
-    var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(1000);
-    setClients(rc.data||[]);
-    var start=year+'-'+String(month).padStart(2,'0')+'-01';
-    var lastDay=new Date(year,month,0).getDate();
-    var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
-    var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);
-    setEntries(re.data||[]);
-    var rl=await supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).order('created_at').limit(1000);
-    setLogs(rl.data||[]);
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(1000);setClients(rc.data||[]);var start=year+'-'+String(month).padStart(2,'0')+'-01';var lastDay=new Date(year,month,0).getDate();var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);setEntries(re.data||[]);var rl=await supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).order('created_at').limit(1000);setLogs(rl.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   var daysInMonth=new Date(year,month,0).getDate();
   var days=[];
@@ -6680,17 +6602,7 @@ function LeavesModule({org,supabase,cu}){
     }
   }
 
-  async function load(){
-    setLoading(true);
-    var fyEnd=fyStart+1;
-    var startDate=fyStart+'-04-01';
-    var endDate=fyEnd+'-03-31';
-    var r=await supabase.from('leave_requests').select('*').eq('org_id',org.id).gte('start_date',startDate).lte('start_date',endDate).order('created_at',{ascending:false}).limit(500);
-    var all=r.data||[];
-    setAllRequests(all);
-    setRequests(all.filter(function(x){return x.user_id===cu.id;}));
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var fyEnd=fyStart+1;var startDate=fyStart+'-04-01';var endDate=fyEnd+'-03-31';var r=await supabase.from('leave_requests').select('*').eq('org_id',org.id).gte('start_date',startDate).lte('start_date',endDate).order('created_at',{ascending:false}).limit(500);var all=r.data||[];setAllRequests(all);setRequests(all.filter(function(x){return x.user_id===cu.id;}));}catch(e){console.error(e);}finally{setLoading(false);}}
 
   function calcDays(s,e){
     if(!s||!e)return 0;
@@ -6849,12 +6761,7 @@ function PerformanceModule({org,supabase,cu}){
     }
   }
 
-  async function loadReviews(){
-    setLoading(true);
-    var r=await supabase.from('performance_reviews').select('*').eq('org_id',org.id).eq('user_id',selUser).order('created_at',{ascending:false}).limit(100);
-    setReviews(r.data||[]);
-    setLoading(false);
-  }
+  async function loadReviews(){setLoading(true);try{var r=await supabase.from('performance_reviews').select('*').eq('org_id',org.id).eq('user_id',selUser).order('created_at',{ascending:false}).limit(100);setReviews(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   async function addReview(){
     if(!form.period){showToast('Select period','err');return;}
@@ -7038,32 +6945,7 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
 
   useEffect(function(){if(orgIds.length>0)loadCalData();},[orgIdKey,calYear,calMonth]);
 
-  async function loadCalData(){
-    setLoading(true);
-    // Date range for visible month (use local date formatting, not toISOString which converts to UTC)
-    var startStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-01';
-    var lastDay=new Date(calYear,calMonth+1,0).getDate();
-    var endStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');
-
-    var rc=await supabase.from('clients').select('id,name,display_name,pan,org_id').in('org_id',orgIds).limit(2000);
-    setClients(rc.data||[]);
-
-    var rr=await supabase.from('worksheet_rows')
-      .select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data')
-      .in('org_id',orgIds)
-      .gte('due_date',startStr)
-      .lte('due_date',endStr)
-      .limit(2000);
-    var rowData=rr.data||[];
-    setRows(rowData);
-
-    if(rowData.length>0){
-      var wsIds=[...new Set(rowData.map(function(r){return r.worksheet_id;}))];
-      var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(500);
-      setWorksheets(rw.data||[]);
-    }else{setWorksheets([]);}
-    setLoading(false);
-  }
+  async function loadCalData(){setLoading(true);try{var startStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-01';var lastDay=new Date(calYear,calMonth+1,0).getDate();var endStr=calYear+'-'+String(calMonth+1).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var rc=await supabase.from('clients').select('id,name,display_name,pan,org_id').in('org_id',orgIds).limit(2000);setClients(rc.data||[]);var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data').in('org_id',orgIds).gte('due_date',startStr).lte('due_date',endStr).limit(2000);var rowData=rr.data||[];setRows(rowData);if(rowData.length>0){var wsIds=[...new Set(rowData.map(function(r){return r.worksheet_id;}))];var rw=await supabase.from('worksheets').select('id,work_type,period_label').in('id',wsIds).limit(500);setWorksheets(rw.data||[]);}else{setWorksheets([]);}}catch(e){console.error(e);}finally{setLoading(false);}}
 
   var clientMap={};
   clients.forEach(function(c){clientMap[c.id]=c;});
@@ -9333,18 +9215,7 @@ function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){set
 
 useEffect(function(){loadAll();},[org.id]);
 
-async function loadAll(){
-setLoading(true);
-var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);
-var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);
-var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);
-var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
-setClients(rc.data||[]);
-setInvoices(ri.data||[]);
-setPayments(rp.data||[]);
-setProposals(rpr.data||[]);
-setLoading(false);
-}
+async function loadAll(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setClients(rc.data||[]);setInvoices(ri.data||[]);setPayments(rp.data||[]);setProposals(rpr.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
 var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
 var TABS=[{id:'invoices',l:'Invoices'},{id:'proposals',l:'Proposals'},{id:'payments',l:'Payments'},{id:'statements',l:'Statements'},{id:'export',l:'Export'}];
@@ -9866,15 +9737,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
 
   useEffect(function(){loadClients();},[org.id]);
 
-  async function loadClients(){
-    setLoading(true);
-    var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);
-    setClients(r.data||[]);
-    var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(200);
-    var ids=(rm.data||[]).map(function(m){return m.user_id;});
-    if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);setOrgMembers(rp.data||[]);}
-    setLoading(false);
-  }
+  async function loadClients(){setLoading(true);try{var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);setClients(r.data||[]);var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(200);var ids=(rm.data||[]).map(function(m){return m.user_id;});if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);}finally{setLoading(false);}}
 
   var periodKey=periodYear+'-'+String(periodMonth).padStart(2,'0');
 
@@ -10698,18 +10561,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadData();},[org.id]);
 
-  async function loadData(){
-    setLoading(true);
-    var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);
-    var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);
-    var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);
-    var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);
-    setClients(rc.data||[]);
-    setPortalUsers(ru.data||[]);
-    setTemplates(rt.data||[]);
-    setCommLogs(rl.data||[]);
-    setLoading(false);
-  }
+  async function loadData(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
@@ -11153,18 +11005,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadAll();},[org.id]);
 
-  async function loadAll(){
-    setLoading(true);
-    var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
-    setClients(rc.data||[]);
-    var ru=await supabase.from('client_portal_access').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
-    setUsers(ru.data||[]);
-    var rr=await supabase.from('client_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
-    setRequests(rr.data||[]);
-    var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);
-    setTemplates(rt.data||[]);
-    setLoading(false);
-  }
+  async function loadAll(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);setClients(rc.data||[]);var ru=await supabase.from('client_portal_access').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setUsers(ru.data||[]);var rr=await supabase.from('client_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setRequests(rr.data||[]);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setTemplates(rt.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   function genPassword(){var c='abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';var p='';for(var i=0;i<8;i++)p+=c.charAt(Math.floor(Math.random()*c.length));return p;}
 
@@ -11482,22 +11323,7 @@ function ClientConnectModule({org,supabase,cu}){
     else{setStorToken('');setStorRootPath('/TaskFlow Uploads');setStorEmail('');}
   },[showStorage,storTab,cloudStorages]);
 
-  async function loadAll(){
-    setLoading(true);
-    var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);
-    var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);
-    var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);
-    var reqIds=(rr.data||[]).map(function(r){return r.id;});
-    var resData=[],msgData=[];
-    if(reqIds.length>0){
-      var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);
-      var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);
-      resData=rres.data||[];msgData=rmsg.data||[];
-    }
-    setClients(rc.data||[]);setRequests(rr.data||[]);setResponses(resData);setCcMessages(msgData);
-    setCloudStorages(sc.data||[]);
-    setLoading(false);
-  }
+  async function loadAll(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}setClients(rc.data||[]);setRequests(rr.data||[]);setResponses(resData);setCcMessages(msgData);setCloudStorages(sc.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   function getActiveStorage(){return cloudStorages.find(function(s){return s.is_active;})||null;}
 
@@ -11903,16 +11729,7 @@ function CredentialsModule({org,supabase,cu}){
   var COMMON_PORTALS=['GST Portal','Income Tax','MCA','TDS Portal','Traces','EPFO','ESIC','Tally','Zoho','Other'];
 
   useEffect(function(){load();},[org.id]);
-  async function load(){
-    setLoading(true);
-    var [rc,rk]=await Promise.all([
-      supabase.from('clients').select('id,name,pan,email,client_type,status').eq('org_id',org.id).eq('status','active').order('name').limit(500),
-      supabase.from('client_credentials').select('*').eq('org_id',org.id).order('portal_name')
-    ]);
-    setClients(rc.data||[]);
-    setAllCreds(rk.data||[]);
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var [rc,rk]=await Promise.all([supabase.from('clients').select('id,name,pan,email,client_type,status').eq('org_id',org.id).eq('status','active').order('name').limit(500),supabase.from('client_credentials').select('*').eq('org_id',org.id).order('portal_name')]);setClients(rc.data||[]);setAllCreds(rk.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
   function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
 
   // derive portal columns: from existing creds first, then nothing else
@@ -12164,12 +11981,7 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
   var [stepInput,setStepInput]=useState('');
 
   useEffect(function(){load();},[org.id]);
-  async function load(){
-    setLoading(true);
-    var r=await supabase.from('org_sops').select('*').eq('org_id',org.id).order('title');
-    setSops(r.data||[]);
-    setLoading(false);
-  }
+  async function load(){setLoading(true);try{var r=await supabase.from('org_sops').select('*').eq('org_id',org.id).order('title');setSops(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
   function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
   function openAdd(){setForm({title:'',category:'',work_type:'',content:'',steps:[]});setStepInput('');setEditSop(null);setShowForm(true);}
   function openEdit(s){setForm({title:s.title||'',category:s.category||'',work_type:s.work_type||'',content:s.content||'',steps:Array.isArray(s.steps)?s.steps:[]});setStepInput('');setEditSop(s);setShowForm(true);}
@@ -12543,12 +12355,7 @@ function ClientPortal({supabase}){
 
   function logout(){setPortalUser(null);setOrg(null);setRequests([]);setSelReq(null);setMessages([]);localStorage.removeItem('tf_portal_session');}
 
-  async function loadRequests(clientId,orgId){
-    setLoading(true);
-    var r=await supabase.from('client_requests').select('*').eq('org_id',orgId).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200);
-    setRequests(r.data||[]);
-    setLoading(false);
-  }
+  async function loadRequests(clientId,orgId){setLoading(true);try{var r=await supabase.from('client_requests').select('*').eq('org_id',orgId).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200);setRequests(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   async function loadMessages(reqId){
     var r=await supabase.from('client_request_messages').select('*').eq('request_id',reqId).order('created_at').limit(500);
