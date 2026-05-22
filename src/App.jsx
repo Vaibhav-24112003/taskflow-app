@@ -2813,13 +2813,16 @@ function OrgMembersPanel({org,cu,supabase}){
   var [members,setMembers]=useState([]);
   var [invites,setInvites]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [email,setEmail]=useState('');
   var [role,setRole]=useState('member');
   var [sending,setSending]=useState(false);
   var [err,setErr]=useState('');
   var [toast,setToast]=useState(null);
   useEffect(function(){loadAll();},[ org.id]);
-  async function loadAll(){setLoading(true);try{var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);var mlist=rm.data||[];var enriched=mlist;if(mlist.length>0){var ids=mlist.map(function(m){return m.user_id;});var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});}setMembers(enriched);var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);setInvites(ri.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);var mlist=rm.data||[];var enriched=mlist;if(mlist.length>0){var ids=mlist.map(function(m){return m.user_id;});var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});}setMembers(enriched);var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);setInvites(ri.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
   var myMembership=members.find(function(m){return m.user_id===cu.id;});
   var myRole=myMembership?myMembership.role:'';
@@ -2869,7 +2872,7 @@ function OrgMembersPanel({org,cu,supabase}){
       </div>
       {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:6}}>{err}</div>}
     </div>}
-    {loading?<div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)'}}>Loading...</div>:<>
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadAll} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:<>
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>Current Members ({members.length})</div>
       <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',marginBottom:16}}>
         {members.length===0?<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No members found</div>
@@ -5693,6 +5696,9 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
 
 function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [clients,setClients]=useState([]);
   var [worksheets,setWorksheets]=useState([]);
   var [allRows,setAllRows]=useState([]);
@@ -5714,7 +5720,11 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   useEffect(function(){loadData();},[org.id,selectedYear]);
 
   async function loadData(){
-    setLoading(true);
+    if(loadingRef.current)return;
+    loadingRef.current=true;
+    setLoading(true);setLoadError(null);
+    if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
     try{
     var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
     // Fetch worksheets for the selected FY year, also include year+1 to catch old calendar-year monthly data (Jan-Mar)
@@ -5733,7 +5743,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
       var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage,start_date').in('worksheet_id',wsIds).limit(2000);
-      if(rr.error){showToast('Failed to load analytics data: '+rr.error.message,'err');setLoading(false);return;}
+      if(rr.error){showToast('Failed to load analytics data: '+rr.error.message,'err');return;}
       var rowData=rr.data||[];
       // Backfill: rows at the last stage of their work type that still have status!='completed'
       // Build a map of work_type → last stage key
@@ -5762,7 +5772,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       }
       setAllRows(rowData);
     }else{setAllRows([]);}
-    }finally{setLoading(false);}
+    }catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
   }
 
   var clientMap={};
@@ -5925,7 +5935,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       {TAB_BTN('overdue','Overdue',overdueRows.length)}
     </div>
 
-    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading analytics...</div>:
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadData} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading analytics...</div>:
     workTypeStats.length===0&&activeTab==='overview'?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
       <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No worksheet data</div>
       <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Create worksheets in the Worksheets tab to see analytics here.</div>
@@ -6150,6 +6160,9 @@ function AttendanceModule({org,supabase,cu}){
   var [year,setYear]=useState(new Date().getFullYear());
   var [entries,setEntries]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [toast,setToast]=useState(null);
   var [adminView,setAdminView]=useState(false);
 
@@ -6182,7 +6195,7 @@ function AttendanceModule({org,supabase,cu}){
     }
   }
 
-  async function load(){setLoading(true);try{var start=year+'-'+String(month).padStart(2,'0')+'-01';var lastDay=new Date(year,month,0).getDate();var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);setEntries(re.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var start=year+'-'+String(month).padStart(2,'0')+'-01';var lastDay=new Date(year,month,0).getDate();var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);setEntries(re.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   var daysInMonth=new Date(year,month,0).getDate();
   var days=[];
@@ -6275,7 +6288,7 @@ function AttendanceModule({org,supabase,cu}){
       <button onClick={function(){bulkSet(function(dd){return dd.dow===0;},'sunday');}} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#94a3b8'})}>Mark Sundays Off</button>
     </div>
 
-    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
     <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:12}}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:6}}>
         {DAY_SHORT.map(function(n){return<div key={n} style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',textAlign:'center',padding:'4px 0'}}>{n}</div>;})}
@@ -6313,6 +6326,9 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
   var [logs,setLogs]=useState([]);
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [toast,setToast]=useState(null);
   var [expDate,setExpDate]=useState(null);
   var [newLog,setNewLog]=useState({client_id:'',work_type:'',hours:0,minutes:0,notes:''});
@@ -6361,7 +6377,7 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
     }
   }
 
-  async function load(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(1000);setClients(rc.data||[]);var start=year+'-'+String(month).padStart(2,'0')+'-01';var lastDay=new Date(year,month,0).getDate();var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);setEntries(re.data||[]);var rl=await supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).order('created_at').limit(1000);setLogs(rl.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(1000);setClients(rc.data||[]);var start=year+'-'+String(month).padStart(2,'0')+'-01';var lastDay=new Date(year,month,0).getDate();var end=year+'-'+String(month).padStart(2,'0')+'-'+String(lastDay).padStart(2,'0');var re=await supabase.from('attendance_entries').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).limit(100);setEntries(re.data||[]);var rl=await supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('user_id',userId).gte('date',start).lte('date',end).order('created_at').limit(1000);setLogs(rl.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   var daysInMonth=new Date(year,month,0).getDate();
   var days=[];
@@ -6490,7 +6506,7 @@ function LogsModule({org,supabase,cu,workTypeConfigs}){
       </div>;})}
     </div>
 
-    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
     <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
       <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
         <thead><tr style={{background:'rgba(14,42,71,0.04)'}}>
@@ -6585,6 +6601,9 @@ function LeavesModule({org,supabase,cu}){
   var [requests,setRequests]=useState([]);
   var [allRequests,setAllRequests]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [toast,setToast]=useState(null);
   var [isAdmin,setIsAdmin]=useState(false);
   var [showApply,setShowApply]=useState(false);
@@ -6620,7 +6639,7 @@ function LeavesModule({org,supabase,cu}){
     }
   }
 
-  async function load(){setLoading(true);try{var fyEnd=fyStart+1;var startDate=fyStart+'-04-01';var endDate=fyEnd+'-03-31';var r=await supabase.from('leave_requests').select('*').eq('org_id',org.id).gte('start_date',startDate).lte('start_date',endDate).order('created_at',{ascending:false}).limit(500);var all=r.data||[];setAllRequests(all);setRequests(all.filter(function(x){return x.user_id===cu.id;}));}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var fyEnd=fyStart+1;var startDate=fyStart+'-04-01';var endDate=fyEnd+'-03-31';var r=await supabase.from('leave_requests').select('*').eq('org_id',org.id).gte('start_date',startDate).lte('start_date',endDate).order('created_at',{ascending:false}).limit(500);var all=r.data||[];setAllRequests(all);setRequests(all.filter(function(x){return x.user_id===cu.id;}));}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   function calcDays(s,e){
     if(!s||!e)return 0;
@@ -6711,7 +6730,7 @@ function LeavesModule({org,supabase,cu}){
       {[{id:'my',l:'My Leaves'},{id:'pending',l:'Pending Approval ('+pendingAll.length+')'},{id:'all',l:'All Requests'}].filter(function(t){return t.id==='my'||isAdmin;}).map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);}} style={{background:'none',border:'none',borderBottom:'2px solid',borderColor:tab===t.id?'#0e2a47':'transparent',padding:'8px 16px',color:tab===t.id?'#0e2a47':'var(--tf-text-sub)',fontSize:12,fontWeight:700,cursor:'pointer',marginBottom:-2}}>{t.l}</button>;})}
     </div>
 
-    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
     displayList.length===0?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',fontSize:13}}>No leave requests found</div>:
     <div style={{display:'flex',flexDirection:'column',gap:8}}>
       {displayList.map(function(req){
@@ -6752,6 +6771,9 @@ function PerformanceModule({org,supabase,cu}){
   var [members,setMembers]=useState([]);
   var [reviews,setReviews]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [toast,setToast]=useState(null);
   var [isAdmin,setIsAdmin]=useState(false);
   var [selUser,setSelUser]=useState(cu.id);
@@ -6779,7 +6801,7 @@ function PerformanceModule({org,supabase,cu}){
     }
   }
 
-  async function loadReviews(){setLoading(true);try{var r=await supabase.from('performance_reviews').select('*').eq('org_id',org.id).eq('user_id',selUser).order('created_at',{ascending:false}).limit(100);setReviews(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function loadReviews(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var r=await supabase.from('performance_reviews').select('*').eq('org_id',org.id).eq('user_id',selUser).order('created_at',{ascending:false}).limit(100);setReviews(r.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   async function addReview(){
     if(!form.period){showToast('Select period','err');return;}
@@ -6858,7 +6880,7 @@ function PerformanceModule({org,supabase,cu}){
       <button onClick={addReview} disabled={saving} style={{background:'linear-gradient(135deg,#22c55e,#16a34a)',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Save Review'}</button>
     </div>}
 
-    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadReviews} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:
     reviews.length===0?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',fontSize:13}}>No reviews yet{isAdmin?' — click "+ Add Review" to get started':''}</div>:
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       {reviews.map(function(rev){
@@ -7231,6 +7253,9 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
 // ── Team Dashboard — workload heatmap + member cards ──────────────
 function TeamDashboard({org,supabase,cu,workTypeConfigs}){
 var [loading,setLoading]=useState(true);
+var [loadError,setLoadError]=useState(null);
+var loadTimerRef=useRef(null);
+var loadingRef=useRef(false);
 var [members,setMembers]=useState([]);
 var [rows,setRows]=useState([]);
 var [worksheets,setWorksheets]=useState([]);
@@ -7242,7 +7267,11 @@ var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;})
 useEffect(function(){loadTeam();},[org.id]);
 
 async function loadTeam(){
-setLoading(true);
+if(loadingRef.current)return;
+loadingRef.current=true;
+setLoading(true);setLoadError(null);
+if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
 try{
 var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
 var mlist=rm.data||[];
@@ -7254,7 +7283,7 @@ var roleMap={};mlist.forEach(function(m){roleMap[m.user_id]=m.role;});
 setMembers(profiles.map(function(p){return Object.assign({},p,{role:roleMap[p.id]||'member'});}));
 }
 var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,start_date').eq('org_id',org.id).limit(5000);
-if(rr.error){showToast('Failed to load team data: '+rr.error.message,'err');setLoading(false);return;}
+if(rr.error){showToast('Failed to load team data: '+rr.error.message,'err');return;}
 setRows(rr.data||[]);
 var allRows=rr.data||[];
 if(allRows.length>0){
@@ -7263,7 +7292,7 @@ if(wsIds.length>0){var rw=await supabase.from('worksheets').select('id,work_type
 }
 var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
 setClients(rc.data||[]);
-}finally{setLoading(false);}
+}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
 }
 
 var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -7314,6 +7343,7 @@ var cap=15;
 return Math.min(100,Math.round((active/cap)*100));
 }
 
+if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadTeam} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
 if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading team data...</div>;
 
 var selRows=selMember?getRowsForMember(selMember).filter(function(r){return r.status!=='completed';}):[];
@@ -7454,6 +7484,9 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 // ── ERP Board — Kanban view of worksheet_rows across all work types ──
 function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [rows,setRows]=useState([]);
   var [worksheets,setWorksheets]=useState([]);
   var [clients,setClients]=useState([]);
@@ -7472,7 +7505,11 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   useEffect(function(){load();},[org.id]);
 
   async function load(){
-    setLoading(true);
+    if(loadingRef.current)return;
+    loadingRef.current=true;
+    setLoading(true);setLoadError(null);
+    if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
     try{
       var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
       var mlist=rm.data||[];
@@ -7482,13 +7519,13 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         setMembers(rp.data||[]);
       }
       var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date').eq('org_id',org.id).limit(5000);
-      if(rr.error){showToast('Failed to load board: '+rr.error.message,'err');setLoading(false);return;}
+      if(rr.error){showToast('Failed to load board: '+rr.error.message,'err');return;}
       setRows(rr.data||[]);
       var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency,period_year,period_month').eq('org_id',org.id).limit(1000);
       setWorksheets(rw.data||[]);
       var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
       setClients(rc.data||[]);
-    }finally{setLoading(false);}
+    }catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
   }
 
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -7600,6 +7637,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     </div>;
   }
 
+  if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
   if(loading)return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)'}}>Loading board…</div>;
 
   return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,padding:'12px 16px'}}>
@@ -9720,6 +9758,9 @@ function groupMembersForGrid(orgMembers, orgGroups, memberships){
 // ── Big Clients Module — project-style task boards for high-volume clients ──
 function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgGroups,orgGroupMemberships}){
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [clients,setClients]=useState([]);
   var [orgMembers,setOrgMembers]=useState([]);
   var [selClientId,setSelClientId]=useState(null);
@@ -9768,7 +9809,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
 
   useEffect(function(){loadClients();},[org.id]);
 
-  async function loadClients(){setLoading(true);try{var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);setClients(r.data||[]);var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(200);var ids=(rm.data||[]).map(function(m){return m.user_id;});if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function loadClients(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);setClients(r.data||[]);var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(200);var ids=(rm.data||[]).map(function(m){return m.user_id;});if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   var periodKey=periodYear+'-'+String(periodMonth).padStart(2,'0');
 
@@ -9942,6 +9983,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
     return{done:done,total:tasks.length,pct:Math.round(done/tasks.length*100)};
   }
 
+  if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadClients} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>;
 
   var cols=selClient?getColumns():[];
@@ -11002,6 +11044,9 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   var [requests,setRequests]=useState([]);
   var [clients,setClients]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [toast,setToast]=useState(null);
   // Left panel
   var [selClientId,setSelClientId]=useState(null);
@@ -11036,7 +11081,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadAll();},[org.id]);
 
-  async function loadAll(){setLoading(true);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);setClients(rc.data||[]);var ru=await supabase.from('client_portal_access').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setUsers(ru.data||[]);var rr=await supabase.from('client_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setRequests(rr.data||[]);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setTemplates(rt.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);setClients(rc.data||[]);var ru=await supabase.from('client_portal_access').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setUsers(ru.data||[]);var rr=await supabase.from('client_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setRequests(rr.data||[]);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setTemplates(rt.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   function genPassword(){var c='abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';var p='';for(var i=0;i<8;i++)p+=c.charAt(Math.floor(Math.random()*c.length));return p;}
 
@@ -11127,6 +11172,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
   var REQ_STATUS_COLORS={pending:'#f59e0b',responded:'#6366f1',closed:'#22c55e'};
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'};
 
+  if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadAll} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading client portal...</div>;
 
   // Group users by client_id for left panel
@@ -11749,6 +11795,9 @@ function CredentialsModule({org,supabase,cu}){
   var [clients,setClients]=useState([]);
   var [allCreds,setAllCreds]=useState([]);   // all creds for the org
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [search,setSearch]=useState('');
   var [filterType,setFilterType]=useState('');
   var [showForm,setShowForm]=useState(false);
@@ -11765,7 +11814,7 @@ function CredentialsModule({org,supabase,cu}){
   var COMMON_PORTALS=['GST Portal','Income Tax','MCA','TDS Portal','Traces','EPFO','ESIC','Tally','Zoho','Other'];
 
   useEffect(function(){load();},[org.id]);
-  async function load(){setLoading(true);try{var [rc,rk]=await Promise.all([supabase.from('clients').select('id,name,pan,email,client_type,status').eq('org_id',org.id).eq('status','active').order('name').limit(500),supabase.from('client_credentials').select('*').eq('org_id',org.id).order('portal_name')]);setClients(rc.data||[]);setAllCreds(rk.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var [rc,rk]=await Promise.all([supabase.from('clients').select('id,name,pan,email,client_type,status').eq('org_id',org.id).eq('status','active').order('name').limit(500),supabase.from('client_credentials').select('*').eq('org_id',org.id).order('portal_name')]);setClients(rc.data||[]);setAllCreds(rk.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
 
   // derive portal columns: from existing creds first, then nothing else
@@ -11825,6 +11874,7 @@ function CredentialsModule({org,supabase,cu}){
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
   var FIXED_W=[180,110,160,90]; // Name, PAN, Email, Type
 
+  if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
   if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading…</div>;
 
   return<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
@@ -12005,6 +12055,9 @@ function CredField({label,value,onCopy,mono}){
 function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
   var [sops,setSops]=useState([]);
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [search,setSearch]=useState('');
   var [filterWT,setFilterWT]=useState('');
   var [filterCat,setFilterCat]=useState('');
@@ -12017,7 +12070,7 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
   var [stepInput,setStepInput]=useState('');
 
   useEffect(function(){load();},[org.id]);
-  async function load(){setLoading(true);try{var r=await supabase.from('org_sops').select('*').eq('org_id',org.id).order('title');setSops(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var r=await supabase.from('org_sops').select('*').eq('org_id',org.id).order('title');setSops(r.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
   function openAdd(){setForm({title:'',category:'',work_type:'',content:'',steps:[]});setStepInput('');setEditSop(null);setShowForm(true);}
   function openEdit(s){setForm({title:s.title||'',category:s.category||'',work_type:s.work_type||'',content:s.content||'',steps:Array.isArray(s.steps)?s.steps:[]});setStepInput('');setEditSop(s);setShowForm(true);}
@@ -12067,7 +12120,7 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
         {cats.map(function(c){return<option key={c} value={c}>{c}</option>;})}
       </select>
     </div>
-    {loading?<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading…</div>:filtered.length===0?<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>
+    {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading…</div>:filtered.length===0?<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>
       {sops.length===0?'No SOPs yet. Click + New SOP to create your first procedure.':'No SOPs match your filters.'}
     </div>:<div style={{display:'flex',flexDirection:'column',gap:10}}>
       {filtered.map(function(s){
