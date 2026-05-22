@@ -40,6 +40,15 @@ import TaskflowLogo from './components/TaskflowLogo.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 
+// ── Module-level data cache ────────────────────────────────────────────────────
+// Survives component unmount/remount (navigation away and back).
+// Keyed by orgId so switching orgs always fetches fresh data.
+var _dashCache = {};       // orgId → { rows, clients, worksheets, orgMembers }
+var _worksheetsCache = {}; // orgId → { clients }
+var _billingCache = {};    // orgId → { clients, invoices, payments, proposals }
+var _ccCache = {};         // orgId → { clients, requests, responses, ccMessages, cloudStorages }
+var _commsCache = {};      // orgId → { clients, portalUsers, templates, commLogs }
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
 const PRIORITIES = ['Low','Medium','High','Critical']
@@ -3547,12 +3556,14 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
     base['Unclassified']={frequency:'once',cols:[],due_dates:[],worksheet_group:null,sop_steps:[],synthetic:true};
     return base;
   },[workTypeConfigs]);
-  var [clients,setClients]=useState([]);
+  var _wsc=_worksheetsCache[org&&org.id]||null;
+  var [clients,setClients]=useState(_wsc?_wsc.clients:[]);
   var [activeType,setActiveType]=useState(null);
-  var [worksheet,setWorksheet]=useState(null); // current period worksheet
+  var [worksheet,setWorksheet]=useState(null);
   var [rows,setRows]=useState([]);
-  var [activeGroup,setActiveGroup]=useState(null); // for grouped work types
-  var [loading,setLoading]=useState(true);
+  var [activeGroup,setActiveGroup]=useState(null);
+  var loadingRef=useRef(false);
+  var [loading,setLoading]=useState(!_wsc);
   var _initP=getCurrentPeriod('monthly');
   var _initQ=getCurrentPeriod('quarterly');
   var [periodYear,setPeriodYear]=useState(_initP.year);
@@ -3862,11 +3873,14 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   function clearFilters(){setFilters({});setFilterClient('');setMineOnly(false);setShowExportMenu(false);}
 
   async function loadClients(){
-    setLoading(true);
+    if(loadingRef.current)return;
+    loadingRef.current=true;
+    if(!_worksheetsCache[org&&org.id])setLoading(true);
     try{
     var r=await supabase.from('clients').select('*').eq('org_id',org.id).order('name').limit(500);
     if(r.data){
       setClients(r.data);
+      _worksheetsCache[org&&org.id]={clients:r.data};
       // Collect all work types from clients
       var types=new Set();
       r.data.forEach(function(c){
@@ -3904,7 +3918,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       }
     }
     }catch(e){console.error('Worksheets loadClients error:',e);}
-    setLoading(false);
+    finally{setLoading(false);loadingRef.current=false;}
   }
 
   async function loadWorksheet(){
@@ -7637,14 +7651,16 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 }
 
 function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan}){
-  var [rows,setRows]=useState([]);
-  var [clients,setClients]=useState([]);
-  var [allClients,setAllClients]=useState([]);
-  var [worksheets,setWorksheets]=useState([]);
+  var _dc=_dashCache[org.id]||null;
+  var [rows,setRows]=useState(_dc?_dc.rows:[]);
+  var [clients,setClients]=useState(_dc?_dc.clients:[]);
+  var [allClients,setAllClients]=useState(_dc?_dc.clients:[]);
+  var [worksheets,setWorksheets]=useState(_dc?_dc.worksheets:[]);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
-  var [orgMembers,setOrgMembers]=useState([]);
-  var [loading,setLoading]=useState(true);
+  var loadingRef=useRef(false);
+  var [orgMembers,setOrgMembers]=useState(_dc?_dc.orgMembers:[]);
+  var [loading,setLoading]=useState(!_dc);
   var [filter,setFilter]=useState('all');
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('list'); // 'list' | 'urgency' | 'kanban'
@@ -7671,19 +7687,22 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id,viewMemberId]);
 
-  // Auto-refresh when the tab regains focus, throttled to once per 60s
+  // Auto-refresh when the tab regains focus, throttled to once per 5 minutes
   useEffect(function(){
     var lastLoad=Date.now();
-    function onFocus(){if(Date.now()-lastLoad>60000){lastLoad=Date.now();load();}}
+    function onFocus(){if(Date.now()-lastLoad>300000){lastLoad=Date.now();load();}}
     window.addEventListener('focus',onFocus);
     return function(){window.removeEventListener('focus',onFocus);};
     /* eslint-disable-next-line */
   },[org.id,cu.id]);
 
   async function load(){
-    setLoading(true);setLoadError(null);
+    if(loadingRef.current)return; // prevent concurrent loads
+    loadingRef.current=true;
+    if(!_dashCache[org.id])setLoading(true); // only show spinner when no cached data
+    setLoadError(null);
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
-    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');},12000);
+    loadTimerRef.current=setTimeout(function(){if(!_dashCache[org.id]){setLoading(false);setLoadError('timeout');}loadingRef.current=false;},12000);
     try{
       var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,completed_at,data,comments,start_date').eq('org_id',org.id).neq('status','completed').limit(3000);
       if(rr.error){showToast('Failed to load tasks: '+rr.error.message,'err');return;}
@@ -7702,23 +7721,25 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
         var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency').in('id',wsIds.slice(0,500)).limit(500);
         wsData=rw.data||[];
       }
-      setWorksheets(wsData);
       var todayLocal2=new Date();todayLocal2.setHours(0,0,0,0);
       var todayStr2=todayLocal2.getFullYear()+'-'+String(todayLocal2.getMonth()+1).padStart(2,'0')+'-'+String(todayLocal2.getDate()).padStart(2,'0');
-      setRows(assignedRows.filter(function(r){return !r.start_date||r.start_date<=todayStr2;}));
+      var filteredRows=assignedRows.filter(function(r){return !r.start_date||r.start_date<=todayStr2;});
       var [rcAll,rmAll]=await Promise.all([
         supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000),
         supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200)
       ]);
-      setAllClients(rcAll.data||[]);setClients(rcAll.data||[]);
-      var mlist=rmAll.data||[];
-      if(mlist.length>0){
-        var ids=mlist.map(function(m){return m.user_id;});
+      var membersList=[];
+      if((rmAll.data||[]).length>0){
+        var ids=(rmAll.data||[]).map(function(m){return m.user_id;});
         var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);
-        setOrgMembers(rp.data||[]);
+        membersList=rp.data||[];
       }
-    }catch(e){console.error('Dashboard load error:',e);setLoadError('error');}
-    finally{clearTimeout(loadTimerRef.current);setLoading(false);}
+      setWorksheets(wsData);setRows(filteredRows);
+      setAllClients(rcAll.data||[]);setClients(rcAll.data||[]);
+      setOrgMembers(membersList);
+      _dashCache[org.id]={rows:filteredRows,clients:rcAll.data||[],worksheets:wsData,orgMembers:membersList};
+    }catch(e){console.error('Dashboard load error:',e);if(!_dashCache[org.id])setLoadError('error');}
+    finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
   }
 
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -9195,20 +9216,22 @@ return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-bor
 // ── Billing Module ────────────────────────────────────────────────
 function BillingModule({org,supabase,cu,activeTab}){
 var tab=activeTab||'invoices';
-var [loading,setLoading]=useState(true);
+var _bc=_billingCache[org.id]||null;
+var [loading,setLoading]=useState(!_bc);
 var [loadError,setLoadError]=useState(null);
 var loadTimerRef=useRef(null);
+var loadingRef=useRef(false);
 var [toast,setToast]=useState(null);
-var [clients,setClients]=useState([]);
-var [invoices,setInvoices]=useState([]);
-var [payments,setPayments]=useState([]);
+var [clients,setClients]=useState(_bc?_bc.clients:[]);
+var [invoices,setInvoices]=useState(_bc?_bc.invoices:[]);
+var [payments,setPayments]=useState(_bc?_bc.payments:[]);
 var [showForm,setShowForm]=useState(false);
 var [editInv,setEditInv]=useState(null);
 var [viewInv,setViewInv]=useState(null);
 var [showProposalForm,setShowProposalForm]=useState(false);
 var [editProposal,setEditProposal]=useState(null);
 var [viewProposal,setViewProposal]=useState(null);
-var [proposals,setProposals]=useState([]);
+var [proposals,setProposals]=useState(_bc?_bc.proposals:[]);
 var [showPayForm,setShowPayForm]=useState(false);
 var [stmtClientId,setStmtClientId]=useState('');
 var [stmtData,setStmtData]=useState(null);
@@ -9218,7 +9241,7 @@ function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){set
 
 useEffect(function(){loadAll();},[org.id]);
 
-async function loadAll(){setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setClients(rc.data||[]);setInvoices(ri.data||[]);setPayments(rp.data||[]);setProposals(rpr.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);}}
+async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;if(!_billingCache[org.id])setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(!_billingCache[org.id]){setLoading(false);setLoadError('timeout');}loadingRef.current=false;},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var cl=rc.data||[],inv=ri.data||[],pay=rp.data||[],prop=rpr.data||[];setClients(cl);setInvoices(inv);setPayments(pay);setProposals(prop);_billingCache[org.id]={clients:cl,invoices:inv,payments:pay,proposals:prop};}catch(e){console.error(e);if(!_billingCache[org.id])setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
 var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
 var TABS=[{id:'invoices',l:'Invoices'},{id:'proposals',l:'Proposals'},{id:'payments',l:'Payments'},{id:'statements',l:'Statements'},{id:'export',l:'Export'}];
@@ -11288,14 +11311,16 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 var PROVIDER_LABELS={google_drive:'Google Drive',dropbox:'Dropbox',onedrive:'OneDrive'};
 
 function ClientConnectModule({org,supabase,cu}){
-  var [clients,setClients]=useState([]);
-  var [requests,setRequests]=useState([]);
-  var [responses,setResponses]=useState([]);
-  var [ccMessages,setCcMessages]=useState([]);
-  var [cloudStorages,setCloudStorages]=useState([]);
-  var [loading,setLoading]=useState(true);
+  var _ccc=_ccCache[org.id]||null;
+  var [clients,setClients]=useState(_ccc?_ccc.clients:[]);
+  var [requests,setRequests]=useState(_ccc?_ccc.requests:[]);
+  var [responses,setResponses]=useState(_ccc?_ccc.responses:[]);
+  var [ccMessages,setCcMessages]=useState(_ccc?_ccc.ccMessages:[]);
+  var [cloudStorages,setCloudStorages]=useState(_ccc?_ccc.cloudStorages:[]);
+  var [loading,setLoading]=useState(!_ccc);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [toast,setToast]=useState(null);
   var [selClientId,setSelClientId]=useState(null);
   var [clientSearch,setClientSearch]=useState('');
@@ -11329,7 +11354,7 @@ function ClientConnectModule({org,supabase,cu}){
     else{setStorToken('');setStorRootPath('/TaskFlow Uploads');setStorEmail('');}
   },[showStorage,storTab,cloudStorages]);
 
-  async function loadAll(){setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}setClients(rc.data||[]);setRequests(rr.data||[]);setResponses(resData);setCcMessages(msgData);setCloudStorages(sc.data||[]);}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);}}
+  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;if(!_ccCache[org.id])setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(!_ccCache[org.id]){setLoading(false);setLoadError('timeout');}loadingRef.current=false;},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}var cl=rc.data||[],req=rr.data||[],cs=sc.data||[];setClients(cl);setRequests(req);setResponses(resData);setCcMessages(msgData);setCloudStorages(cs);_ccCache[org.id]={clients:cl,requests:req,responses:resData,ccMessages:msgData,cloudStorages:cs};}catch(e){console.error(e);if(!_ccCache[org.id])setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   function getActiveStorage(){return cloudStorages.find(function(s){return s.is_active;})||null;}
 
@@ -12908,7 +12933,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   // Auto-refresh when the tab regains focus, throttled to once per 60s
   useEffect(function(){
     var lastLoad=Date.now();
-    function onFocus(){if(Date.now()-lastLoad>60000){lastLoad=Date.now();refreshAll();}}
+    function onFocus(){if(Date.now()-lastLoad>300000){lastLoad=Date.now();refreshAll();}}
     window.addEventListener('focus',onFocus);
     return function(){window.removeEventListener('focus',onFocus);};
     /* eslint-disable-next-line */
