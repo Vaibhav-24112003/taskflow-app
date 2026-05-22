@@ -7595,6 +7595,21 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var wsMap={};worksheets.forEach(function(w){wsMap[w.id]=w;});
   var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
 
+  // Derive display status from stage position: first=pending, middle=in_progress, last=completed
+  function getEffectiveStatus(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws&&ws.work_type;
+    var cfg=wt&&(workTypeConfigs||[]).find(function(c){return c.name===wt;});
+    var stages=cfg&&cfg.stages&&cfg.stages.length>0?cfg.stages:null;
+    if(!stages)return r.status||'pending';
+    if(!r.current_stage)return'pending';
+    var idx=stages.findIndex(function(s){return s.key===r.current_stage;});
+    if(idx<0)return r.status||'pending';
+    if(idx===stages.length-1)return'completed';
+    if(idx===0)return'pending';
+    return'in_progress';
+  }
+
   function getAssignee(r){
     var d=r.data||{};
     if(d.__assignee)return d.__assignee;
@@ -7611,7 +7626,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   }
 
   var filtered=rows.filter(function(r){
-    if(hideCompleted&&r.status==='completed')return false;
+    if(hideCompleted&&getEffectiveStatus(r)==='completed')return false;
     if(assigneeFilter==='mine'){if(!rowMatchesUser(r,cu.id))return false;}
     else if(assigneeFilter!=='all'){if(!rowMatchesUser(r,assigneeFilter))return false;}
     if(clientQuery.trim()){
@@ -7632,7 +7647,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var columns;
   if(groupBy==='status'){
     columns=STATUS_COLS.filter(function(s){return !(hideCompleted&&s.key==='completed');}).map(function(s){
-      return{key:s.key,label:s.label,color:s.color,rows:filtered.filter(function(r){return (r.status||'pending')===s.key;})};
+      return{key:s.key,label:s.label,color:s.color,rows:filtered.filter(function(r){return getEffectiveStatus(r)===s.key;})};
     });
   }else{
     var byWT={};
@@ -7904,14 +7919,27 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     urgencyGrouped.later.push(r);
   });
 
-  // Kanban grouping by status
+  // Kanban grouping by status — derived from stage position when stages are configured
+  function getEffectiveStatusDash(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws&&ws.work_type;
+    var cfg=wt&&(workTypeConfigs||[]).find(function(c){return c.name===wt;});
+    var stages=cfg&&cfg.stages&&cfg.stages.length>0?cfg.stages:null;
+    if(!stages)return r.status||'pending';
+    if(!r.current_stage)return'pending';
+    var idx=stages.findIndex(function(s){return s.key===r.current_stage;});
+    if(idx<0)return r.status||'pending';
+    if(idx===stages.length-1)return'completed';
+    if(idx===0)return'pending';
+    return'in_progress';
+  }
   var kanbanCols=[
     {id:'pending',label:'To Do',color:'#64748b',bg:'rgba(100,116,139,0.08)'},
     {id:'in_progress',label:'In Progress',color:'#3b82f6',bg:'rgba(59,130,246,0.08)'},
     {id:'under_review',label:'In Review',color:'#8b5cf6',bg:'rgba(139,92,246,0.08)'},
   ];
   var kanbanGrouped={pending:[],in_progress:[],under_review:[]};
-  filteredRows.forEach(function(r){if(kanbanGrouped[r.status]!==undefined)kanbanGrouped[r.status].push(r);else kanbanGrouped.pending.push(r);});
+  filteredRows.forEach(function(r){var es=getEffectiveStatusDash(r);if(es==='completed')return;if(kanbanGrouped[es]!==undefined)kanbanGrouped[es].push(r);else kanbanGrouped.pending.push(r);});
 
   async function updateStatus(rowId,newStatus){
     var updates={status:newStatus};
