@@ -12824,6 +12824,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var [worksheetMeta,setWorksheetMeta]=useState({}); // worksheet_id -> {work_type, period_label}
   var [bcTasks,setBcTasks]=useState([]); // big-client tasks due today
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [showPicker,setShowPicker]=useState(false);
   var [search,setSearch]=useState('');
   var [filterStatus,setFilterStatus]=useState('all');
@@ -13081,11 +13084,15 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   }
 
   async function loadPlan(){
-    setLoading(true);
+    if(loadingRef.current)return;
+    loadingRef.current=true;
+    setLoading(true);setLoadError(null);
+    if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
     try{
     var r=await supabase.from('daily_plans').select('*').eq('user_id',planUserId).eq('plan_date',planDate).order('sort_order');
     var planRows=r.data||[];
-    if(planRows.length===0){setPlan([]);setLoading(false);return;}
+    if(planRows.length===0){setPlan([]);return;}
     // Split by source_type (fallback to 'task' if null with task_id)
     var taskSourceIds=[];var wsSourceIds=[];
     planRows.forEach(function(p){
@@ -13150,8 +13157,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       });
     }
     setPlan(enriched);
-    }catch(e){console.error('Plan load error:',e);}
-    setLoading(false);
+    }catch(e){console.error('Plan load error:',e);setLoadError('error');}
+    finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
   }
 
   async function loadTasks(){
@@ -13329,7 +13336,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
       {/* Plan list */}
       <div style={{flex:1,minWidth:0}}>
-        {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:
+        {loadError?<div style={{textAlign:'center',padding:40}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadPlan} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:
+        loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:
         plan.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
           <div style={{fontSize:36,marginBottom:12}}>☀️</div>
           <div style={{fontWeight:700,fontSize:16,color:'var(--tf-text)',marginBottom:6}}>No tasks planned for {dateLabel}</div>
