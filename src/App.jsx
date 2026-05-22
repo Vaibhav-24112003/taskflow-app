@@ -2490,6 +2490,9 @@ function OrgGroupsPanel({org,cu,supabase}){
   var [memberships,setMemberships]=useState([]); // [{group_id, user_id}]
   var [orgMembers,setOrgMembers]=useState([]); // [{id, name, email}]
   var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadTimerRef=useRef(null);
+  var loadingRef=useRef(false);
   var [editingGroupId,setEditingGroupId]=useState(null);
   var [showAddGroup,setShowAddGroup]=useState(false);
   var [newGroupName,setNewGroupName]=useState('');
@@ -2502,7 +2505,7 @@ function OrgGroupsPanel({org,cu,supabase}){
 
   useEffect(function(){load();},[org.id]);
 
-  async function load(){setLoading(true);try{var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');setGroups(rg.data||[]);var gids=(rg.data||[]).map(function(g){return g.id;});if(gids.length){var rm=await supabase.from('org_group_members').select('*').in('group_id',gids);setMemberships(rm.data||[]);}var rme=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);try{var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');setGroups(rg.data||[]);var gids=(rg.data||[]).map(function(g){return g.id;});if(gids.length){var rm=await supabase.from('org_group_members').select('*').in('group_id',gids);setMemberships(rm.data||[]);}var rme=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
 
   async function addGroup(){
     if(!newGroupName.trim())return;
@@ -2541,6 +2544,7 @@ function OrgGroupsPanel({org,cu,supabase}){
     }
   }
 
+  if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>;
 
   var ungroupedMembers=orgMembers.filter(function(m){return!memberships.some(function(mb){return mb.user_id===m.id;});});
