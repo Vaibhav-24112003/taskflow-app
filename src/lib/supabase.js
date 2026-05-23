@@ -7,45 +7,39 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
 }
 
 // In-process serial lock — replaces Supabase's default navigator.locks based
-// auth lock, which causes "lock was released because another request stole it"
-// errors when the user has multiple tabs open or several internal supabase
-// calls race during boot. This keeps lock scope inside this tab only —
-// each tab maintains its own consistent auth state, which is what we want.
+// auth lock. When the page returns from background, _skipLock is set so all
+// lock calls run fn() immediately (no queueing behind a stale chain).
 const _locks = new Map()
+let _skipLock = false
 function processLock(name, _acquireTimeout, fn) {
+  if (_skipLock) return fn()
   const prev = _locks.get(name) || Promise.resolve()
   let release
   const next = new Promise(r => { release = r })
   _locks.set(name, prev.then(() => next))
   return prev.then(async () => {
-    // Safety: if fn() hangs (e.g. browser backgrounds the tab mid-refresh and
-    // the network request stalls), force-release after 5 s so all callers
-    // behind this lock are not blocked forever. Calling release() twice is
-    // harmless — a resolved Promise ignores further resolution attempts.
     const safetyTimer = setTimeout(release, 5000)
     try { return await fn() } finally { clearTimeout(safetyTimer); release() }
   })
 }
 
-// When the page becomes visible again, clear any stale lock chains that were
-// acquired before the app-switch (the holder may have hung waiting for
-// network). Future callers then start a fresh chain instead of queuing
-// behind a promise that might never resolve.
-//
-// Also reset GoTrue's internal lockAcquired flag and pendingInLock queue —
-// without this, the GoTrue client sees lockAcquired=true and short-circuits
-// our processLock entirely, queuing new callers behind the stuck operation.
+// Visibility-aware lock management:
+// HIDDEN  → stop auto-refresh so no token refresh fires in background
+// VISIBLE → bypass locks for 2 s, reset GoTrue internals, restart refresh
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === 'hidden') {
+      try { supabase.auth.stopAutoRefresh() } catch (e) {}
+    } else {
+      _skipLock = true
       _locks.clear()
       try {
         const auth = supabase.auth
-        if (auth.lockAcquired) {
-          auth.lockAcquired = false
-          auth.pendingInLock = []
-        }
-      } catch (e) { /* supabase not ready yet */ }
+        auth.lockAcquired = false
+        auth.pendingInLock = []
+        auth.startAutoRefresh()
+      } catch (e) {}
+      setTimeout(() => { _skipLock = false }, 2000)
     }
   })
 }
