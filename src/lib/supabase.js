@@ -18,7 +18,22 @@ function processLock(name, _acquireTimeout, fn) {
   const next = new Promise(r => { release = r })
   _locks.set(name, prev.then(() => next))
   return prev.then(async () => {
-    try { return await fn() } finally { release() }
+    // Safety: if fn() hangs (e.g. browser backgrounds the tab mid-refresh and
+    // the network request stalls), force-release after 5 s so all callers
+    // behind this lock are not blocked forever. Calling release() twice is
+    // harmless — a resolved Promise ignores further resolution attempts.
+    const safetyTimer = setTimeout(release, 5000)
+    try { return await fn() } finally { clearTimeout(safetyTimer); release() }
+  })
+}
+
+// When the page becomes visible again, clear any stale lock chains that were
+// acquired before the app-switch (the holder may have hung waiting for
+// network). Future callers then start a fresh chain instead of queuing
+// behind a promise that might never resolve.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _locks.clear()
   })
 }
 
