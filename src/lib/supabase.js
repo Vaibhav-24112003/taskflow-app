@@ -31,9 +31,22 @@ function processLock(name, _acquireTimeout, fn) {
 // acquired before the app-switch (the holder may have hung waiting for
 // network). Future callers then start a fresh chain instead of queuing
 // behind a promise that might never resolve.
+//
+// Also reset GoTrue's internal lockAcquired flag and pendingInLock queue —
+// without this, the GoTrue client sees lockAcquired=true and short-circuits
+// our processLock entirely, queuing new callers behind the stuck operation.
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') _locks.clear()
+    if (document.visibilityState === 'visible') {
+      _locks.clear()
+      try {
+        const auth = supabase.auth
+        if (auth.lockAcquired) {
+          auth.lockAcquired = false
+          auth.pendingInLock = []
+        }
+      } catch (e) { /* supabase not ready yet */ }
+    }
   })
 }
 
