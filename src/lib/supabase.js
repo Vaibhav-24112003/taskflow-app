@@ -6,13 +6,48 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
 }
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+// In-process serial lock — replaces Supabase's default navigator.locks based
+// auth lock, which causes "lock was released because another request stole it"
+// errors when the user has multiple tabs open or several internal supabase
+// calls race during boot. This keeps lock scope inside this tab only —
+// each tab maintains its own consistent auth state, which is what we want.
+const _locks = new Map()
+function processLock(name, _acquireTimeout, fn) {
+  const prev = _locks.get(name) || Promise.resolve()
+  let release
+  const next = new Promise(r => { release = r })
+  _locks.set(name, prev.then(() => next))
+  return prev.then(async () => {
+    try { return await fn() } finally { release() }
+  })
+}
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    lock: processLock,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+})
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 export const signInWithGoogle = () =>
   supabase.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: window.location.origin }
+  })
+
+// Passwordless email sign-in for users whose email isn't a Google account
+// (e.g. domain mailboxes like support@taskflowco.in). The user gets a one-time
+// link in their inbox; clicking it lands them back on the app, signed in.
+export const signInWithEmailLink = (email) =>
+  supabase.auth.signInWithOtp({
+    email: String(email || '').trim(),
+    options: {
+      emailRedirectTo: window.location.origin,
+      shouldCreateUser: true,
+    },
   })
 
 export const signOut = () => supabase.auth.signOut()
@@ -189,3 +224,79 @@ export const getUserWorksheetPrefs = (userId, orgId) =>
 
 export const upsertUserWorksheetPref = (pref) =>
   supabase.from('user_worksheet_prefs').upsert(pref, { onConflict: 'user_id,org_id,work_type' }).select().single()
+
+// ── Support Tickets ────────────────────────────────────────────────────────
+// Note: we don't chain .select() after insert because anon has no SELECT
+// policy on the table — that would make PostgREST fail the whole call.
+// Instead we synthesise the returned row from the payload (good enough
+// for the notify-admin email).
+export const createSupportTicket = async (payload) => {
+  const { error } = await supabase.from('support_tickets').insert(payload)
+  if (error) return { data: null, error }
+  return {
+    error: null,
+    data: {
+      ...payload,
+      priority: 'normal',
+      status: 'open',
+      created_at: new Date().toISOString(),
+    },
+  }
+}
+
+// Logged-in users — RLS auto-filters to their own tickets
+export const getMyTickets = () =>
+  supabase.from('support_tickets').select('*').order('created_at', { ascending: false })
+
+// Admin only — RLS allows full read for @taskflowco.in emails
+export const getAllTickets = (filters = {}) => {
+  let q = supabase.from('support_tickets').select('*').order('created_at', { ascending: false })
+  if (filters.status)   q = q.eq('status',   filters.status)
+  if (filters.category) q = q.eq('category', filters.category)
+  if (filters.priority) q = q.eq('priority', filters.priority)
+  return q
+}
+
+export const updateSupportTicket = (id, updates) =>
+  supabase.from('support_tickets').update(updates).eq('id', id).select().single()
+
+export const notifyAdminOfTicket = (ticket) =>
+  supabase.functions.invoke('notify-support-ticket', { body: { ticket } })
+
+// Admin = any @taskflowco.in email
+export const isAdminEmail = (email) =>
+  !!email && /@taskflowco\.in$/i.test(String(email).trim())
+
+// ── Announcements ──────────────────────────────────────────────────────────
+// Logged-in users see active, non-expired announcements (RLS handles it)
+export const getActiveAnnouncements = () =>
+  supabase.from('announcements').select('*').order('published_at', { ascending: false })
+
+// Admin — see all (active + expired + draft)
+export const getAllAnnouncements = () =>
+  supabase.from('announcements').select('*').order('published_at', { ascending: false })
+
+export const createAnnouncement = async (payload) => {
+  const { error } = await supabase.from('announcements').insert(payload)
+  if (error) return { data: null, error }
+  return { data: payload, error: null }
+}
+
+export const updateAnnouncement = (id, updates) =>
+  supabase.from('announcements').update(updates).eq('id', id).select().single()
+
+export const deleteAnnouncement = (id) =>
+  supabase.from('announcements').delete().eq('id', id)
+
+// Per-user read tracking
+export const getMyReadAnnouncementIds = async () => {
+  const { data, error } = await supabase.from('announcement_reads').select('announcement_id')
+  if (error) return { data: [], error }
+  return { data: (data || []).map(r => r.announcement_id), error: null }
+}
+
+export const markAnnouncementRead = (announcementId, userId) =>
+  supabase.from('announcement_reads').upsert(
+    { user_id: userId, announcement_id: announcementId },
+    { onConflict: 'user_id,announcement_id' }
+  )
