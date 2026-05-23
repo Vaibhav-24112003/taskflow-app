@@ -13,17 +13,21 @@ export default function UsersAdmin() {
 
   async function load() {
     setLoading(true);
-    const [{ data: rows, error: e1 }, { data: agg, error: e2 }] = await Promise.all([
-      supabase
-        .from("admin_user_overview")
-        .select("*")
-        .order("last_sign_in_at", { ascending: false, nullsFirst: false })
-        .limit(500),
-      supabase.rpc("admin_user_stats"),
-    ]);
-    if (e1 || e2) setError(e1 ?? e2);
+    setError(null);
+    // Fetch user list — required
+    const { data: rows, error: e1 } = await supabase
+      .from("admin_user_overview")
+      .select("*")
+      .order("last_sign_in_at", { ascending: false, nullsFirst: false })
+      .limit(500);
+    if (e1) { setError(e1); setLoading(false); return; }
     setUsers(rows ?? []);
-    setStats(Array.isArray(agg) ? agg[0] : agg);
+
+    // Fetch aggregate stats — optional, fail silently
+    const { data: agg, error: e2 } = await supabase.rpc("admin_user_stats");
+    if (!e2) setStats(Array.isArray(agg) ? agg[0] : agg);
+    // If e2 (e.g. function missing / permission denied), stats panel just won't render
+
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
