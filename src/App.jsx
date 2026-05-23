@@ -2506,7 +2506,7 @@ function OrgGroupsPanel({org,cu,supabase}){
 
   useEffect(function(){load();},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;load();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;load();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function load(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rg=await supabase.from('org_groups').select('*').eq('org_id',org.id).order('position');setGroups(rg.data||[]);var gids=(rg.data||[]).map(function(g){return g.id;});if(gids.length){var rm=await supabase.from('org_group_members').select('*').in('group_id',gids);setMemberships(rm.data||[]);}var rme=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   async function addGroup(){
@@ -2826,7 +2826,7 @@ function OrgMembersPanel({org,cu,supabase}){
   var [toast,setToast]=useState(null);
   useEffect(function(){loadAll();},[ org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);var mlist=rm.data||[];var enriched=mlist;if(mlist.length>0){var ids=mlist.map(function(m){return m.user_id;});var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});}setMembers(enriched);var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);setInvites(ri.data||[]);}catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);var mlist=rm.data||[];var enriched=mlist;if(mlist.length>0){var ids=mlist.map(function(m){return m.user_id;});var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});}setMembers(enriched);var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);setInvites(ri.data||[]);}catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
   var myMembership=members.find(function(m){return m.user_id===cu.id;});
   var myRole=myMembership?myMembership.role:'';
@@ -5724,7 +5724,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadData();},[org.id,selectedYear]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id,selectedYear]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id,selectedYear]);
   async function loadData(){
     if(loadingRef.current)return;
     loadingRef.current=true;
@@ -6797,7 +6797,7 @@ function PerformanceModule({org,supabase,cu}){
   useEffect(function(){loadMembers();},[org.id]);
   useEffect(function(){loadReviews();},[org.id,selUser]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadReviews();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id,selUser]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadReviews();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id,selUser]);
   async function loadMembers(){
     var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
     var rows=rm.data||[];
@@ -7276,7 +7276,7 @@ var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;})
 
 useEffect(function(){loadTeam();},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadTeam();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadTeam();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
 async function loadTeam(){
 if(loadingRef.current)return;
 loadingRef.current=true;
@@ -7499,6 +7499,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
   var loadingRef=useRef(false);
+  var loadGenRef=useRef(0);
   var [rows,setRows]=useState([]);
   var [worksheets,setWorksheets]=useState([]);
   var [clients,setClients]=useState([]);
@@ -7515,13 +7516,15 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
 
   useEffect(function(){load();},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;load();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
 
   async function load(){
     if(loadingRef.current)return;
     loadingRef.current=true;
+    var gen=++loadGenRef.current;
     setLoading(true);setLoadError(null);
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
-    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
+    loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
       var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
       var mlist=rm.data||[];
@@ -7537,7 +7540,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       setWorksheets(rw.data||[]);
       var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
       setClients(rc.data||[]);
-    }catch(e){console.error(e);setLoadError('error');}finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
+    }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -7744,7 +7747,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   // Restart any stalled load when tab becomes visible again (backgrounded fetch fix)
   useEffect(function(){
-    function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;load();}}
+    function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;load();}}
     document.addEventListener('visibilitychange',onVisible);
     return function(){document.removeEventListener('visibilitychange',onVisible);};
     /* eslint-disable-next-line */
@@ -9297,7 +9300,7 @@ function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){set
 
 useEffect(function(){loadAll();},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
 async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;if(!_billingCache[org.id])setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current&&!_billingCache[org.id]){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,email,gstin,city,state').eq('org_id',org.id).order('name').limit(2000);var ri=await supabase.from('invoices').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(1000);var rp=await supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(1000);var rpr=await supabase.from('proposals').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var cl=rc.data||[],inv=ri.data||[],pay=rp.data||[],prop=rpr.data||[];setClients(cl);setInvoices(inv);setPayments(pay);setProposals(prop);_billingCache[org.id]={clients:cl,invoices:inv,payments:pay,proposals:prop};}catch(e){console.error(e);if(gen===loadGenRef.current&&!_billingCache[org.id])setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
 var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
@@ -9825,7 +9828,7 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
 
   useEffect(function(){loadClients();},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadClients();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadClients();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function loadClients(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var r=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(2000);setClients(r.data||[]);var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(200);var ids=(rm.data||[]).map(function(m){return m.user_id;});if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(200);setOrgMembers(rp.data||[]);}}catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   var periodKey=periodYear+'-'+String(periodMonth).padStart(2,'0');
@@ -10654,7 +10657,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadData();},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError&&setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
@@ -11103,8 +11106,8 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 
   useEffect(function(){loadAll();},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  useEffect(function(){function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);setClients(rc.data||[]);var ru=await supabase.from('client_portal_access').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setUsers(ru.data||[]);var rr=await supabase.from('client_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);setRequests(rr.data||[]);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setTemplates(rt.data||[]);}catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   function genPassword(){var c='abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';var p='';for(var i=0;i<8;i++)p+=c.charAt(Math.floor(Math.random()*c.length));return p;}
@@ -12909,6 +12912,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
   var loadingRef=useRef(false);
+  var loadGenRef=useRef(0);
   var [showPicker,setShowPicker]=useState(false);
   var [search,setSearch]=useState('');
   var [filterStatus,setFilterStatus]=useState('all');
@@ -13017,7 +13021,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
 
   // Restart any stalled load when tab becomes visible again (backgrounded fetch fix)
   useEffect(function(){
-    function onVisible(){if(document.visibilityState==='visible'&&loadingRef.current){clearTimeout(loadTimerRef.current);loadingRef.current=false;loadPlan();}}
+    function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadPlan();}}
     document.addEventListener('visibilitychange',onVisible);
     return function(){document.removeEventListener('visibilitychange',onVisible);};
     /* eslint-disable-next-line */
@@ -13167,9 +13171,10 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   async function loadPlan(){
     if(loadingRef.current)return;
     loadingRef.current=true;
+    var gen=++loadGenRef.current;
     setLoading(true);setLoadError(null);
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
-    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
+    loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
     var r=await supabase.from('daily_plans').select('*').eq('user_id',planUserId).eq('plan_date',planDate).order('sort_order');
     var planRows=r.data||[];
@@ -13238,8 +13243,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       });
     }
     setPlan(enriched);
-    }catch(e){console.error('Plan load error:',e);setLoadError('error');}
-    finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
+    }catch(e){console.error('Plan load error:',e);if(gen===loadGenRef.current)setLoadError('error');}
+    finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
   async function loadTasks(){
