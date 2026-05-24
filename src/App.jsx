@@ -10565,14 +10565,12 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [entryFrom,setEntryFrom]=useState('');
   var [replyToLog,setReplyToLog]=useState(null);
   // Gmail integration state
-  var [gmailToken,setGmailToken]=useState(function(){
-    var saved=localStorage.getItem('tf_gmailToken_'+org.id);
-    var exp=localStorage.getItem('tf_gmailTokenExp_'+org.id);
-    if(saved&&exp&&Date.now()<Number(exp))return saved;
-    localStorage.removeItem('tf_gmailToken_'+org.id);
-    localStorage.removeItem('tf_gmailTokenExp_'+org.id);
-    return null;
-  });
+  var [gmailAccounts,setGmailAccounts]=useState([]); // [{email,token,expiry,type,label}]
+  var [gmailActiveEmail,setGmailActiveEmail]=useState(null);
+  var gmailAutoRefreshRef=useRef(null);
+  // Derived: active token
+  var _activeAcc=gmailAccounts.find(function(a){return a.email===gmailActiveEmail&&a.token&&Date.now()<a.expiry;});
+  var gmailToken=_activeAcc?_activeAcc.token:null;
   var [gmailClientId,setGmailClientId]=useState(function(){return import.meta.env.VITE_GMAIL_CLIENT_ID||localStorage.getItem('tf_gmailClientId')||'';});
   var [gmailThreads,setGmailThreads]=useState([]);
   var [gmailSelThread,setGmailSelThread]=useState(null);
@@ -10605,37 +10603,154 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     document.head.appendChild(s);
   },[]);
 
-  // Auto-load inbox if token exists from localStorage
+  // Auto-load accounts from localStorage on mount
   useEffect(function(){
-    if(gmailToken&&gmailThreads.length===0&&!gmailLoading){
-      fetchGmailProfile(gmailToken);
-      fetchGmailThreads(gmailToken,'INBOX');
+    var loaded=loadLocalAccounts();
+    if(loaded.length>0){
+      setGmailAccounts(loaded);
+      var firstValid=loaded.find(function(a){return a.token&&Date.now()<a.expiry;});
+      if(firstValid){
+        setGmailActiveEmail(firstValid.email);
+        fetchGmailProfile(firstValid.token);
+        fetchGmailThreads(firstValid.token,'INBOX');
+      }
     }
   },[]);
 
+  // Cleanup auto-refresh timer on unmount
+  useEffect(function(){return function(){if(gmailAutoRefreshRef.current)clearTimeout(gmailAutoRefreshRef.current);};},[]);
+
+  var _gmailPersonalKey='tf_gmailAccounts_'+org.id+'_'+cu.id;
+  var _gmailOrgKey='tf_gmailOrgAccounts_'+org.id;
+
+  function savePersonalAccounts(accs){
+    var personal=accs.filter(function(a){return a.type==='personal';});
+    localStorage.setItem(_gmailPersonalKey,JSON.stringify(personal));
+  }
+
+  function loadLocalAccounts(){
+    var personal=[];var org2=[];
+    try{personal=JSON.parse(localStorage.getItem(_gmailPersonalKey)||'[]');}catch(e){}
+    try{org2=JSON.parse(localStorage.getItem(_gmailOrgKey)||'[]');}catch(e){}
+    var all=personal.concat(org2).filter(function(a){return a&&a.email&&a.token;});
+    return all;
+  }
+
+  function addOrUpdateAccount(email,token,expiry,type,label){
+    setGmailAccounts(function(prev){
+      var filtered=prev.filter(function(a){return a.email!==email;});
+      var updated=filtered.concat([{email:email,token:token,expiry:expiry,type:type||'personal',label:label||email}]);
+      savePersonalAccounts(updated);
+      return updated;
+    });
+    setGmailActiveEmail(email);
+    setGmailProfile(null);
+    // schedule auto-refresh 5min before expiry
+    if(gmailAutoRefreshRef.current)clearTimeout(gmailAutoRefreshRef.current);
+    var refreshIn=expiry-Date.now()-300000;
+    if(refreshIn>0){
+      gmailAutoRefreshRef.current=setTimeout(function(){silentRefreshGmail(email);},refreshIn);
+    }
+  }
+
+  function silentRefreshGmail(email){
+    if(!gmailClientId||typeof google==='undefined'||!google.accounts)return;
+    var client=google.accounts.oauth2.initTokenClient({
+      client_id:gmailClientId,
+      scope:'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify',
+      prompt:'none',
+      hint:email,
+      callback:function(resp){
+        if(resp.error||!resp.access_token)return;
+        var expiry=Date.now()+(resp.expires_in||3600)*1000;
+        addOrUpdateAccount(email,resp.access_token,expiry,'personal',email);
+        showToast('Gmail reconnected');
+      }
+    });
+    try{client.requestAccessToken();}catch(e){}
+  }
+
+  function disconnectAccount(email){
+    setGmailAccounts(function(prev){
+      var updated=prev.filter(function(a){return a.email!==email;});
+      savePersonalAccounts(updated);
+      return updated;
+    });
+    if(gmailActiveEmail===email){
+      setGmailActiveEmail(null);
+      setGmailProfile(null);
+      setGmailThreads([]);
+      setGmailSelThread(null);
+      setGmailThreadMsgs([]);
+    }
+    showToast('Account disconnected');
+  }
+
   function connectGmail(){
-    if(!gmailClientId){showToast('Set Google Client ID first','err');return;}
-    if(typeof google==='undefined'||!google.accounts){showToast('Google script loading...','err');return;}
+    if(!gmailClientId){showToast('Gmail not configured','err');return;}
+    if(typeof google==='undefined'||!google.accounts){showToast('Google script loading, try again','err');return;}
     var client=google.accounts.oauth2.initTokenClient({
       client_id:gmailClientId,
       scope:'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify',
       callback:function(resp){
         if(resp.error){showToast('Auth failed: '+resp.error,'err');return;}
-        var expMs=Date.now()+(resp.expires_in||3600)*1000;
-        localStorage.setItem('tf_gmailToken_'+org.id,resp.access_token);
-        localStorage.setItem('tf_gmailTokenExp_'+org.id,String(expMs));
-        setGmailToken(resp.access_token);
-        fetchGmailProfile(resp.access_token);
-        fetchGmailThreads(resp.access_token,'INBOX');
+        var expiry=Date.now()+(resp.expires_in||3600)*1000;
+        gmailApi('profile',resp.access_token).then(function(d){
+          if(!d)return;
+          var email=d.emailAddress||'';
+          setGmailProfile(d);
+          addOrUpdateAccount(email,resp.access_token,expiry,'personal',email);
+          fetchGmailThreads(resp.access_token,'INBOX');
+        });
       }
     });
     client.requestAccessToken();
   }
 
+  async function connectOrgGmail(){
+    if(!gmailClientId){showToast('Gmail not configured','err');return;}
+    if(typeof google==='undefined'||!google.accounts){showToast('Google script loading','err');return;}
+    var client=google.accounts.oauth2.initTokenClient({
+      client_id:gmailClientId,
+      scope:'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify',
+      callback:async function(resp){
+        if(resp.error){showToast('Auth failed','err');return;}
+        var expiry=Date.now()+(resp.expires_in||3600)*1000;
+        var d=await gmailApi('profile',resp.access_token);
+        if(!d)return;
+        var email=d.emailAddress;
+        var label='Org: '+email;
+        var existing=[];
+        try{existing=JSON.parse(localStorage.getItem('tf_gmailOrgAccounts_'+org.id)||'[]');}catch(e){}
+        var updated=existing.filter(function(a){return a.email!==email;}).concat([{email:email,token:resp.access_token,expiry:expiry,type:'org',label:label}]);
+        localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(updated));
+        await supabase.from('org_cloud_storage').upsert({org_id:org.id,provider:'gmail_org_accounts',access_token:JSON.stringify(updated),is_active:true,connected_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:'org_id,provider'});
+        addOrUpdateAccount(email,resp.access_token,expiry,'org',label);
+        showToast('Org email connected: '+email);
+      }
+    });
+    client.requestAccessToken();
+  }
+
+  async function removeOrgGmail(email){
+    var existing=[];
+    try{existing=JSON.parse(localStorage.getItem('tf_gmailOrgAccounts_'+org.id)||'[]');}catch(e){}
+    var updated=existing.filter(function(a){return a.email!==email;});
+    localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(updated));
+    await supabase.from('org_cloud_storage').upsert({org_id:org.id,provider:'gmail_org_accounts',access_token:JSON.stringify(updated),is_active:updated.length>0,connected_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:'org_id,provider'});
+    disconnectAccount(email);
+    showToast('Org email removed');
+  }
+
   async function gmailApi(path,token,opts){
     var tk=token||gmailToken;if(!tk)return null;
     var res=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/'+path,Object.assign({headers:{Authorization:'Bearer '+tk}},opts||{}));
-    if(res.status===401){setGmailToken(null);localStorage.removeItem('tf_gmailToken_'+org.id);localStorage.removeItem('tf_gmailTokenExp_'+org.id);showToast('Gmail session expired — reconnect','err');return null;}
+    if(res.status===401){
+      var expAcc=gmailAccounts.find(function(a){return a.token===tk;});
+      if(expAcc){silentRefreshGmail(expAcc.email);showToast('Gmail session expired — reconnecting...','err');}
+      else{showToast('Gmail session expired — reconnect','err');}
+      return null;
+    }
     return res.json();
   }
 
@@ -10827,7 +10942,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   useEffect(function(){loadData();},[org.id]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
