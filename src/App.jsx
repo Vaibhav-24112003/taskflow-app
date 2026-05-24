@@ -10505,6 +10505,11 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [gmailCompose,setGmailCompose]=useState(null);
   var [gmailNextPage,setGmailNextPage]=useState(null);
   var gmailScriptLoaded=useRef(false);
+  var [gmailReplyText,setGmailReplyText]=useState('');
+  var [gmailReplyMode,setGmailReplyMode]=useState('reply'); // 'reply'|'replyall'|'forward'
+  var [gmailComposeFiles,setGmailComposeFiles]=useState([]); // file attachments for new compose
+  var [gmailReplyFiles,setGmailReplyFiles]=useState([]); // file attachments for reply
+  var [gmailMsgAttachments,setGmailMsgAttachments]=useState({}); // messageId -> [{id,filename,mimeType,size}]
   var loadTimerRef=useRef(null);
   var loadingRef=useRef(false);
   var loadGenRef=useRef(0);
@@ -10583,11 +10588,14 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     setGmailLoading(true);
     var d=await gmailApi('threads/'+threadId+'?format=full');
     if(!d){setGmailLoading(false);return;}
+    var attachMap={};
     var msgs=d.messages.map(function(m){
       var headers={};(m.payload.headers||[]).forEach(function(h){headers[h.name.toLowerCase()]=h.value;});
       var body='';var html='';
+      var atts=[];
       function extractParts(part){
         if(!part)return;
+        if(part.filename&&part.body&&part.body.attachmentId)atts.push({id:part.body.attachmentId,filename:part.filename,mimeType:part.mimeType||'application/octet-stream',size:part.body.size||0});
         if(part.mimeType==='text/html'&&part.body&&part.body.data){html=atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));}
         if(part.mimeType==='text/plain'&&part.body&&part.body.data){body=atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));}
         if(part.parts)part.parts.forEach(extractParts);
@@ -10597,9 +10605,12 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         var raw=atob(m.payload.body.data.replace(/-/g,'+').replace(/_/g,'/'));
         if(m.payload.mimeType==='text/html')html=raw;else body=raw;
       }
+      if(atts.length)attachMap[m.id]=atts;
       return{id:m.id,messageId:headers['message-id']||'',from:headers.from||'',to:headers.to||'',cc:headers.cc||'',date:headers.date||'',subject:headers.subject||'',body:body,html:html,labelIds:m.labelIds||[]};
     });
     setGmailThreadMsgs(msgs);
+    setGmailMsgAttachments(attachMap);
+    setGmailReplyText('');setGmailReplyFiles([]);
     setGmailSelThread(threadId);
     // Mark as read
     var unreadMsg=d.messages.find(function(m){return m.labelIds&&m.labelIds.indexOf('UNREAD')!==-1;});
@@ -10610,34 +10621,102 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     setGmailLoading(false);
   }
 
-  async function sendGmailReply(to,subject,bodyText,threadId,messageId){
-    if(!bodyText.trim()){showToast('Message body required','err');return;}
-    var boundary='boundary_'+Date.now();
-    var sub=subject.startsWith('Re:')?subject:'Re: '+subject;
-    var raw='MIME-Version: 1.0\r\nTo: '+to+'\r\nSubject: '+sub+'\r\nIn-Reply-To: '+messageId+'\r\nReferences: '+messageId+'\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText;
-    var encoded=btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded,threadId:threadId})});
-    if(res&&res.id){showToast('Reply sent!');openGmailThread(threadId);}
+  function buildMimeEmail(to,subject,bodyText,cc,bcc,replyTo,inReplyTo,references,files){
+    var boundary='==TaskFlow_'+Date.now()+'==';
+    var headers='MIME-Version: 1.0\r\nTo: '+to+'\r\n';
+    if(cc&&cc.trim())headers+='Cc: '+cc.trim()+'\r\n';
+    if(bcc&&bcc.trim())headers+='Bcc: '+bcc.trim()+'\r\n';
+    if(inReplyTo)headers+='In-Reply-To: '+inReplyTo+'\r\nReferences: '+(references||inReplyTo)+'\r\n';
+    headers+='Subject: '+subject+'\r\n';
+    if(files&&files.length){
+      headers+='Content-Type: multipart/mixed; boundary="'+boundary+'"\r\n\r\n';
+      var body='--'+boundary+'\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText+'\r\n';
+      files.forEach(function(f){body+='--'+boundary+'\r\nContent-Type: '+f.mimeType+'; name="'+f.name+'"\r\nContent-Disposition: attachment; filename="'+f.name+'"\r\nContent-Transfer-Encoding: base64\r\n\r\n'+f.b64+'\r\n';});
+      body+='--'+boundary+'--';
+      return btoa(unescape(encodeURIComponent(headers+body))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    headers+='Content-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText;
+    return btoa(unescape(encodeURIComponent(headers))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+
+  async function readFilesAsB64(files){
+    return Promise.all(Array.from(files).map(function(f){return new Promise(function(res){var r=new FileReader();r.onload=function(e){res({name:f.name,mimeType:f.type||'application/octet-stream',b64:e.target.result.split(',')[1]});};r.readAsDataURL(f);});}));
+  }
+
+  async function downloadGmailAttachment(messageId,attachmentId,filename,mimeType){
+    var d=await gmailApi('messages/'+messageId+'/attachments/'+attachmentId);
+    if(!d||!d.data)return;
+    var bytes=atob(d.data.replace(/-/g,'+').replace(/_/g,'/'));
+    var arr=new Uint8Array(bytes.length);for(var i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+    var blob=new Blob([arr],{type:mimeType||'application/octet-stream'});
+    var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=filename||'attachment';a.style.display='none';document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},2000);
+    showToast('Downloading '+filename);
+  }
+
+  async function archiveThread(threadId){
+    await gmailApi('threads/'+threadId+'/modify',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({removeLabelIds:['INBOX']})});
+    setGmailThreads(function(p){return p.filter(function(t){return t.id!==threadId;});});
+    setGmailSelThread(null);setGmailThreadMsgs([]);
+    showToast('Archived');
+  }
+
+  async function trashThread(threadId){
+    await gmailApi('threads/'+threadId+'/trash',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'}});
+    setGmailThreads(function(p){return p.filter(function(t){return t.id!==threadId;});});
+    setGmailSelThread(null);setGmailThreadMsgs([]);
+    showToast('Moved to Trash');
+  }
+
+  async function markThreadUnread(threadId){
+    var msgs2=await gmailApi('threads/'+threadId+'?format=minimal');
+    if(!msgs2||!msgs2.messages)return;
+    await gmailApi('messages/'+msgs2.messages[msgs2.messages.length-1].id+'/modify',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({addLabelIds:['UNREAD']})});
+    setGmailThreads(function(p){return p.map(function(t){return t.id===threadId?Object.assign({},t,{unread:true}):t;});});
+    showToast('Marked as unread');
+  }
+
+  async function sendGmailReply(lastMsg,threadId,mode){
+    if(!gmailReplyText.trim()&&!gmailReplyFiles.length){showToast('Message body required','err');return;}
+    var to='';var cc='';
+    var myEmail=gmailProfile?gmailProfile.emailAddress:'';
+    var fromEmail=parseEmailName(lastMsg.from).email;
+    if(mode==='replyall'){
+      to=fromEmail===myEmail?lastMsg.to:lastMsg.from;
+      var allTo=[lastMsg.to,lastMsg.cc].filter(Boolean).join(',').split(',').map(function(e){return e.trim();}).filter(function(e){return e&&!e.includes(myEmail);});
+      cc=allTo.join(', ');
+    }else if(mode==='forward'){
+      to=gmailReplyText.split('\n')[0]||'';
+    }else{
+      to=fromEmail===myEmail?lastMsg.to.split(',')[0].trim():fromEmail;
+    }
+    var subject=mode==='forward'?'Fwd: '+lastMsg.subject:(lastMsg.subject.startsWith('Re:')?lastMsg.subject:'Re: '+lastMsg.subject);
+    var body=gmailReplyText;
+    if(mode==='forward'){body+='\n\n---------- Forwarded message ----------\nFrom: '+lastMsg.from+'\nDate: '+lastMsg.date+'\nSubject: '+lastMsg.subject+'\n\n'+(lastMsg.body||'');}
+    var files=gmailReplyFiles.length?await readFilesAsB64(gmailReplyFiles):[];
+    var encoded=buildMimeEmail(to,subject,body,'','',(mode==='replyall'?to:''),mode!=='forward'?lastMsg.messageId:'',mode!=='forward'?lastMsg.messageId:'',files);
+    var payload={raw:encoded};
+    if(mode!=='forward')payload.threadId=threadId;
+    var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(res&&res.id){showToast(mode==='forward'?'Forwarded!':'Reply sent!');setGmailReplyText('');setGmailReplyFiles([]);if(mode!=='forward')openGmailThread(threadId);}
     else{showToast('Send failed','err');}
   }
 
   async function sendGmailNew(to,subject,bodyText,cc,bcc){
     if(!to.trim()||!subject.trim()){showToast('To and Subject required','err');return;}
-    var raw='MIME-Version: 1.0\r\nTo: '+to+'\r\n';
-    if(cc&&cc.trim())raw+='Cc: '+cc.trim()+'\r\n';
-    if(bcc&&bcc.trim())raw+='Bcc: '+bcc.trim()+'\r\n';
-    raw+='Subject: '+subject+'\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText;
-    var encoded=btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    var files=gmailComposeFiles.length?await readFilesAsB64(gmailComposeFiles):[];
+    var encoded=buildMimeEmail(to,subject,bodyText,cc,bcc,'','','',files);
     var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
-    if(res&&res.id){showToast('Email sent!');setGmailCompose(null);fetchGmailThreads(gmailToken,gmailFolder);}
+    if(res&&res.id){showToast('Email sent!');setGmailCompose(null);setGmailComposeFiles([]);fetchGmailThreads(gmailToken,gmailFolder);}
     else{showToast('Send failed','err');}
   }
 
-  function saveGmailClientId(){
+  async function saveGmailClientId(){
     if(!gmailClientIdInput.trim())return;
-    localStorage.setItem('tf_gmailClientId',gmailClientIdInput.trim());
-    setGmailClientId(gmailClientIdInput.trim());
-    showToast('Client ID saved');
+    var id=gmailClientIdInput.trim();
+    await supabase.from('org_cloud_storage').upsert({org_id:org.id,provider:'gmail_clientid',access_token:id,is_active:false,connected_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:'org_id,provider'});
+    localStorage.setItem('tf_gmailClientId',id);
+    setGmailClientId(id);
+    showToast('Client ID saved for all devices');
   }
 
   function parseEmailName(fromStr){
@@ -10658,7 +10737,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   useEffect(function(){loadData();},[org.id]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);var rg=await supabase.from('org_cloud_storage').select('access_token').eq('org_id',org.id).eq('provider','gmail_clientid').maybeSingle();var dbGmailClientId=rg.data&&rg.data.access_token||'';setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);if(dbGmailClientId){localStorage.setItem('tf_gmailClientId',dbGmailClientId);setGmailClientId(dbGmailClientId);}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
@@ -10930,10 +11009,17 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <FormatBar bodyId={'gmail_compose_body'} setter={function(v){setGmailCompose(Object.assign({},gmailCompose,{body:v}));}} getter={gmailCompose.body}/>
               <textarea id="gmail_compose_body" value={gmailCompose.body} onChange={function(e){setGmailCompose(Object.assign({},gmailCompose,{body:e.target.value}));}} rows={10} placeholder="Write your email..." style={Object.assign({},INP,{resize:'vertical'})}/>
             </div>
-            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
               <button onClick={function(){sendGmailNew(gmailCompose.to,gmailCompose.subject,gmailCompose.body,gmailCompose.cc,gmailCompose.bcc);}} style={{background:'linear-gradient(135deg,#4285f4,#1a73e8)',border:'none',borderRadius:8,padding:'10px 28px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:'0 2px 8px rgba(66,133,244,0.3)'}}>Send</button>
               <button onClick={function(){setGmailCompose(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>Discard</button>
+              <label style={{display:'inline-flex',alignItems:'center',gap:5,padding:'8px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,color:'var(--tf-text-sub)'}}>
+                📎 Attach files
+                <input type="file" multiple onChange={function(e){setGmailComposeFiles(Array.from(e.target.files));}} style={{display:'none'}}/>
+              </label>
             </div>
+            {gmailComposeFiles.length>0&&<div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:8}}>
+              {gmailComposeFiles.map(function(f,i){return<span key={i} style={{fontSize:11,padding:'2px 8px',background:'rgba(66,133,244,0.1)',border:'1px solid rgba(66,133,244,0.2)',borderRadius:4,color:'#4285f4'}}>{f.name}<button onClick={function(){setGmailComposeFiles(function(p){return p.filter(function(_,j){return j!==i;});});}} style={{background:'none',border:'none',cursor:'pointer',color:'#4285f4',marginLeft:4,fontSize:12}}>×</button></span>;})}
+            </div>}
           </div>
         </div>:!gmailSelThread?<div style={{textAlign:'center',padding:'80px 20px'}}>
           <div style={{fontSize:40,marginBottom:12}}>📬</div>
@@ -10941,10 +11027,14 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
           <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Choose an email thread from the left panel to read it.</div>
         </div>:<div>
           {/* Thread view header */}
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
             <button onClick={function(){setGmailSelThread(null);setGmailThreadMsgs([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>← Back</button>
-            <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailThreadMsgs.length>0?gmailThreadMsgs[0].subject:'Loading...'}</div>
-            <span style={{fontSize:11,color:'var(--tf-text-sub)',flexShrink:0}}>{gmailThreadMsgs.length} message{gmailThreadMsgs.length!==1?'s':''}</span>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailThreadMsgs.length>0?gmailThreadMsgs[0].subject:'Loading...'}</div>
+            <div style={{display:'flex',gap:4,flexShrink:0}}>
+              <button onClick={function(){markThreadUnread(gmailSelThread);}} title="Mark unread" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>● Unread</button>
+              <button onClick={function(){archiveThread(gmailSelThread);}} title="Archive" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>📥 Archive</button>
+              <button onClick={function(){if(window.confirm('Move to Trash?'))trashThread(gmailSelThread);}} title="Delete" style={{background:'rgba(239,68,68,0.06)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'#ef4444'}}>🗑 Trash</button>
+            </div>
           </div>
           {/* Messages */}
           {gmailThreadMsgs.map(function(msg,idx){
@@ -10969,21 +11059,43 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <div id={'gmail_msg_'+msg.id} style={{display:expanded?'block':'none',padding:'0 16px 14px',borderTop:'1px solid var(--tf-border)'}}>
                 {msg.html?<iframe srcDoc={msg.html} style={{width:'100%',minHeight:300,border:'none',borderRadius:6,background:'#fff'}} sandbox="allow-same-origin"/>:
                 <div style={{fontSize:13,color:'var(--tf-text)',lineHeight:1.6,whiteSpace:'pre-wrap',padding:'12px 0'}}>{msg.body}</div>}
+                {gmailMsgAttachments[msg.id]&&gmailMsgAttachments[msg.id].length>0&&<div style={{padding:'8px 0 4px',display:'flex',gap:6,flexWrap:'wrap',borderTop:'1px solid var(--tf-border)',marginTop:8}}>
+                  {gmailMsgAttachments[msg.id].map(function(att){
+                    return<button key={att.id} onClick={function(){downloadGmailAttachment(msg.id,att.id,att.filename,att.mimeType);}} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'4px 10px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer',fontSize:11,color:'var(--tf-text)',fontFamily:'inherit'}}>
+                      <span>📎</span>{att.filename}<span style={{color:'var(--tf-text-sub)',fontSize:10}}>({Math.round(att.size/1024)}KB)</span>
+                    </button>;
+                  })}
+                </div>}
+                <div style={{display:'flex',gap:6,padding:'8px 0 0',marginTop:4}}>
+                  <button onClick={function(){setGmailReplyMode('reply');setGmailReplyText('');var el=document.getElementById('gmail_reply_area');if(el)el.scrollIntoView({behavior:'smooth'});}} style={{padding:'4px 12px',background:'#4285f4',border:'none',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff'}}>Reply</button>
+                  <button onClick={function(){setGmailReplyMode('replyall');setGmailReplyText('');var el=document.getElementById('gmail_reply_area');if(el)el.scrollIntoView({behavior:'smooth'});}} style={{padding:'4px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer',fontSize:11,color:'var(--tf-text)'}}>Reply-All</button>
+                  <button onClick={function(){setGmailReplyMode('forward');setGmailReplyText('To: ');var el=document.getElementById('gmail_reply_area');if(el)el.scrollIntoView({behavior:'smooth'});}} style={{padding:'4px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer',fontSize:11,color:'var(--tf-text)'}}>Forward</button>
+                </div>
               </div>
             </div>;
           })}
           {/* Reply box */}
           {gmailThreadMsgs.length>0&&(function(){
             var lastMsg=gmailThreadMsgs[gmailThreadMsgs.length-1];
-            var replyTo=parseEmailName(lastMsg.from);
-            var replyAddr=replyTo.email===gmailProfile?.emailAddress?lastMsg.to.split(',')[0].trim():replyTo.email;
-            return<div style={{background:'var(--tf-surface)',border:'1px solid rgba(66,133,244,0.3)',borderRadius:10,padding:14,marginTop:8}}>
-              <div style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',marginBottom:6}}>Reply to {replyAddr}</div>
-              <textarea id="gmail_reply_box" rows={4} placeholder="Write your reply..." style={Object.assign({},INP,{resize:'vertical',marginBottom:8})}/>
-              <button onClick={function(){
-                var body=document.getElementById('gmail_reply_box').value;
-                sendGmailReply(replyAddr,lastMsg.subject,body,gmailSelThread,lastMsg.messageId);
-              }} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 20px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Send Reply</button>
+            return<div id="gmail_reply_area" style={{background:'var(--tf-surface)',border:'1px solid rgba(66,133,244,0.3)',borderRadius:10,padding:14,marginTop:8}}>
+              <div style={{display:'flex',gap:4,marginBottom:8}}>
+                {[{id:'reply',label:'↩ Reply'},{id:'replyall',label:'↩ Reply All'},{id:'forward',label:'→ Forward'}].map(function(m){var act=gmailReplyMode===m.id;return<button key={m.id} onClick={function(){setGmailReplyMode(m.id);if(m.id==='forward')setGmailReplyText('To: ');}} style={{padding:'4px 12px',border:'1px solid',borderColor:act?'#4285f4':'var(--tf-border)',borderRadius:6,background:act?'rgba(66,133,244,0.1)':'var(--tf-bg)',color:act?'#4285f4':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:act?700:500,fontFamily:'inherit'}}>{m.label}</button>;})}
+                <div style={{flex:1}}/>
+                <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t)setGmailReplyText(gmailReplyText+(gmailReplyText?'\n\n':'')+t.body);e.target.value='';}} style={{padding:'3px 8px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-surface)',color:'var(--tf-text-sub)',fontSize:10,fontFamily:'inherit',cursor:'pointer',outline:'none'}}>
+                  <option value="">📋 Template</option>
+                  {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
+                </select>
+              </div>
+              {gmailReplyMode==='forward'&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:4}}>Enter recipient on the first line (e.g. "To: email@example.com")</div>}
+              <textarea value={gmailReplyText} onChange={function(e){setGmailReplyText(e.target.value);}} rows={5} placeholder={gmailReplyMode==='forward'?'To: recipient@email.com\n\nYour message here...':'Write your reply...'} style={Object.assign({},INP,{resize:'vertical',marginBottom:8})}/>
+              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                <button onClick={function(){sendGmailReply(lastMsg,gmailSelThread,gmailReplyMode);}} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>{gmailReplyMode==='forward'?'Forward':'Send Reply'}</button>
+                <label style={{display:'inline-flex',alignItems:'center',gap:4,padding:'7px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>
+                  <span>📎</span> Attach
+                  <input type="file" multiple onChange={function(e){setGmailReplyFiles(Array.from(e.target.files));}} style={{display:'none'}}/>
+                </label>
+                {gmailReplyFiles.length>0&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{gmailReplyFiles.length} file{gmailReplyFiles.length!==1?'s':''} selected</span>}
+              </div>
             </div>;
           })()}
         </div>}
