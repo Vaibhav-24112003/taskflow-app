@@ -11385,7 +11385,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 }
 
 // ── Client Connect Module — Q&A forms, data requests & BYO storage ──
-var PROVIDER_LABELS={google_drive:'Google Drive',dropbox:'Dropbox',onedrive:'OneDrive'};
+var PROVIDER_LABELS={taskflow:'TaskFlow Storage',google_drive:'Google Drive',dropbox:'Dropbox',onedrive:'OneDrive'};
 
 function ClientConnectModule({org,supabase,cu}){
   var _ccc=_ccCache[org.id]||null;
@@ -11411,8 +11411,9 @@ function ClientConnectModule({org,supabase,cu}){
   var [newDue,setNewDue]=useState('');
   var [newQuestions,setNewQuestions]=useState([]);
   var [creating,setCreating]=useState(false);
+  var [reqStorProvider,setReqStorProvider]=useState(null); // per-request storage override
   // Storage modal state
-  var [storTab,setStorTab]=useState('dropbox'); // 'dropbox'|'google_drive'|'onedrive'
+  var [storTab,setStorTab]=useState('taskflow'); // 'taskflow'|'dropbox'|'google_drive'|'onedrive'
   var [storToken,setStorToken]=useState('');
   var [storRootPath,setStorRootPath]=useState('/TaskFlow Uploads');
   var [storEmail,setStorEmail]=useState('');
@@ -11426,7 +11427,7 @@ function ClientConnectModule({org,supabase,cu}){
 
   // When storage modal opens or tab changes, prefill from existing config
   useEffect(function(){
-    if(!showStorage)return;
+    if(!showStorage||storTab==='taskflow')return;
     var existing=cloudStorages.find(function(s){return s.provider===storTab;});
     if(existing){setStorToken(existing.access_token||'');setStorRootPath(existing.root_folder_path||'/TaskFlow Uploads');setStorEmail(existing.account_email||'');}
     else{setStorToken('');setStorRootPath('/TaskFlow Uploads');setStorEmail('');}
@@ -11435,16 +11436,41 @@ function ClientConnectModule({org,supabase,cu}){
   async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;if(!_ccCache[org.id])setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current&&!_ccCache[org.id]){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}var cl=rc.data||[],req=rr.data||[],cs=sc.data||[];setClients(cl);setRequests(req);setResponses(resData);setCcMessages(msgData);setCloudStorages(cs);_ccCache[org.id]={clients:cl,requests:req,responses:resData,ccMessages:msgData,cloudStorages:cs};}catch(e){console.error(e);if(gen===loadGenRef.current&&!_ccCache[org.id])setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   function getActiveStorage(){return cloudStorages.find(function(s){return s.is_active;})||null;}
+  function getClientDefaultStorage(clientId){
+    var c=clients.find(function(cl){return cl.id===clientId;});
+    return c&&c.custom_fields&&c.custom_fields.default_storage_provider||null;
+  }
+  function getEffectiveProvider(clientId){
+    if(reqStorProvider)return reqStorProvider;
+    var cd=getClientDefaultStorage(clientId);
+    if(cd)return cd;
+    var a=getActiveStorage();
+    return a?a.provider:'taskflow';
+  }
+  function availableProviders(){
+    var provs=[{id:'taskflow',label:'TaskFlow Storage (Download to Disk)',icon:'💾'}];
+    cloudStorages.forEach(function(s){provs.push({id:s.provider,label:PROVIDER_LABELS[s.provider],icon:s.provider==='dropbox'?'📦':s.provider==='google_drive'?'🟢':'🔵'});});
+    return provs;
+  }
+  async function setClientDefaultStorageProvider(clientId,provider){
+    var c=clients.find(function(cl){return cl.id===clientId;});
+    if(!c)return;
+    var cf=Object.assign({},c.custom_fields||{},{default_storage_provider:provider});
+    await supabase.from('clients').update({custom_fields:cf}).eq('id',clientId);
+    setClients(function(p){return p.map(function(cl){return cl.id===clientId?Object.assign({},cl,{custom_fields:cf}):cl;});});
+    if(_ccCache[org.id])_ccCache[org.id].clients=clients.map(function(cl){return cl.id===clientId?Object.assign({},cl,{custom_fields:cf}):cl;});
+    showToast('Default storage set to '+PROVIDER_LABELS[provider]);
+  }
 
   async function createRequest(){
     if(!newTitle.trim()||!selClientId){showToast('Title and client required','err');return;}
     setCreating(true);
-    var active=getActiveStorage();
-    var payload={org_id:org.id,client_id:selClientId,created_by:cu.id,title:newTitle.trim(),description:newDesc.trim()||null,questions:newQuestions,due_date:newDue||null,cloud_provider:active?active.provider:null};
+    var eProv=getEffectiveProvider(selClientId);
+    var payload={org_id:org.id,client_id:selClientId,created_by:cu.id,title:newTitle.trim(),description:newDesc.trim()||null,questions:newQuestions,due_date:newDue||null,cloud_provider:eProv==='taskflow'?null:eProv};
     var {data,error}=await supabase.from('client_connect_requests').insert(payload).select().single();
     if(error){showToast(error.message,'err');setCreating(false);return;}
     setRequests(function(p){return[data,...p];});
-    setNewTitle('');setNewDesc('');setNewDue('');setNewQuestions([]);
+    setNewTitle('');setNewDesc('');setNewDue('');setNewQuestions([]);setReqStorProvider(null);
     setShowCreate(false);setCreating(false);
     showToast('Request created! Copy the link to share with client.');
   }
@@ -11531,7 +11557,7 @@ function ClientConnectModule({org,supabase,cu}){
           <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Client Connect</div>
           <div style={{fontSize:13,maxWidth:340}}>Send Q&A questionnaires and data requests to clients via a simple shareable link — no login required. Files go to your own cloud storage.</div>
           <button onClick={function(){setShowStorage(true);}} style={{marginTop:8,padding:'8px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
-            ⚙ Storage Settings {(function(){var a=getActiveStorage();return a?'('+PROVIDER_LABELS[a.provider]+')':'(not connected)';})()}
+            ⚙ Storage Settings {(function(){var a=getActiveStorage();return a?'('+PROVIDER_LABELS[a.provider]+')':'(TaskFlow Storage)';})()}
           </button>
           <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>← Select a client to start</div>
         </div>:
@@ -11541,9 +11567,13 @@ function ClientConnectModule({org,supabase,cu}){
               <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}</div>
               {selClient.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>PAN: {selClient.pan}</div>}
             </div>
-            <div style={{display:'flex',gap:8}}>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+              <select value={getClientDefaultStorage(selClientId)||''} onChange={function(e){setClientDefaultStorageProvider(selClientId,e.target.value);}} style={{padding:'6px 10px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:11,fontFamily:'inherit',cursor:'pointer',outline:'none'}} title="Default storage for this client">
+                <option value="">Default Storage: Org</option>
+                {availableProviders().map(function(p){return<option key={p.id} value={p.id}>{p.icon} {p.label}</option>;})}
+              </select>
               <button onClick={function(){setShowStorage(true);}} style={{padding:'6px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
-                ⚙ Storage {(function(){var a=getActiveStorage();return a?'('+PROVIDER_LABELS[a.provider]+')':'(not connected)';})()}
+                ⚙ Storage
               </button>
               <button onClick={function(){setShowCreate(true);}} style={{padding:'6px 14px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>
                 + New Request
@@ -11580,7 +11610,7 @@ function ClientConnectModule({org,supabase,cu}){
                   <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
                     <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📝 {questions.length} question{questions.length!==1?'s':''}</span>
                     {req.due_date&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📅 Due {req.due_date}</span>}
-                    {req.storage_url&&<span style={{fontSize:11,color:'#0e2a47'}}>🗂 Storage linked</span>}
+                    <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{req.cloud_provider?({dropbox:'📦',google_drive:'🟢',onedrive:'🔵'}[req.cloud_provider]||'📁')+' '+PROVIDER_LABELS[req.cloud_provider]:'💾 TaskFlow Storage'}</span>
                     {rCount>0&&<span style={{fontSize:11,color:'#22c55e',fontWeight:700}}>✓ {rCount} response{rCount!==1?'s':''}</span>}
                   </div>
                   <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
@@ -11659,11 +11689,16 @@ function ClientConnectModule({org,supabase,cu}){
         </div>
 
         <div style={{padding:'10px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'rgba(14,42,71,0.06)',marginBottom:16}}>
-          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>📁 File Storage Destination</div>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>📁 File Storage Destination</div>
+          <select value={getEffectiveProvider(selClientId)} onChange={function(e){setReqStorProvider(e.target.value);}} style={{width:'100%',boxSizing:'border-box',padding:'8px 10px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none',marginBottom:6,cursor:'pointer'}}>
+            {availableProviders().map(function(p){return<option key={p.id} value={p.id}>{p.icon} {p.label}</option>;})}
+          </select>
           <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>
-            {(function(){var a=getActiveStorage();
-              if(a)return'Files will upload to your '+PROVIDER_LABELS[a.provider]+' under '+(a.root_folder_path||'/TaskFlow Uploads')+'/[client]/[request]';
-              return'No cloud storage connected. Files will be stored on TaskFlow (private). Click "⚙ Storage" above to connect your cloud.';
+            {(function(){var ep=getEffectiveProvider(selClientId);
+              if(ep==='taskflow')return'Files will be stored on TaskFlow — downloadable to your local disk from the Responses view.';
+              var cs=cloudStorages.find(function(s){return s.provider===ep;});
+              if(cs)return'Files will upload to your '+PROVIDER_LABELS[ep]+' under '+(cs.root_folder_path||'/TaskFlow Uploads')+'/[client]/[request]';
+              return PROVIDER_LABELS[ep]+' is not connected yet. Connect it in ⚙ Storage Settings.';
             })()}
           </div>
         </div>
@@ -11683,7 +11718,7 @@ function ClientConnectModule({org,supabase,cu}){
         google_drive:{title:'Google Drive — OAuth Setup',steps:['Setup required. Register an OAuth 2.0 Client at console.cloud.google.com','Enable Drive API, add redirect URI: https://www.taskflowco.in/oauth/google/callback','Provide me your Client ID & Client Secret to wire up the Connect flow.'],tokenLabel:'OAuth Access Token (manual)'},
         onedrive:{title:'OneDrive — OAuth Setup',steps:['Setup required. Register an app at portal.azure.com','Add Files.ReadWrite scope, redirect URI: https://www.taskflowco.in/oauth/microsoft/callback','Provide me your Application (client) ID & secret to wire up the Connect flow.'],tokenLabel:'OAuth Access Token (manual)'}
       };
-      var help=tabHelp[storTab];
+      var help=tabHelp[storTab]||{};
       return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
         <div style={{background:'var(--tf-bg)',borderRadius:14,padding:24,width:560,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
@@ -11709,8 +11744,8 @@ function ClientConnectModule({org,supabase,cu}){
 
           <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>Add / Update Connection</div>
 
-          <div style={{display:'flex',gap:6,marginBottom:14,borderBottom:'1px solid var(--tf-border)'}}>
-            {[{id:'dropbox',label:'Dropbox',icon:'📦'},{id:'google_drive',label:'Google Drive',icon:'🟢'},{id:'onedrive',label:'OneDrive',icon:'🔵'}].map(function(p){
+          <div style={{display:'flex',gap:6,marginBottom:14,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
+            {[{id:'taskflow',label:'TaskFlow',icon:'💾'},{id:'dropbox',label:'Dropbox',icon:'📦'},{id:'google_drive',label:'Google Drive',icon:'🟢'},{id:'onedrive',label:'OneDrive',icon:'🔵'}].map(function(p){
               var act=storTab===p.id;
               return<button key={p.id} onClick={function(){setStorTab(p.id);}} style={{padding:'8px 14px',border:'none',background:'none',borderBottom:act?'2px solid #0e2a47':'2px solid transparent',fontFamily:'inherit',cursor:'pointer',fontSize:12,fontWeight:act?700:500,color:act?'#0e2a47':'var(--tf-text-sub)',marginBottom:-1}}>
                 <span style={{marginRight:5}}>{p.icon}</span>{p.label}
@@ -11718,29 +11753,55 @@ function ClientConnectModule({org,supabase,cu}){
             })}
           </div>
 
-          <div style={{padding:'12px',border:'1px solid rgba(14,42,71,0.3)',borderRadius:10,background:'rgba(14,42,71,0.06)',marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>{help.title}</div>
-            <ol style={{margin:0,paddingLeft:18,fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.6}}>
-              {help.steps.map(function(s,i){return<li key={i}>{s}</li>;})}
-            </ol>
-          </div>
+          {storTab==='taskflow'?<div>
+            <div style={{padding:'16px',border:'1px solid rgba(34,197,94,0.3)',borderRadius:10,background:'rgba(34,197,94,0.06)',marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>💾 TaskFlow Storage — No Setup Required</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.7}}>
+                Files uploaded by clients are stored securely on TaskFlow's servers. You can download them to your local hard disk anytime from the Responses view.
+              </div>
+              <div style={{marginTop:12,display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--tf-text-sub)'}}>
+                  <span>✅</span> No tokens or API keys needed
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--tf-text-sub)'}}>
+                  <span>✅</span> Click "Download" on any file response to save to your disk
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--tf-text-sub)'}}>
+                  <span>✅</span> Works for organisations that use local/offline storage
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:'var(--tf-text-sub)'}}>
+                  <span>✅</span> Files stored privately — only your org can access them
+                </div>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={function(){setShowStorage(false);}} style={{padding:'9px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>Close</button>
+            </div>
+          </div>:<div>
+            <div style={{padding:'12px',border:'1px solid rgba(14,42,71,0.3)',borderRadius:10,background:'rgba(14,42,71,0.06)',marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>{help.title}</div>
+              <ol style={{margin:0,paddingLeft:18,fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.6}}>
+                {help.steps.map(function(s,i){return<li key={i}>{s}</li>;})}
+              </ol>
+            </div>
 
-          <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Account Email <span style={{fontWeight:400}}>(for your reference)</span></label>
-          <input value={storEmail} onChange={function(e){setStorEmail(e.target.value);}} placeholder="e.g. you@example.com" style={Object.assign({},INP2,{marginBottom:12})}/>
+            <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Account Email <span style={{fontWeight:400}}>(for your reference)</span></label>
+            <input value={storEmail} onChange={function(e){setStorEmail(e.target.value);}} placeholder="e.g. you@example.com" style={Object.assign({},INP2,{marginBottom:12})}/>
 
-          <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>{help.tokenLabel} *</label>
-          <input type="password" value={storToken} onChange={function(e){setStorToken(e.target.value);}} placeholder="Paste token here…" style={Object.assign({},INP2,{marginBottom:12,fontFamily:'monospace'})}/>
+            <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>{help.tokenLabel} *</label>
+            <input type="password" value={storToken} onChange={function(e){setStorToken(e.target.value);}} placeholder="Paste token here…" style={Object.assign({},INP2,{marginBottom:12,fontFamily:'monospace'})}/>
 
-          <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Root Folder Path</label>
-          <input value={storRootPath} onChange={function(e){setStorRootPath(e.target.value);}} placeholder="/TaskFlow Uploads" style={Object.assign({},INP2,{marginBottom:6})}/>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:16}}>Files organize as: {storRootPath||'/TaskFlow Uploads'}/[Client Name]/[Request Title]/[filename]</div>
+            <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Root Folder Path</label>
+            <input value={storRootPath} onChange={function(e){setStorRootPath(e.target.value);}} placeholder="/TaskFlow Uploads" style={Object.assign({},INP2,{marginBottom:6})}/>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:16}}>Files organize as: {storRootPath||'/TaskFlow Uploads'}/[Client Name]/[Request Title]/[filename]</div>
 
-          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-            <button onClick={function(){setShowStorage(false);}} style={{padding:'9px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>Cancel</button>
-            <button onClick={saveStorageConnection} disabled={savingStorage||!storToken.trim()} style={{padding:'9px 18px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff',fontFamily:'inherit',opacity:savingStorage?0.7:1}}>
-              {savingStorage?'Connecting…':(existing?'Update & Activate':'Connect & Activate')}
-            </button>
-          </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button onClick={function(){setShowStorage(false);}} style={{padding:'9px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>Cancel</button>
+              <button onClick={saveStorageConnection} disabled={savingStorage||!storToken.trim()} style={{padding:'9px 18px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff',fontFamily:'inherit',opacity:savingStorage?0.7:1}}>
+                {savingStorage?'Connecting…':(existing?'Update & Activate':'Connect & Activate')}
+              </button>
+            </div>
+          </div>}
         </div>
       </div>;
     })()}
@@ -11770,7 +11831,7 @@ function ClientConnectModule({org,supabase,cu}){
                 <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>{q.label||'Untitled question'}</div>
                 {isFile?
                   <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)'}}>
-                    <span style={{fontSize:14}}>{ans.provider==='dropbox'?'📦':ans.provider==='google_drive'?'🟢':ans.provider==='onedrive'?'🔵':'📄'}</span>
+                    <span style={{fontSize:14}}>{ans.provider==='dropbox'?'📦':ans.provider==='google_drive'?'🟢':ans.provider==='onedrive'?'🔵':'💾'}</span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ans.name||'Uploaded file'}{ans.size?' ('+Math.round(ans.size/1024)+'KB)':''}</div>
                       <div style={{fontSize:10,color:'var(--tf-text-sub)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ans.path}</div>
@@ -11788,11 +11849,13 @@ function ClientConnectModule({org,supabase,cu}){
                             else showToast('Could not generate download link','err');
                           }catch(e){showToast('Could not generate download link','err');}
                         }else{
-                          var {data}=await supabase.storage.from('cc-uploads').createSignedUrl(ans.path,3600);
-                          if(data&&data.signedUrl)window.open(data.signedUrl,'_blank');
-                          else showToast('Could not generate download link','err');
+                          var {data}=await supabase.storage.from('cc-uploads').createSignedUrl(ans.path,3600,{download:ans.name||true});
+                          if(data&&data.signedUrl){
+                            var a2=document.createElement('a');a2.href=data.signedUrl;a2.download=ans.name||'download';a2.style.display='none';document.body.appendChild(a2);a2.click();document.body.removeChild(a2);
+                            showToast('Downloading to disk…');
+                          }else showToast('Could not generate download link','err');
                         }
-                      }} style={{padding:'4px 10px',background:'#0e2a47',border:'none',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0}}>Download</button>
+                      }} style={{padding:'4px 10px',background:'#0e2a47',border:'none',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0}}>💾 Save to Disk</button>
                     }
                   </div>:
                   <div style={{fontSize:13,color:'var(--tf-text)',padding:'6px 10px',background:'var(--tf-surface)',borderRadius:6,border:'1px solid var(--tf-border)'}}>{ans!=null&&ans!==''?String(ans):<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>No answer</span>}</div>
