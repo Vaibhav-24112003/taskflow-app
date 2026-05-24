@@ -10493,8 +10493,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     localStorage.removeItem('tf_gmailTokenExp_'+org.id);
     return null;
   });
-  var [gmailClientId,setGmailClientId]=useState(function(){return localStorage.getItem('tf_gmailClientId')||'';});
-  var [gmailClientIdInput,setGmailClientIdInput]=useState('');
+  var [gmailClientId,setGmailClientId]=useState(function(){return import.meta.env.VITE_GMAIL_CLIENT_ID||localStorage.getItem('tf_gmailClientId')||'';});
   var [gmailThreads,setGmailThreads]=useState([]);
   var [gmailSelThread,setGmailSelThread]=useState(null);
   var [gmailThreadMsgs,setGmailThreadMsgs]=useState([]);
@@ -10710,14 +10709,6 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     else{showToast('Send failed','err');}
   }
 
-  async function saveGmailClientId(){
-    if(!gmailClientIdInput.trim())return;
-    var id=gmailClientIdInput.trim();
-    await supabase.from('org_cloud_storage').upsert({org_id:org.id,provider:'gmail_clientid',access_token:id,is_active:false,connected_at:new Date().toISOString(),updated_at:new Date().toISOString()},{onConflict:'org_id,provider'});
-    localStorage.setItem('tf_gmailClientId',id);
-    setGmailClientId(id);
-    showToast('Client ID saved for all devices');
-  }
 
   function parseEmailName(fromStr){
     var m=fromStr.match(/^(.+?)\s*<(.+?)>$/);
@@ -10737,7 +10728,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   useEffect(function(){loadData();},[org.id]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);var rg=await supabase.from('org_cloud_storage').select('access_token').eq('org_id',org.id).eq('provider','gmail_clientid').maybeSingle();var dbGmailClientId=rg.data&&rg.data.access_token||'';setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);if(dbGmailClientId){localStorage.setItem('tf_gmailClientId',dbGmailClientId);setGmailClientId(dbGmailClientId);}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
@@ -10860,11 +10851,10 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
       <div style={{flex:1,overflowY:'auto',padding:'10px 0'}}>
         {activeTab==='gmail'?<>
           {!gmailToken?<div style={{padding:'12px 14px'}}>
-            {!gmailClientId?<div>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6}}>SETUP</div>
-              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>Enter your Google OAuth Client ID to connect Gmail.</div>
-              <input value={gmailClientIdInput} onChange={function(e){setGmailClientIdInput(e.target.value);}} placeholder="Google Client ID" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit',marginBottom:6}}/>
-              <button onClick={saveGmailClientId} style={{width:'100%',background:'#0e2a47',border:'none',borderRadius:7,padding:'8px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Save Client ID</button>
+            {!gmailClientId?<div style={{textAlign:'center',padding:'20px 0'}}>
+              <div style={{fontSize:28,marginBottom:8}}>📧</div>
+              <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Gmail not configured</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Contact your administrator to enable Gmail integration.</div>
             </div>:
             <div style={{textAlign:'center',padding:'20px 0'}}>
               <div style={{fontSize:28,marginBottom:8}}>📧</div>
@@ -10873,7 +10863,6 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <button onClick={connectGmail} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',gap:6}}>
                 <span style={{fontSize:16}}>G</span> Sign in with Google
               </button>
-              <button onClick={function(){localStorage.removeItem('tf_gmailClientId');setGmailClientId('');}} style={{display:'block',margin:'10px auto 0',background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:10}}>Change Client ID</button>
             </div>}
           </div>:<>
             {/* Gmail folders/labels */}
@@ -10970,7 +10959,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         {!gmailToken?<div style={{textAlign:'center',padding:'80px 20px'}}>
           <div style={{fontSize:48,marginBottom:12}}>📧</div>
           <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>Gmail Integration</div>
-          <div style={{fontSize:13,color:'var(--tf-text-sub)',maxWidth:400,margin:'0 auto'}}>Connect your Google account to view, send, and reply to emails directly from TaskFlowCo. Set up your Client ID and sign in from the left panel.</div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',maxWidth:400,margin:'0 auto'}}>Sign in with Google from the left panel to view and send emails directly from TaskFlow.</div>
         </div>:gmailCompose?<div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>New Email</div>
