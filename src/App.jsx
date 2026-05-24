@@ -11076,15 +11076,34 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
               <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Connect Gmail</div>
               <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:12}}>Sign in to view and send emails directly.</div>
               <button onClick={connectGmail} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'9px 18px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',gap:6}}>
-                <span style={{fontSize:16}}>G</span> Sign in with Google
+                <span style={{fontSize:16}}>G</span> Connect Gmail Account
               </button>
             </div>}
           </div>:<>
             {/* Gmail folders/labels */}
             <div style={{padding:'0 8px 4px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,padding:'2px 6px',marginBottom:4}}>
-                <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailProfile?gmailProfile.emailAddress:''}</span>
-                <button onClick={function(){setGmailToken(null);setGmailThreads([]);setGmailSelThread(null);setGmailProfile(null);localStorage.removeItem('tf_gmailToken_'+org.id);localStorage.removeItem('tf_gmailTokenExp_'+org.id);}} style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:9,flexShrink:0}} title="Disconnect">✕</button>
+              {/* Account switcher */}
+              <div style={{marginBottom:6}}>
+                {gmailAccounts.map(function(acc){
+                  var isActive=gmailActiveEmail===acc.email;
+                  var isExpired=Date.now()>=acc.expiry;
+                  return<div key={acc.email} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 6px',borderRadius:6,background:isActive?'rgba(66,133,244,0.1)':'transparent',marginBottom:2}}>
+                    <button onClick={function(){
+                      if(isExpired){silentRefreshGmail(acc.email);return;}
+                      setGmailActiveEmail(acc.email);
+                      if(!gmailProfile||gmailProfile.emailAddress!==acc.email)fetchGmailProfile(acc.token);
+                      fetchGmailThreads(acc.token,'INBOX');
+                    }} style={{flex:1,textAlign:'left',background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>
+                      <div style={{fontSize:10,fontWeight:isActive?700:500,color:isActive?'#4285f4':'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {isExpired?'🔴 ':isActive?'🟢 ':'⚪ '}{acc.label}
+                      </div>
+                      {acc.type==='org'&&<div style={{fontSize:9,color:'#f59e0b',marginTop:1}}>Org email</div>}
+                      {isExpired&&<div style={{fontSize:9,color:'#ef4444',marginTop:1}}>Expired — click to reconnect</div>}
+                    </button>
+                    <button onClick={function(){disconnectAccount(acc.email);}} style={{background:'none',border:'none',color:'var(--tf-text-mut)',cursor:'pointer',fontSize:9,padding:'2px 4px',flexShrink:0}} title="Remove">✕</button>
+                  </div>;
+                })}
+                <button onClick={connectGmail} style={{width:'100%',background:'rgba(66,133,244,0.06)',border:'1px dashed rgba(66,133,244,0.3)',borderRadius:6,padding:'5px',color:'#4285f4',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'inherit',marginTop:2}}>+ Add account</button>
               </div>
               <button onClick={function(){setGmailCompose({to:'',cc:'',bcc:'',subject:'',body:''});setGmailSelThread(null);}} style={{width:'100%',background:'linear-gradient(135deg,#4285f4,#1a73e8)',border:'none',borderRadius:8,padding:'9px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit',marginBottom:6,boxShadow:'0 2px 8px rgba(66,133,244,0.3)'}}>+ Compose</button>
               {[{id:'INBOX',label:'Inbox',icon:'📥'},{id:'STARRED',label:'Starred',icon:'⭐'},{id:'SENT',label:'Sent',icon:'📤'},{id:'DRAFT',label:'Drafts',icon:'📝'},{id:'IMPORTANT',label:'Important',icon:'🏷'},{id:'ALL',label:'All Mail',icon:'📬'}].map(function(f){
@@ -11107,6 +11126,19 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
                   <span style={{fontSize:12}}>{f.icon}</span>{f.label}
                 </button>;
               })}
+              {(cu.id===org.owner_id||(cu.role==='admin'))&&<>
+                <div style={{borderTop:'1px solid var(--tf-border)',margin:'6px 4px'}}/>
+                <div style={{padding:'0 8px 4px'}}>
+                  <div style={{fontSize:9,fontWeight:700,color:'var(--tf-text-mut)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Org Emails (Admin)</div>
+                  {gmailAccounts.filter(function(a){return a.type==='org';}).map(function(acc){
+                    return<div key={acc.email} style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
+                      <span style={{fontSize:10,color:'var(--tf-text-sub)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acc.email}</span>
+                      <button onClick={function(){removeOrgGmail(acc.email);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:9,padding:'2px 4px',flexShrink:0}}>Remove</button>
+                    </div>;
+                  })}
+                  <button onClick={connectOrgGmail} style={{width:'100%',background:'rgba(245,158,11,0.08)',border:'1px dashed rgba(245,158,11,0.4)',borderRadius:6,padding:'5px 8px',color:'#f59e0b',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>+ Connect Org Email</button>
+                </div>
+              </>}
             </div>
           </>}
         </>:activeTab==='bulk'?<>
