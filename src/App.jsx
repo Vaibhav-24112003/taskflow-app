@@ -10447,6 +10447,86 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
 
 
 
+// ── Rich Text Editor (contentEditable) ──
+
+function RichEditor({id,value,onChange,placeholder,minHeight}){
+  var editorRef=useRef(null);
+  var [showLinkModal,setShowLinkModal]=useState(false);
+  var [linkUrl,setLinkUrl]=useState('');
+
+  function exec(cmd,val){document.execCommand(cmd,false,val||null);if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);}
+
+  function insertTable(){
+    var html='<table style="border-collapse:collapse;width:100%;margin:8px 0"><tbody>';
+    for(var r=0;r<3;r++){html+='<tr>';for(var c=0;c<3;c++)html+='<td style="border:1px solid #ccc;padding:6px 8px;min-width:60px">&nbsp;</td>';html+='</tr>';}
+    html+='</tbody></table><p></p>';
+    document.execCommand('insertHTML',false,html);
+    if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);
+  }
+
+  function insertLink(){
+    if(linkUrl.trim()){document.execCommand('createLink',false,linkUrl.trim());}
+    setShowLinkModal(false);setLinkUrl('');
+    if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);
+  }
+
+  var TB={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'3px 7px',cursor:'pointer',fontSize:12,color:'var(--tf-text)',fontFamily:'inherit',lineHeight:1.2,display:'inline-flex',alignItems:'center',justifyContent:'center',minWidth:26};
+  var SEP={width:1,height:18,background:'var(--tf-border)',margin:'0 2px',flexShrink:0};
+
+  return<div style={{border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden',background:'var(--tf-surface)'}}>
+    {/* Toolbar */}
+    <div style={{display:'flex',gap:2,padding:'4px 6px',borderBottom:'1px solid var(--tf-border)',background:'var(--tf-bg)',flexWrap:'wrap',alignItems:'center'}}>
+      {/* Font size */}
+      <select onChange={function(e){if(e.target.value)exec('fontSize',e.target.value);e.target.value='';}} style={{padding:'2px 4px',border:'1px solid var(--tf-border)',borderRadius:4,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:10,fontFamily:'inherit',cursor:'pointer',outline:'none'}}>
+        <option value="">Size</option>
+        <option value="1">Small</option>
+        <option value="3">Normal</option>
+        <option value="5">Large</option>
+        <option value="7">Huge</option>
+      </select>
+      <div style={SEP}/>
+      <button type="button" onClick={function(){exec('bold');}} style={Object.assign({},TB,{fontWeight:800})} title="Bold">B</button>
+      <button type="button" onClick={function(){exec('italic');}} style={Object.assign({},TB,{fontStyle:'italic'})} title="Italic">I</button>
+      <button type="button" onClick={function(){exec('underline');}} style={Object.assign({},TB,{textDecoration:'underline'})} title="Underline">U</button>
+      <button type="button" onClick={function(){exec('strikeThrough');}} style={Object.assign({},TB,{textDecoration:'line-through'})} title="Strikethrough">S</button>
+      <div style={SEP}/>
+      {/* Text color */}
+      <label title="Text color" style={Object.assign({},TB,{position:'relative',overflow:'hidden'})}>
+        <span style={{color:'#e74c3c'}}>A</span>
+        <input type="color" onChange={function(e){exec('foreColor',e.target.value);}} style={{position:'absolute',opacity:0,width:1,height:1,cursor:'pointer'}}/>
+      </label>
+      {/* Highlight */}
+      <label title="Highlight" style={Object.assign({},TB,{position:'relative',overflow:'hidden'})}>
+        <span style={{background:'#fef08a',padding:'0 2px',borderRadius:2,fontSize:11}}>A</span>
+        <input type="color" defaultValue="#fef08a" onChange={function(e){exec('hiliteColor',e.target.value);}} style={{position:'absolute',opacity:0,width:1,height:1,cursor:'pointer'}}/>
+      </label>
+      <div style={SEP}/>
+      <button type="button" onClick={function(){exec('justifyLeft');}} style={TB} title="Align left">&#x2B77;</button>
+      <button type="button" onClick={function(){exec('justifyCenter');}} style={TB} title="Center">&#x2BFF;</button>
+      <button type="button" onClick={function(){exec('justifyRight');}} style={TB} title="Align right">&#x2B78;</button>
+      <div style={SEP}/>
+      <button type="button" onClick={function(){exec('insertUnorderedList');}} style={TB} title="Bullet list">{'•'} —</button>
+      <button type="button" onClick={function(){exec('insertOrderedList');}} style={TB} title="Numbered list">1.</button>
+      <button type="button" onClick={function(){exec('indent');}} style={TB} title="Indent">{'→'}|</button>
+      <button type="button" onClick={function(){exec('outdent');}} style={TB} title="Outdent">|{'←'}</button>
+      <div style={SEP}/>
+      <button type="button" onClick={function(){setShowLinkModal(true);}} style={TB} title="Insert link">{'🔗'}</button>
+      <button type="button" onClick={insertTable} style={TB} title="Insert table">{'⊞'}</button>
+      <button type="button" onClick={function(){exec('formatBlock','blockquote');}} style={TB} title="Quote">{'❝'}</button>
+      <button type="button" onClick={function(){exec('removeFormat');}} style={TB} title="Clear formatting">{'✕'}</button>
+    </div>
+    {/* Link modal */}
+    {showLinkModal&&<div style={{padding:'6px 8px',background:'var(--tf-bg)',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:4,alignItems:'center'}}>
+      <input value={linkUrl} onChange={function(e){setLinkUrl(e.target.value);}} placeholder="https://..." onKeyDown={function(e){if(e.key==='Enter')insertLink();}} style={{flex:1,padding:'4px 8px',border:'1px solid var(--tf-border)',borderRadius:4,fontSize:11,background:'var(--tf-surface)',color:'var(--tf-text)',outline:'none',fontFamily:'inherit'}}/>
+      <button onClick={insertLink} style={{padding:'4px 10px',background:'#4285f4',border:'none',borderRadius:4,color:'#fff',fontSize:11,cursor:'pointer',fontWeight:600}}>Add</button>
+      <button onClick={function(){setShowLinkModal(false);setLinkUrl('');}} style={{padding:'4px 8px',background:'none',border:'1px solid var(--tf-border)',borderRadius:4,color:'var(--tf-text-sub)',fontSize:11,cursor:'pointer'}}>Cancel</button>
+    </div>}
+    {/* Editor area */}
+    <div ref={editorRef} id={id} contentEditable={true} onInput={function(){if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);}} data-placeholder={placeholder||'Write your email...'} style={{minHeight:minHeight||200,padding:'10px 12px',outline:'none',fontSize:13,lineHeight:1.6,color:'var(--tf-text)',fontFamily:'inherit',overflowY:'auto',maxHeight:400}}/>
+    <style>{('#'+id+':empty:before{content:attr(data-placeholder);color:var(--tf-text-sub);opacity:0.6;pointer-events:none}')}</style>
+  </div>;
+}
+
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
 function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
@@ -10509,6 +10589,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   var [gmailComposeFiles,setGmailComposeFiles]=useState([]); // file attachments for new compose
   var [gmailReplyFiles,setGmailReplyFiles]=useState([]); // file attachments for reply
   var [gmailMsgAttachments,setGmailMsgAttachments]=useState({}); // messageId -> [{id,filename,mimeType,size}]
+  var [gmailUndoTimer,setGmailUndoTimer]=useState(null);
+  var [gmailUndoInfo,setGmailUndoInfo]=useState(null); // {msg,timerId}
   var loadTimerRef=useRef(null);
   var loadingRef=useRef(false);
   var loadGenRef=useRef(0);
@@ -10629,12 +10711,12 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     headers+='Subject: '+subject+'\r\n';
     if(files&&files.length){
       headers+='Content-Type: multipart/mixed; boundary="'+boundary+'"\r\n\r\n';
-      var body='--'+boundary+'\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText+'\r\n';
+      var body='--'+boundary+'\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n'+bodyText+'\r\n';
       files.forEach(function(f){body+='--'+boundary+'\r\nContent-Type: '+f.mimeType+'; name="'+f.name+'"\r\nContent-Disposition: attachment; filename="'+f.name+'"\r\nContent-Transfer-Encoding: base64\r\n\r\n'+f.b64+'\r\n';});
       body+='--'+boundary+'--';
       return btoa(unescape(encodeURIComponent(headers+body))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
     }
-    headers+='Content-Type: text/plain; charset=UTF-8\r\n\r\n'+bodyText;
+    headers+='Content-Type: text/html; charset=UTF-8\r\n\r\n'+bodyText;
     return btoa(unescape(encodeURIComponent(headers))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
   }
 
@@ -10693,22 +10775,39 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
     if(mode==='forward'){body+='\n\n---------- Forwarded message ----------\nFrom: '+lastMsg.from+'\nDate: '+lastMsg.date+'\nSubject: '+lastMsg.subject+'\n\n'+(lastMsg.body||'');}
     var files=gmailReplyFiles.length?await readFilesAsB64(gmailReplyFiles):[];
     var encoded=buildMimeEmail(to,subject,body,'','',(mode==='replyall'?to:''),mode!=='forward'?lastMsg.messageId:'',mode!=='forward'?lastMsg.messageId:'',files);
-    var payload={raw:encoded};
-    if(mode!=='forward')payload.threadId=threadId;
-    var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(res&&res.id){showToast(mode==='forward'?'Forwarded!':'Reply sent!');setGmailReplyText('');setGmailReplyFiles([]);if(mode!=='forward')openGmailThread(threadId);}
-    else{showToast('Send failed','err');}
+    scheduleGmailSend(encoded,mode!=='forward'?threadId:null,mode,function(){
+      setGmailReplyText('');setGmailReplyFiles([]);
+      if(mode!=='forward')openGmailThread(threadId);
+    });
   }
 
   async function sendGmailNew(to,subject,bodyText,cc,bcc){
     if(!to.trim()||!subject.trim()){showToast('To and Subject required','err');return;}
     var files=gmailComposeFiles.length?await readFilesAsB64(gmailComposeFiles):[];
     var encoded=buildMimeEmail(to,subject,bodyText,cc,bcc,'','','',files);
-    var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
-    if(res&&res.id){showToast('Email sent!');setGmailCompose(null);setGmailComposeFiles([]);fetchGmailThreads(gmailToken,gmailFolder);}
-    else{showToast('Send failed','err');}
+    scheduleGmailSend(encoded,null,'compose',function(){
+      setGmailCompose(null);setGmailComposeFiles([]);fetchGmailThreads(gmailToken,gmailFolder);
+    });
   }
 
+
+  function scheduleGmailSend(encodedRaw,threadId,mode,callback){
+    var tid=setTimeout(function(){
+      setGmailUndoInfo(null);
+      (async function(){
+        var payload={raw:encodedRaw};
+        if(threadId)payload.threadId=threadId;
+        var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(res&&res.id){showToast(mode==='forward'?'Forwarded!':mode==='compose'?'Email sent!':'Reply sent!');if(callback)callback(res);}
+        else{showToast('Send failed','err');}
+      })();
+    },5000);
+    setGmailUndoInfo({timerId:tid,label:mode==='compose'?'Sending email...':'Sending reply...'});
+  }
+
+  function undoGmailSend(){
+    if(gmailUndoInfo&&gmailUndoInfo.timerId){clearTimeout(gmailUndoInfo.timerId);setGmailUndoInfo(null);showToast('Send cancelled');}
+  }
 
   function parseEmailName(fromStr){
     var m=fromStr.match(/^(.+?)\s*<(.+?)>$/);
@@ -11000,11 +11099,11 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
             </div>
             <div style={{marginBottom:10}}>
               <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Body</label>
-              <FormatBar bodyId={'gmail_compose_body'} setter={function(v){setGmailCompose(Object.assign({},gmailCompose,{body:v}));}} getter={gmailCompose.body}/>
-              <textarea id="gmail_compose_body" value={gmailCompose.body} onChange={function(e){setGmailCompose(Object.assign({},gmailCompose,{body:e.target.value}));}} rows={10} placeholder="Write your email..." style={Object.assign({},INP,{resize:'vertical'})}/>
+              <RichEditor id="gmail_compose_editor" onChange={function(html){setGmailCompose(Object.assign({},gmailCompose,{body:html}));}} placeholder="Write your email..." minHeight={250}/>
             </div>
             <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
               <button onClick={function(){sendGmailNew(gmailCompose.to,gmailCompose.subject,gmailCompose.body,gmailCompose.cc,gmailCompose.bcc);}} style={{background:'linear-gradient(135deg,#4285f4,#1a73e8)',border:'none',borderRadius:8,padding:'10px 28px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:'0 2px 8px rgba(66,133,244,0.3)'}}>Send</button>
+              <button onClick={async function(){var raw='MIME-Version: 1.0\r\nTo: '+(gmailCompose.to||'')+'\r\n';if(gmailCompose.cc)raw+='Cc: '+gmailCompose.cc+'\r\n';raw+='Subject: '+(gmailCompose.subject||'')+'\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n'+(gmailCompose.body||'');var encoded=btoa(unescape(encodeURIComponent(raw))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');var res=await gmailApi('drafts',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({message:{raw:encoded}})});if(res&&res.id){showToast('Draft saved!');setGmailCompose(null);}else showToast('Save failed','err');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>Save Draft</button>
               <button onClick={function(){setGmailCompose(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>Discard</button>
               <label style={{display:'inline-flex',alignItems:'center',gap:5,padding:'8px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,color:'var(--tf-text-sub)'}}>
                 📎 Attach files
@@ -11079,8 +11178,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
                   {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
                 </select>
               </div>
-              {gmailReplyMode==='forward'&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:4}}>Enter recipient on the first line (e.g. "To: email@example.com")</div>}
-              <textarea value={gmailReplyText} onChange={function(e){setGmailReplyText(e.target.value);}} rows={5} placeholder={gmailReplyMode==='forward'?'To: recipient@email.com\n\nYour message here...':'Write your reply...'} style={Object.assign({},INP,{resize:'vertical',marginBottom:8})}/>
+              {gmailReplyMode==='forward'&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:4}}>Start with "To: recipient@email.com" then your message.</div>}
+              <div style={{marginBottom:8}}><RichEditor id="gmail_reply_editor" onChange={function(html){setGmailReplyText(html);}} placeholder={gmailReplyMode==='forward'?'To: recipient@email.com\n\nYour message...':'Write your reply...'} minHeight={120}/></div>
               <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
                 <button onClick={function(){sendGmailReply(lastMsg,gmailSelThread,gmailReplyMode);}} style={{background:'#4285f4',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>{gmailReplyMode==='forward'?'Forward':'Send Reply'}</button>
                 <label style={{display:'inline-flex',alignItems:'center',gap:4,padding:'7px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>
@@ -11164,6 +11263,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         </div>
       </>}
     </div>
+    {gmailUndoInfo&&<div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:'#323232',color:'#fff',padding:'10px 20px',borderRadius:10,fontSize:13,fontWeight:600,boxShadow:'0 10px 30px rgba(0,0,0,0.3)',zIndex:1001,display:'flex',alignItems:'center',gap:14,whiteSpace:'nowrap'}}><span>{gmailUndoInfo.label}</span><button onClick={undoGmailSend} style={{background:'#4285f4',border:'none',borderRadius:6,padding:'5px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Undo</button></div>}
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
   </div>;
 }
