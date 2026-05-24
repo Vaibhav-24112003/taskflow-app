@@ -6,9 +6,10 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.error('Missing Supabase environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.')
 }
 
-// In-process serial lock — replaces Supabase's default navigator.locks based
-// auth lock. When the page returns from background, _skipLock is set so all
-// lock calls run fn() immediately (no queueing behind a stale chain).
+// ── Auth lock ─────────────────────────────────────────────────────────────────
+// In-process serial lock replacing navigator.locks. _skipLock bypasses it
+// entirely for 2s after tab-return so GoTrue's own visibility handler can't
+// block the new data fetches.
 const _locks = new Map()
 let _skipLock = false
 function processLock(name, _acquireTimeout, fn) {
@@ -23,14 +24,50 @@ function processLock(name, _acquireTimeout, fn) {
   })
 }
 
-// Visibility-aware lock management:
-// HIDDEN  → stop auto-refresh so no token refresh fires in background
-// VISIBLE → bypass locks for 2 s, reset GoTrue internals, restart refresh
+// ── Fetch with timeout + global abort ────────────────────────────────────────
+// Root cause of stuck-loading: when the OS suspends network on app-switch,
+// in-flight fetch() calls hang forever (HTTP/2 connections die silently).
+// Fix: 20s hard timeout on every request + a global AbortController that is
+// replaced on tab-return so all stale requests are cancelled immediately.
+let _fetchCtrl = new AbortController()
+
+function supabaseFetch(url, options = {}) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 20000)
+  const globalSignal = _fetchCtrl.signal  // snapshot — _fetchCtrl may be replaced
+
+  const onGlobalAbort = () => ctrl.abort()
+  globalSignal.addEventListener('abort', onGlobalAbort, { once: true })
+
+  // Forward caller's signal (GoTrue passes its own AbortController for auth calls)
+  if (options.signal) {
+    if (options.signal.aborted) {
+      ctrl.abort()
+    } else {
+      options.signal.addEventListener('abort', () => ctrl.abort(), { once: true })
+    }
+  }
+
+  return fetch(url, { ...options, signal: ctrl.signal })
+    .finally(() => {
+      clearTimeout(timer)
+      globalSignal.removeEventListener('abort', onGlobalAbort)
+    })
+}
+
+// ── Visibility management ─────────────────────────────────────────────────────
+// HIDDEN  → stop auto-refresh (prevent auth lock acquisition in background)
+// VISIBLE → abort all stale requests + reset auth lock + restart auto-refresh
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       try { supabase.auth.stopAutoRefresh() } catch (e) {}
     } else {
+      // Replace the controller first — any new fetch() calls get the fresh one
+      _fetchCtrl.abort()
+      _fetchCtrl = new AbortController()
+
+      // Bypass auth lock for 2s and reset GoTrue's internal state
       _skipLock = true
       _locks.clear()
       try {
@@ -50,6 +87,9 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+  },
+  global: {
+    fetch: supabaseFetch,
   },
 })
 
