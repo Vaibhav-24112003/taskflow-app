@@ -10836,9 +10836,10 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
 
   if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading communications...</div>;
 
+  var gmailThreePaneActive=activeTab==='gmail'&&!!gmailToken;
   return<div style={{display:'flex',height:'calc(100vh - 120px)',margin:'0 -24px -60px'}}>
-    {/* LEFT PANEL — Tabs + Quick actions */}
-    <div style={{width:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0}}>
+    {/* LEFT PANEL — Tabs + Folder nav */}
+    <div style={{width:gmailThreePaneActive?185:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0,transition:'width 0.2s'}}>
       <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
         <div style={{display:'flex',gap:4}}>
           {[{id:'gmail',label:'Gmail',icon:'📧'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'templates',label:'Templates',icon:'📋'}].map(function(t){
@@ -10893,26 +10894,6 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
                 </button>;
               })}
             </div>
-            <div style={{borderTop:'1px solid var(--tf-border)',margin:'4px 10px 4px'}}/>
-            {/* Search */}
-            <div style={{padding:'0 8px 4px'}}>
-              <input value={gmailSearch} onChange={function(e){setGmailSearch(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&gmailSearch.trim()){setGmailFolder('search');setGmailSelThread(null);fetchGmailThreads(gmailToken,'ALL',gmailSearch);}}} placeholder="Search emails..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:10,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
-            </div>
-            {/* Thread list */}
-            {gmailLoading&&gmailThreads.length===0?<div style={{textAlign:'center',padding:16,color:'var(--tf-text-sub)',fontSize:10}}>Loading...</div>:
-            gmailThreads.map(function(t){
-              var p=parseEmailName(t.from);
-              var active=gmailSelThread===t.id;
-              return<button key={t.id} onClick={function(){openGmailThread(t.id);setGmailCompose(null);}} style={{width:'100%',textAlign:'left',padding:'7px 10px',border:'none',background:active?'rgba(66,133,244,0.1)':t.unread?'rgba(66,133,244,0.04)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:active?'3px solid #4285f4':'3px solid transparent',display:'block'}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:4}}>
-                  <div style={{fontSize:11,fontWeight:t.unread?800:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{p.name}{t.msgCount>1?' ('+t.msgCount+')':''}</div>
-                  <span style={{fontSize:9,color:'var(--tf-text-mut)',flexShrink:0}}>{timeAgo(t.date)}</span>
-                </div>
-                <div style={{fontSize:10,fontWeight:t.unread?700:500,color:t.unread?'var(--tf-text)':'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{t.subject}</div>
-                <div style={{fontSize:9,color:'var(--tf-text-mut)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:1}}>{t.snippet}</div>
-              </button>;
-            })}
-            {gmailNextPage&&<button onClick={function(){fetchGmailThreads(gmailToken,gmailFolder,gmailSearch,gmailNextPage);}} style={{width:'100%',padding:'7px',border:'none',background:'rgba(66,133,244,0.06)',color:'#4285f4',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>Load More</button>}
           </>}
         </>:activeTab==='bulk'?<>
           <div style={{padding:'0 12px 8px'}}>
@@ -10952,6 +10933,30 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         </>}
       </div>
     </div>
+
+    {/* MIDDLE PANEL — Thread list (Gmail 3-pane only) */}
+    {gmailThreePaneActive&&<div style={{width:300,borderRight:'1px solid var(--tf-border)',background:'var(--tf-bg)',display:'flex',flexDirection:'column',flexShrink:0}}>
+      <div style={{padding:'8px 8px 4px',borderBottom:'1px solid var(--tf-border)'}}>
+        <input value={gmailSearch} onChange={function(e){setGmailSearch(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&gmailSearch.trim()){setGmailFolder('search');setGmailSelThread(null);fetchGmailThreads(gmailToken,'ALL',gmailSearch);}}} placeholder="Search emails..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
+      </div>
+      <div style={{flex:1,overflowY:'auto'}}>
+        {gmailLoading&&gmailThreads.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:11}}>Loading...</div>:
+        gmailThreads.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:11}}>No emails</div>:
+        gmailThreads.map(function(t){
+          var p=parseEmailName(t.from);
+          var active=gmailSelThread===t.id;
+          return<button key={t.id} onClick={function(){openGmailThread(t.id);setGmailCompose(null);}} style={{width:'100%',textAlign:'left',padding:'10px 12px',border:'none',borderBottom:'1px solid var(--tf-border)',background:active?'rgba(66,133,244,0.1)':t.unread?'rgba(66,133,244,0.04)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:active?'3px solid #4285f4':'3px solid transparent',display:'block',boxSizing:'border-box'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',gap:4,marginBottom:2}}>
+              <div style={{fontSize:12,fontWeight:t.unread?800:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{p.name}{t.msgCount>1?' ('+t.msgCount+')':''}</div>
+              <span style={{fontSize:10,color:'var(--tf-text-mut)',flexShrink:0}}>{timeAgo(t.date)}</span>
+            </div>
+            <div style={{fontSize:11,fontWeight:t.unread?700:500,color:t.unread?'var(--tf-text)':'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:2}}>{t.subject}</div>
+            <div style={{fontSize:10,color:'var(--tf-text-mut)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.snippet}</div>
+          </button>;
+        })}
+        {gmailNextPage&&<button onClick={function(){fetchGmailThreads(gmailToken,gmailFolder,gmailSearch,gmailNextPage);}} style={{width:'100%',padding:'9px',border:'none',borderTop:'1px solid var(--tf-border)',background:'rgba(66,133,244,0.06)',color:'#4285f4',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit'}}>Load More</button>}
+      </div>
+    </div>}
 
     {/* RIGHT PANEL */}
     <div style={{flex:1,overflowY:'auto',padding:'20px 24px 60px'}}>
@@ -11017,7 +11022,6 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
         </div>:<div>
           {/* Thread view header */}
           <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-            <button onClick={function(){setGmailSelThread(null);setGmailThreadMsgs([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>← Back</button>
             <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailThreadMsgs.length>0?gmailThreadMsgs[0].subject:'Loading...'}</div>
             <div style={{display:'flex',gap:4,flexShrink:0}}>
               <button onClick={function(){markThreadUnread(gmailSelThread);}} title="Mark unread" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>● Unread</button>
