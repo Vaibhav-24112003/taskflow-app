@@ -12777,7 +12777,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'},{id:'demoreqs',label:'Demo Requests'}]}
+    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'},...(cu.email&&cu.email.endsWith('@taskflowco.in')?[{id:'demoreqs',label:'Demo Requests'}]:[])].filter(Boolean)}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -12868,7 +12868,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Set-up */}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
-      {orgModule==='setup'&&tab==='demoreqs'&&<DemoRequestsPanel supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='demoreqs'&&cu.email&&cu.email.endsWith('@taskflowco.in')&&<DemoRequestsPanel supabase={supabase}/>}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
