@@ -22,7 +22,7 @@ const SupportAdminView   = lazyWithReload(() => import('./SupportAdminView.jsx')
 const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
 import { isAdminEmail } from './lib/supabase'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -7703,10 +7703,10 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     var title=(r.data&&r.data.__title)||c.display_name||c.name||'Untitled';
     var isDragging=dragId===r.id;
     return<div key={r.id}
-      draggable
-      onDragStart={function(e){setDragId(r.id);e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',r.id);}catch(_){}}}
-      onDragEnd={function(){setDragId(null);setDragOverCol(null);}}
-      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#0e2a47'),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:'grab',opacity:isDragging?0.5:1,transition:'opacity 0.12s'}}>
+      draggable={groupBy==='status'}
+      onDragStart={groupBy==='status'?function(e){setDragId(r.id);e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',r.id);}catch(_){}}:undefined}
+      onDragEnd={groupBy==='status'?function(){setDragId(null);setDragOverCol(null);}:undefined}
+      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#0e2a47'),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:groupBy==='status'?'grab':'default',opacity:isDragging?0.5:1,transition:'opacity 0.12s'}}>
       <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</div>
       <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:6}}>
         <span style={Object.assign({},pillStyle,{background:'rgba(14,42,71,0.12)',color:'#0e2a47'})}>{ws.work_type||'—'}</span>
@@ -7794,7 +7794,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [filter,setFilter]=useState('all');
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('list'); // 'list' | 'urgency' | 'kanban'
-  var [showCalendar,setShowCalendar]=useState(true);
   var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
   // Create Task modal state
   var [showCreate,setShowCreate]=useState(false);
@@ -8250,7 +8249,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           })}
           <div style={{flex:1}}/>
           <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3}}>
-            {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'}].map(function(v){
+            {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'},{id:'urgency',Icon:Zap,label:'Urgency'}].map(function(v){
               var active=dashView===v.id;
               var Ico=v.Icon;
               return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label} aria-label={v.label}
@@ -8272,7 +8271,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <option value="next30">Next 30 Days</option>
             <option value="nodate">No Due Date</option>
           </select>
-          {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');}}
+          {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');setWsRailFilter('all');}}
             style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'5px 9px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit'}}>
             <option value={cu.id}>My Worklist</option>
             {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
@@ -8638,6 +8637,76 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             </div>;
           })}
         </div>}
+
+        {/* URGENCY VIEW — grouped by deadline band */}
+        {dashView==='urgency'&&<div>
+          {urgencyBands.map(function(band){
+            var bandRows=[];
+            railFiltered.forEach(function(r){
+              if(!r.due_date){if(band.id==='nodate')bandRows.push(r);}
+              else if(r.due_date<todayStr){if(band.id==='overdue')bandRows.push(r);}
+              else if(r.due_date===todayStr){if(band.id==='today')bandRows.push(r);}
+              else if(r.due_date<=weekEndStr){if(band.id==='week')bandRows.push(r);}
+              else{if(band.id==='later')bandRows.push(r);}
+            });
+            if(bandRows.length===0)return null;
+            var isOpen=expandedGroups['__urg_'+band.id]!==false;
+            return<div key={band.id} style={{marginBottom:10,background:'var(--tf-panel)',border:'1px solid '+(band.id==='overdue'?'rgba(239,68,68,0.25)':'var(--tf-border)'),borderRadius:12,overflow:'hidden'}}>
+              <button onClick={function(){setExpandedGroups(function(p){var n=Object.assign({},p);n['__urg_'+band.id]=n['__urg_'+band.id]===false;return n;});}}
+                style={{width:'100%',textAlign:'left',background:isOpen?band.bg:'transparent',border:'none',borderBottom:isOpen?'1px solid '+band.border:'none',padding:'11px 14px',cursor:'pointer',display:'flex',alignItems:'center',gap:9,fontFamily:'inherit'}}
+                onMouseEnter={function(e){if(!isOpen)e.currentTarget.style.background=band.bg;}}
+                onMouseLeave={function(e){if(!isOpen)e.currentTarget.style.background='transparent';}}>
+                <span style={{fontSize:10,color:'var(--tf-text-sub)',transition:'transform 0.15s',transform:isOpen?'rotate(90deg)':'rotate(0deg)',display:'inline-block',width:10,flexShrink:0}}>▶</span>
+                <span style={{fontSize:11}}>{band.icon}</span>
+                <span style={{fontSize:13,fontWeight:800,color:band.color,flex:1}}>{band.label}</span>
+                <span style={{fontSize:10,fontWeight:700,color:band.color,background:band.bg,padding:'2px 7px',borderRadius:10,border:'1px solid '+band.border,fontFamily:"'JetBrains Mono',monospace"}}>{bandRows.length}</span>
+              </button>
+              {isOpen&&bandRows.map(function(row,idx){
+                var rd=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id];
+                var clientName=client?(client.display_name||client.name):'';
+                var rowTitle=rd.__title||(client?(client.display_name||client.name):'')||'Task';
+                var priority=rd.__priority||'medium';
+                var inMyDay=myDayIds.includes(row.id);
+                var role=getRole(row);
+                var isOverdue=row.due_date&&row.due_date<todayStr;
+                var isToday=row.due_date===todayStr;
+                var assigneeId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
+                var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
+                var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
+                var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
+                return<div key={row.id} style={{borderTop:idx===0?'none':'1px solid var(--tf-border)',borderLeft:isOverdue?'2.5px solid #ef4444':'none',background:isOverdue?'rgba(239,68,68,0.02)':inMyDay?'rgba(14,42,71,0.05)':'transparent'}}
+                  onClick={function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='OPTION'||e.target.tagName==='BUTTON')return;toggleExpand(row.id);}}
+                  onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.04)';}}
+                  onMouseLeave={function(e){e.currentTarget.style.background=isOverdue?'rgba(239,68,68,0.02)':inMyDay?'rgba(14,42,71,0.05)':'transparent';}}>
+                  <div style={{padding:'9px 14px',display:'grid',gridTemplateColumns:'16px 1fr auto auto auto',alignItems:'center',gap:8,cursor:'pointer'}}>
+                    <div onClick={function(e){e.stopPropagation();updateStatus(row.id,'completed');}}
+                      style={{width:14,height:14,borderRadius:3,border:'1.5px solid',borderColor:PC[priority],background:'transparent',cursor:'pointer',flexShrink:0}} title="Mark complete"/>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rowTitle}{inMyDay&&<span style={{fontSize:9,color:'#0e2a47',fontWeight:800,marginLeft:5}}>· IN MY DAY</span>}</div>
+                      <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:5,alignItems:'center',marginTop:1,flexWrap:'wrap'}}>
+                        <span style={{color:'#0e2a47',fontWeight:600,background:'rgba(14,42,71,0.08)',padding:'1px 5px',borderRadius:8}}>{role.label}</span>
+                        {ws&&ws.work_type&&<span>{ws.work_type}</span>}
+                      </div>
+                    </div>
+                    {client&&<span style={{display:'inline-block',fontSize:10,fontWeight:600,color:clientColor(row.client_id),borderLeft:'2px solid '+clientColor(row.client_id),background:'rgba(14,42,71,0.06)',padding:'2px 6px 2px 5px',borderRadius:4,maxWidth:80,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{clientName}</span>}
+                    {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff',flexShrink:0}} title={assigneeName}>{assigneeInitials}</div>}
+                    <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                      {row.due_date&&<span style={{fontSize:10,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>{isOverdue?'Overdue':isToday?'Today':new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
+                      <button onClick={function(e){e.stopPropagation();toggleMyDay(row.id);}} title={inMyDay?'Remove from My Day':'Add to My Day'}
+                        style={{background:'none',border:'none',cursor:'pointer',fontSize:11,opacity:inMyDay?1:0.3,color:'#f59e0b',padding:'0 2px',lineHeight:1}}
+                        onMouseEnter={function(e){e.currentTarget.style.opacity='1';}}
+                        onMouseLeave={function(e){e.currentTarget.style.opacity=inMyDay?'1':'0.3';}}>☀</button>
+                      <select value={row.status||'pending'} onChange={function(e){updateStatus(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}}
+                        style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 4px',fontSize:10,color:'var(--tf-text)',fontFamily:'inherit',cursor:'pointer'}}>
+                        <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Review</option><option value="completed">Done</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>;
+              })}
+            </div>;
+          })}
+        </div>}
       </div>
     </div>
 
@@ -8647,7 +8716,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:4}}>
           <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</div>
-          <button style={{background:'#0f172a',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>▶ Start focus</button>
+          <button onClick={onGoToPlan} style={{background:'#0f172a',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>▶ Start focus</button>
         </div>
         <div style={{fontSize:11,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>
           {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}
