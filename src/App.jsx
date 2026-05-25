@@ -9820,9 +9820,9 @@ showToast('Tally JSON downloaded');}
 
 function exportTallyXML(){
 var orgState=org.gstin?org.gstin.slice(0,2):'';
-var todayDt=new Date().toISOString().slice(0,10).replace(/-/g,'');
+var td=new Date();var todayDt=td.getFullYear()+String(td.getMonth()+1).padStart(2,'0')+String(td.getDate()).padStart(2,'0');
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-// In Tally XML ALL ALLLEDGERENTRIES amounts are negative; ISDEEMEDPOSITIVE controls Dr/Cr side
+function tallyDate(d){if(!d)return todayDt;return String(d).slice(0,10).replace(/-/g,'');}
 var vouchers=invoices.map(function(inv){
 var c=clientMap[inv.client_id]||{};
 var items=inv.items||[];
@@ -9830,52 +9830,72 @@ var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate
 var taxAmt=inv.tax_percent?Math.round(((inv.total||0)-sub)*100)/100:0;
 var clientState=c.gstin?c.gstin.slice(0,2):'';
 var isInterState=orgState&&clientState&&orgState!==clientState;
-// Always use a valid date — fallback to today if invoice_date is missing
-var dt=inv.invoice_date?inv.invoice_date.replace(/-/g,''):todayDt;
-var partyName=esc(c.display_name||c.name||'Party');
+var dt=tallyDate(inv.invoice_date);
+var partyName=c.display_name||c.name||'Sundry Debtors';
 var total=Number(inv.total||0);
-var lines=[];
-// Party (Debit): ISDEEMEDPOSITIVE=Yes, amount negative
-lines.push('<ALLLEDGERENTRIES.LIST>');
-lines.push('<LEDGERNAME>'+partyName+'</LEDGERNAME>');
-lines.push('<ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
-lines.push('<AMOUNT>-'+total.toFixed(2)+'</AMOUNT>');
-lines.push('</ALLLEDGERENTRIES.LIST>');
-// Sales line items (Credit): ISDEEMEDPOSITIVE=No, amount negative
+var v=[];
+v.push(' <VOUCHER VCHTYPE="Sales" ACTION="Create">');
+v.push('  <DATE>'+dt+'</DATE>');
+v.push('  <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>');
+v.push('  <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
+v.push('  <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
+if(inv.notes)v.push('  <NARRATION>'+esc(inv.notes)+'</NARRATION>');
+if(c.gstin)v.push('  <PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>');
+v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('   <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
+v.push('   <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
+v.push('   <AMOUNT>-'+total.toFixed(2)+'</AMOUNT>');
+v.push('  </ALLLEDGERENTRIES.LIST>');
 items.forEach(function(it){
 var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
-lines.push('<ALLLEDGERENTRIES.LIST>');
-lines.push('<LEDGERNAME>'+esc(it.description||'Sales')+'</LEDGERNAME>');
-lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-lines.push('<AMOUNT>-'+amt.toFixed(2)+'</AMOUNT>');
-if(it.sac_code)lines.push('<GSTDETAILS.LIST><HSNSACCODE>'+esc(it.sac_code)+'</HSNSACCODE><TAXABILITY>Taxable</TAXABILITY></GSTDETAILS.LIST>');
-lines.push('</ALLLEDGERENTRIES.LIST>');
+v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('   <LEDGERNAME>'+esc(it.description||'Sales Account')+'</LEDGERNAME>');
+v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+v.push('   <AMOUNT>-'+amt.toFixed(2)+'</AMOUNT>');
+v.push('  </ALLLEDGERENTRIES.LIST>');
 });
-// Tax entries (Credit): ISDEEMEDPOSITIVE=No, amount negative
 if(taxAmt>0){
 if(isInterState){
-lines.push('<ALLLEDGERENTRIES.LIST>');
-lines.push('<LEDGERNAME>IGST @'+(inv.tax_percent||0)+'%</LEDGERNAME>');
-lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-lines.push('<AMOUNT>-'+taxAmt.toFixed(2)+'</AMOUNT>');
-lines.push('</ALLLEDGERENTRIES.LIST>');
+v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('   <LEDGERNAME>IGST</LEDGERNAME>');
+v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+v.push('   <AMOUNT>-'+taxAmt.toFixed(2)+'</AMOUNT>');
+v.push('  </ALLLEDGERENTRIES.LIST>');
 }else{
 var half=Math.round(taxAmt/2*100)/100;
-lines.push('<ALLLEDGERENTRIES.LIST>');
-lines.push('<LEDGERNAME>CGST @'+((inv.tax_percent||0)/2)+'%</LEDGERNAME>');
-lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-lines.push('<AMOUNT>-'+half.toFixed(2)+'</AMOUNT>');
-lines.push('</ALLLEDGERENTRIES.LIST>');
-lines.push('<ALLLEDGERENTRIES.LIST>');
-lines.push('<LEDGERNAME>SGST @'+((inv.tax_percent||0)/2)+'%</LEDGERNAME>');
-lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-lines.push('<AMOUNT>-'+half.toFixed(2)+'</AMOUNT>');
-lines.push('</ALLLEDGERENTRIES.LIST>');
+v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('   <LEDGERNAME>CGST</LEDGERNAME>');
+v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+v.push('   <AMOUNT>-'+half.toFixed(2)+'</AMOUNT>');
+v.push('  </ALLLEDGERENTRIES.LIST>');
+v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('   <LEDGERNAME>SGST</LEDGERNAME>');
+v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+v.push('   <AMOUNT>-'+half.toFixed(2)+'</AMOUNT>');
+v.push('  </ALLLEDGERENTRIES.LIST>');
 }}
-return'<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">\n<DATE>'+dt+'</DATE>\n<EFFECTIVEDATE>'+dt+'</EFFECTIVEDATE>\n<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>\n<VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>\n<PARTYLEDGERNAME>'+partyName+'</PARTYLEDGERNAME>\n<BASICBUYERNAME>'+partyName+'</BASICBUYERNAME>\n<ISINVOICE>Yes</ISINVOICE>\n<NARRATION>'+esc(inv.notes||'')+'</NARRATION>\n'+(c.gstin?'<PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>\n':'')+(clientState?'<PLACEOFSUPPLY>'+clientState+'</PLACEOFSUPPLY>\n':'')+lines.join('\n')+'\n</VOUCHER>';
+v.push(' </VOUCHER>');
+return v.join('\n');
 });
-var xml='<?xml version="1.0" encoding="UTF-8"?>\n<ENVELOPE>\n<HEADER>\n<TALLYREQUEST>Import Data</TALLYREQUEST>\n</HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC>\n<REPORTNAME>Vouchers</REPORTNAME>\n<STATICVARIABLES>\n<SVCURRENTCOMPANY>'+esc(org.name||'')+'</SVCURRENTCOMPANY>\n</STATICVARIABLES>\n</REQUESTDESC>\n<REQUESTDATA>\n<TALLYMESSAGE xmlns:UDF="TallyUDF">\n'+vouchers.join('\n')+'\n</TALLYMESSAGE>\n</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>';
-downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'application/xml');
+var xml=['<?xml version="1.0"?>',
+'<ENVELOPE>',
+' <HEADER>',
+'  <TALLYREQUEST>Import Data</TALLYREQUEST>',
+' </HEADER>',
+' <BODY>',
+'  <IMPORTDATA>',
+'   <REQUESTDESC>',
+'    <REPORTNAME>Vouchers</REPORTNAME>',
+'   </REQUESTDESC>',
+'   <REQUESTDATA>',
+'    <TALLYMESSAGE xmlns:UDF="TallyUDF">',
+vouchers.join('\n'),
+'    </TALLYMESSAGE>',
+'   </REQUESTDATA>',
+'  </IMPORTDATA>',
+' </BODY>',
+'</ENVELOPE>'].join('\n');
+downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'text/xml');
 showToast('Tally XML downloaded');}
 
 function exportZohoXLSX(){
