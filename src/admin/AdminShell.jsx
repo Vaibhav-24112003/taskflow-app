@@ -51,6 +51,10 @@ function Overview({ onNavigate }) {
       setLoading(false)
     }
     load()
+    const chan = supabase.channel('overview-demo-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'demo_requests' }, () => load())
+      .subscribe()
+    return () => { supabase.removeChannel(chan) }
   }, [])
 
   const STATUS_COL = { new: '#6366f1', contacted: '#f59e0b', converted: '#10b981', declined: '#94a3b8' }
@@ -58,7 +62,11 @@ function Overview({ onNavigate }) {
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1100 }}>
       <div style={{ marginBottom: 28 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.025em', color: 'var(--tf-text)', marginBottom: 4 }}>Platform Overview</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.025em', color: 'var(--tf-text)', marginBottom: 4 }}>Platform Overview</div>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981', animation: 'pulse 2s infinite', flexShrink: 0 }} />
+          <span style={{ fontSize: 10, color: '#10b981', fontWeight: 600 }}>LIVE</span>
+        </div>
         <div style={{ fontSize: 13, color: 'var(--tf-text-sub)' }}>All organisations, users and leads across taskflowco.in</div>
       </div>
 
@@ -130,6 +138,14 @@ function DemoRequestsAdmin() {
     setLoading(false)
   }
   useEffect(() => { load() }, [filter])
+  useEffect(() => {
+    const chan = supabase.channel('demoreqs-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'demo_requests' }, (payload) => {
+        setRows(prev => [payload.new, ...prev])
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(chan) }
+  }, [])
 
   async function updateStatus(id, status) {
     await supabase.from('demo_requests').update({ status }).eq('id', id)
@@ -212,6 +228,7 @@ export default function AdminShell({ cu, onClose }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', background: 'var(--tf-bg)' }}>
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }`}</style>
       {/* Top bar */}
       <div style={{ height: 48, flexShrink: 0, background: '#0e1929', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', padding: '0 20px', gap: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
