@@ -1758,6 +1758,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {isAdminEmail(cu?.email)&&<>
         <button onClick={()=>{setAdminModule('users');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Users" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>🛡 Users</button>
         <button onClick={()=>{setAdminModule('orgs');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Orgs" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>🏢 Orgs</button>
+        <button onClick={()=>{setAdminModule('demoreqs');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Demo Requests" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>📋 Demos</button>
       </>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAnnouncementsAdmin(true)}/>
@@ -1799,6 +1800,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {/* CONTENT */}
     {adminModule==='users'&&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><UsersAdmin/></Suspense>}
     {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
+    {adminModule==='demoreqs'&&isAdminEmail(cu?.email)&&<div style={{flex:1,overflow:'auto'}}><DemoRequestsPanel supabase={supabase}/></div>}
     {!adminModule&&!activeWs
       ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
@@ -12777,7 +12779,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'},...(cu.email&&cu.email.endsWith('@taskflowco.in')?[{id:'demoreqs',label:'Demo Requests'}]:[])].filter(Boolean)}
+    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -12868,7 +12870,6 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Set-up */}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
-      {orgModule==='setup'&&tab==='demoreqs'&&cu.email&&cu.email.endsWith('@taskflowco.in')&&<DemoRequestsPanel supabase={supabase}/>}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
