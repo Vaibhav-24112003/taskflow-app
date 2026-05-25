@@ -9936,7 +9936,7 @@ showToast('Excel CSV downloaded');}
 var FORMATS=[
 {id:'pdf',label:'All Invoices PDF',desc:'Print all invoices as PDF',icon:'📄',color:'#ef4444',fn:exportAllPDF},
 {id:'excel',label:'Invoices Excel/CSV',desc:'All invoices with items, payments, balance',icon:'📊',color:'#22c55e',fn:exportExcel},
-{id:'tallyxml',label:'Tally XML',desc:'Native XML import for Tally ERP/Prime — double-entry, CGST/SGST/IGST split',icon:'📋',color:'#f59e0b',fn:exportTallyXML},
+{id:'tallyxml',label:'Tally XML',desc:'Native XML import for Tally ERP/Prime. Invoice dates must fall within the Tally company period.',icon:'📋',color:'#f59e0b',fn:exportTallyXML},
 {id:'zoho',label:'Zoho Books CSV',desc:'CSV format compatible with Zoho Books import',icon:'📑',color:'#3b82f6',fn:exportZohoXLSX}];
 
 return<div>
