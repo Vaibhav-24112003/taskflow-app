@@ -2632,6 +2632,78 @@ function OrgGroupsPanel({org,cu,supabase}){
   </div>;
 }
 
+// ── Demo Requests Panel ────────────────────────────────────────────────────────
+var _demoReqsCache={};
+function DemoRequestsPanel({supabase}){
+  var [rows,setRows]=useState(_demoReqsCache.rows||[]);
+  var [loading,setLoading]=useState(!_demoReqsCache.rows);
+  var [err,setErr]=useState(null);
+
+  async function load(){
+    setLoading(true);setErr(null);
+    var {data,error}=await supabase.from('demo_requests').select('*').order('created_at',{ascending:false});
+    setLoading(false);
+    if(error){setErr(error.message);return;}
+    _demoReqsCache.rows=data||[];
+    setRows(data||[]);
+  }
+  useEffect(function(){load();},[]);
+
+  async function updateStatus(id,status){
+    await supabase.from('demo_requests').update({status}).eq('id',id);
+    setRows(function(prev){return prev.map(function(r){return r.id===id?{...r,status}:r;});});
+    _demoReqsCache.rows=(_demoReqsCache.rows||[]).map(function(r){return r.id===id?{...r,status}:r;});
+  }
+
+  var STATUS_COLORS={'new':'#6366f1','contacted':'#f59e0b','converted':'#10b981','declined':'#94a3b8'};
+
+  return<div style={{padding:'20px 24px',maxWidth:1000}}>
+    <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+      <div>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-.02em'}}>Demo Requests</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Leads submitted from the landing page "Book a demo" form.</div>
+      </div>
+      <button onClick={load} style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit'}}>↻ Refresh</button>
+    </div>
+    {loading&&<div style={{color:'var(--tf-text-sub)',fontSize:13}}>Loading…</div>}
+    {err&&<div style={{color:'#ef4444',fontSize:13}}>{err}</div>}
+    {!loading&&!err&&rows.length===0&&<div style={{color:'var(--tf-text-sub)',fontSize:13,padding:'40px 0',textAlign:'center'}}>No demo requests yet. They'll appear here once someone fills in the landing page form.</div>}
+    {rows.length>0&&<div style={{overflowX:'auto'}}>
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+        <thead>
+          <tr style={{borderBottom:'2px solid var(--tf-border)'}}>
+            {['Name','Email','Phone','Firm','Team','Message','Status','Date'].map(function(h){
+              return<th key={h} style={{textAlign:'left',padding:'8px 10px',color:'var(--tf-text-sub)',fontWeight:700,whiteSpace:'nowrap',fontSize:11}}>{h}</th>;
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(function(r){
+            var col=STATUS_COLORS[r.status]||'#94a3b8';
+            return<tr key={r.id} style={{borderBottom:'1px solid var(--tf-border)'}}>
+              <td style={{padding:'10px 10px',fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap'}}>{r.name}</td>
+              <td style={{padding:'10px 10px'}}><a href={'mailto:'+r.email} style={{color:'#6b8cad',textDecoration:'none'}}>{r.email}</a></td>
+              <td style={{padding:'10px 10px',color:'var(--tf-text-sub)'}}>{r.phone||'—'}</td>
+              <td style={{padding:'10px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.firm_name||'—'}</td>
+              <td style={{padding:'10px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.team_size||'—'}</td>
+              <td style={{padding:'10px 10px',color:'var(--tf-text-sub)',maxWidth:200,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={r.message||''}>{r.message||'—'}</td>
+              <td style={{padding:'10px 10px'}}>
+                <select value={r.status} onChange={function(e){updateStatus(r.id,e.target.value);}}
+                  style={{background:'rgba('+col.replace('#','').match(/../g).map(function(x){return parseInt(x,16);}).join(',')+',.12)',border:'1px solid '+col,borderRadius:20,padding:'3px 8px',color:col,fontWeight:700,fontSize:11,cursor:'pointer',fontFamily:'inherit'}}>
+                  {['new','contacted','converted','declined'].map(function(s){return<option key={s} value={s}>{s}</option>;})}
+                </select>
+              </td>
+              <td style={{padding:'10px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap',fontFamily:"'JetBrains Mono',monospace",fontSize:11}}>
+                {new Date(r.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}
+              </td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </div>}
+  </div>;
+}
+
 // ── Org Settings Panel (replaces OrgManagementPanel inside org view) ─
 function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   var [hierarchy,setHierarchy]=useState((org.workflow_hierarchy||[]).map(function(h){return{key:h.key,label:h.label};}));
@@ -12705,7 +12777,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
+    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'},{id:'demoreqs',label:'Demo Requests'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -12796,6 +12868,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Set-up */}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {orgModule==='setup'&&tab==='demoreqs'&&<DemoRequestsPanel supabase={supabase}/>}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>

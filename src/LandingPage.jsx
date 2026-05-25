@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import SupportContactForm from './SupportContactForm.jsx'
 import TaskflowLogo from './components/TaskflowLogo.jsx'
-import { signInWithEmailLink } from './lib/supabase'
+import { signInWithEmailLink, supabase } from './lib/supabase'
 
 // Heavy tour modals are only loaded when the user opens them.
 const TourModal   = lazy(() => import('./LandingTour.jsx'))
@@ -96,6 +96,119 @@ const CSS = `
   .lp-tour-nav-btn.primary:hover:not(:disabled) { background: #4f46e5; border-color: #4f46e5; }
 `
 
+// ── Book Demo Modal ───────────────────────────────────────────────────────────
+const TEAM_SIZES = ['Just me', '2–5', '6–15', '16–30', '30+']
+
+function BookDemoModal({ open, onClose }) {
+  const [form, setForm] = useState({ name: '', email: '', phone: '', firm: '', size: '', message: '' })
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState('')
+
+  if (!open) return null
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!form.name.trim() || !form.email.trim()) { setErr('Name and email are required.'); return }
+    setBusy(true); setErr('')
+    try {
+      const { error } = await supabase.from('demo_requests').insert({
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim() || null,
+        firm_name: form.firm.trim() || null,
+        team_size: form.size || null,
+        message: form.message.trim() || null,
+      })
+      if (error) throw error
+      setDone(true)
+    } catch (e) {
+      setErr('Something went wrong. Please email us directly at hello@taskflowco.in')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const inputStyle = {
+    width: '100%', padding: '10px 14px', borderRadius: 8, fontSize: 13,
+    background: 'var(--lp-surface)', border: '1px solid var(--lp-border)',
+    color: 'var(--lp-text)', fontFamily: 'inherit', outline: 'none',
+    transition: 'border-color .15s',
+  }
+  const labelStyle = { fontSize: 11, fontWeight: 600, color: 'var(--lp-text-sub)', marginBottom: 5, display: 'block' }
+
+  return (
+    <div className="lp-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: '100%', maxWidth: 520, background: 'var(--lp-panel)', borderRadius: 16, border: '1px solid var(--lp-border)', boxShadow: '0 40px 120px rgba(0,0,0,.5)', padding: '32px 32px 28px', position: 'relative', animation: 'lp-modal-in .2s ease' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'var(--lp-surface)', border: '1px solid var(--lp-border)', borderRadius: 7, width: 30, height: 30, cursor: 'pointer', color: 'var(--lp-text-sub)', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
+            <h3 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' }}>You're on the list!</h3>
+            <p style={{ color: 'var(--lp-text-sub)', fontSize: 14, lineHeight: 1.6, margin: '0 0 24px' }}>Thanks! We'll reach out within 24 hours to schedule your demo.</p>
+            <button className="lp-btn lp-btn-primary" onClick={onClose}>Close</button>
+          </div>
+        ) : (<>
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#0e2a47', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Book a demo</div>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-.025em' }}>See Taskflow in action</h2>
+            <p style={{ margin: '8px 0 0', fontSize: 13, color: 'var(--lp-text-sub)', lineHeight: 1.5 }}>30-minute walkthrough tailored to your practice. No slides, just the product.</p>
+          </div>
+
+          <form onSubmit={submit}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+              <div>
+                <label style={labelStyle}>Name *</label>
+                <input style={inputStyle} placeholder="Rajesh Kumar" value={form.name} onChange={e => set('name', e.target.value)} required />
+              </div>
+              <div>
+                <label style={labelStyle}>Work Email *</label>
+                <input style={inputStyle} type="email" placeholder="rajesh@firm.com" value={form.email} onChange={e => set('email', e.target.value)} required />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+              <div>
+                <label style={labelStyle}>Phone</label>
+                <input style={inputStyle} placeholder="+91 98765 43210" value={form.phone} onChange={e => set('phone', e.target.value)} />
+              </div>
+              <div>
+                <label style={labelStyle}>Firm name</label>
+                <input style={inputStyle} placeholder="Kumar & Associates" value={form.firm} onChange={e => set('firm', e.target.value)} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Team size</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {TEAM_SIZES.map(s => (
+                  <button key={s} type="button" onClick={() => set('size', s)}
+                    style={{ padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: '1px solid', fontFamily: 'inherit', transition: 'all .12s',
+                      background: form.size === s ? '#0e2a47' : 'var(--lp-surface)',
+                      borderColor: form.size === s ? '#0e2a47' : 'var(--lp-border)',
+                      color: form.size === s ? '#fff' : 'var(--lp-text-sub)' }}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Anything specific you want to see?</label>
+              <textarea style={{ ...inputStyle, resize: 'vertical', minHeight: 72 }} placeholder="e.g. ITR workflow, recurring tasks, client portal…" value={form.message} onChange={e => set('message', e.target.value)} />
+            </div>
+            {err && <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 8, fontSize: 12, color: '#ef4444' }}>{err}</div>}
+            <button type="submit" className="lp-btn lp-btn-primary" disabled={busy} style={{ width: '100%', justifyContent: 'center', fontSize: 14 }}>
+              {busy ? 'Sending…' : 'Request demo →'}
+            </button>
+            <p style={{ textAlign: 'center', fontSize: 11, color: 'var(--lp-text-mut)', marginTop: 10 }}>We'll reach out within 24 hours. No spam, ever.</p>
+          </form>
+        </>)}
+      </div>
+    </div>
+  )
+}
+
 // ── Nav ───────────────────────────────────────────────────────────────────────
 const NAV_LINKS = [
   { label: 'Product',   href: '#product'    },
@@ -111,7 +224,7 @@ function scrollTo(id) {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-function Nav({ onOpenAuth, loading, dark, onToggleTheme }) {
+function Nav({ onOpenAuth, loading, dark, onToggleTheme, onOpenDemo }) {
   return (
     <nav style={{ position: 'sticky', top: 0, zIndex: 40, backdropFilter: 'blur(14px)', background: 'var(--lp-nav-bg)', borderBottom: '1px solid var(--lp-border)' }}>
       <div className="lp-container" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 32px' }}>
@@ -128,6 +241,7 @@ function Nav({ onOpenAuth, loading, dark, onToggleTheme }) {
           {dark ? '☀︎' : '☾'}
         </button>
         <button className="lp-btn lp-btn-link" onClick={onOpenAuth}>Sign in</button>
+        <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo} style={{ padding: '9px 16px', fontSize: 13 }}>Book demo</button>
         <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
           {loading ? 'Signing in…' : 'Start free'}
         </button>
@@ -239,7 +353,7 @@ function HeroMosaic() {
   )
 }
 
-function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR }) {
+function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpenDemo }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
@@ -256,6 +370,7 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR }) {
             <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
               {loading ? 'Signing in…' : 'Start free →'}
             </button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo}>Book a demo</button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Launch tour</button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenITR} style={{ background: 'rgba(14,42,71,.08)', borderColor: 'rgba(14,42,71,.3)', color: '#0e2a47' }}>📊 ITR Season</button>
             <button className="lp-btn lp-btn-link" onClick={onOpenTour}>Website tour →</button>
@@ -722,7 +837,7 @@ function Support() {
 }
 
 // ── Final CTA ─────────────────────────────────────────────────────────────────
-function FinalCTA({ onOpenAuth, loading }) {
+function FinalCTA({ onOpenAuth, loading, onOpenDemo }) {
   return (
     <section id="trial" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
@@ -733,7 +848,7 @@ function FinalCTA({ onOpenAuth, loading }) {
           <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
             {loading ? 'Signing in…' : 'Start free trial →'}
           </button>
-          <button className="lp-btn lp-btn-ghost">Book a demo</button>
+          <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo}>Book a demo</button>
         </div>
       </div>
     </section>
@@ -933,7 +1048,9 @@ export default function LandingPage({ onSignIn, loading }) {
   const [launchOpen, setLaunchOpen] = useState(false)
   const [itrOpen,    setItrOpen]    = useState(false)
   const [authOpen,   setAuthOpen]   = useState(false)
+  const [demoOpen,   setDemoOpen]   = useState(false)
   const openAuth = () => setAuthOpen(true)
+  const openDemo = () => setDemoOpen(true)
   return (
     <div className="lp-root" data-theme={dark ? 'dark' : 'light'}>
       <style>{CSS}</style>
@@ -943,6 +1060,7 @@ export default function LandingPage({ onSignIn, loading }) {
         onGoogle={onSignIn}
         googleBusy={loading}
       />
+      <BookDemoModal open={demoOpen} onClose={() => setDemoOpen(false)} />
       {tourOpen && (
         <Suspense fallback={<div className="lp-modal-overlay"><div style={{padding:24,color:'var(--lp-text-sub)',fontSize:13}}>Loading tour…</div></div>}>
           <TourModal open={tourOpen} onClose={() => setTourOpen(false)} />
@@ -958,8 +1076,8 @@ export default function LandingPage({ onSignIn, loading }) {
           <ITRTour open={itrOpen} onClose={() => setItrOpen(false)} />
         </Suspense>
       )}
-      <Nav onOpenAuth={openAuth} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} />
-      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} onOpenITR={() => setItrOpen(true)} />
+      <Nav onOpenAuth={openAuth} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} onOpenDemo={openDemo} />
+      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} onOpenITR={() => setItrOpen(true)} onOpenDemo={openDemo} />
       <Stats />
       <Problem />
       <Modules />
@@ -969,7 +1087,7 @@ export default function LandingPage({ onSignIn, loading }) {
       <Security />
       <FAQ />
       <Support />
-      <FinalCTA onOpenAuth={openAuth} loading={loading} />
+      <FinalCTA onOpenAuth={openAuth} loading={loading} onOpenDemo={openDemo} />
       <Footer />
     </div>
   )
