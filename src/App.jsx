@@ -39,6 +39,7 @@ import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
 import TaskflowLogo from './components/TaskflowLogo.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
+const AdminShell = lazyWithReload(() => import('./admin/AdminShell.jsx'))
 
 // ── Module-level data cache ────────────────────────────────────────────────────
 // Survives component unmount/remount (navigation away and back).
@@ -1357,6 +1358,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [supportTab,setSupportTab]=useState('send') // 'send' | 'mine'
   const [showAnnouncementsAdmin,setShowAnnouncementsAdmin]=useState(false)
   const [adminModule,setAdminModule]=useState(null) // 'users' | 'orgs' | null
+  const [showAdminShell,setShowAdminShell]=useState(false)
   const trialGate=useTrialGate(activeOrg)
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
@@ -1754,14 +1756,10 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           </div>}
         </div>;
       })()}
-      {/* Admin buttons — @taskflowco.in only */}
-      {isAdminEmail(cu?.email)&&<>
-        <button onClick={()=>{setAdminModule('users');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Users" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>🛡 Users</button>
-        <button onClick={()=>{setAdminModule('orgs');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Orgs" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>🏢 Orgs</button>
-        <button onClick={()=>{setAdminModule('demoreqs');setActiveOrg(null);setActiveWsId(null)}} title="Admin · Demo Requests" style={{padding:'5px 10px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:G.font,flexShrink:0}}>📋 Demos</button>
-      </>}
+      {/* Admin button — @taskflowco.in only */}
+      {isAdminEmail(cu?.email)&&<button onClick={()=>setShowAdminShell(true)} title="Platform Admin Dashboard" style={{padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5}}>🛡 Admin</button>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
-      <AnnouncementsBell cu={cu} onManage={()=>setShowAnnouncementsAdmin(true)}/>
+      <AnnouncementsBell cu={cu} onManage={()=>setShowAdminShell(true)}/>
       {/* Support / help icon */}
       <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#0e2a47'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
         <LifeBuoy size={14}/>
@@ -1800,7 +1798,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {/* CONTENT */}
     {adminModule==='users'&&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><UsersAdmin/></Suspense>}
     {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
-    {adminModule==='demoreqs'&&isAdminEmail(cu?.email)&&<div style={{flex:1,overflow:'auto'}}><DemoRequestsPanel supabase={supabase}/></div>}
+    {showAdminShell&&isAdminEmail(cu?.email)&&<Suspense fallback={null}><AdminShell cu={cu} onClose={()=>setShowAdminShell(false)}/></Suspense>}
     {!adminModule&&!activeWs
       ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
