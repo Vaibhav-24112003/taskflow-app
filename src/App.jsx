@@ -9820,10 +9820,12 @@ showToast('Tally JSON downloaded');}
 
 function exportTallyXML(){
 var orgState=org.gstin?org.gstin.slice(0,2):'';
-var td=new Date();var todayDt=td.getFullYear()+String(td.getMonth()+1).padStart(2,'0')+String(td.getDate()).padStart(2,'0');
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function tallyDate(d){if(!d)return todayDt;return String(d).slice(0,10).replace(/-/g,'');}
-var vouchers=invoices.map(function(inv){
+function tallyDate(d){return String(d).slice(0,10).replace(/-/g,'');}
+var skipped=invoices.filter(function(inv){return !inv.invoice_date;}).length;
+var eligible=invoices.filter(function(inv){return !!inv.invoice_date;});
+if(eligible.length===0){showToast('No invoices have a date set — add dates first','err');return;}
+var vouchers=eligible.map(function(inv){
 var c=clientMap[inv.client_id]||{};
 var items=inv.items||[];
 var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
@@ -9896,7 +9898,7 @@ vouchers.join('\n'),
 ' </BODY>',
 '</ENVELOPE>'].join('\n');
 downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'text/xml');
-showToast('Tally XML downloaded');}
+showToast('Tally XML downloaded'+(skipped>0?' ('+skipped+' invoice'+(skipped>1?'s':'')+' skipped — no date)':''));}
 
 function exportZohoXLSX(){
 var header=['Invoice Number','Invoice Date','Due Date','Customer Name','Item Name','Quantity','Rate','Tax','Total'];
