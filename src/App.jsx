@@ -9792,12 +9792,84 @@ function renderExport(){
 function downloadFile(name,content,type){var b=new Blob([content],{type:type});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
 
 function exportTallyJSON(){
+var orgState=org.gstin?org.gstin.slice(0,2):'';
 var data=invoices.map(function(inv){
 var c=clientMap[inv.client_id]||{};
 var items=inv.items||[];
-return{VoucherTypeName:'Sales',Date:inv.invoice_date||'',PartyLedgerName:c.display_name||c.name||'',VoucherNumber:inv.invoice_no,Narration:inv.notes||'',IsInvoice:'Yes',GSTIN:c.gstin||'',Ledgers:items.map(function(it){return{LedgerName:it.description,Amount:(Number(it.qty)||1)*(Number(it.rate)||0),SACCode:it.sac_code||''};}),TaxAmount:inv.tax_percent?(inv.total||0)-(items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0)):0,TotalAmount:inv.total||0};});
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var taxAmt=inv.tax_percent?((inv.total||0)-sub):0;
+var clientState=c.gstin?c.gstin.slice(0,2):'';
+var isInterState=orgState&&clientState&&orgState!==clientState;
+var dt=(inv.invoice_date||'').replace(/-/g,'');
+var ledgers=[];
+ledgers.push({LedgerName:c.display_name||c.name||'Party',IsDeemedPositive:'Yes',Amount:-(inv.total||0)});
+items.forEach(function(it){
+ledgers.push({LedgerName:it.description||'Sales',IsDeemedPositive:'No',Amount:(Number(it.qty)||1)*(Number(it.rate)||0),SACCode:it.sac_code||''});
+});
+if(taxAmt>0){
+if(isInterState){
+ledgers.push({LedgerName:'IGST @'+(inv.tax_percent||0)+'%',IsDeemedPositive:'No',Amount:taxAmt});
+}else{
+ledgers.push({LedgerName:'CGST @'+((inv.tax_percent||0)/2)+'%',IsDeemedPositive:'No',Amount:Math.round(taxAmt/2*100)/100});
+ledgers.push({LedgerName:'SGST @'+((inv.tax_percent||0)/2)+'%',IsDeemedPositive:'No',Amount:Math.round(taxAmt/2*100)/100});
+}}
+return{VoucherTypeName:'Sales',Date:dt,VoucherNumber:inv.invoice_no||'',PartyLedgerName:c.display_name||c.name||'',GSTIN:c.gstin||'',PlaceOfSupply:clientState,Narration:inv.notes||'',IsInvoice:'Yes',BasicBuyerName:c.display_name||c.name||'',AllLedgerEntries:ledgers,TotalAmount:inv.total||0};
+});
 downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(data,null,2),'application/json');
 showToast('Tally JSON downloaded');}
+
+function exportTallyXML(){
+var orgState=org.gstin?org.gstin.slice(0,2):'';
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+var vouchers=invoices.map(function(inv){
+var c=clientMap[inv.client_id]||{};
+var items=inv.items||[];
+var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var taxAmt=inv.tax_percent?((inv.total||0)-sub):0;
+var clientState=c.gstin?c.gstin.slice(0,2):'';
+var isInterState=orgState&&clientState&&orgState!==clientState;
+var dt=(inv.invoice_date||'').replace(/-/g,'');
+var partyName=esc(c.display_name||c.name||'Party');
+var lines=[];
+lines.push('<ALLLEDGERENTRIES.LIST>');
+lines.push('<LEDGERNAME>'+partyName+'</LEDGERNAME>');
+lines.push('<ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
+lines.push('<AMOUNT>-'+Number(inv.total||0).toFixed(2)+'</AMOUNT>');
+lines.push('</ALLLEDGERENTRIES.LIST>');
+items.forEach(function(it){
+var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
+lines.push('<ALLLEDGERENTRIES.LIST>');
+lines.push('<LEDGERNAME>'+esc(it.description||'Sales')+'</LEDGERNAME>');
+lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+lines.push('<AMOUNT>'+amt.toFixed(2)+'</AMOUNT>');
+if(it.sac_code)lines.push('<SERVICETAXDETAILS.LIST><SACCODE>'+esc(it.sac_code)+'</SACCODE></SERVICETAXDETAILS.LIST>');
+lines.push('</ALLLEDGERENTRIES.LIST>');
+});
+if(taxAmt>0){
+if(isInterState){
+lines.push('<ALLLEDGERENTRIES.LIST>');
+lines.push('<LEDGERNAME>IGST @'+(inv.tax_percent||0)+'%</LEDGERNAME>');
+lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+lines.push('<AMOUNT>'+taxAmt.toFixed(2)+'</AMOUNT>');
+lines.push('</ALLLEDGERENTRIES.LIST>');
+}else{
+var half=Math.round(taxAmt/2*100)/100;
+lines.push('<ALLLEDGERENTRIES.LIST>');
+lines.push('<LEDGERNAME>CGST @'+((inv.tax_percent||0)/2)+'%</LEDGERNAME>');
+lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+lines.push('<AMOUNT>'+half.toFixed(2)+'</AMOUNT>');
+lines.push('</ALLLEDGERENTRIES.LIST>');
+lines.push('<ALLLEDGERENTRIES.LIST>');
+lines.push('<LEDGERNAME>SGST @'+((inv.tax_percent||0)/2)+'%</LEDGERNAME>');
+lines.push('<ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+lines.push('<AMOUNT>'+half.toFixed(2)+'</AMOUNT>');
+lines.push('</ALLLEDGERENTRIES.LIST>');
+}}
+return'<VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">\n<DATE>'+dt+'</DATE>\n<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>\n<VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>\n<PARTYLEDGERNAME>'+partyName+'</PARTYLEDGERNAME>\n<BASICBUYERNAME>'+partyName+'</BASICBUYERNAME>\n<NARRATION>'+esc(inv.notes||'')+'</NARRATION>\n<EFFECTIVEDATE>'+dt+'</EFFECTIVEDATE>\n'+(c.gstin?'<PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>\n':'')+(clientState?'<PLACEOFSUPPLY>'+clientState+'</PLACEOFSUPPLY>\n':'')+lines.join('\n')+'\n</VOUCHER>';
+});
+var xml='<?xml version="1.0" encoding="UTF-8"?>\n<ENVELOPE>\n<HEADER>\n<TALLYREQUEST>Import Data</TALLYREQUEST>\n</HEADER>\n<BODY>\n<IMPORTDATA>\n<REQUESTDESC>\n<REPORTNAME>Vouchers</REPORTNAME>\n<STATICVARIABLES>\n<SVCURRENTCOMPANY>'+esc(org.name||'')+'</SVCURRENTCOMPANY>\n</STATICVARIABLES>\n</REQUESTDESC>\n<REQUESTDATA>\n<TALLYMESSAGE xmlns:UDF="TallyUDF">\n'+vouchers.join('\n')+'\n</TALLYMESSAGE>\n</REQUESTDATA>\n</IMPORTDATA>\n</BODY>\n</ENVELOPE>';
+downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'application/xml');
+showToast('Tally XML downloaded');}
 
 function exportZohoXLSX(){
 var header=['Invoice Number','Invoice Date','Due Date','Customer Name','Item Name','Quantity','Rate','Tax','Total'];
@@ -9835,7 +9907,8 @@ showToast('Excel CSV downloaded');}
 var FORMATS=[
 {id:'pdf',label:'All Invoices PDF',desc:'Print all invoices as PDF',icon:'📄',color:'#ef4444',fn:exportAllPDF},
 {id:'excel',label:'Invoices Excel/CSV',desc:'All invoices with items, payments, balance',icon:'📊',color:'#22c55e',fn:exportExcel},
-{id:'tally',label:'Tally JSON',desc:'Import-ready JSON for Tally ERP/Prime',icon:'📋',color:'#f59e0b',fn:exportTallyJSON},
+{id:'tallyxml',label:'Tally XML',desc:'Native XML import for Tally ERP/Prime (recommended)',icon:'📋',color:'#f59e0b',fn:exportTallyXML},
+{id:'tally',label:'Tally JSON',desc:'Structured JSON with double-entry ledger format',icon:'📑',color:'#d97706',fn:exportTallyJSON},
 {id:'zoho',label:'Zoho Books CSV',desc:'CSV format compatible with Zoho Books import',icon:'📑',color:'#3b82f6',fn:exportZohoXLSX}];
 
 return<div>
