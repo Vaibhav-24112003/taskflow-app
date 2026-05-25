@@ -9790,6 +9790,11 @@ return<div>
 }
 function renderExport(){
 function downloadFile(name,content,type){var b=new Blob([content],{type:type});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);}
+function downloadFileUTF16(name,content){
+var buf=new ArrayBuffer(2+content.length*2);var bom=new Uint8Array(buf,0,2);bom[0]=0xFF;bom[1]=0xFE;
+var view=new Uint16Array(buf,2);for(var i=0;i<content.length;i++)view[i]=content.charCodeAt(i);
+var b=new Blob([buf],{type:'text/xml'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);
+}
 
 function exportTallyJSON(){
 var orgState=org.gstin?org.gstin.slice(0,2):'';
@@ -9836,11 +9841,14 @@ var dt=tallyDate(inv.invoice_date);
 var partyName=c.display_name||c.name||'Sundry Debtors';
 var total=Number(inv.total||0);
 var v=[];
-v.push(' <VOUCHER VCHTYPE="Sales" ACTION="Create">');
+v.push(' <VOUCHER VCHTYPE="Sales" ACTION="Create" OBJVIEW="Invoice Voucher View">');
 v.push('  <DATE>'+dt+'</DATE>');
+v.push('  <EFFECTIVEDATE>'+dt+'</EFFECTIVEDATE>');
 v.push('  <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>');
+v.push('  <ISINVOICE>Yes</ISINVOICE>');
 v.push('  <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
 v.push('  <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
+v.push('  <BASICBUYERNAME>'+esc(partyName)+'</BASICBUYERNAME>');
 if(inv.notes)v.push('  <NARRATION>'+esc(inv.notes)+'</NARRATION>');
 if(c.gstin)v.push('  <PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>');
 v.push('  <ALLLEDGERENTRIES.LIST>');
@@ -9879,7 +9887,7 @@ v.push('  </ALLLEDGERENTRIES.LIST>');
 v.push(' </VOUCHER>');
 return v.join('\n');
 });
-var xml=['<?xml version="1.0"?>',
+var xml=['<?xml version="1.0" encoding="UTF-16"?>',
 '<ENVELOPE>',
 ' <HEADER>',
 '  <TALLYREQUEST>Import Data</TALLYREQUEST>',
@@ -9888,6 +9896,9 @@ var xml=['<?xml version="1.0"?>',
 '  <IMPORTDATA>',
 '   <REQUESTDESC>',
 '    <REPORTNAME>Vouchers</REPORTNAME>',
+'    <STATICVARIABLES>',
+'     <SVCURRENTCOMPANY>'+esc(org.name||'')+'</SVCURRENTCOMPANY>',
+'    </STATICVARIABLES>',
 '   </REQUESTDESC>',
 '   <REQUESTDATA>',
 '    <TALLYMESSAGE xmlns:UDF="TallyUDF">',
@@ -9896,8 +9907,8 @@ vouchers.join('\n'),
 '   </REQUESTDATA>',
 '  </IMPORTDATA>',
 ' </BODY>',
-'</ENVELOPE>'].join('\n');
-downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'text/xml');
+'</ENVELOPE>'].join('\r\n');
+downloadFileUTF16('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml);
 showToast('Tally XML downloaded'+(skipped>0?' ('+skipped+' invoice'+(skipped>1?'s':'')+' skipped — no date)':''));}
 
 function exportZohoXLSX(){
