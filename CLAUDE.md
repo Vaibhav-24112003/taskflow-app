@@ -24,6 +24,12 @@
 | `src/components/TaskflowLogo.jsx` | Wordmark component — use `<TaskflowLogo size={N} />` |
 | `src/lib/supabase.js` | Supabase client + helper functions |
 | `src/lib/authStateListener.js` | Auth state + block check |
+| `src/admin/AdminShell.jsx` | Platform admin dashboard (Overview, Users, Orgs, Demos, Support, Announcements) |
+| `src/admin/UsersAdmin.jsx` | User management — reads `admin_user_overview` view |
+| `src/admin/OrgsAdmin.jsx` | Org management — reads `admin_org_overview` view, trial/module controls |
+| `src/SupportAdminView.jsx` | Support tickets admin (183 lines) |
+| `src/AnnouncementsAdmin.jsx` | Announcements CRUD (223 lines) |
+| `supabase/migrations/` | SQL migration files for DB changes |
 
 ## Git / Push Flow
 The local proxy blocks direct git push. Use PAT every time:
@@ -70,6 +76,8 @@ git add src/App.jsx && git commit --no-edit
 | `clients` | `id`, `name`, `display_name`, `pan`, `org_id` |
 | `organization_members` | `user_id`, `role`, `org_id` |
 | `profiles` | `id`, `name`, `email` |
+| `demo_requests` | Landing page "Book a Demo" form — `name`, `email`, `phone`, `firm_name`, `team_size`, `message`, `status` (new/contacted/converted/declined) |
+| `org_cloud_storage` | Per-org cloud/integration tokens — `provider`, `access_token`, `is_active` |
 
 `worksheet_rows.data` JSONB keys: `__title`, `__assignee`, `__priority`, `__description`, `__contact`, `__checklist`, `__h_<key>` (workflow hierarchy assignees)
 
@@ -242,12 +250,39 @@ borderRight: '1px solid rgba(255,255,255,0.06)'
 - Problem section: "Your team works hard. Your systems should too."
 - Tours: Website Tour (LaunchTour) + ITR Season tour (ITRTour) — lazy loaded
 - No "14-day free trial" messaging anywhere
+- **Book a Demo** button in Nav, Hero CTAs, and FinalCTA — opens `BookDemoModal`
+- `BookDemoModal` in `LandingPage.jsx`: name, email, phone, firm, team size pills, message → inserts to `demo_requests`
 
-## What's Been Built (this session / current branch)
+## Platform Admin Dashboard (`src/admin/AdminShell.jsx`)
+- Accessible via single **🛡 Admin** button in top bar (only `@taskflowco.in` accounts)
+- Full-screen overlay with dark navy sidebar
+- **Sections**: Overview · Users · Organisations · Demo Requests · Support Tickets · Announcements
+- **Overview**: live stats cards (users, orgs, new demos) + quick nav cards + recent demo requests table
+- **Realtime**: Overview and Demo Requests subscribe to `supabase_realtime` on `demo_requests` — updates push instantly, green pulsing LIVE indicator
+- Demo Requests has status filter pills (all/new/contacted/converted/declined) + inline status dropdown per row
+- Required Supabase SQL: `alter publication supabase_realtime add table demo_requests;`
+
+## Gmail Multi-Account (`CommunicationsModule` in App.jsx)
+- `gmailAccounts` state: array of `{email, token, expiry, type, label}`
+- `gmailActiveEmail`: which account is currently active
+- `addOrUpdateAccount(email, token, expiry, type, label)` — adds/updates account, schedules auto-refresh
+- `silentRefreshGmail(email)` — GIS `prompt:'none'` silent token refresh 5min before expiry
+- `disconnectAccount(email)` — removes account, clears active if needed
+- `connectOrgGmail()` — admin connects shared org email, stored in `org_cloud_storage` provider=`gmail_org_accounts`
+- `removeOrgGmail(email)` — removes org email from DB + local state
+- Personal accounts stored in `localStorage` key `tf_gmailAccounts_{orgId}_{userId}`
+- Org accounts stored in `localStorage` key `tf_gmailOrgAccounts_{orgId}` + DB
+- Account switcher UI in Gmail left panel: 🟢/🔴/⚪ dots, click to switch, ✕ to remove
+- Org email admin section in Gmail left panel (owner/admin only): list + Remove + "+ Connect Org Email"
+
+## What's Been Built
 1. **ERP Board (WorkZone → Board tab)** — `ErpBoardModule`: Kanban over `worksheet_rows`, drag-and-drop, group by status/work type, assignee filter, client search, hide-completed
 2. **Worklist redesign** — `YourDashboardModule`: removed 240px left rail → merged as Row 3 pill strip, 4 view modes (List/Board/Calendar/Grid), My Day add/remove with localStorage persistence
 3. **Send to Logs in Plan My Day panel** — `→ Log` button on every Morning/Afternoon card, inline form, writes to `attendance_time_logs`
 4. **Open Unclassified button** — "Open Unclassified →" in list-view group headers (amber styling)
+5. **Gmail multi-account** — account switcher in left panel, silent auto-refresh, org email management (admin), personal accounts per user in localStorage
+6. **Book a Demo form** — `BookDemoModal` on landing page (Nav + Hero + FinalCTA), inserts to `demo_requests` Supabase table with RLS
+7. **Platform Admin Dashboard** — `AdminShell` with Overview (realtime stats), Users, Orgs, Demo Requests, Support, Announcements. Single 🛡 Admin button, `@taskflowco.in` only. Realtime via Supabase postgres_changes channel.
 
 ## Pending / Deferred Work
 - Client Ledger in Analytics
@@ -255,6 +290,7 @@ borderRight: '1px solid rgba(255,255,255,0.06)'
 - Pricing tier feature flags
 - Unified Kanban across all work types
 - Recurring task management per client
+- Frontend Design plugin (only available in Claude Code desktop app, not web)
 
 ## Design References
 Design files (extracted from tar.gz at `/tmp/design_files/taskflow/`):
