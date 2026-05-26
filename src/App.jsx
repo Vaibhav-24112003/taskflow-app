@@ -9851,43 +9851,43 @@ v.push('  <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
 v.push('  <BASICBUYERNAME>'+esc(partyName)+'</BASICBUYERNAME>');
 if(inv.notes)v.push('  <NARRATION>'+esc(inv.notes)+'</NARRATION>');
 if(c.gstin)v.push('  <PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>');
-v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('  <LEDGERENTRIES.LIST>');
 v.push('   <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
 v.push('   <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>-'+total.toFixed(2)+'</AMOUNT>');
-v.push('  </ALLLEDGERENTRIES.LIST>');
+v.push('   <AMOUNT>'+total.toFixed(2)+'</AMOUNT>');
+v.push('  </LEDGERENTRIES.LIST>');
 items.forEach(function(it){
 var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
-v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('  <LEDGERENTRIES.LIST>');
 v.push('   <LEDGERNAME>'+esc(it.description||'Sales Account')+'</LEDGERNAME>');
 v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>-'+amt.toFixed(2)+'</AMOUNT>');
-v.push('  </ALLLEDGERENTRIES.LIST>');
+v.push('   <AMOUNT>'+amt.toFixed(2)+'</AMOUNT>');
+v.push('  </LEDGERENTRIES.LIST>');
 });
 if(taxAmt>0){
 if(isInterState){
-v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('  <LEDGERENTRIES.LIST>');
 v.push('   <LEDGERNAME>IGST</LEDGERNAME>');
 v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>-'+taxAmt.toFixed(2)+'</AMOUNT>');
-v.push('  </ALLLEDGERENTRIES.LIST>');
+v.push('   <AMOUNT>'+taxAmt.toFixed(2)+'</AMOUNT>');
+v.push('  </LEDGERENTRIES.LIST>');
 }else{
 var half=Math.round(taxAmt/2*100)/100;
-v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('  <LEDGERENTRIES.LIST>');
 v.push('   <LEDGERNAME>CGST</LEDGERNAME>');
 v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>-'+half.toFixed(2)+'</AMOUNT>');
-v.push('  </ALLLEDGERENTRIES.LIST>');
-v.push('  <ALLLEDGERENTRIES.LIST>');
+v.push('   <AMOUNT>'+half.toFixed(2)+'</AMOUNT>');
+v.push('  </LEDGERENTRIES.LIST>');
+v.push('  <LEDGERENTRIES.LIST>');
 v.push('   <LEDGERNAME>SGST</LEDGERNAME>');
 v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>-'+half.toFixed(2)+'</AMOUNT>');
-v.push('  </ALLLEDGERENTRIES.LIST>');
+v.push('   <AMOUNT>'+half.toFixed(2)+'</AMOUNT>');
+v.push('  </LEDGERENTRIES.LIST>');
 }}
 v.push(' </VOUCHER>');
 return v.join('\n');
 });
-var xml=['<?xml version="1.0" encoding="UTF-16"?>',
+var xml=['<?xml version="1.0" encoding="UTF-8"?>',
 '<ENVELOPE>',
 ' <HEADER>',
 '  <TALLYREQUEST>Import Data</TALLYREQUEST>',
@@ -9908,7 +9908,7 @@ vouchers.join('\n'),
 '  </IMPORTDATA>',
 ' </BODY>',
 '</ENVELOPE>'].join('\r\n');
-downloadFileUTF16('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml);
+downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'text/xml;charset=utf-8');
 showToast('Tally XML downloaded'+(skipped>0?' ('+skipped+' invoice'+(skipped>1?'s':'')+' skipped — no date)':''));}
 
 function exportZohoXLSX(){
