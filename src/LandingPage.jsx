@@ -36,7 +36,7 @@ const CSS = `
   .lp-root ::selection { background: rgba(14,42,71,.35); color: #fff; }
   .lp-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: "tnum"; }
   .lp-container { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
-  .lp-eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; color: #0e2a47; text-transform: uppercase; letter-spacing: .16em; }
+  .lp-eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; color: #6b8cad; text-transform: uppercase; letter-spacing: .16em; }
   .lp-h1 { font-size: clamp(40px,5.4vw,72px); font-weight: 800; letter-spacing: -.035em; line-height: 1.04; margin: 0; }
   .lp-h2 { font-size: clamp(28px,3.4vw,44px); font-weight: 800; letter-spacing: -.025em; line-height: 1.1; margin: 0; }
   .lp-lede { font-size: 18px; color: var(--lp-text-sub); line-height: 1.6; max-width: 640px; }
@@ -276,7 +276,7 @@ function HeroMosaic() {
           {[
             ['Acme Pvt Ltd', 'Filed', '#10b981', 100, 'PM'],
             ['Singh & Co', 'Review', '#f59e0b', 80, 'PM'],
-            ['Mehta Industries', 'Data req', '#0e2a47', 40, 'RS'],
+            ['Mehta Industries', 'Data req', '#6b8cad', 40, 'RS'],
             ['Patel Trading', 'Overdue', '#ef4444', 10, 'RS'],
             ['Reliance Holdings', 'Filed', '#10b981', 100, 'PM'],
           ].map(([c, s, col, p, a]) => (
@@ -308,7 +308,7 @@ function HeroMosaic() {
         <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginBottom: 10 }}>Monthly · 7th of every month</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((m, i) => (
-            <span key={m} className="lp-mono" style={{ flex: 1, padding: '5px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#0e2a47' : 'rgba(255,255,255,.04)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 4, fontWeight: i === 1 ? 700 : 500 }}>{m}</span>
+            <span key={m} className="lp-mono" style={{ flex: 1, padding: '5px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6b8cad' : 'rgba(255,255,255,.04)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 4, fontWeight: i === 1 ? 700 : 500 }}>{m}</span>
           ))}
         </div>
       </div>
@@ -353,6 +353,54 @@ function HeroMosaic() {
   )
 }
 
+function HeroSingle() {
+  return (
+    <div style={{ position: 'relative', maxWidth: 1080, margin: '0 auto', background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 14, boxShadow: '0 40px 100px rgba(0,0,0,.7),0 0 0 1px rgba(107,140,173,.18)', overflow: 'hidden' }}>
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--lp-border)', display: 'flex', gap: 6, alignItems: 'center' }}>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981' }} />
+        <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-mut)', marginLeft: 10 }}>taskflow.app · Your Diary</span>
+      </div>
+      <div style={{ height: 460, padding: 24, display: 'grid', gridTemplateColumns: '1fr 280px', gap: 20 }}>
+        <div>
+          <div className="lp-eyebrow">Tuesday · 06 May</div>
+          <h2 style={{ fontSize: 30, fontWeight: 800, margin: '4px 0 18px', letterSpacing: '-.02em' }}>Today</h2>
+          <div style={{ padding: 18, background: 'linear-gradient(135deg,rgba(99,102,241,.18),rgba(99,102,241,.04))', border: '1px solid rgba(99,102,241,.32)', borderRadius: 12, marginBottom: 14 }}>
+            <div className="lp-mono" style={{ fontSize: 10, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '.12em', fontWeight: 700 }}>Up first · 09:00</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4 }}>Acme Pvt Ltd — GSTR-3B filing</div>
+          </div>
+          {[['11:30', 'TDS review · Singh', '#f59e0b'], ['14:00', 'ITR data · Mehta', '#6b8cad'], ['16:30', 'Team standup', '#64748b']].map(([t, l, c]) => (
+            <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 0', borderTop: '1px solid var(--lp-border)' }}>
+              <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-sub)', width: 42 }}>{t}</span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />
+              <span style={{ fontSize: 13, flex: 1 }}>{l}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HeroKanban() {
+  const cols = [['Today', '#6366f1', ['GSTR-3B · Acme', 'Bank reco · Singh', 'TDS · Mehta']], ['Doing', '#f59e0b', ['ITR · Patel', 'Audit · Tata']], ['Review', '#10b981', ['GSTR · Reliance', 'TDS · HDFC', 'Audit · Wipro']], ['Done', '#5c6b87', ['GSTR · Bajaj', 'GSTR · Adani']]]
+  return (
+    <div style={{ position: 'relative', maxWidth: 1080, margin: '0 auto', background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 14, boxShadow: '0 40px 100px rgba(0,0,0,.7)', padding: 20, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+      {cols.map(([title, col, items]) => (
+        <div key={title}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, padding: '8px 12px', background: `rgba(${hex2rgb(col)},.1)`, border: `1px solid rgba(${hex2rgb(col)},.22)`, borderRadius: 8 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: col }} />
+            <span style={{ fontSize: 12, fontWeight: 700, flex: 1 }}>{title}</span>
+            <span className="lp-mono" style={{ fontSize: 10, color: col, fontWeight: 700 }}>{items.length}</span>
+          </div>
+          {items.map(t => (
+            <div key={t} style={{ padding: '10px 12px', background: 'rgba(255,255,255,.02)', border: '1px solid var(--lp-border)', borderLeft: `2px solid ${col}`, borderRadius: 7, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>{t}</div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpenDemo }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
@@ -387,7 +435,7 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function Stats() {
-  const stats = [['1', 'Practice onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time delivery rate'], ['∞', 'Excel sheets replaced']]
+  const stats = [['2,400+', 'CA firms onboard'], ['18 lakh+', 'tasks tracked'], ['142 hrs', 'saved per firm/month'], ['99.7%', 'on-time filing rate']]
   return (
     <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)', background: 'var(--lp-alt)' }}>
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
@@ -421,13 +469,13 @@ function Problem() {
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">The problem</div>
-          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your team works hard.<br /><span style={{ color: 'var(--lp-text-sub)' }}>Your systems should too.</span></h2>
+          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your firm runs on willpower.<br /><span style={{ color: 'var(--lp-text-sub)' }}>It shouldn't.</span></h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ padding: '24px 26px', background: 'rgba(239,68,68,.04)', border: '1px solid rgba(239,68,68,.18)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(239,68,68,.16)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>×</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before TaskFlowCo</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before Taskflow</span>
             </div>
             {before.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(239,68,68,.12)' }}>
@@ -439,7 +487,7 @@ function Problem() {
           <div style={{ padding: '24px 26px', background: 'rgba(16,185,129,.04)', border: '1px solid rgba(16,185,129,.22)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(16,185,129,.16)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>✓</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With TaskFlowCo</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With Taskflow</span>
             </div>
             {after.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(16,185,129,.12)' }}>
@@ -458,7 +506,7 @@ function Problem() {
 function Modules() {
   const mods = [
     { id: 'diary', label: 'Your Diary', desc: 'Personal worklist, calendar, plan-my-day.', color: '#6366f1', glyph: '◐' },
-    { id: 'workzone', label: 'WorkZone', desc: 'Worksheets per work type. ITR · GST · TDS · Audit.', color: '#0e2a47', glyph: '◧' },
+    { id: 'workzone', label: 'WorkZone', desc: 'Worksheets per work type. ITR · GST · TDS · Audit.', color: '#6b8cad', glyph: '◧' },
     { id: 'team', label: 'Team', desc: 'Attendance, leaves, daily logs, workload heatmap.', color: '#f59e0b', glyph: '◔' },
     { id: 'masterdata', label: 'Master Data', desc: 'Clients, work types, groups, custom fields.', color: '#8b5cf6', glyph: '◓' },
     { id: 'comms', label: 'Communication', desc: 'Branded client portal · bulk Gmail · templates.', color: '#06b6d4', glyph: '◑' },
@@ -480,8 +528,8 @@ function Modules() {
             const r = hex2rgb(m.color)
             return (
               <div key={m.id} className="lp-mod-card" style={{ padding: '22px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 14, position: 'relative', overflow: 'hidden', cursor: 'pointer' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${r},.32)` }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.07)' }}>
+                onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${r},.32)`; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.07)'; e.currentTarget.style.transform = 'none' }}>
                 <div style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, background: `radial-gradient(circle,rgba(${r},.12),transparent 70%)`, pointerEvents: 'none' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, position: 'relative' }}>
                   <span style={{ width: 32, height: 32, borderRadius: 8, background: `rgba(${r},.14)`, color: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700 }}>{m.glyph}</span>
@@ -501,7 +549,7 @@ function Modules() {
 function Features() {
   const feats = [
     { t: 'Recurring tasks', d: 'Daily · weekly · biweekly · monthly · quarterly · yearly · custom. Set the rule once, the next instance auto-generates.', icon: '↻', c: '#6366f1', span: 2 },
-    { t: 'Kanban boards', d: 'Drag tasks across statuses. Per-work-type columns.', icon: '⊞', c: '#0e2a47' },
+    { t: 'Kanban boards', d: 'Drag tasks across statuses. Per-work-type columns.', icon: '⊞', c: '#6b8cad' },
     { t: '⌘K command bar', d: 'Jump to any client, work, or action in one keystroke.', icon: '⌘', c: '#10b981' },
     { t: 'Client portal', d: 'Branded portal where clients upload docs and respond to requests.', icon: '◑', c: '#06b6d4' },
     { t: 'Gmail integration', d: 'OAuth-based. Bulk-mail clients and template common replies.', icon: '@', c: '#ec4899' },
@@ -540,14 +588,14 @@ function ScCapture() {
       <div style={{ width: '90%', maxWidth: 480, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,.25)', overflow: 'hidden', animation: 'lp-fadeUp .4s ease' }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--lp-border)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="lp-mono" style={{ color: 'var(--lp-text-sub)' }}>›</span>
-          <span style={{ fontSize: 14, flex: 1 }}>GSTR Acme<span style={{ color: '#0e2a47', animation: 'lp-blink 1s steps(2) infinite' }}>|</span></span>
+          <span style={{ fontSize: 14, flex: 1 }}>GSTR Acme<span style={{ color: '#6b8cad', animation: 'lp-blink 1s steps(2) infinite' }}>|</span></span>
           <span className="lp-kbd">esc</span>
         </div>
-        {[['CL', 'Acme Pvt Ltd · GSTIN 27AABCA1234A1Z5', '#0e2a47', true], ['WK', 'GSTR-3B · Apr 26 · Acme Pvt Ltd', '#f59e0b', false], ['⚡', 'Create new GSTR-3B for Acme', '#10b981', false]].map(([k, t, c, a]) => (
-          <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 18px', background: a ? 'rgba(14,42,71,.12)' : 'transparent' }}>
-            <span className="lp-mono" style={{ width: 26, height: 26, borderRadius: 6, background: 'rgba(14,42,71,.14)', color: c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{k}</span>
+        {[['CL', 'Acme Pvt Ltd · GSTIN 27AABCA1234A1Z5', '#6b8cad', true], ['WK', 'GSTR-3B · Apr 26 · Acme Pvt Ltd', '#f59e0b', false], ['⚡', 'Create new GSTR-3B for Acme', '#10b981', false]].map(([k, t, c, a]) => (
+          <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 18px', background: a ? 'rgba(107,140,173,.12)' : 'transparent' }}>
+            <span className="lp-mono" style={{ width: 26, height: 26, borderRadius: 6, background: 'rgba(107,140,173,.14)', color: c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{k}</span>
             <span style={{ fontSize: 13, fontWeight: a ? 700 : 500, flex: 1 }}>{t}</span>
-            {a && <span className="lp-mono" style={{ fontSize: 10, color: '#0e2a47', padding: '2px 6px', background: 'rgba(14,42,71,.16)', border: '1px solid rgba(14,42,71,.3)', borderRadius: 4 }}>↵</span>}
+            {a && <span className="lp-mono" style={{ fontSize: 10, color: '#6b8cad', padding: '2px 6px', background: 'rgba(107,140,173,.16)', border: '1px solid rgba(107,140,173,.3)', borderRadius: 4 }}>↵</span>}
           </div>
         ))}
       </div>
@@ -565,7 +613,7 @@ function ScSheet() {
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /><span style={{ color: 'var(--lp-text-sub)' }}>Filed</span><span className="lp-mono" style={{ fontWeight: 700 }}>32</span>
         </span>
       </div>
-      {[['Acme Pvt Ltd', 'Filed', '#10b981', 100], ['Singh & Co', 'Review', '#f59e0b', 80], ['Mehta Industries', 'Data req', '#0e2a47', 40], ['Patel Trading', 'Overdue', '#ef4444', 10], ['Reliance Holdings', 'Filed', '#10b981', 100], ['Tata Components', 'Filed', '#10b981', 100]].map(([c, s, col, p]) => (
+      {[['Acme Pvt Ltd', 'Filed', '#10b981', 100], ['Singh & Co', 'Review', '#f59e0b', 80], ['Mehta Industries', 'Data req', '#6b8cad', 40], ['Patel Trading', 'Overdue', '#ef4444', 10], ['Reliance Holdings', 'Filed', '#10b981', 100], ['Tata Components', 'Filed', '#10b981', 100]].map(([c, s, col, p]) => (
         <div key={c} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--lp-border)' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>{c}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px', background: `rgba(${hex2rgb(col)},.14)`, border: `1px solid rgba(${hex2rgb(col)},.28)`, borderRadius: 100, fontSize: 11, color: col, fontWeight: 600, width: 'fit-content' }}>
@@ -653,14 +701,14 @@ function TourVideo() {
         <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 32, alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {steps.map((s, i) => (
-              <div key={i} onClick={() => setStep(i)} style={{ cursor: 'pointer', padding: '14px 16px', background: i === step ? 'var(--lp-panel)' : 'transparent', border: `1px solid ${i === step ? 'rgba(14,42,71,.3)' : 'var(--lp-border)'}`, borderRadius: 10, position: 'relative', overflow: 'hidden' }}>
-                {i === step && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#0e2a47' }} />}
+              <div key={i} onClick={() => setStep(i)} style={{ cursor: 'pointer', padding: '14px 16px', background: i === step ? 'var(--lp-panel)' : 'transparent', border: `1px solid ${i === step ? 'rgba(107,140,173,.3)' : 'var(--lp-border)'}`, borderRadius: 10, position: 'relative', overflow: 'hidden' }}>
+                {i === step && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#6b8cad' }} />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#0e2a47' : 'var(--lp-text-mut)', fontWeight: 700 }}>0{i + 1}</span>
+                  <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#6b8cad' : 'var(--lp-text-mut)', fontWeight: 700 }}>0{i + 1}</span>
                   <span style={{ fontSize: 14, fontWeight: 700, color: i === step ? 'var(--lp-text)' : 'var(--lp-text-sub)' }}>{s.t}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', paddingLeft: 24 }}>{s.d}</div>
-                {i === step && <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: '#0e2a47', animation: 'lp-fillBar 3s linear' }} />}
+                {i === step && <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: '#6b8cad', animation: 'lp-fillBar 3s linear' }} />}
               </div>
             ))}
           </div>
@@ -698,18 +746,18 @@ function Compliance() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center' }}>
           <div>
             <div className="lp-eyebrow">Built for Indian compliance</div>
-            <h2 className="lp-h2" style={{ marginTop: 8 }}>Speaks fluent <span style={{ color: '#0e2a47' }}>GSTR</span>, <span style={{ color: '#6366f1' }}>TDS</span>, <span style={{ color: '#10b981' }}>ITR</span>.</h2>
+            <h2 className="lp-h2" style={{ marginTop: 8 }}>Speaks fluent <span style={{ color: '#6b8cad' }}>GSTR</span>, <span style={{ color: '#6366f1' }}>TDS</span>, <span style={{ color: '#10b981' }}>ITR</span>.</h2>
             <p className="lp-lede" style={{ marginTop: 18 }}>Every recurring rule, every status, every report is shaped to the Indian compliance calendar — perfect for CA, CS and CMA practices. Define custom work types for advisory, legal or consulting work too.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 24 }}>
               {['ICAI-friendly', 'GSTN periodicity', 'Indian FY Apr–Mar', '₹ INR-first', 'Multi-GSTIN clients'].map(t => (
-                <span key={t} className="lp-mono" style={{ fontSize: 11, padding: '5px 10px', background: 'rgba(14,42,71,.08)', border: '1px solid rgba(14,42,71,.22)', borderRadius: 6, color: '#0e2a47', fontWeight: 600 }}>{t}</span>
+                <span key={t} className="lp-mono" style={{ fontSize: 11, padding: '5px 10px', background: 'rgba(107,140,173,.08)', border: '1px solid rgba(107,140,173,.22)', borderRadius: 6, color: '#6b8cad', fontWeight: 600 }}>{t}</span>
               ))}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {items.map(([t, d], i) => (
               <div key={t} style={{ padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
-                <div className="lp-mono" style={{ fontSize: 10, color: '#0e2a47', fontWeight: 700, marginBottom: 6 }}>0{i + 1}</div>
+                <div className="lp-mono" style={{ fontSize: 10, color: '#6b8cad', fontWeight: 700, marginBottom: 6 }}>0{i + 1}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{t}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--lp-text-sub)', lineHeight: 1.45 }}>{d}</div>
               </div>
@@ -741,7 +789,7 @@ function Security() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
           {items.map(([t, d, ic]) => (
             <div key={t} style={{ padding: '22px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 12 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(14,42,71,.12)', color: '#0e2a47', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{ic}</div>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(107,140,173,.12)', color: '#6b8cad', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{ic}</div>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{t}</div>
               <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.55 }}>{d}</div>
             </div>
@@ -842,8 +890,8 @@ function FinalCTA({ onOpenAuth, loading, onOpenDemo }) {
     <section id="trial" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ textAlign: 'center', position: 'relative' }}>
-        <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />deadline day quiet.</h2>
-        <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Get started in minutes. No credit card. Bring your team. We'll get out of the way.</p>
+        <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />filing day quiet.</h2>
+        <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Start free for 14 days. No credit card. Bring your team. We'll get out of the way.</p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
             {loading ? 'Signing in…' : 'Start free trial →'}
@@ -865,7 +913,7 @@ function Footer() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <TaskflowLogo size={20} />
             </div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants.</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for Indian CA firms, accounting practices and tax consultants.</div>
           </div>
           {[
             ['Product', ['Modules', 'Pricing', 'Changelog', 'Roadmap', 'Status']],
@@ -882,7 +930,7 @@ function Footer() {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
-          <span>© 2026 TaskFlowCo · All rights reserved · Made in India 🇮🇳</span>
+          <span>© 2026 Taskflow Technologies Pvt Ltd · Made in India 🇮🇳</span>
           <span>v 2.4.1 · all systems operational</span>
         </div>
       </div>

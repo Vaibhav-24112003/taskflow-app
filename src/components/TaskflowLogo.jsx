@@ -1,22 +1,21 @@
-// Taskflowco wordmark — design round 9 picks (handoff:
-// taskflow/project/Taskflowco Logo v9.html).
+// Taskflowco wordmark — design round 10 (handoff: Taskflowco Logo v10.html)
 //
-// Layout:  "Taskflo" + small-v bridge + hand-drawn marker V + "co"
-//          Geist 800 · ink white over navy · co in #5e8bb0
-//          V: marker style, weight 13, -4° tilt, 4px drop, wobble 0 (deterministic)
+// Layout:  "Taskflo" + small-v bridge + hand-drawn asymmetric V + "co"
+//          Geist 800 · ink (white/dark) · V in accent #5e8bb0 · co matches ink
 //
-// Use `<TaskflowLogo size={…}>` anywhere a wordmark is needed. The mark scales
-// off a single `size` prop (stem font-size, in px).
+// V shape: asymmetric — short left dip, right leg stretched well above cap line
+//          per user's pen sketch (round 10).
+//
+// Use `<TaskflowLogo size={N} />` anywhere a wordmark is needed.
 
-const PEN_COLOR = "#5e8bb0";
+const V_ACCENT = "#5e8bb0";
 
-// Hand-drawn V — two pen strokes meeting at a centered apex. NOT a tick.
-// viewBox 100x100, deterministic (no jitter — wobble fixed at 0 per design picks).
-function HandV({ size = 110, weight = 13, color = "#ffffff", tilt = -4, shift = 4 }) {
-  // Marker profile: round caps, 1.5x weight multiplier
+// Asymmetric pen V — left leg is a small dip to the apex, right leg shoots up
+// well past the cap line. Path matches design round 10 Option B ("medium stretch").
+function HandV({ size = 110, weight = 13, color = V_ACCENT, tilt = -4, shift = 4 }) {
   const sw = weight * 1.5;
-  // Symmetric V geometry (matches design source verbatim)
-  const d = "M 12 10 Q 29 50 50 90 Q 71 50 88 10";
+  // M left-top → apex → right-top (right leg ends well above cap line)
+  const d = "M 18 38 Q 32 64 50 88 Q 70 50 96 6";
 
   return (
     <svg
@@ -47,13 +46,12 @@ function HandV({ size = 110, weight = 13, color = "#ffffff", tilt = -4, shift = 
 }
 
 export default function TaskflowLogo({
-  size = 28,           // stem font-size in px (the "Taskflo" / "co" text size)
-  inkColor = "#fff",   // colour of "Taskflo" and the hand-V
-  coColor = PEN_COLOR, // colour of "co"
+  size = 28,             // stem font-size in px
+  inkColor = "#fff",     // colour of "Taskflo", "co", and the small-v bridge
+  vColor = V_ACCENT,     // colour of the hand-drawn V stroke (accent blue)
   showCo = true,
   style = {},
 }) {
-  // V is sized ~1.1x the stem, small-v bridge ~0.9x — same ratios as the design.
   const vSize = size * 1.1;
   const smallVSize = size * 0.9;
 
@@ -74,8 +72,8 @@ export default function TaskflowLogo({
     >
       <span>Taskflo</span>
       <span style={{ fontSize: smallVSize + "px", fontWeight: 800, margin: "0 -1px" }}>v</span>
-      <HandV size={vSize} color={inkColor} />
-      {showCo && <span style={{ color: coColor }}>co</span>}
+      <HandV size={vSize} color={vColor} />
+      {showCo && <span>co</span>}
     </span>
   );
 }
