@@ -83,7 +83,7 @@ function AppShell({ view, children }) {
       {/* Sidebar */}
       <div style={{ width:216, background:C.sidebar, flexShrink:0, display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'17px 18px 14px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-          <TaskflowLogo size={15} inkColor="#fff" coColor="#7fa3c7" />
+          <TaskflowLogo size={15} inkColor="#fff" />
         </div>
         <div style={{ padding:'12px 10px', display:'flex', flexDirection:'column', gap:2 }}>
           {[
@@ -446,7 +446,7 @@ function SceneIntro() {
               backgroundSize:'80px 80px', opacity:0.7,
               maskImage:'radial-gradient(ellipse at center,black,transparent 70%)' }}/>
             <div style={{ opacity:logo, transform:`scale(${0.9+0.1*logo})`, marginBottom:36 }}>
-              <TaskflowLogo size={40} inkColor="#fff" coColor="#7fa3c7" />
+              <TaskflowLogo size={40} inkColor="#fff" />
             </div>
             <div style={{ textAlign:'center', opacity:h1, transform:`translateY(${(1-h1)*22}px)`, marginBottom:24 }}>
               <div style={{ fontFamily:FD, fontSize:92, fontWeight:800, color:'#fff',

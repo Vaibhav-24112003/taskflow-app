@@ -40,11 +40,8 @@ function Sprite({ start, end, children }) {
 
 // ── UI primitives ─────────────────────────────────────────────────────────────
 function PenV({ size=80, draw=1, color='#fff', weight=11, tilt=-4 }) {
-  const r = 56, xL=12, xR=88, xA=50, yT=10, yA=90
-  const cx1=(xL+xA)/2-2, cy1=(yT+yA)/2
-  const cx2=(xA+xR)/2+2, cy2=(yA+yT)/2
-  const leftD  = `M ${xL} ${yT} Q ${cx1} ${cy1} ${xA} ${yA}`
-  const rightD = `M ${xA} ${yA} Q ${cx2} ${cy2} ${xR} ${yT}`
+  const leftD  = 'M 18 38 Q 32 64 50 88'
+  const rightD = 'M 50 88 Q 70 50 96 6'
   const lp = clamp(draw/0.55,0,1), rp = clamp((draw-0.45)/0.55,0,1)
   return (
     <svg width={size} height={size} viewBox="0 0 100 100"
@@ -55,15 +52,15 @@ function PenV({ size=80, draw=1, color='#fff', weight=11, tilt=-4 }) {
   )
 }
 
-function Wordmark({ size=64, draw=1, reveal=1, coColor=TF.accentBright, color=TF.text }) {
+function Wordmark({ size=64, draw=1, reveal=1, coColor, color=TF.text, vColor=TF.accentBright }) {
   const tiny = size <= 22
   return (
     <span style={{ fontFamily:FD, fontSize:size, fontWeight:800, letterSpacing:'-0.04em',
       lineHeight:1, color, opacity:reveal, whiteSpace:'nowrap', display:'inline-flex', alignItems:'baseline' }}>
       <span>taskflo</span>
       {!tiny && <span style={{ fontSize:size*0.82, fontWeight:800, margin:`0 ${-size*0.012}px 0 0` }}>v</span>}
-      <PenV size={size*(tiny?0.95:1.05)} weight={Math.max(8,size*0.13)} draw={draw} color={color} tilt={-4}/>
-      <span style={{ color:coColor }}>co</span>
+      <PenV size={size*(tiny?0.95:1.05)} weight={Math.max(8,size*0.13)} draw={draw} color={vColor} tilt={-4}/>
+      <span style={{ color:coColor||color }}>co</span>
     </span>
   )
 }
@@ -236,7 +233,7 @@ function SceneIntro() {
               backgroundSize:'64px 64px', opacity:0.4,
               maskImage:'radial-gradient(ellipse at center,black 0%,transparent 70%)' }}/>
             <div style={{ transform:`scale(${0.94+0.06*Easing.easeOutCubic(wm)})`, opacity:clamp(wm+0.1,0,1) }}>
-              <Wordmark size={132} draw={Easing.easeOutCubic(draw)} reveal={wm} coColor={TF.accentBright} coOpacity={coOp}/>
+              <Wordmark size={132} draw={Easing.easeOutCubic(draw)} reveal={wm}/>
             </div>
             <div style={{ marginTop:36, fontFamily:FM, fontSize:16, color:TF.sub,
               letterSpacing:'0.22em', textTransform:'uppercase', opacity:tag, fontWeight:600,

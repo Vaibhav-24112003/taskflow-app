@@ -435,7 +435,7 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function Stats() {
-  const stats = [['2,400+', 'CA firms onboard'], ['18 lakh+', 'tasks tracked'], ['142 hrs', 'saved per firm/month'], ['99.7%', 'on-time filing rate']]
+  const stats = [['1', 'Practice onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time delivery rate'], ['∞', 'Excel sheets replaced']]
   return (
     <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)', background: 'var(--lp-alt)' }}>
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
@@ -469,13 +469,13 @@ function Problem() {
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">The problem</div>
-          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your firm runs on willpower.<br /><span style={{ color: 'var(--lp-text-sub)' }}>It shouldn't.</span></h2>
+          <h2 className="lp-h2" style={{ marginTop: 8 }}>Your team works hard.<br /><span style={{ color: 'var(--lp-text-sub)' }}>Your systems should too.</span></h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <div style={{ padding: '24px 26px', background: 'rgba(239,68,68,.04)', border: '1px solid rgba(239,68,68,.18)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(239,68,68,.16)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>×</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before Taskflow</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444', letterSpacing: '-.01em' }}>Life before TaskFlowCo</span>
             </div>
             {before.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(239,68,68,.12)' }}>
@@ -487,7 +487,7 @@ function Problem() {
           <div style={{ padding: '24px 26px', background: 'rgba(16,185,129,.04)', border: '1px solid rgba(16,185,129,.22)', borderRadius: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
               <span style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(16,185,129,.16)', color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>✓</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With Taskflow</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', letterSpacing: '-.01em' }}>With TaskFlowCo</span>
             </div>
             {after.map(([t, d]) => (
               <div key={t} style={{ padding: '12px 0', borderTop: '1px solid rgba(16,185,129,.12)' }}>
@@ -890,8 +890,8 @@ function FinalCTA({ onOpenAuth, loading, onOpenDemo }) {
     <section id="trial" className="lp-sec" style={{ position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 900, height: 500, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ textAlign: 'center', position: 'relative' }}>
-        <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />filing day quiet.</h2>
-        <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Start free for 14 days. No credit card. Bring your team. We'll get out of the way.</p>
+        <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />deadline day quiet.</h2>
+        <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Get started in minutes. No credit card. Bring your team. We'll get out of the way.</p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
             {loading ? 'Signing in…' : 'Start free trial →'}
@@ -913,7 +913,7 @@ function Footer() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <TaskflowLogo size={20} />
             </div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for Indian CA firms, accounting practices and tax consultants.</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants.</div>
           </div>
           {[
             ['Product', ['Modules', 'Pricing', 'Changelog', 'Roadmap', 'Status']],
@@ -930,7 +930,7 @@ function Footer() {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
-          <span>© 2026 Taskflow Technologies Pvt Ltd · Made in India 🇮🇳</span>
+          <span>© 2026 TaskFlowCo · All rights reserved · Made in India 🇮🇳</span>
           <span>v 2.4.1 · all systems operational</span>
         </div>
       </div>
