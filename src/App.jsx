@@ -2927,10 +2927,511 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   </div>;
 }
 
+// ── Departments Panel ─────────────────────────────────────────────
+function DepartmentsPanel({org,cu,supabase}){
+  var [depts,setDepts]=useState([]);
+  var [members,setMembers]=useState([]);
+  var [orgMembers,setOrgMembers]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [newName,setNewName]=useState('');
+  var [newColor,setNewColor]=useState('#6b8cad');
+  var [adding,setAdding]=useState(false);
+  var [err,setErr]=useState('');
+  var [toast,setToast]=useState(null);
+  var [expandedDept,setExpandedDept]=useState(null);
+  var [assignUserId,setAssignUserId]=useState('');
+  var [assignIsHead,setAssignIsHead]=useState(false);
+  var [editDeptId,setEditDeptId]=useState(null);
+  var [editName,setEditName]=useState('');
+
+  var myMembership=orgMembers.find(function(m){return m.user_id===cu.id;});
+  var myRole=myMembership?myMembership.role:'member';
+  var canManage=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
+
+  useEffect(function(){load();},[ org.id]);
+
+  async function load(){
+    setLoading(true);
+    var [rd,rm,ro]=await Promise.all([
+      supabase.from('departments').select('*').eq('org_id',org.id).order('name'),
+      supabase.from('department_members').select('*').eq('org_id',org.id),
+      supabase.from('organization_members').select('user_id,role,role_id').eq('org_id',org.id),
+    ]);
+    var mlist=ro.data||[];
+    var ids=mlist.map(function(m){return m.user_id;});
+    var profMap={};
+    if(ids.length>0){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids);(rp.data||[]).forEach(function(p){profMap[p.id]=p;});}
+    var enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});
+    setDepts(rd.data||[]);setMembers(rm.data||[]);setOrgMembers(enriched);setLoading(false);
+  }
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  async function addDept(){
+    if(!newName.trim()){setErr('Enter department name');return;}
+    setAdding(true);setErr('');
+    var res=await supabase.from('departments').insert({org_id:org.id,name:newName.trim(),color:newColor});
+    setAdding(false);
+    if(res.error){setErr(res.error.message);return;}
+    setNewName('');load();showToast('Department created');
+  }
+
+  async function deleteDept(id){
+    if(!window.confirm('Delete this department? Members will be removed from it.'))return;
+    await supabase.from('departments').delete().eq('id',id);
+    load();showToast('Department deleted');
+  }
+
+  async function saveDeptName(id){
+    if(!editName.trim())return;
+    await supabase.from('departments').update({name:editName.trim()}).eq('id',id);
+    setEditDeptId(null);load();showToast('Renamed');
+  }
+
+  async function assignMember(deptId){
+    if(!assignUserId)return;
+    var res=await supabase.from('department_members').upsert({org_id:org.id,department_id:deptId,user_id:assignUserId,is_head:assignIsHead},{onConflict:'department_id,user_id'});
+    if(res.error){showToast(res.error.message,'err');return;}
+    setAssignUserId('');setAssignIsHead(false);load();showToast('Member assigned');
+  }
+
+  async function removeDeptMember(deptId,userId){
+    await supabase.from('department_members').delete().eq('department_id',deptId).eq('user_id',userId);
+    load();showToast('Removed from department');
+  }
+
+  async function toggleHead(deptId,userId,cur){
+    await supabase.from('department_members').update({is_head:!cur}).eq('department_id',deptId).eq('user_id',userId);
+    load();
+  }
+
+  var profMap2={};orgMembers.forEach(function(m){if(m.profile)profMap2[m.user_id]=m.profile;});
+  var DEPT_COLORS=['#6b8cad','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b'];
+
+  return<div style={{maxWidth:760,margin:'0 auto'}}>
+    <div style={{marginBottom:20}}>
+      <h3 style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',margin:'0 0 4px'}}>Departments</h3>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Organise your firm into departments. Members can belong to multiple departments.</div>
+    </div>
+    {canManage&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:20}}>
+      <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>New Department</div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <input value={newName} onChange={function(e){setNewName(e.target.value);setErr('');}} placeholder="e.g. Audit, Tax, GST"
+          style={{flex:'1 1 200px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}
+          onKeyDown={function(e){if(e.key==='Enter')addDept();}}/>
+        <div style={{display:'flex',gap:4}}>
+          {DEPT_COLORS.map(function(c){return<button key={c} onClick={function(){setNewColor(c);}} style={{width:22,height:22,borderRadius:'50%',background:c,border:newColor===c?'2px solid var(--tf-text)':'2px solid transparent',cursor:'pointer',padding:0}}/>;}) }
+        </div>
+        <button onClick={addDept} disabled={adding} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:adding?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:adding?0.6:1,whiteSpace:'nowrap'}}>{adding?'Adding...':'Add Department'}</button>
+      </div>
+      {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:6}}>{err}</div>}
+    </div>}
+    {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:depts.length===0?
+      <div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>
+        <div style={{fontSize:32,marginBottom:8}}>🏢</div>
+        <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>No departments yet</div>
+        <div style={{fontSize:12}}>Create departments to organise your team members.</div>
+      </div>
+    :<div style={{display:'flex',flexDirection:'column',gap:12}}>
+      {depts.map(function(dept){
+        var dms=members.filter(function(m){return m.department_id===dept.id;});
+        var isExpanded=expandedDept===dept.id;
+        var unassigned=orgMembers.filter(function(m){return !dms.find(function(dm){return dm.user_id===m.user_id;});});
+        return<div key={dept.id} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',cursor:'pointer'}} onClick={function(){setExpandedDept(isExpanded?null:dept.id);}}>
+            <div style={{width:14,height:14,borderRadius:'50%',background:dept.color,flexShrink:0}}/>
+            {editDeptId===dept.id?
+              <input value={editName} onChange={function(e){setEditName(e.target.value);}} autoFocus
+                onBlur={function(){saveDeptName(dept.id);}}
+                onKeyDown={function(e){if(e.key==='Enter')saveDeptName(dept.id);if(e.key==='Escape'){setEditDeptId(null);}}}
+                onClick={function(e){e.stopPropagation();}}
+                style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text)',fontSize:14,fontWeight:700,fontFamily:'inherit',outline:'none'}}/>
+            :<div style={{flex:1,fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{dept.name}</div>}
+            <span style={{fontSize:12,color:'var(--tf-text-sub)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'2px 9px'}}>{dms.length} member{dms.length!==1?'s':''}</span>
+            {canManage&&<div style={{display:'flex',gap:5}} onClick={function(e){e.stopPropagation();}}>
+              <button onClick={function(){setEditDeptId(dept.id);setEditName(dept.name);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text-sub)',fontSize:12,cursor:'pointer'}}>Rename</button>
+              <button onClick={function(){deleteDept(dept.id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',fontSize:12,cursor:'pointer'}}>Delete</button>
+            </div>}
+            <span style={{color:'var(--tf-text-sub)',fontSize:13}}>{isExpanded?'▲':'▼'}</span>
+          </div>
+          {isExpanded&&<div style={{borderTop:'1px solid var(--tf-border)',padding:'14px 16px'}}>
+            {dms.length>0&&<div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>Members</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {dms.map(function(dm){
+                  var p=profMap2[dm.user_id]||{};
+                  return<div key={dm.user_id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--tf-bg)',borderRadius:8}}>
+                    <div style={{width:28,height:28,borderRadius:'50%',background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#fff',flexShrink:0}}>
+                      {(p.name||p.email||'?').charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name||p.email||dm.user_id.slice(0,8)}</div>
+                      {p.email&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{p.email}</div>}
+                    </div>
+                    <button onClick={function(){toggleHead(dept.id,dm.user_id,dm.is_head);}}
+                      style={{background:dm.is_head?'rgba(245,158,11,0.12)':'var(--tf-bg)',border:'1px solid '+(dm.is_head?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:20,padding:'2px 9px',color:dm.is_head?'#f59e0b':'var(--tf-text-sub)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                      {dm.is_head?'★ Head':'☆ Head'}
+                    </button>
+                    {canManage&&<button onClick={function(){removeDeptMember(dept.id,dm.user_id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 8px',color:'#ef4444',fontSize:12,cursor:'pointer'}}>×</button>}
+                  </div>;
+                })}
+              </div>
+            </div>}
+            {canManage&&unassigned.length>0&&<div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:8}}>Add Member</div>
+              <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                <select value={assignUserId} onChange={function(e){setAssignUserId(e.target.value);}}
+                  style={{flex:'1 1 180px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',cursor:'pointer'}}>
+                  <option value=''>Select member...</option>
+                  {unassigned.map(function(m){var p=m.profile||{};return<option key={m.user_id} value={m.user_id}>{p.name||p.email||m.user_id.slice(0,8)}</option>;})}
+                </select>
+                <label style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:'var(--tf-text-sub)',cursor:'pointer'}}>
+                  <input type='checkbox' checked={assignIsHead} onChange={function(e){setAssignIsHead(e.target.checked);}}/> Dept Head
+                </label>
+                <button onClick={function(){assignMember(dept.id);}} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 14px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Assign</button>
+              </div>
+            </div>}
+          </div>}
+        </div>;
+      })}
+    </div>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
+// ── Roles & Permissions Panel ─────────────────────────────────────
+function RolesPermissionsPanel({org,cu,supabase}){
+  var [roles,setRoles]=useState([]);
+  var [rolePerms,setRolePerms]=useState([]);
+  var [orgMembers,setOrgMembers]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [selectedRole,setSelectedRole]=useState(null);
+  var [newRoleName,setNewRoleName]=useState('');
+  var [newRoleLevel,setNewRoleLevel]=useState(3);
+  var [newRoleColor,setNewRoleColor]=useState('#6b8cad');
+  var [adding,setAdding]=useState(false);
+  var [toast,setToast]=useState(null);
+
+  var myMembership=orgMembers.find(function(m){return m.user_id===cu.id;});
+  var myRole=myMembership?myMembership.role:'member';
+  var canManage=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
+
+  useEffect(function(){load();},[ org.id]);
+
+  async function load(){
+    setLoading(true);
+    var [rr,rp,rm]=await Promise.all([
+      supabase.from('org_roles').select('*').eq('org_id',org.id).order('level'),
+      supabase.from('role_permissions').select('*').eq('org_id',org.id),
+      supabase.from('organization_members').select('user_id,role').eq('org_id',org.id),
+    ]);
+    var roles2=rr.data||[];
+    setRoles(roles2);setRolePerms(rp.data||[]);setOrgMembers(rm.data||[]);
+    if(!selectedRole&&roles2.length>0)setSelectedRole(roles2[0].id);
+    setLoading(false);
+  }
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  async function addRole(){
+    if(!newRoleName.trim())return;
+    setAdding(true);
+    var res=await supabase.from('org_roles').insert({org_id:org.id,name:newRoleName.trim(),level:newRoleLevel,color:newRoleColor});
+    setAdding(false);
+    if(res.error){showToast(res.error.message,'err');return;}
+    setNewRoleName('');load();showToast('Role created');
+  }
+
+  async function deleteRole(id){
+    if(!window.confirm('Delete this role? Members with this role will lose role assignment.'))return;
+    await supabase.from('org_roles').delete().eq('id',id);
+    if(selectedRole===id)setSelectedRole(null);
+    load();showToast('Role deleted');
+  }
+
+  async function setPermission(roleId,nodeId,field,value){
+    var existing=rolePerms.find(function(p){return p.role_id===roleId&&p.node_id===nodeId;});
+    if(existing){
+      var update={};update[field]=value;
+      await supabase.from('role_permissions').update(update).eq('id',existing.id);
+    } else {
+      var insert={org_id:org.id,role_id:roleId,node_id:nodeId,access:'none',scope:'own'};
+      insert[field]=value;
+      await supabase.from('role_permissions').insert(insert);
+    }
+    setRolePerms(function(prev){
+      var idx=prev.findIndex(function(p){return p.role_id===roleId&&p.node_id===nodeId;});
+      if(idx>=0){var updated=prev.slice();updated[idx]=Object.assign({},updated[idx]);updated[idx][field]=value;return updated;}
+      var newP={org_id:org.id,role_id:roleId,node_id:nodeId,access:'none',scope:'own'};newP[field]=value;return prev.concat([newP]);
+    });
+  }
+
+  var ROLE_COLORS=['#6b8cad','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b'];
+  var ACCESS_OPTS=['none','view','edit','manage'];
+  var SCOPE_OPTS=['own','dept','all'];
+  var LEVEL_OPTS=[{v:1,l:'Level 1 — Owner'},{v:2,l:'Level 2 — Admin'},{v:3,l:'Level 3 — Manager'},{v:4,l:'Level 4 — Staff'}];
+
+  var moduleGroups={};
+  PERMISSION_NODES.forEach(function(n){
+    if(!moduleGroups[n.module])moduleGroups[n.module]=[];
+    moduleGroups[n.module].push(n);
+  });
+  var topModules=PERMISSION_NODES.filter(function(n){return !n.section;});
+
+  var selRole=roles.find(function(r){return r.id===selectedRole;});
+  var selRolePerms=rolePerms.filter(function(p){return p.role_id===selectedRole;});
+
+  function getPerm(nodeId,field){
+    var p=selRolePerms.find(function(p){return p.node_id===nodeId;});
+    if(p)return p[field]||'none';
+    return field==='scope'?'own':'none';
+  }
+
+  var memberCount=function(roleId){return orgMembers.filter(function(m){return m.role_id===roleId;}).length;};
+
+  return<div style={{maxWidth:900,margin:'0 auto'}}>
+    <div style={{marginBottom:20}}>
+      <h3 style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',margin:'0 0 4px'}}>Roles & Permissions</h3>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Define roles for your team. Each role controls which modules and sections members can access and what data they can see.</div>
+    </div>
+    {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:<div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+      <div style={{width:220,flexShrink:0}}>
+        {canManage&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:14,marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:10}}>New Role</div>
+          <input value={newRoleName} onChange={function(e){setNewRoleName(e.target.value);}} placeholder="Role name..."
+            style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',marginBottom:8}}
+            onKeyDown={function(e){if(e.key==='Enter')addRole();}}/>
+          <select value={newRoleLevel} onChange={function(e){setNewRoleLevel(Number(e.target.value));}}
+            style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',marginBottom:8}}>
+            {LEVEL_OPTS.map(function(o){return<option key={o.v} value={o.v}>{o.l}</option>;})}
+          </select>
+          <div style={{display:'flex',gap:4,marginBottom:10}}>
+            {ROLE_COLORS.map(function(c){return<button key={c} onClick={function(){setNewRoleColor(c);}} style={{width:20,height:20,borderRadius:'50%',background:c,border:newRoleColor===c?'2px solid var(--tf-text)':'2px solid transparent',cursor:'pointer',padding:0}}/>;}) }
+          </div>
+          <button onClick={addRole} disabled={adding||!newRoleName.trim()} style={{width:'100%',background:'#0e2a47',border:'none',borderRadius:7,padding:'8px 0',color:'#fff',cursor:adding?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:adding||!newRoleName.trim()?0.5:1}}>{adding?'Adding...':'Add Role'}</button>
+        </div>}
+        {roles.length===0?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:13}}>No roles yet. Create one above.</div>
+        :<div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {roles.map(function(r){
+            var isActive=selectedRole===r.id;
+            var mc=memberCount(r.id);
+            return<button key={r.id} onClick={function(){setSelectedRole(r.id);}}
+              style={{textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(isActive?'#6b8cad':'var(--tf-border)'),borderRadius:10,padding:'10px 12px',cursor:'pointer',fontFamily:'inherit',transition:'all 0.12s'}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:r.color,flexShrink:0}}/>
+                <div style={{flex:1,fontSize:13,fontWeight:700,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
+              </div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:3,paddingLeft:18}}>Level {r.level} · {mc} member{mc!==1?'s':''}</div>
+            </button>;
+          })}
+        </div>}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        {!selRole?<div style={{textAlign:'center',padding:60,color:'var(--tf-text-sub)'}}>
+          <div style={{fontSize:32,marginBottom:8}}>🔐</div>
+          <div style={{fontSize:14}}>{roles.length===0?'Create a role to start configuring permissions.':'Select a role to edit its permissions.'}</div>
+        </div>:<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+          <div style={{padding:'14px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10}}>
+            <div style={{width:12,height:12,borderRadius:'50%',background:selRole.color}}/>
+            <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{selRole.name}</div>
+            <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:20,padding:'2px 9px'}}>Level {selRole.level}</span>
+            <div style={{flex:1}}/>
+            {canManage&&<button onClick={function(){deleteRole(selRole.id);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',color:'#ef4444',fontSize:12,cursor:'pointer',fontWeight:600}}>Delete Role</button>}
+          </div>
+          <div style={{padding:'0 0 8px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 110px 100px',gap:0,padding:'8px 16px 4px',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,borderBottom:'1px solid var(--tf-border)'}}>
+              <div>Module / Section</div><div style={{textAlign:'center'}}>Access</div><div style={{textAlign:'center'}}>Scope</div>
+            </div>
+            {topModules.map(function(mod){
+              var children=PERMISSION_NODES.filter(function(n){return n.module===mod.module&&n.section;});
+              return<div key={mod.id}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 110px 100px',gap:0,padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',background:'var(--tf-bg)'}}>
+                  <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{mod.label}</div>
+                  <div style={{textAlign:'center'}}>
+                    <select value={getPerm(mod.id,'access')} onChange={function(e){setPermission(selectedRole,mod.id,'access',e.target.value);}}
+                      disabled={!canManage}
+                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 6px',color:getPerm(mod.id,'access')==='none'?'var(--tf-text-sub)':'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:100}}>
+                      {ACCESS_OPTS.map(function(a){return<option key={a} value={a}>{a.charAt(0).toUpperCase()+a.slice(1)}</option>;})}
+                    </select>
+                  </div>
+                  <div style={{textAlign:'center'}}>
+                    <select value={getPerm(mod.id,'scope')} onChange={function(e){setPermission(selectedRole,mod.id,'scope',e.target.value);}}
+                      disabled={!canManage||getPerm(mod.id,'access')==='none'}
+                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90,opacity:getPerm(mod.id,'access')==='none'?0.4:1}}>
+                      {SCOPE_OPTS.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
+                    </select>
+                  </div>
+                </div>
+                {children.map(function(child){return<div key={child.id} style={{display:'grid',gridTemplateColumns:'1fr 110px 100px',gap:0,padding:'8px 16px 8px 32px',borderBottom:'1px solid var(--tf-border)'}}>
+                  <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>↳ {child.label}</div>
+                  <div style={{textAlign:'center'}}>
+                    <select value={getPerm(child.id,'access')} onChange={function(e){setPermission(selectedRole,child.id,'access',e.target.value);}}
+                      disabled={!canManage}
+                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 6px',color:getPerm(child.id,'access')==='none'?'var(--tf-text-sub)':'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:100}}>
+                      {ACCESS_OPTS.map(function(a){return<option key={a} value={a}>{a.charAt(0).toUpperCase()+a.slice(1)}</option>;})}
+                    </select>
+                  </div>
+                  <div style={{textAlign:'center'}}>
+                    <select value={getPerm(child.id,'scope')} onChange={function(e){setPermission(selectedRole,child.id,'scope',e.target.value);}}
+                      disabled={!canManage||getPerm(child.id,'access')==='none'}
+                      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90,opacity:getPerm(child.id,'access')==='none'?0.4:1}}>
+                      {SCOPE_OPTS.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
+                    </select>
+                  </div>
+                </div>;})}
+              </div>;
+            })}
+          </div>
+        </div>}
+      </div>
+    </div>}
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
+// ── Member Access Panel (modal overlay for per-member overrides) ───
+function MemberAccessPanel({org,cu,supabase,member,profiles,roles,rolePerms,onClose}){
+  var [memberPerms,setMemberPerms]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+  var profile=profiles[member.user_id]||{};
+  var memberRole=roles.find(function(r){return r.id===member.role_id;});
+
+  useEffect(function(){loadPerms();},[ member.user_id,org.id]);
+
+  async function loadPerms(){
+    setLoading(true);
+    var rp=await supabase.from('member_permissions').select('*').eq('org_id',org.id).eq('user_id',member.user_id);
+    setMemberPerms(rp.data||[]);setLoading(false);
+  }
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  async function setOverride(nodeId,field,value){
+    var existing=memberPerms.find(function(p){return p.node_id===nodeId;});
+    if(value===null){
+      if(existing){
+        var other=field==='access'?'scope':'access';
+        if(existing[other]===null||existing[other]===undefined){
+          await supabase.from('member_permissions').delete().eq('id',existing.id);
+        } else {
+          var upd={};upd[field]=null;
+          await supabase.from('member_permissions').update(upd).eq('id',existing.id);
+        }
+      }
+    } else {
+      if(existing){
+        var upd2={};upd2[field]=value;
+        await supabase.from('member_permissions').update(upd2).eq('id',existing.id);
+      } else {
+        var ins={org_id:org.id,user_id:member.user_id,node_id:nodeId};ins[field]=value;
+        await supabase.from('member_permissions').insert(ins);
+      }
+    }
+    loadPerms();showToast('Override saved');
+  }
+
+  function getRoleDefault(nodeId,field){
+    if(!memberRole)return field==='scope'?'own':'none';
+    var rp=rolePerms.find(function(p){return p.role_id===memberRole.id&&p.node_id===nodeId;});
+    if(rp)return rp[field]||'none';
+    var legacyRole=member.role;
+    if(legacyRole==='owner'||legacyRole==='admin')return field==='scope'?'all':'manage';
+    return field==='scope'?'own':'none';
+  }
+
+  function getMemberOverride(nodeId,field){
+    var p=memberPerms.find(function(p){return p.node_id===nodeId;});
+    return p?p[field]:null;
+  }
+
+  var ACCESS_OPTS=['none','view','edit','manage'];
+  var SCOPE_OPTS=['own','dept','all'];
+  var topModules=PERMISSION_NODES.filter(function(n){return !n.section;});
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:16,width:'100%',maxWidth:760,maxHeight:'85vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12}}>
+        <div style={{width:36,height:36,borderRadius:'50%',background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>
+          {(profile.name||profile.email||'?').charAt(0).toUpperCase()}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{profile.name||profile.email||member.user_id.slice(0,8)}</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>
+            {memberRole?<span style={{color:memberRole.color,fontWeight:600}}>{memberRole.name}</span>:<span style={{textTransform:'capitalize'}}>{member.role}</span>}
+            {profile.email&&<span style={{marginLeft:8}}>{profile.email}</span>}
+          </div>
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'right',marginRight:8}}>
+          <div>Blue = override active</div>
+          <div>Grey = inheriting from role</div>
+        </div>
+        <button onClick={onClose} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,width:32,height:32,cursor:'pointer',color:'var(--tf-text)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+      </div>
+      <div style={{flex:1,overflow:'auto',padding:'0 0 12px'}}>
+        {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:<>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 120px 100px 120px 100px',gap:0,padding:'8px 20px 6px',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,borderBottom:'1px solid var(--tf-border)'}}>
+            <div>Module</div><div style={{textAlign:'center'}}>Role Access</div><div style={{textAlign:'center'}}>Role Scope</div><div style={{textAlign:'center'}}>Override Access</div><div style={{textAlign:'center'}}>Override Scope</div>
+          </div>
+          {topModules.map(function(mod){
+            var children=PERMISSION_NODES.filter(function(n){return n.module===mod.module&&n.section;});
+            var hasMemberOverride=getMemberOverride(mod.id,'access')!==null||getMemberOverride(mod.id,'scope')!==null;
+            return<div key={mod.id}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 120px 100px 120px 100px',gap:0,padding:'10px 20px',borderBottom:'1px solid var(--tf-border)',background:hasMemberOverride?'rgba(107,140,173,0.06)':'var(--tf-bg)'}}>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{mod.label}</div>
+                <div style={{textAlign:'center',fontSize:12,color:'var(--tf-text-sub)',padding:'3px 0'}}>{getRoleDefault(mod.id,'access')}</div>
+                <div style={{textAlign:'center',fontSize:12,color:'var(--tf-text-sub)',padding:'3px 0'}}>{getRoleDefault(mod.id,'scope')}</div>
+                <div style={{textAlign:'center'}}>
+                  <select value={getMemberOverride(mod.id,'access')||''} onChange={function(e){setOverride(mod.id,'access',e.target.value||null);}}
+                    style={{background:getMemberOverride(mod.id,'access')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(mod.id,'access')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:110}}>
+                    <option value=''>— Inherit</option>
+                    {ACCESS_OPTS.map(function(a){return<option key={a} value={a}>{a.charAt(0).toUpperCase()+a.slice(1)}</option>;})}
+                  </select>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <select value={getMemberOverride(mod.id,'scope')||''} onChange={function(e){setOverride(mod.id,'scope',e.target.value||null);}}
+                    style={{background:getMemberOverride(mod.id,'scope')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(mod.id,'scope')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90}}>
+                    <option value=''>— Inherit</option>
+                    {SCOPE_OPTS.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
+                  </select>
+                </div>
+              </div>
+              {children.map(function(child){
+                var childOverride=getMemberOverride(child.id,'access')!==null||getMemberOverride(child.id,'scope')!==null;
+                return<div key={child.id} style={{display:'grid',gridTemplateColumns:'1fr 120px 100px 120px 100px',gap:0,padding:'7px 20px 7px 36px',borderBottom:'1px solid var(--tf-border)',background:childOverride?'rgba(107,140,173,0.04)':'transparent'}}>
+                  <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>↳ {child.label}</div>
+                  <div style={{textAlign:'center',fontSize:11,color:'var(--tf-text-sub)',padding:'3px 0'}}>{getRoleDefault(child.id,'access')}</div>
+                  <div style={{textAlign:'center',fontSize:11,color:'var(--tf-text-sub)',padding:'3px 0'}}>{getRoleDefault(child.id,'scope')}</div>
+                  <div style={{textAlign:'center'}}>
+                    <select value={getMemberOverride(child.id,'access')||''} onChange={function(e){setOverride(child.id,'access',e.target.value||null);}}
+                      style={{background:getMemberOverride(child.id,'access')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(child.id,'access')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:110}}>
+                      <option value=''>— Inherit</option>
+                      {ACCESS_OPTS.map(function(a){return<option key={a} value={a}>{a.charAt(0).toUpperCase()+a.slice(1)}</option>;})}
+                    </select>
+                  </div>
+                  <div style={{textAlign:'center'}}>
+                    <select value={getMemberOverride(child.id,'scope')||''} onChange={function(e){setOverride(child.id,'scope',e.target.value||null);}}
+                      style={{background:getMemberOverride(child.id,'scope')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(child.id,'scope')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90}}>
+                      <option value=''>— Inherit</option>
+                      {SCOPE_OPTS.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
+                    </select>
+                  </div>
+                </div>;
+              })}
+            </div>;
+          })}
+        </>}
+      </div>
+    </div>
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Org Members Panel ───────────────────────────────────────────────
 function OrgMembersPanel({org,cu,supabase}){
   var [members,setMembers]=useState([]);
   var [invites,setInvites]=useState([]);
+  var [roles,setRoles]=useState([]);
+  var [rolePerms,setRolePerms]=useState([]);
+  var [deptMembers,setDeptMembers]=useState([]);
+  var [depts,setDepts]=useState([]);
   var [loading,setLoading]=useState(true);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
@@ -2941,13 +3442,40 @@ function OrgMembersPanel({org,cu,supabase}){
   var [sending,setSending]=useState(false);
   var [err,setErr]=useState('');
   var [toast,setToast]=useState(null);
+  var [accessMember,setAccessMember]=useState(null);
   useEffect(function(){loadAll();},[ org.id]);
+  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
 
-  useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rm=await supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200);var mlist=rm.data||[];var enriched=mlist;if(mlist.length>0){var ids=mlist.map(function(m){return m.user_id;});var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});}setMembers(enriched);var ri=await supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200);setInvites(ri.data||[]);}catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadAll(){
+    if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;
+    setLoading(true);setLoadError(null);
+    if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+    loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
+    try{
+      var [rm,ri,rr,rrp,rdm,rd]=await Promise.all([
+        supabase.from('organization_members').select('org_id,user_id,role,role_id,joined_at').eq('org_id',org.id).limit(200),
+        supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200),
+        supabase.from('org_roles').select('*').eq('org_id',org.id).order('level'),
+        supabase.from('role_permissions').select('*').eq('org_id',org.id),
+        supabase.from('department_members').select('*').eq('org_id',org.id),
+        supabase.from('departments').select('*').eq('org_id',org.id),
+      ]);
+      var mlist=rm.data||[];var enriched=mlist;
+      if(mlist.length>0){
+        var ids=mlist.map(function(m){return m.user_id;});
+        var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);
+        var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});
+        enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});
+      }
+      if(gen===loadGenRef.current){setMembers(enriched);setInvites(ri.data||[]);setRoles(rr.data||[]);setRolePerms(rrp.data||[]);setDeptMembers(rdm.data||[]);setDepts(rd.data||[]);}
+    }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}
+    finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
+  }
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
   var myMembership=members.find(function(m){return m.user_id===cu.id;});
   var myRole=myMembership?myMembership.role:'';
   var canManage=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
+
   async function inviteMember(){
     if(!email.trim()||!email.includes('@')){setErr('Enter a valid email');return;}
     setSending(true);setErr('');
@@ -2969,11 +3497,24 @@ function OrgMembersPanel({org,cu,supabase}){
     await supabase.from('organization_members').update({role:newRole}).eq('org_id',org.id).eq('user_id',userId);
     loadAll();showToast('Role updated');
   }
+  async function assignOrgRole(userId,roleId){
+    await supabase.from('organization_members').update({role_id:roleId||null}).eq('org_id',org.id).eq('user_id',userId);
+    setMembers(function(prev){return prev.map(function(m){return m.user_id===userId?Object.assign({},m,{role_id:roleId||null}):m;});});
+    showToast('Role assigned');
+  }
+
   var ROLE_COLORS={owner:'#f59e0b',admin:'#0e2a47',member:'#22c55e'};
-  return<div style={{maxWidth:700,margin:'0 auto'}}>
+  var profMap={};members.forEach(function(m){if(m.profile)profMap[m.user_id]=m.profile;});
+
+  function getMemberDepts(userId){
+    var dIds=deptMembers.filter(function(dm){return dm.user_id===userId;}).map(function(dm){return dm.department_id;});
+    return depts.filter(function(d){return dIds.includes(d.id);});
+  }
+
+  return<div style={{maxWidth:760,margin:'0 auto'}}>
     <div style={{marginBottom:20}}>
       <h3 style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',margin:'0 0 4px'}}>Organisation Members</h3>
-      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Members can access this organisation's Client Data, Billing and Time Tracking</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Manage members, assign roles and configure individual access overrides.</div>
     </div>
     {canManage&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:20}}>
       <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Invite Member by Email</div>
@@ -2998,24 +3539,40 @@ function OrgMembersPanel({org,cu,supabase}){
       <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',marginBottom:16}}>
         {members.length===0?<div style={{padding:24,textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No members found</div>
         :members.map(function(m,i){
-          var p=m.profile||{};var isMe=m.user_id===cu.id;var rc=ROLE_COLORS[m.role]||'#94a3b8';
-          return<div key={m.user_id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<members.length-1?'1px solid var(--tf-border)':'none'}}>
+          var p=m.profile||{};var isMe=m.user_id===cu.id;
+          var rc=ROLE_COLORS[m.role]||'#94a3b8';
+          var orgRole=roles.find(function(r){return r.id===m.role_id;});
+          var mDepts=getMemberDepts(m.user_id);
+          return<div key={m.user_id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<members.length-1?'1px solid var(--tf-border)':'none',flexWrap:'wrap'}}>
             <div style={{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>
               {(p.name||p.email||'?').charAt(0).toUpperCase()}
             </div>
-            <div style={{flex:1,minWidth:0}}>
+            <div style={{flex:1,minWidth:140}}>
               <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{p.name||p.email||m.user_id.slice(0,8)}{isMe&&<span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginLeft:6}}>(you)</span>}</div>
-              {p.email&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{p.email}</div>}
+              <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2,flexWrap:'wrap'}}>
+                {p.email&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{p.email}</div>}
+                {mDepts.length>0&&mDepts.map(function(d){return<span key={d.id} style={{fontSize:10,fontWeight:600,color:d.color,background:d.color+'18',border:'1px solid '+d.color+'30',borderRadius:10,padding:'1px 7px'}}>{d.name}</span>;})}
+              </div>
             </div>
-            <span style={{fontSize:11,fontWeight:700,color:rc,background:rc+'18',border:'1px solid '+rc+'30',borderRadius:20,padding:'2px 9px',textTransform:'capitalize',flexShrink:0}}>{m.role}</span>
-            {canManage&&!isMe&&m.role!=='owner'&&<div style={{display:'flex',gap:5}}>
-              <select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
+            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+              <span style={{fontSize:11,fontWeight:700,color:rc,background:rc+'18',border:'1px solid '+rc+'30',borderRadius:20,padding:'2px 9px',textTransform:'capitalize',flexShrink:0}}>{m.role}</span>
+              {orgRole&&<span style={{fontSize:11,fontWeight:600,color:orgRole.color,background:orgRole.color+'15',border:'1px solid '+orgRole.color+'30',borderRadius:20,padding:'2px 9px',flexShrink:0}}>{orgRole.name}</span>}
+            </div>
+            {canManage&&!isMe&&<div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+              {m.role!=='owner'&&<select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
                 style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none'}}>
                 <option value="admin">Admin</option>
                 <option value="member">Member</option>
-              </select>
-              <button onClick={function(){removeMember(m.user_id);}}
-                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>
+              </select>}
+              {roles.length>0&&<select value={m.role_id||''} onChange={function(e){assignOrgRole(m.user_id,e.target.value);}}
+                style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',maxWidth:120}}>
+                <option value=''>No role</option>
+                {roles.map(function(r){return<option key={r.id} value={r.id}>{r.name}</option>;})}
+              </select>}
+              <button onClick={function(){setAccessMember(m);}}
+                style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600}}>Access</button>
+              {m.role!=='owner'&&<button onClick={function(){removeMember(m.user_id);}}
+                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>}
             </div>}
           </div>;
         })}
@@ -3037,6 +3594,7 @@ function OrgMembersPanel({org,cu,supabase}){
         </div>
       </>}
     </>}
+    {accessMember&&<MemberAccessPanel org={org} cu={cu} supabase={supabase} member={accessMember} profiles={profMap} roles={roles} rolePerms={rolePerms} onClose={function(){setAccessMember(null);loadAll();}}/>}
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
   </div>;
 }
@@ -13000,7 +13558,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, invites and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'settings',label:'Org Settings'}]}
+    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, roles, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'departments',label:'Departments'},{id:'roles',label:'Roles & Access'},{id:'settings',label:'Org Settings'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -13090,6 +13648,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='masterdata'&&tab==='groups'&&<OrgGroupsPanel org={org} cu={cu} supabase={supabase}/>}
       {/* Set-up */}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='departments'&&<DepartmentsPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='roles'&&<RolesPermissionsPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
   </>;
 
