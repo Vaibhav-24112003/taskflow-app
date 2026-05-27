@@ -60,6 +60,51 @@ const WS_COLORS = ['#0e2a47','#ec4899','#10b981','#f59e0b','#06b6d4','#1d4670','
 const WS_ICONS  = ['*','#','@','&','+','▲','●','■']
 const SCPAL = ['#64748b','#0e2a47','#f59e0b','#10b981','#ec4899','#06b6d4','#1d4670','#ef4444']
 
+// ── Access Control ─────────────────────────────────────────────────────────────
+var PERMISSION_NODES=[
+  {id:'diary',label:'Your Diary',module:'diary'},
+  {id:'diary.worklist',label:'Worklist',module:'diary',section:'worklist'},
+  {id:'diary.planmyday',label:'Plan My Day',module:'diary',section:'planmyday'},
+  {id:'workzone',label:'WorkZone',module:'workzone'},
+  {id:'workzone.worksheets',label:'Worksheets',module:'workzone',section:'worksheets'},
+  {id:'workzone.board',label:'Board',module:'workzone',section:'board'},
+  {id:'workzone.bigclients',label:'Big Clients',module:'workzone',section:'bigclients'},
+  {id:'workzone.teamview',label:'Team View',module:'workzone',section:'teamview'},
+  {id:'library',label:'Library',module:'library'},
+  {id:'team',label:'Team',module:'team'},
+  {id:'team.logs',label:'Logs',module:'team',section:'logs'},
+  {id:'team.attendance',label:'Attendance',module:'team',section:'attendance'},
+  {id:'team.leaves',label:'Leaves',module:'team',section:'leaves'},
+  {id:'analytics',label:'Analytics',module:'analytics'},
+  {id:'comms',label:'Communication',module:'comms'},
+  {id:'billing',label:'Billing',module:'billing'},
+  {id:'masterdata',label:'Master Data',module:'masterdata'},
+  {id:'setup',label:'Set-up',module:'setup'},
+];
+
+function resolvePermission(nodeId,userId,rolePerms,memberPerms,orgMembers){
+  var mo=(memberPerms||[]).find(function(p){return p.user_id===userId&&p.node_id===nodeId;});
+  if(mo)return{access:mo.access||'none',scope:mo.scope||'own',source:'member'};
+  var mem=(orgMembers||[]).find(function(m){return m.user_id===userId;});
+  var roleId=mem&&mem.role_id;
+  if(roleId){
+    var rp=(rolePerms||[]).find(function(p){return p.role_id===roleId&&p.node_id===nodeId;});
+    if(rp)return{access:rp.access,scope:rp.scope,source:'role'};
+  }
+  var legacyRole=mem&&mem.role;
+  if(legacyRole==='owner'||legacyRole==='admin')return{access:'manage',scope:'all',source:'legacy'};
+  var memberDefaults={'diary':'view','diary.worklist':'view','diary.planmyday':'edit','workzone':'view','workzone.worksheets':'view','workzone.board':'view','library':'view','team':'view','team.logs':'view','team.attendance':'view','team.leaves':'view'};
+  if(memberDefaults[nodeId])return{access:memberDefaults[nodeId],scope:'own',source:'default'};
+  return{access:'none',scope:'own',source:'default'};
+}
+
+function canAccess(nodeId,minAccess,userId,rolePerms,memberPerms,orgMembers){
+  var p=resolvePermission(nodeId,userId,rolePerms,memberPerms,orgMembers);
+  if(!p||p.access==='none')return false;
+  var levels=['none','view','edit','manage'];
+  return levels.indexOf(p.access)>=levels.indexOf(minAccess||'view');
+}
+
 // ── Design tokens — CSS variable based (proper light/dark, no filter hack) ─────
 const G = {
   // All color tokens are CSS vars — set by GlobalStyle on :root / [data-theme]
