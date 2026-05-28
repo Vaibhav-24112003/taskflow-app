@@ -3424,7 +3424,6 @@ function MemberAccessPanel({org,cu,supabase,member,profiles,roles,rolePerms,onCl
   </div>;
 }
 
-// ── Org Members Panel ───────────────────────────────────────────────
 // ── Member Permissions Panel (module toggles + dept access grants) ──
 function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
   var [moduleAccess,setModuleAccess]=useState([]);
@@ -3573,13 +3572,10 @@ function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
   </div>;
 }
 
-function OrgMembersPanel({org,cu,supabase}){
+function OrgMembersPanel({org,cu,supabase,orgDepts,orgDeptMembers}){
+  orgDepts=orgDepts||[];orgDeptMembers=orgDeptMembers||[];
   var [members,setMembers]=useState([]);
   var [invites,setInvites]=useState([]);
-  var [roles,setRoles]=useState([]);
-  var [rolePerms,setRolePerms]=useState([]);
-  var [deptMembers,setDeptMembers]=useState([]);
-  var [depts,setDepts]=useState([]);
   var [loading,setLoading]=useState(true);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
@@ -3590,7 +3586,7 @@ function OrgMembersPanel({org,cu,supabase}){
   var [sending,setSending]=useState(false);
   var [err,setErr]=useState('');
   var [toast,setToast]=useState(null);
-  var [accessMember,setAccessMember]=useState(null);
+  var [permsMember,setPermsMember]=useState(null);
   useEffect(function(){loadAll();},[ org.id]);
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadAll();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
 
@@ -3600,13 +3596,9 @@ function OrgMembersPanel({org,cu,supabase}){
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
     loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
-      var [rm,ri,rr,rrp,rdm,rd]=await Promise.all([
-        supabase.from('organization_members').select('org_id,user_id,role,role_id,joined_at').eq('org_id',org.id).limit(200),
+      var [rm,ri]=await Promise.all([
+        supabase.from('organization_members').select('org_id,user_id,role,joined_at').eq('org_id',org.id).limit(200),
         supabase.from('org_invitations').select('*').eq('org_id',org.id).eq('status','pending').limit(200),
-        supabase.from('org_roles').select('*').eq('org_id',org.id).order('level'),
-        supabase.from('role_permissions').select('*').eq('org_id',org.id),
-        supabase.from('department_members').select('*').eq('org_id',org.id),
-        supabase.from('departments').select('*').eq('org_id',org.id),
       ]);
       var mlist=rm.data||[];var enriched=mlist;
       if(mlist.length>0){
@@ -3615,7 +3607,7 @@ function OrgMembersPanel({org,cu,supabase}){
         var profMap={};(rp.data||[]).forEach(function(p){profMap[p.id]=p;});
         enriched=mlist.map(function(m){return Object.assign({},m,{profile:profMap[m.user_id]||null});});
       }
-      if(gen===loadGenRef.current){setMembers(enriched);setInvites(ri.data||[]);setRoles(rr.data||[]);setRolePerms(rrp.data||[]);setDeptMembers(rdm.data||[]);setDepts(rd.data||[]);}
+      if(gen===loadGenRef.current){setMembers(enriched);setInvites(ri.data||[]);}
     }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}
     finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
@@ -3645,24 +3637,19 @@ function OrgMembersPanel({org,cu,supabase}){
     await supabase.from('organization_members').update({role:newRole}).eq('org_id',org.id).eq('user_id',userId);
     loadAll();showToast('Role updated');
   }
-  async function assignOrgRole(userId,roleId){
-    await supabase.from('organization_members').update({role_id:roleId||null}).eq('org_id',org.id).eq('user_id',userId);
-    setMembers(function(prev){return prev.map(function(m){return m.user_id===userId?Object.assign({},m,{role_id:roleId||null}):m;});});
-    showToast('Role assigned');
-  }
 
   var ROLE_COLORS={owner:'#f59e0b',admin:'#0e2a47',member:'#22c55e'};
   var profMap={};members.forEach(function(m){if(m.profile)profMap[m.user_id]=m.profile;});
 
   function getMemberDepts(userId){
-    var dIds=deptMembers.filter(function(dm){return dm.user_id===userId;}).map(function(dm){return dm.department_id;});
-    return depts.filter(function(d){return dIds.includes(d.id);});
+    var dIds=orgDeptMembers.filter(function(dm){return dm.user_id===userId;}).map(function(dm){return dm.department_id;});
+    return orgDepts.filter(function(d){return dIds.includes(d.id);});
   }
 
   return<div style={{maxWidth:760,margin:'0 auto'}}>
     <div style={{marginBottom:20}}>
       <h3 style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',margin:'0 0 4px'}}>Organisation Members</h3>
-      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Manage members, assign roles and configure individual access overrides.</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Manage members and configure individual module and department access.</div>
     </div>
     {canManage&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:20}}>
       <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Invite Member by Email</div>
@@ -3689,7 +3676,6 @@ function OrgMembersPanel({org,cu,supabase}){
         :members.map(function(m,i){
           var p=m.profile||{};var isMe=m.user_id===cu.id;
           var rc=ROLE_COLORS[m.role]||'#94a3b8';
-          var orgRole=roles.find(function(r){return r.id===m.role_id;});
           var mDepts=getMemberDepts(m.user_id);
           return<div key={m.user_id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<members.length-1?'1px solid var(--tf-border)':'none',flexWrap:'wrap'}}>
             <div style={{width:34,height:34,borderRadius:'50%',background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0}}>
@@ -3704,23 +3690,17 @@ function OrgMembersPanel({org,cu,supabase}){
             </div>
             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
               <span style={{fontSize:11,fontWeight:700,color:rc,background:rc+'18',border:'1px solid '+rc+'30',borderRadius:20,padding:'2px 9px',textTransform:'capitalize',flexShrink:0}}>{m.role}</span>
-              {orgRole&&<span style={{fontSize:11,fontWeight:600,color:orgRole.color,background:orgRole.color+'15',border:'1px solid '+orgRole.color+'30',borderRadius:20,padding:'2px 9px',flexShrink:0}}>{orgRole.name}</span>}
             </div>
-            {canManage&&!isMe&&<div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
-              {m.role!=='owner'&&<select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
+            {canManage&&!isMe&&m.role!=='owner'&&<div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
+              <select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
                 style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none'}}>
                 <option value="admin">Admin</option>
                 <option value="member">Member</option>
-              </select>}
-              {roles.length>0&&<select value={m.role_id||''} onChange={function(e){assignOrgRole(m.user_id,e.target.value);}}
-                style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none',maxWidth:120}}>
-                <option value=''>No role</option>
-                {roles.map(function(r){return<option key={r.id} value={r.id}>{r.name}</option>;})}
-              </select>}
-              <button onClick={function(){setAccessMember(m);}}
-                style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600}}>Access</button>
-              {m.role!=='owner'&&<button onClick={function(){removeMember(m.user_id);}}
-                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>}
+              </select>
+              <button onClick={function(){setPermsMember(m);}}
+                style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600}}>Permissions</button>
+              <button onClick={function(){removeMember(m.user_id);}}
+                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>
             </div>}
           </div>;
         })}
@@ -3742,7 +3722,7 @@ function OrgMembersPanel({org,cu,supabase}){
         </div>
       </>}
     </>}
-    {accessMember&&<MemberAccessPanel org={org} cu={cu} supabase={supabase} member={accessMember} profiles={profMap} roles={roles} rolePerms={rolePerms} onClose={function(){setAccessMember(null);loadAll();}}/>}
+    {permsMember&&<MemberPermissionsPanel org={org} cu={cu} supabase={supabase} member={permsMember} profile={permsMember.profile||{}} depts={orgDepts} onClose={function(){setPermsMember(null);}}/>}
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
   </div>;
 }
@@ -13713,6 +13693,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var [orgRolePerms,setOrgRolePerms]=useState([]);
   var [orgMemberPerms,setOrgMemberPerms]=useState([]);
   var [orgAllMembers,setOrgAllMembers]=useState([]);
+  var [myModuleAccess,setMyModuleAccess]=useState(null);
   // Respond to CommandBar navigation
   useEffect(function(){
     if(!navTarget||!navTarget.module)return;
@@ -13725,13 +13706,14 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
 
   useEffect(function(){loadWTC();loadMyRole();loadOrgGroups();loadAccessData();/* eslint-disable-next-line */},[org.id]);
   async function loadAccessData(){
-    var [rd,rdm,rr,rrp,rmp,rom]=await Promise.all([
+    var [rd,rdm,rr,rrp,rmp,rom,rma]=await Promise.all([
       supabase.from('departments').select('id,name,color').eq('org_id',org.id),
       supabase.from('department_members').select('*').eq('org_id',org.id),
       supabase.from('org_roles').select('*').eq('org_id',org.id),
       supabase.from('role_permissions').select('*').eq('org_id',org.id),
       supabase.from('member_permissions').select('*').eq('org_id',org.id),
       supabase.from('organization_members').select('user_id,role,role_id').eq('org_id',org.id),
+      supabase.from('member_module_access').select('module_id,enabled').eq('org_id',org.id).eq('user_id',cu.id),
     ]);
     setOrgDepts(rd.data||[]);
     setOrgDeptMembers(rdm.data||[]);
@@ -13739,6 +13721,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     setOrgRolePerms(rrp.data||[]);
     setOrgMemberPerms(rmp.data||[]);
     setOrgAllMembers(rom.data||[]);
+    var accessMap={};(rma.data||[]).forEach(function(m){accessMap[m.module_id]=m.enabled;});
+    setMyModuleAccess(accessMap);
   }
   async function loadWTC(){
     var r=await getAllWorkTypeConfigs(org.id);
@@ -13761,7 +13745,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   }
   var activeConfigs=workTypeConfigs.filter(function(c){return c.is_active;});
   var workTypeNames=activeConfigs.map(function(c){return c.name;});
-  var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id;
+  var isAnyDeptManager=(orgDeptMembers||[]).some(function(dm){return dm.user_id===cu.id&&dm.is_head===true;});
+  var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id||isAnyDeptManager;
 
   var MODULES=[
     {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
@@ -13778,6 +13763,13 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
     {id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'departments',label:'Departments'},{id:'settings',label:'Org Settings'}]}
   );
+  var DEFAULT_MEMBER_MODULES=['diary','workzone','library'];
+  if(myRole!=='owner'&&myRole!=='admin'&&org.created_by!==cu.id&&myModuleAccess!==null){
+    MODULES=MODULES.filter(function(m){
+      if(myModuleAccess[m.id]!==undefined)return myModuleAccess[m.id];
+      return DEFAULT_MEMBER_MODULES.includes(m.id);
+    });
+  }
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
   function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}
@@ -13865,7 +13857,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
       {orgModule==='masterdata'&&tab==='groups'&&<OrgGroupsPanel org={org} cu={cu} supabase={supabase}/>}
       {/* Set-up */}
-      {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='setup'&&tab==='departments'&&<DepartmentsPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
   </>;
