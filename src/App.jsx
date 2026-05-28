@@ -4236,7 +4236,7 @@ function getDefaultPeriod(freq, cfg){
   return p;
 }
 
-function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly, orgGroups, orgGroupMemberships}){
+function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly, orgGroups, orgGroupMemberships, orgDepts, orgDeptMembers}){
   var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
   // Always include a synthetic "Unclassified" entry (frequency=once) so tasks
@@ -4313,6 +4313,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [pageSize,setPageSize]=useState(50);
   var [pageIdx,setPageIdx]=useState(0);
   var [showArchived,setShowArchived]=useState(false);
+  var [deptFilter,setDeptFilter]=useState('all');
   var WS_PC={low:'#94a3b8',medium:'#3b82f6',high:'#f59e0b',urgent:'#ef4444'};
   var WS_STATUS_COLORS={pending:'#94a3b8',in_progress:'#3b82f6',under_review:'#f59e0b',completed:'#22c55e'};
   function toggleSort(colKey){setSortCol(function(prev){if(prev===colKey){setSortDir(function(d){return d==='asc'?'desc':'asc';});return colKey;}setSortDir('asc');return colKey;});}
@@ -4363,8 +4364,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   // Build grouped tab structure: [{label, types:[], isGroup}]
   var tabLayout=useMemo(function(){
     var groups={};var ungrouped=[];var hasUnclassified=false;
+    // Dept filter: only show work types belonging to selected dept
+    var deptWtSet=deptFilter!=='all'?new Set((workTypeConfigs||[]).filter(function(c){return c.department_id===deptFilter;}).map(function(c){return c.name;})):null;
     allTypes.forEach(function(t){
-      if(t==='Unclassified'){hasUnclassified=true;return;}
+      if(t==='Unclassified'){if(!deptWtSet)hasUnclassified=true;return;}
+      if(deptWtSet&&!deptWtSet.has(t))return;
       var cfg=WS_TYPE_CONFIGS[t];
       if(cfg&&cfg.worksheet_group){
         if(!groups[cfg.worksheet_group])groups[cfg.worksheet_group]=[];
@@ -4379,7 +4383,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     // Unclassified always last, clearly distinct
     if(hasUnclassified)tabs.push({label:'Unclassified',types:['Unclassified'],isGroup:false,isUnclassified:true});
     return tabs;
-  },[allTypes,WS_TYPE_CONFIGS]);
+  },[allTypes,WS_TYPE_CONFIGS,deptFilter,workTypeConfigs]);
 
   useEffect(function(){loadClients();loadColPrefs();},[org.id,(workTypeConfigs||[]).length]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
@@ -4395,6 +4399,17 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     }
   // eslint-disable-next-line
   },[initWorkType]);
+  // When dept filter changes, reset activeType to first visible tab
+  useEffect(function(){
+    if(tabLayout.length>0){
+      var firstTab=tabLayout[0];
+      setActiveType(firstTab.types[0]);
+      setActiveGroup(firstTab.isGroup?firstTab.label:null);
+    }else{
+      setActiveType(null);setActiveGroup(null);
+    }
+  // eslint-disable-next-line
+  },[deptFilter]);
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
@@ -5277,7 +5292,8 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var showTaskCard=!hiddenCols.includes('__taskcard');
 
   // Apply filters to rows
-  var hasActiveFilters=Object.keys(filters).length>0||filterClient||mineOnly;
+  var deptWtNames=deptFilter!=='all'?(workTypeConfigs||[]).filter(function(c){return c.department_id===deptFilter;}).map(function(c){return c.name;}):[]; // dept-filtered work type names
+  var hasActiveFilters=Object.keys(filters).length>0||filterClient||mineOnly||(deptFilter!=='all');
   var filteredRows=rows.filter(function(row){
     // Archive view shows archived rows only; main view hides them
     if(showArchived){if(!row.archived_at)return false;}
@@ -5380,6 +5396,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No work types assigned</div>
       <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to Client Master Data → edit each client → Work Types tab to assign work types.</div>
     </div>:<div>
+      {/* Department filter pills */}
+      {(orgDepts||[]).length>0&&<div style={{display:'flex',gap:6,overflowX:'auto',padding:'0 0 10px',flexShrink:0,marginBottom:2}}>
+        <button onClick={function(){setDeptFilter('all');setActiveType(null);setActiveGroup(null);}}
+          style={{padding:'4px 12px',borderRadius:20,border:'1px solid var(--tf-border)',background:deptFilter==='all'?'#0e2a47':'var(--tf-surface)',color:deptFilter==='all'?'#fff':'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,fontFamily:'inherit'}}>All Depts</button>
+        {(orgDepts||[]).map(function(d){return<button key={d.id} onClick={function(){setDeptFilter(d.id);setActiveType(null);setActiveGroup(null);}}
+          style={{padding:'4px 12px',borderRadius:20,border:'1px solid '+(deptFilter===d.id?d.color:'var(--tf-border)'),background:deptFilter===d.id?d.color+'20':'var(--tf-surface)',color:deptFilter===d.id?d.color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,fontFamily:'inherit'}}>{d.name}</button>;})}
+      </div>}
       {/* Work type tabs — with grouping support */}
       <div style={{display:'flex',gap:4,marginBottom:0,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
         {tabLayout.map(function(tab){
@@ -5403,7 +5426,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
             }
             clearFilters();
-          }} style={{padding:'8px 16px',border:'none',borderBottom:isActiveTab?('2px solid '+(tab.isUnclassified?'#f59e0b':'#0e2a47')):'2px solid transparent',background:'none',color:isActiveTab?(tab.isUnclassified?'#f59e0b':'#0e2a47'):(tab.isUnclassified?'#f59e0b':'var(--tf-text-sub)'),cursor:'pointer',fontSize:12,fontWeight:isActiveTab?700:(tab.isUnclassified?700:500),whiteSpace:'nowrap',transition:'all 0.15s'}}>{tab.isUnclassified&&<span style={{marginRight:4}}>🏷</span>}{tab.label}{tab.isGroup&&<span style={{fontSize:9,marginLeft:4,color:'#f59e0b',fontWeight:700}}>▾</span>}</button>;
+          }} style={{padding:'8px 16px',border:'none',borderBottom:isActiveTab?('2px solid '+(tab.isUnclassified?'#f59e0b':'#0e2a47')):'2px solid transparent',background:'none',color:isActiveTab?(tab.isUnclassified?'#f59e0b':'#0e2a47'):(tab.isUnclassified?'#f59e0b':'var(--tf-text-sub)'),cursor:'pointer',fontSize:12,fontWeight:isActiveTab?700:(tab.isUnclassified?700:500),whiteSpace:'nowrap',transition:'all 0.15s'}}>
+            {tab.isUnclassified&&<span style={{marginRight:4}}>🏷</span>}
+            {(function(){var wtc=!tab.isGroup&&!tab.isUnclassified&&(workTypeConfigs||[]).find(function(c){return c.name===tab.types[0];});var dept=wtc&&wtc.department_id&&(orgDepts||[]).find(function(d){return d.id===wtc.department_id;});return dept?<span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:dept.color,marginRight:5,verticalAlign:'middle'}} title={dept.name}/>:null;})()}
+            {tab.label}{tab.isGroup&&<span style={{fontSize:9,marginLeft:4,color:'#f59e0b',fontWeight:700}}>▾</span>}
+          </button>;
         })}
       </div>
       {/* Sub-tabs for grouped work types */}
@@ -8181,7 +8208,7 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 }
 
 // ── ERP Board — Kanban view of worksheet_rows across all work types ──
-function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
+function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDepts,orgDeptMembers}){
   var [loading,setLoading]=useState(true);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
@@ -8195,6 +8222,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [assigneeFilter,setAssigneeFilter]=useState('all'); // 'all' | 'mine' | userId
   var [clientQuery,setClientQuery]=useState('');
   var [hideCompleted,setHideCompleted]=useState(true);
+  var [deptFilter,setDeptFilter]=useState('all');
   var [toast,setToast]=useState(null);
   var [dragId,setDragId]=useState(null);
   var [dragOverCol,setDragOverCol]=useState(null);
@@ -8264,6 +8292,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     return false;
   }
 
+  var boardDeptWtNames=deptFilter!=='all'?(workTypeConfigs||[]).filter(function(c){return c.department_id===deptFilter;}).map(function(c){return c.name;}):[]; // dept-scoped work type names for board
   var filtered=rows.filter(function(r){
     if(hideCompleted&&getEffectiveStatus(r)==='completed')return false;
     if(assigneeFilter==='mine'){if(!rowMatchesUser(r,cu.id))return false;}
@@ -8273,6 +8302,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       var hay=((c.display_name||c.name||'')+' '+(c.pan||'')).toLowerCase();
       if(hay.indexOf(clientQuery.trim().toLowerCase())<0)return false;
     }
+    if(deptFilter!=='all'){var ws=wsMap[r.worksheet_id];if(!ws||boardDeptWtNames.indexOf(ws.work_type)<0)return false;}
     return true;
   });
 
@@ -8324,6 +8354,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#0e2a47'),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:groupBy==='status'?'grab':'default',opacity:isDragging?0.5:1,transition:'opacity 0.12s'}}>
       <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</div>
       <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:6}}>
+        {(function(){var wtc=ws.work_type&&(workTypeConfigs||[]).find(function(c){return c.name===ws.work_type;});var dept=wtc&&wtc.department_id&&(orgDepts||[]).find(function(d){return d.id===wtc.department_id;});return dept?<span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:dept.color,flexShrink:0}} title={dept.name}/>:null;})()}
         <span style={Object.assign({},pillStyle,{background:'rgba(14,42,71,0.12)',color:'#0e2a47'})}>{ws.work_type||'—'}</span>
         {ws.period_label&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{ws.period_label}</span>}
       </div>
@@ -8343,6 +8374,11 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   if(loading)return<div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--tf-text-sub)'}}>Loading board…</div>;
 
   return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0,padding:'12px 16px'}}>
+    {/* Dept filter pills */}
+    {(orgDepts||[]).length>0&&<div style={{display:'flex',gap:6,overflowX:'auto',padding:'0 0 10px',flexShrink:0}}>
+      <button onClick={function(){setDeptFilter('all');}} style={{padding:'4px 12px',borderRadius:20,border:'1px solid var(--tf-border)',background:deptFilter==='all'?'#0e2a47':'var(--tf-surface)',color:deptFilter==='all'?'#fff':'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,fontFamily:'inherit'}}>All Depts</button>
+      {(orgDepts||[]).map(function(d){return<button key={d.id} onClick={function(){setDeptFilter(d.id);}} style={{padding:'4px 12px',borderRadius:20,border:'1px solid '+(deptFilter===d.id?d.color:'var(--tf-border)'),background:deptFilter===d.id?d.color+'20':'var(--tf-surface)',color:deptFilter===d.id?d.color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,fontFamily:'inherit'}}>{d.name}</button>;})}
+    </div>}
     {/* Toolbar */}
     <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,flexWrap:'wrap'}}>
       <div style={{display:'flex',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:2}}>
@@ -13523,6 +13559,12 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const [wsInitWorkType,setWsInitWorkType]=useState(null);
   const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
   const [sidebarOpen,setSidebarOpen]=useState(true);
+  var [orgDepts,setOrgDepts]=useState([]);
+  var [orgDeptMembers,setOrgDeptMembers]=useState([]);
+  var [orgRoles,setOrgRoles]=useState([]);
+  var [orgRolePerms,setOrgRolePerms]=useState([]);
+  var [orgMemberPerms,setOrgMemberPerms]=useState([]);
+  var [orgAllMembers,setOrgAllMembers]=useState([]);
   // Respond to CommandBar navigation
   useEffect(function(){
     if(!navTarget||!navTarget.module)return;
@@ -13533,7 +13575,23 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   },[navTarget]);
   const wsCount=(allWorkspaces||[]).filter(function(w){return w.org_id===org.id;}).length;
 
-  useEffect(function(){loadWTC();loadMyRole();loadOrgGroups();/* eslint-disable-next-line */},[org.id]);
+  useEffect(function(){loadWTC();loadMyRole();loadOrgGroups();loadAccessData();/* eslint-disable-next-line */},[org.id]);
+  async function loadAccessData(){
+    var [rd,rdm,rr,rrp,rmp,rom]=await Promise.all([
+      supabase.from('departments').select('id,name,color').eq('org_id',org.id),
+      supabase.from('department_members').select('*').eq('org_id',org.id),
+      supabase.from('org_roles').select('*').eq('org_id',org.id),
+      supabase.from('role_permissions').select('*').eq('org_id',org.id),
+      supabase.from('member_permissions').select('*').eq('org_id',org.id),
+      supabase.from('organization_members').select('user_id,role,role_id').eq('org_id',org.id),
+    ]);
+    setOrgDepts(rd.data||[]);
+    setOrgDeptMembers(rdm.data||[]);
+    setOrgRoles(rr.data||[]);
+    setOrgRolePerms(rrp.data||[]);
+    setOrgMemberPerms(rmp.data||[]);
+    setOrgAllMembers(rom.data||[]);
+  }
   async function loadWTC(){
     var r=await getAllWorkTypeConfigs(org.id);
     setWorkTypeConfigs(r.data||[]);
@@ -13628,8 +13686,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){setTab('plan');localStorage.setItem('tf_lastOrgTab','plan');}}/>}
       {orgModule==='diary'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {/* WorkZone */}
-      {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
-      {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
+      {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
