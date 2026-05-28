@@ -3425,6 +3425,154 @@ function MemberAccessPanel({org,cu,supabase,member,profiles,roles,rolePerms,onCl
 }
 
 // ── Org Members Panel ───────────────────────────────────────────────
+// ── Member Permissions Panel (module toggles + dept access grants) ──
+function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
+  var [moduleAccess,setModuleAccess]=useState([]);
+  var [deptAccess,setDeptAccess]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [toast,setToast]=useState(null);
+
+  var ALL_MODULES=[
+    {id:'diary',label:'Your Diary',icon:'📓'},
+    {id:'workzone',label:'WorkZone',icon:'💼'},
+    {id:'library',label:'Library',icon:'📚'},
+    {id:'team',label:'Team',icon:'👥'},
+    {id:'analytics',label:'Analytics',icon:'📊'},
+    {id:'comms',label:'Communication',icon:'✉️'},
+    {id:'billing',label:'Billing',icon:'🧾'},
+    {id:'masterdata',label:'Master Data',icon:'🗄️'},
+  ];
+  var DEFAULT_ON=['diary','workzone','library'];
+
+  useEffect(function(){load();},[ member.user_id,org.id]);
+
+  async function load(){
+    setLoading(true);
+    var [rm,rd]=await Promise.all([
+      supabase.from('member_module_access').select('*').eq('org_id',org.id).eq('user_id',member.user_id),
+      supabase.from('member_dept_access').select('*').eq('org_id',org.id).eq('user_id',member.user_id),
+    ]);
+    setModuleAccess(rm.data||[]);
+    setDeptAccess(rd.data||[]);
+    setLoading(false);
+  }
+
+  function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},2500);}
+
+  function getModuleEnabled(moduleId){
+    var entry=moduleAccess.find(function(m){return m.module_id===moduleId;});
+    if(entry)return entry.enabled;
+    return DEFAULT_ON.includes(moduleId);
+  }
+
+  async function toggleModule(moduleId,cur){
+    var newVal=!cur;
+    var existing=moduleAccess.find(function(m){return m.module_id===moduleId;});
+    if(existing){
+      await supabase.from('member_module_access').update({enabled:newVal}).eq('id',existing.id);
+    } else {
+      await supabase.from('member_module_access').insert({org_id:org.id,user_id:member.user_id,module_id:moduleId,enabled:newVal});
+    }
+    setModuleAccess(function(prev){
+      var idx=prev.findIndex(function(m){return m.module_id===moduleId;});
+      if(idx>=0){var a=prev.slice();a[idx]=Object.assign({},a[idx],{enabled:newVal});return a;}
+      return prev.concat([{org_id:org.id,user_id:member.user_id,module_id:moduleId,enabled:newVal}]);
+    });
+    showToast(newVal?moduleId+' enabled':moduleId+' hidden');
+  }
+
+  function getDeptAccess(deptId){
+    var entry=deptAccess.find(function(d){return d.department_id===deptId;});
+    return entry?entry.access_level:'none';
+  }
+
+  async function setDeptAccessLevel(deptId,level){
+    var existing=deptAccess.find(function(d){return d.department_id===deptId;});
+    if(level==='none'){
+      if(existing)await supabase.from('member_dept_access').delete().eq('id',existing.id);
+      setDeptAccess(function(prev){return prev.filter(function(d){return d.department_id!==deptId;});});
+    } else {
+      if(existing){
+        await supabase.from('member_dept_access').update({access_level:level}).eq('id',existing.id);
+        setDeptAccess(function(prev){return prev.map(function(d){return d.department_id===deptId?Object.assign({},d,{access_level:level}):d;});});
+      } else {
+        var ins={org_id:org.id,user_id:member.user_id,department_id:deptId,access_level:level};
+        await supabase.from('member_dept_access').insert(ins);
+        setDeptAccess(function(prev){return prev.concat([ins]);});
+      }
+    }
+    showToast('Department access updated');
+  }
+
+  var DEPT_ACCESS_OPTS=[
+    {v:'none',l:'No Access'},
+    {v:'view_own',l:'View Own'},
+    {v:'view_all',l:'View All'},
+    {v:'full',l:'Full'},
+  ];
+
+  var name=profile.name||profile.email||member.user_id.slice(0,8);
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:16,width:'100%',maxWidth:580,maxHeight:'82vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={{padding:'16px 20px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12}}>
+        <div style={{width:36,height:36,borderRadius:'50%',background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:'#fff',flexShrink:0}}>
+          {name.charAt(0).toUpperCase()}
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>{name}</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{member.role}</div>
+        </div>
+        <button onClick={onClose} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,width:32,height:32,cursor:'pointer',color:'var(--tf-text)',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+      </div>
+      <div style={{flex:1,overflow:'auto',padding:20}}>
+        {loading?<div style={{textAlign:'center',padding:32,color:'var(--tf-text-sub)'}}>Loading...</div>:<>
+          {/* Module access */}
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Module Access</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:12}}>Toggle which sections this member can see in the sidebar.</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+              {ALL_MODULES.map(function(m){
+                var enabled=getModuleEnabled(m.id);
+                return<button key={m.id} onClick={function(){toggleModule(m.id,enabled);}}
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:enabled?'rgba(107,140,173,0.1)':'var(--tf-surface)',border:'1px solid '+(enabled?'#6b8cad':'var(--tf-border)'),borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'all 0.12s'}}>
+                  <span style={{fontSize:18,flexShrink:0}}>{m.icon}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:600,color:enabled?'var(--tf-text)':'var(--tf-text-sub)'}}>{m.label}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:enabled?'#6b8cad':'var(--tf-text-sub)',background:enabled?'rgba(107,140,173,0.15)':'var(--tf-bg)',borderRadius:20,padding:'2px 8px'}}>{enabled?'On':'Off'}</span>
+                </button>;
+              })}
+            </div>
+          </div>
+          {/* Department access */}
+          {depts.length>0&&<div>
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>Department Access</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:12}}>Grant access to specific departments beyond their own assigned work.</div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {depts.map(function(d){
+                var level=getDeptAccess(d.id);
+                return<div key={d.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10}}>
+                  <div style={{width:10,height:10,borderRadius:'50%',background:d.color,flexShrink:0}}/>
+                  <div style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{d.name}</div>
+                  <div style={{display:'flex',gap:4}}>
+                    {DEPT_ACCESS_OPTS.map(function(o){
+                      var isActive=level===o.v;
+                      return<button key={o.v} onClick={function(){setDeptAccessLevel(d.id,o.v);}}
+                        style={{padding:'4px 10px',borderRadius:20,border:'1px solid '+(isActive?'#6b8cad':'var(--tf-border)'),background:isActive?'rgba(107,140,173,0.15)':'var(--tf-bg)',color:isActive?'#6b8cad':'var(--tf-text-sub)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                        {o.l}
+                      </button>;
+                    })}
+                  </div>
+                </div>;
+              })}
+            </div>
+          </div>}
+        </>}
+      </div>
+    </div>
+    {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
+  </div>;
+}
+
 function OrgMembersPanel({org,cu,supabase}){
   var [members,setMembers]=useState([]);
   var [invites,setInvites]=useState([]);
@@ -13628,7 +13776,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
     {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
     {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, roles, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'departments',label:'Departments'},{id:'roles',label:'Roles & Access'},{id:'settings',label:'Org Settings'}]}
+    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'departments',label:'Departments'},{id:'settings',label:'Org Settings'}]}
   );
 
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
@@ -13719,7 +13867,6 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Set-up */}
       {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='departments'&&<DepartmentsPanel org={org} cu={cu} supabase={supabase}/>}
-      {orgModule==='setup'&&tab==='roles'&&<RolesPermissionsPanel org={org} cu={cu} supabase={supabase}/>}
       {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
   </>;
 
