@@ -3667,8 +3667,12 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
   var [editConfig,setEditConfig]=useState(null);
   var [toast,setToast]=useState(null);
   var [seeding,setSeeding]=useState(false);
+  var [depts,setDepts]=useState([]);
 
   useEffect(function(){setConfigs(workTypeConfigs||[]);},[workTypeConfigs]);
+  useEffect(function(){
+    supabase.from('departments').select('id,name,color').eq('org_id',org.id).then(function(rd){setDepts(rd.data||[]);});
+  },[org.id]);
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
 
@@ -3753,7 +3757,15 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
                 {(c.columns||[]).map(function(col){return<span key={col.key} style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(14,42,71,0.06)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 6px'}}>{col.label}</span>;})}
               </div>}
             </div>
-            <div style={{display:'flex',gap:5,flexShrink:0}}>
+            <div style={{display:'flex',gap:5,flexShrink:0,alignItems:'center'}}>
+              {depts.length>0&&<select value={c.department_id||''} onChange={async function(e){
+                var val=e.target.value||null;
+                await supabase.from('work_type_configs').update({department_id:val}).eq('id',c.id);
+                if(onReload)onReload();
+              }} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer'}}>
+                <option value=''>No Dept</option>
+                {depts.map(function(d){return<option key={d.id} value={d.id}>{d.name}</option>;})}
+              </select>}
               <button onClick={function(){setEditConfig(c);setShowForm(true);}} style={{background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:6,padding:'4px 10px',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
               <button onClick={function(){toggleActive(c);}} style={{background:'rgba(148,163,184,0.08)',border:'1px solid rgba(148,163,184,0.2)',borderRadius:6,padding:'4px 10px',color:'#94a3b8',cursor:'pointer',fontSize:12,fontWeight:600}}>{c.is_active?'Disable':'Enable'}</button>
               <button onClick={function(){del(c);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Del</button>
