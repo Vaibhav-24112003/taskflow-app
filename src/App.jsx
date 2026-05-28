@@ -3029,7 +3029,7 @@ function DepartmentsPanel({org,cu,supabase}){
       <div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>
         <div style={{fontSize:32,marginBottom:8}}>🏢</div>
         <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>No departments yet</div>
-        <div style={{fontSize:12}}>Create departments to organise your team members.</div>
+        <div style={{fontSize:12,lineHeight:1.6}}>Departments are optional — skip this if your whole team shares access to everything.<br/>Create departments to split visibility by team (e.g. Audit, Tax, GST).</div>
       </div>
     :<div style={{display:'flex',flexDirection:'column',gap:12}}>
       {depts.map(function(dept){
