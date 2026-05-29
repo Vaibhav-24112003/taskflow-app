@@ -6537,6 +6537,287 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
 }
 
 // ══════════════════════════════════════════════════════════════════
+// CLIENT LEDGER TAB (inside Analytics)
+// ══════════════════════════════════════════════════════════════════
+
+function ClientLedgerTab({org,supabase,clients,initClientId}){
+  var [selClientId,setSelClientId]=useState(initClientId||'');
+  var [search,setSearch]=useState('');
+  var [loading,setLoading]=useState(false);
+  var [invoices,setInvoices]=useState([]);
+  var [payments,setPayments]=useState([]);
+  var [timeLogs,setTimeLogs]=useState([]);
+  var [clientRows,setClientRows]=useState([]);
+  var [clientWorksheets,setClientWorksheets]=useState([]);
+
+  useEffect(function(){if(selClientId)loadClientData(selClientId);},[selClientId,org.id]);
+  useEffect(function(){if(initClientId&&initClientId!==selClientId)setSelClientId(initClientId);},[initClientId]);
+
+  async function loadClientData(clientId){
+    setLoading(true);
+    var [ri,rp,rl,rr,rw]=await Promise.all([
+      supabase.from('invoices').select('*').eq('org_id',org.id).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200),
+      supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(500),
+      supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('client_id',clientId).order('date',{ascending:false}).limit(500),
+      supabase.from('worksheet_rows').select('id,worksheet_id,status,due_date,completed_at,data,current_stage').eq('org_id',org.id).eq('client_id',clientId).limit(500),
+      supabase.from('worksheets').select('id,work_type,period_label,period_year,frequency').eq('org_id',org.id).limit(1000),
+    ]);
+    var invData=ri.data||[];
+    var invIds=new Set(invData.map(function(i){return i.id;}));
+    setInvoices(invData);
+    setPayments((rp.data||[]).filter(function(p){return invIds.has(p.invoice_id);}));
+    setTimeLogs(rl.data||[]);
+    setClientRows(rr.data||[]);
+    setClientWorksheets(rw.data||[]);
+    setLoading(false);
+  }
+
+  function calcInvTotal(inv){
+    var items=inv.items||[];
+    var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+    var tax=inv.tax_percent?sub*(Number(inv.tax_percent)/100):0;
+    var tds=inv.tds_percent?sub*(Number(inv.tds_percent)/100):0;
+    return sub+tax-tds;
+  }
+
+  var selClient=clients.find(function(c){return c.id===selClientId;});
+  var visibleClients=search.trim()?clients.filter(function(c){var n=(c.display_name||c.name||'').toLowerCase();return n.includes(search.trim().toLowerCase());}):clients;
+
+  // ── Calculations ──
+  var wsMap={};clientWorksheets.forEach(function(w){wsMap[w.id]=w;});
+
+  // Work performed
+  var workByType={};
+  clientRows.forEach(function(r){
+    var ws=wsMap[r.worksheet_id];
+    var wt=ws?ws.work_type:'Unknown';
+    if(!workByType[wt])workByType[wt]={name:wt,total:0,done:0,pending:0,overdue:0};
+    workByType[wt].total++;
+    if(r.status==='completed')workByType[wt].done++;
+    else if(r.due_date&&new Date(r.due_date)<new Date())workByType[wt].overdue++;
+    else workByType[wt].pending++;
+  });
+  var workStats=Object.values(workByType).sort(function(a,b){return b.total-a.total;});
+
+  // Time spent
+  var timeByType={};var totalMins=0;
+  timeLogs.forEach(function(l){
+    var wt=l.work_type||'General';
+    if(!timeByType[wt])timeByType[wt]={name:wt,mins:0};
+    var m=(Number(l.hours)||0)*60+(Number(l.minutes)||0);
+    timeByType[wt].mins+=m;totalMins+=m;
+  });
+  var timeStats=Object.values(timeByType).sort(function(a,b){return b.mins-a.mins;});
+  function fmtMins(m){var h=Math.floor(m/60);var mn=m%60;return h+'h'+(mn>0?' '+mn+'m':'');}
+
+  // Finance
+  var totalInvoiced=invoices.reduce(function(s,i){return s+calcInvTotal(i);},0);
+  var totalReceived=payments.reduce(function(s,p){return s+Number(p.amount);},0);
+  var outstanding=totalInvoiced-totalReceived;
+  var lastInvDate=invoices.length>0?invoices[0].created_at:null;
+
+  // Unbilled tasks: completed rows with no invoice after last invoice date (or all if no invoice)
+  var unbilledTasks=clientRows.filter(function(r){
+    if(r.status!=='completed')return false;
+    if(!lastInvDate)return true;
+    var compAt=r.completed_at||r.due_date;
+    return compAt&&compAt>lastInvDate;
+  });
+
+  // Unbilled time: logs after last invoice date
+  var unbilledLogs=timeLogs.filter(function(l){
+    if(!lastInvDate)return true;
+    return l.date&&l.date>lastInvDate.slice(0,10);
+  });
+  var unbilledMins=unbilledLogs.reduce(function(s,l){return s+(Number(l.hours)||0)*60+(Number(l.minutes)||0);},0);
+
+  var KPI=function(label,value,color,sub){
+    return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',minWidth:110}}>
+      <div style={{fontSize:20,fontWeight:800,color:color||'var(--tf-text)'}}>{value}</div>
+      <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2,fontWeight:600}}>{label}</div>
+      {sub&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:1}}>{sub}</div>}
+    </div>;
+  };
+
+  var HDR=function(title,right){return<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:'1px solid var(--tf-border)'}}>
+    <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{title}</div>
+    {right}
+  </div>;};
+
+  var CARD=function(children){return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',marginBottom:14}}>{children}</div>;};
+
+  return<div>
+    {/* Client selector */}
+    <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:20}}>
+      <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:10,textTransform:'uppercase',letterSpacing:.05}}>Select Client</div>
+      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search client..." style={{flex:'0 0 200px',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'}}/>
+        <select value={selClientId} onChange={function(e){setSelClientId(e.target.value);setSearch('');}} style={{flex:'1 1 260px',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',cursor:'pointer'}}>
+          <option value=''>— Pick a client —</option>
+          {visibleClients.map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
+        </select>
+        {selClient&&<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{selClient.display_name||selClient.name}{selClient.pan&&<span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:8,fontWeight:400}}>PAN: {selClient.pan}</span>}</div>}
+      </div>
+    </div>
+
+    {!selClientId&&<div style={{textAlign:'center',padding:'60px 0',color:'var(--tf-text-sub)'}}>
+      <div style={{fontSize:40,marginBottom:12}}>🗂️</div>
+      <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>Select a client to view their summary</div>
+      <div style={{fontSize:13}}>Work performed · Time spent · Billing · Unbilled work — all in one place.</div>
+    </div>}
+
+    {selClientId&&loading&&<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading client data...</div>}
+
+    {selClientId&&!loading&&<>
+      {/* KPI row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:10,marginBottom:20}}>
+        {KPI('Tasks Done',clientRows.filter(function(r){return r.status==='completed';}).length,'#22c55e')}
+        {KPI('Pending',clientRows.filter(function(r){return r.status!=='completed'&&(!r.due_date||new Date(r.due_date)>=new Date());}).length,'#94a3b8')}
+        {KPI('Overdue',clientRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<new Date();}).length,'#ef4444')}
+        {KPI('Hours Logged',fmtMins(totalMins),'#6b8cad',timeLogs.length+' entries')}
+        {KPI('Invoiced','₹'+totalInvoiced.toLocaleString('en-IN'),'var(--tf-text)',invoices.length+' invoices')}
+        {KPI('Received','₹'+totalReceived.toLocaleString('en-IN'),'#22c55e')}
+        {KPI('Outstanding','₹'+Math.max(0,outstanding).toLocaleString('en-IN'),outstanding>0?'#ef4444':'#22c55e')}
+        {KPI('Unbilled Hrs',fmtMins(unbilledMins),'#f59e0b',unbilledLogs.length+' logs')}
+        {KPI('Unbilled Tasks',unbilledTasks.length,'#f59e0b','completed, not billed')}
+      </div>
+
+      {/* Work Performed */}
+      {workStats.length>0&&CARD(<>
+        {HDR('Work Performed',<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{clientRows.length} tasks across {workStats.length} work types</span>)}
+        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <thead><tr style={{background:'rgba(14,42,71,0.04)'}}>
+            <th style={{padding:'8px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Work Type</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Total</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'#22c55e',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Done</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'#94a3b8',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Pending</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'#ef4444',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Overdue</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Complete</th>
+          </tr></thead>
+          <tbody>{workStats.map(function(w,i){var pct=w.total>0?Math.round(w.done/w.total*100):0;return<tr key={w.name} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
+            <td style={{padding:'9px 16px',fontWeight:600,color:'var(--tf-text)'}}>{w.name}</td>
+            <td style={{padding:'9px 10px',textAlign:'center',fontWeight:700}}>{w.total}</td>
+            <td style={{padding:'9px 10px',textAlign:'center',color:'#22c55e',fontWeight:600}}>{w.done}</td>
+            <td style={{padding:'9px 10px',textAlign:'center',color:'#94a3b8'}}>{w.pending}</td>
+            <td style={{padding:'9px 10px',textAlign:'center',color:w.overdue>0?'#ef4444':'var(--tf-text-sub)',fontWeight:w.overdue>0?700:400}}>{w.overdue}</td>
+            <td style={{padding:'9px 10px',textAlign:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,justifyContent:'center'}}>
+                <div style={{width:50,height:5,borderRadius:3,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:pct+'%',height:'100%',background:pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444'}}/></div>
+                <span style={{fontSize:11,fontWeight:700,color:pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444'}}>{pct}%</span>
+              </div>
+            </td>
+          </tr>;})}
+          </tbody>
+        </table></div>
+      </>)}
+
+      {/* Time Spent */}
+      {timeStats.length>0&&CARD(<>
+        {HDR('Time Spent',<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Total: {fmtMins(totalMins)}</span>)}
+        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <thead><tr style={{background:'rgba(14,42,71,0.04)'}}>
+            <th style={{padding:'8px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Work Type</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Hours</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Entries</th>
+            <th style={{padding:'8px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Latest</th>
+          </tr></thead>
+          <tbody>{timeStats.map(function(t,i){
+            var entries=timeLogs.filter(function(l){return (l.work_type||'General')===t.name;});
+            var latest=entries[0];
+            return<tr key={t.name} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
+              <td style={{padding:'9px 16px',fontWeight:600,color:'var(--tf-text)'}}>{t.name}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',fontWeight:700,color:'#6b8cad'}}>{fmtMins(t.mins)}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',color:'var(--tf-text-sub)'}}>{entries.length}</td>
+              <td style={{padding:'9px 16px',color:'var(--tf-text-sub)',fontSize:11}}>{latest?latest.date+(latest.notes?' — '+latest.notes.slice(0,40):''):'—'}</td>
+            </tr>;
+          })}
+          </tbody>
+        </table></div>
+      </>)}
+
+      {/* Finance Summary */}
+      {CARD(<>
+        {HDR('Finance Summary',<div style={{display:'flex',gap:16,fontSize:12}}>
+          <span style={{color:'var(--tf-text-sub)'}}>Invoiced: <strong style={{color:'var(--tf-text)'}}>₹{totalInvoiced.toLocaleString('en-IN')}</strong></span>
+          <span style={{color:'var(--tf-text-sub)'}}>Received: <strong style={{color:'#22c55e'}}>₹{totalReceived.toLocaleString('en-IN')}</strong></span>
+          <span style={{color:'var(--tf-text-sub)'}}>Due: <strong style={{color:outstanding>0?'#ef4444':'#22c55e'}}>₹{Math.max(0,outstanding).toLocaleString('en-IN')}</strong></span>
+        </div>)}
+        {invoices.length===0?<div style={{padding:'20px 16px',color:'var(--tf-text-sub)',fontSize:13}}>No invoices raised for this client.</div>:
+        <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <thead><tr style={{background:'rgba(14,42,71,0.04)'}}>
+            <th style={{padding:'8px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Invoice No</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Date</th>
+            <th style={{padding:'8px 10px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Amount</th>
+            <th style={{padding:'8px 10px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Paid</th>
+            <th style={{padding:'8px 10px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Balance</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
+          </tr></thead>
+          <tbody>{invoices.map(function(inv,i){
+            var tot=calcInvTotal(inv);
+            var paid=payments.filter(function(p){return p.invoice_id===inv.id;}).reduce(function(s,p){return s+Number(p.amount);},0);
+            var bal=tot-paid;
+            var stColor=inv.status==='paid'?'#22c55e':inv.status==='partial'?'#f59e0b':'#ef4444';
+            return<tr key={inv.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
+              <td style={{padding:'9px 16px',fontWeight:700,color:'#6b8cad'}}>{inv.invoice_no||'—'}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',color:'var(--tf-text-sub)'}}>{inv.invoice_date||inv.created_at?.slice(0,10)||'—'}</td>
+              <td style={{padding:'9px 10px',textAlign:'right',fontWeight:600}}>₹{tot.toLocaleString('en-IN')}</td>
+              <td style={{padding:'9px 10px',textAlign:'right',color:'#22c55e'}}>₹{paid.toLocaleString('en-IN')}</td>
+              <td style={{padding:'9px 10px',textAlign:'right',fontWeight:700,color:bal>0?'#ef4444':'#22c55e'}}>₹{Math.max(0,bal).toLocaleString('en-IN')}</td>
+              <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:10,fontWeight:700,color:stColor,background:stColor+'18',border:'1px solid '+stColor+'30',borderRadius:20,padding:'2px 8px',textTransform:'capitalize'}}>{inv.status||'draft'}</span></td>
+            </tr>;
+          })}
+          <tr style={{borderTop:'2px solid var(--tf-border)',background:'rgba(14,42,71,0.04)'}}>
+            <td colSpan={2} style={{padding:'9px 16px',fontWeight:700,color:'var(--tf-text)'}}>Total</td>
+            <td style={{padding:'9px 10px',textAlign:'right',fontWeight:800}}>₹{totalInvoiced.toLocaleString('en-IN')}</td>
+            <td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,color:'#22c55e'}}>₹{totalReceived.toLocaleString('en-IN')}</td>
+            <td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,color:outstanding>0?'#ef4444':'#22c55e'}}>₹{Math.max(0,outstanding).toLocaleString('en-IN')}</td>
+            <td/>
+          </tr>
+          </tbody>
+        </table></div>}
+      </>)}
+
+      {/* Unbilled Section */}
+      {(unbilledTasks.length>0||unbilledMins>0)&&CARD(<>
+        {HDR('Unbilled Work',<span style={{fontSize:11,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:20,padding:'2px 9px',fontWeight:600}}>⚠ Revenue not yet invoiced</span>)}
+        <div style={{padding:'14px 16px'}}>
+          {unbilledMins>0&&<div style={{marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>Unbilled Time — {fmtMins(unbilledMins)} ({unbilledLogs.length} log entries after last invoice)</div>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {Object.entries(unbilledLogs.reduce(function(acc,l){var k=l.work_type||'General';if(!acc[k])acc[k]=0;acc[k]+=(Number(l.hours)||0)*60+(Number(l.minutes)||0);return acc;},{})).map(function(e){return<div key={e[0]} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8}}>
+                <span style={{fontSize:13,flex:1,fontWeight:600,color:'var(--tf-text)'}}>{e[0]}</span>
+                <span style={{fontSize:13,fontWeight:700,color:'#f59e0b'}}>{fmtMins(e[1])}</span>
+              </div>;})}
+            </div>
+          </div>}
+          {unbilledTasks.length>0&&<div>
+            <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>Unbilled Tasks — {unbilledTasks.length} completed tasks after last invoice</div>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {unbilledTasks.slice(0,10).map(function(r){
+                var ws=wsMap[r.worksheet_id];
+                var title=r.data&&r.data.__title?r.data.__title:(ws?ws.work_type+' — '+ws.period_label:'Task');
+                return<div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8}}>
+                  <span style={{fontSize:13,flex:1,color:'var(--tf-text)'}}>{title}</span>
+                  {ws&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{ws.work_type}</span>}
+                  <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Completed {(r.completed_at||'').slice(0,10)}</span>
+                </div>;
+              })}
+              {unbilledTasks.length>10&&<div style={{fontSize:12,color:'var(--tf-text-sub)',padding:'4px 12px'}}>+{unbilledTasks.length-10} more tasks</div>}
+            </div>
+          </div>}
+        </div>
+      </>)}
+
+      {clientRows.length===0&&timeLogs.length===0&&invoices.length===0&&<div style={{textAlign:'center',padding:'40px 0',color:'var(--tf-text-sub)'}}>
+        <div style={{fontSize:28,marginBottom:8}}>📭</div>
+        <div style={{fontSize:14,fontWeight:600}}>No data found for this client</div>
+        <div style={{fontSize:12,marginTop:4}}>Add this client to worksheets, log time, or raise an invoice to see data here.</div>
+      </div>}
+    </>}
+  </div>;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // ANALYTICS DASHBOARD
 // ══════════════════════════════════════════════════════════════════
 
@@ -6554,6 +6835,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   var [filterMonth,setFilterMonth]=useState(0);
   var [drillType,setDrillType]=useState(null);
   var [drillFilter,setDrillFilter]=useState('all');
+  var [ledgerInitClient,setLedgerInitClient]=useState('');
 
   var configMap=useMemo(function(){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
@@ -6782,6 +7064,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
       {TAB_BTN('monthly','Monthly',null)}
       {TAB_BTN('clients','Clients',clientStats.length)}
       {TAB_BTN('overdue','Overdue',overdueRows.length)}
+      {TAB_BTN('ledger','Client Ledger',null)}
     </div>
 
     {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadData} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading analytics...</div>:
@@ -6939,6 +7222,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           <th style={{padding:'9px 14px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',position:'sticky',left:0,background:'var(--tf-surface)',zIndex:1}}>Client</th>
           {workTypeNames.map(function(wt){return<th key={wt} style={{padding:'9px 10px',textAlign:'center',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{wt}</th>;})}
           <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Overall</th>
+          <th style={{padding:'9px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Detail</th>
         </tr></thead>
         <tbody>
           {clientStats.map(function(cl,ci){
@@ -6958,6 +7242,9 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
                 <span style={{fontWeight:700,color:cl.pct>=80?'#22c55e':cl.pct>=50?'#f59e0b':'#ef4444'}}>{cl.pct}%</span>
                 <div style={{fontSize:9,color:'var(--tf-text-sub)'}}>{cl.done}/{cl.total}</div>
               </td>
+              <td style={{padding:'9px 10px',textAlign:'center'}}>
+                <button onClick={function(){setLedgerInitClient(cl.id);setActiveTab('ledger');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Ledger →</button>
+              </td>
             </tr>;
           })}
         </tbody>
@@ -6965,6 +7252,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     </div>}
 
     {/* ── OVERDUE TAB ── */}
+    {activeTab==='ledger'&&<ClientLedgerTab org={org} supabase={supabase} clients={clients} initClientId={ledgerInitClient}/>}
+
     {activeTab==='overdue'&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
       <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)'}}>Overdue Tasks</div>
