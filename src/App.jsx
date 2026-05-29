@@ -1146,7 +1146,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 ────────────────────────────────────────────────────── */
 var CMD_MODULES=[
   {id:'diary',label:'Your Diary',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
-  {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
+  {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
@@ -6533,6 +6533,426 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
         <button onClick={save} disabled={saving} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Create'}</button>
       </div>
     </div>
+  </div>;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ITR DESK — document-initiated compilation workflow
+// ══════════════════════════════════════════════════════════════════
+
+var _itrCache = {}; // (org.id+'_'+ay) → { clients, records }
+
+var ITR_DOCS=[
+  {key:'form16',label:'Form 16'},
+  {key:'ais',label:'AIS'},
+  {key:'tis',label:'TIS'},
+  {key:'as26',label:'26AS'},
+  {key:'lastyr_comp',label:'Last Year Computation'},
+  {key:'lastyr_itr',label:'Last Year ITR'},
+  {key:'cg_statement',label:'Capital Gain Statement'},
+  {key:'fno_statement',label:'F&O Statement'},
+  {key:'bank_stmt',label:'Bank Statement'},
+  {key:'rent_proof',label:'Rent / HRA Proof'},
+  {key:'deduction_proof',label:'Deduction Proofs (80C/80D)'},
+];
+
+var ITR_INCOME_TYPES=[['salary','Salary'],['rent','House Property'],['capgains','Capital Gains'],['business','Business / Profession'],['fno','F&O'],['interest','Interest'],['other','Other Sources']];
+
+var ITR_SECTIONS=[
+  {id:'basics',label:'Basics',icon:'📋',always:true,fields:[
+    {key:'regime',label:'Regime preference',type:'select',opts:[['','—'],['old','Old Regime'],['new','New Regime'],['decide','Compare & decide']]},
+    {key:'itr_form',label:'ITR form type',type:'select',opts:[['','—'],['1','ITR-1'],['2','ITR-2'],['3','ITR-3'],['4','ITR-4']]},
+    {key:'pan',label:'PAN',type:'text'},
+    {key:'pan_verified',label:'PAN verified',type:'check'},
+    {key:'dob',label:'Date of Birth',type:'text'},
+    {key:'mobile',label:'Mobile',type:'text'},
+    {key:'email',label:'Email',type:'text'},
+  ]},
+  {id:'salary',label:'Salary',icon:'💼',cond:'salary',fields:[
+    {key:'form16_received',label:'Form 16 received',type:'check'},
+    {key:'basic',label:'Basic Salary',type:'num'},
+    {key:'hra_received',label:'HRA received',type:'num'},
+    {key:'allowances',label:'Other Allowances',type:'num'},
+    {key:'hra_claimed',label:'HRA exemption claimed',type:'check'},
+    {key:'monthly_rent',label:'Monthly rent paid',type:'num'},
+    {key:'landlord_pan',label:'Landlord PAN (if rent > 1L)',type:'text'},
+    {key:'city',label:'City of residence',type:'text'},
+  ]},
+  {id:'rent',label:'House Property',icon:'🏠',cond:'rent',fields:[
+    {key:'annual_rent',label:'Annual rent received',type:'num'},
+    {key:'property_address',label:'Property address',type:'area'},
+    {key:'municipal_tax',label:'Municipal tax paid',type:'num'},
+    {key:'tenant_name_pan',label:'Tenant Name & PAN',type:'text'},
+    {key:'housing_loan_interest',label:'Housing loan interest',type:'num'},
+  ]},
+  {id:'capgains',label:'Capital Gains',icon:'📈',cond:'capgains',fields:[
+    {key:'cg_type',label:'Type',type:'select',opts:[['','—'],['stcg','STCG'],['ltcg','LTCG'],['both','Both']]},
+    {key:'cg_statement_link',label:'CG statement (link / how shared)',type:'text'},
+    {key:'shares_mf',label:'Shares / Mutual Funds details',type:'area'},
+    {key:'property_sale',label:'Property sale details',type:'area'},
+  ]},
+  {id:'fno',label:'F&O',icon:'📊',cond:'fno',fields:[
+    {key:'fno_statement_link',label:'F&O statement (link / how shared)',type:'text'},
+    {key:'fno_turnover',label:'Turnover',type:'num'},
+    {key:'fno_pl',label:'Profit / Loss',type:'num'},
+  ]},
+  {id:'business',label:'Business / Profession',icon:'🏢',cond:'business',fields:[
+    {key:'business_details',label:'Business / Profession details',type:'area'},
+    {key:'gross_receipts',label:'Gross receipts / turnover',type:'num'},
+    {key:'net_profit',label:'Net profit',type:'num'},
+  ]},
+  {id:'other',label:'Other Income',icon:'💰',always:true,fields:[
+    {key:'interest_income',label:'Interest income (FD/savings/bonds)',type:'area'},
+    {key:'other_sources',label:'Other sources',type:'area'},
+  ]},
+  {id:'deductions',label:'Deductions',icon:'🧾',always:true,fields:[
+    {key:'sec80c',label:'80C (LIC/PPF/ELSS/principal)',type:'num'},
+    {key:'sec80d',label:'80D (Medical insurance)',type:'num'},
+    {key:'nps',label:'NPS (80CCD)',type:'num'},
+    {key:'donations',label:'Donations (80G)',type:'num'},
+    {key:'other_deductions',label:'Other deductions',type:'area'},
+  ]},
+];
+
+var ITR_CHECKS=[
+  ['ais_reconciled','AIS reconciled with data provided'],
+  ['tis_reviewed','TIS reviewed'],
+  ['tds_matched','26AS / TDS matched'],
+  ['lastyr_compared','Compared with last year computation'],
+  ['regime_compared','Regime comparison done'],
+  ['bank_interest_added','Bank / savings interest added'],
+  ['proofs_collected','All deduction proofs collected'],
+  ['discrepancy_resolved','Discrepancies resolved with client'],
+];
+
+var ITR_STATUS=[
+  ['compiling','Compiling','#6b8cad'],
+  ['pending_data','Pending Data','#f59e0b'],
+  ['ready','Ready for Software','#22c55e'],
+  ['in_software','In Software','#3b82f6'],
+  ['filed','Filed','#0e2a47'],
+];
+
+function itrStatusMeta(s){return ITR_STATUS.find(function(x){return x[0]===s;})||ITR_STATUS[0];}
+
+function itrComputeCompleteness(internal){
+  internal=internal||{};
+  var types=internal.income_types||[];
+  var docs=internal.docs||{};
+  var checks=internal.checks||{};
+  var pieces=[];
+  // Docs: count those marked received or n/a as done
+  ITR_DOCS.forEach(function(d){var st=docs[d.key];pieces.push(st==='received'||st==='na');});
+  // Applicable section fields
+  ITR_SECTIONS.forEach(function(sec){
+    if(!sec.always&&types.indexOf(sec.cond)<0)return;
+    var sd=internal[sec.id]||{};
+    sec.fields.forEach(function(f){
+      if(f.type==='check')return; // checks within section optional, skip from denominator
+      var v=sd[f.key];
+      pieces.push(v!==undefined&&v!==null&&String(v).trim()!=='');
+    });
+  });
+  // Pre-computation checks
+  ITR_CHECKS.forEach(function(c){pieces.push(!!checks[c[0]]);});
+  if(pieces.length===0)return 0;
+  var done=pieces.filter(Boolean).length;
+  return Math.round(done/pieces.length*100);
+}
+
+function itrDefaultAY(){var now=new Date();var y=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;return (y+1);} // filing year base; AY label = base..base+1
+
+// ── ITR Compilation Panel (full-screen overlay) ──
+function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved}){
+  var [internal,setInternal]=useState(existing&&existing.internal_data?existing.internal_data:{income_types:[]});
+  var [status,setStatus]=useState(existing?existing.status:'compiling');
+  var [recId,setRecId]=useState(existing?existing.id:null);
+  var [activeSection,setActiveSection]=useState('documents');
+  var [saveState,setSaveState]=useState('saved'); // saved | saving | dirty
+  var saveTimer=useRef(null);
+  var dirtyRef=useRef(false);
+  var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
+
+  var completeness=itrComputeCompleteness(internal);
+
+  // Autosave (debounced)
+  useEffect(function(){
+    if(!dirtyRef.current)return;
+    setSaveState('saving');
+    if(saveTimer.current)clearTimeout(saveTimer.current);
+    saveTimer.current=setTimeout(function(){doSave();},1100);
+    return function(){if(saveTimer.current)clearTimeout(saveTimer.current);};
+  },[internal,status]);
+
+  async function doSave(){
+    var comp=itrComputeCompleteness(internal);
+    var payload={org_id:org.id,client_id:client.id,assessment_year:ay+'-'+String(ay+1).slice(2),internal_data:internal,status:status,completeness:comp,updated_at:new Date().toISOString()};
+    try{
+      var res;
+      if(recId){res=await supabase.from('itr_compilation').update(payload).eq('id',recId).select().single();}
+      else{payload.created_by=cu.id;res=await supabase.from('itr_compilation').insert(payload).select().single();}
+      if(res.error){console.error(res.error);setSaveState('dirty');return;}
+      if(res.data&&res.data.id)setRecId(res.data.id);
+      dirtyRef.current=false;
+      setSaveState('saved');
+      if(onSaved)onSaved(res.data);
+    }catch(e){console.error(e);setSaveState('dirty');}
+  }
+
+  function touch(){dirtyRef.current=true;setSaveState('dirty');}
+  function setField(secId,key,val){touch();setInternal(function(p){var sd=Object.assign({},p[secId]||{});sd[key]=val;var np=Object.assign({},p);np[secId]=sd;return np;});}
+  function setDoc(key,val){touch();setInternal(function(p){var d=Object.assign({},p.docs||{});d[key]=d[key]===val?'':val;var np=Object.assign({},p);np.docs=d;return np;});}
+  function setCheck(key,val){touch();setInternal(function(p){var c=Object.assign({},p.checks||{});c[key]=val;var np=Object.assign({},p);np.checks=c;return np;});}
+  function toggleIncomeType(t){touch();setInternal(function(p){var arr=(p.income_types||[]).slice();var i=arr.indexOf(t);if(i<0)arr.push(t);else arr.splice(i,1);var np=Object.assign({},p);np.income_types=arr;return np;});}
+  function setNote(key,val){touch();setInternal(function(p){var n=Object.assign({},p.notes||{});n[key]=val;var np=Object.assign({},p);np.notes=n;return np;});}
+
+  var types=internal.income_types||[];
+  var allChecksDone=ITR_CHECKS.every(function(c){return (internal.checks||{})[c[0]];});
+
+  // Build visible section nav
+  var navItems=[{id:'documents',label:'Documents',icon:'📎'}];
+  ITR_SECTIONS.forEach(function(sec){if(sec.always||types.indexOf(sec.cond)>=0)navItems.push({id:sec.id,label:sec.label,icon:sec.icon});});
+  navItems.push({id:'checks',label:'Pre-computation Checks',icon:'✅'});
+  navItems.push({id:'notes',label:'Notes & Call Log',icon:'🗒️'});
+
+  var INP={background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+  var LBL={fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:5,display:'block'};
+
+  function renderField(secId,f){
+    var sd=internal[secId]||{};
+    var v=sd[f.key];
+    if(f.type==='check'){
+      return<label key={f.key} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'8px 0'}}>
+        <input type="checkbox" checked={!!v} onChange={function(e){setField(secId,f.key,e.target.checked);}} style={{width:16,height:16,cursor:'pointer'}}/>
+        <span style={{fontSize:13,color:'var(--tf-text)'}}>{f.label}</span>
+      </label>;
+    }
+    return<div key={f.key} style={{marginBottom:12}}>
+      <label style={LBL}>{f.label}</label>
+      {f.type==='select'?<select value={v||''} onChange={function(e){setField(secId,f.key,e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+        {f.opts.map(function(o){return<option key={o[0]} value={o[0]}>{o[1]}</option>;})}
+      </select>:f.type==='area'?<textarea value={v||''} onChange={function(e){setField(secId,f.key,e.target.value);}} rows={3} style={Object.assign({},INP,{resize:'vertical'})}/>:
+      <input type={f.type==='num'?'text':'text'} value={v||''} onChange={function(e){setField(secId,f.key,e.target.value);}} style={INP} placeholder={f.type==='num'?'₹ amount':''}/>}
+    </div>;
+  }
+
+  var notes=internal.notes||{};
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(10,16,28,0.55)',zIndex:9000,display:'flex',justifyContent:'center',alignItems:'stretch',padding:'2vh 2vw'}} onClick={onClose}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',borderRadius:16,width:'100%',maxWidth:1080,display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,0.4)'}}>
+      {/* Header */}
+      <div style={{padding:'16px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>{client.display_name||client.name}</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{ayLabel}{client.pan?' · PAN '+client.pan:''} · ITR Compilation</div>
+        </div>
+        {/* Save indicator */}
+        <span style={{fontSize:11,fontWeight:600,color:saveState==='saved'?'#22c55e':saveState==='saving'?'#f59e0b':'var(--tf-text-sub)'}}>
+          {saveState==='saved'?'✓ Saved':saveState==='saving'?'Saving…':'Unsaved'}
+        </span>
+        {/* Status */}
+        <select value={status} onChange={function(e){var ns=e.target.value;if(ns==='ready'&&!allChecksDone){showToast('Complete all pre-computation checks before marking Ready','err');return;}touch();setStatus(ns);}} style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 11px',color:itrStatusMeta(status)[2],fontSize:12,fontWeight:700,cursor:'pointer',outline:'none'}}>
+          {ITR_STATUS.map(function(s){return<option key={s[0]} value={s[0]}>{s[1]}</option>;})}
+        </select>
+        <button onClick={onClose} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,width:32,height:32,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,flexShrink:0}}>✕</button>
+      </div>
+      {/* Completeness bar */}
+      <div style={{padding:'10px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+        <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)'}}>Completeness</span>
+        <div style={{flex:1,height:8,borderRadius:5,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:completeness+'%',height:'100%',background:completeness>=80?'#22c55e':completeness>=40?'#f59e0b':'#6b8cad',transition:'width 0.3s'}}/></div>
+        <span style={{fontSize:13,fontWeight:800,color:completeness>=80?'#22c55e':'var(--tf-text)'}}>{completeness}%</span>
+      </div>
+      <div style={{display:'flex',flex:1,minHeight:0}}>
+        {/* Section nav */}
+        <div style={{width:220,borderRight:'1px solid var(--tf-border)',padding:'12px 0',overflowY:'auto',flexShrink:0,background:'var(--tf-surface)'}}>
+          {navItems.map(function(n){
+            var active=activeSection===n.id;
+            return<button key={n.id} onClick={function(){setActiveSection(n.id);}} style={{display:'flex',alignItems:'center',gap:9,width:'100%',padding:'9px 18px',border:'none',borderLeft:'3px solid '+(active?'#0e2a47':'transparent'),background:active?'rgba(14,42,71,0.07)':'transparent',color:active?'var(--tf-text)':'var(--tf-text-sub)',fontSize:13,fontWeight:active?700:500,cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}>
+              <span style={{fontSize:14}}>{n.icon}</span>{n.label}
+            </button>;
+          })}
+        </div>
+        {/* Section body */}
+        <div style={{flex:1,padding:'20px 26px',overflowY:'auto'}}>
+          {activeSection==='documents'&&<div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>📎 Documents Received</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>Track what's arrived and what's still pending from the client.</div>
+            {ITR_DOCS.map(function(d){
+              var st=(internal.docs||{})[d.key]||'';
+              return<div key={d.key} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid var(--tf-border)'}}>
+                <span style={{flex:1,fontSize:13,color:'var(--tf-text)'}}>{d.label}</span>
+                {[['received','Received','#22c55e'],['pending','Pending','#f59e0b'],['na','N/A','#94a3b8']].map(function(o){
+                  var on=st===o[0];
+                  return<button key={o[0]} onClick={function(){setDoc(d.key,o[0]);}} style={{padding:'4px 11px',borderRadius:20,border:'1px solid',borderColor:on?o[2]:'var(--tf-border)',background:on?o[2]+'22':'transparent',color:on?o[2]:'var(--tf-text-sub)',fontSize:11,fontWeight:on?700:500,cursor:'pointer'}}>{o[1]}</button>;
+                })}
+              </div>;
+            })}
+          </div>}
+
+          {activeSection==='basics'&&<div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>📋 Basics & Income Types</div>
+            <div style={{marginBottom:18}}>
+              <label style={LBL}>Which incomes does this client have? (drives sections below)</label>
+              <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
+                {ITR_INCOME_TYPES.map(function(t){var on=types.indexOf(t[0])>=0;return<button key={t[0]} onClick={function(){toggleIncomeType(t[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:on?'#0e2a47':'var(--tf-border)',background:on?'rgba(14,42,71,0.1)':'transparent',color:on?'#0e2a47':'var(--tf-text-sub)',fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{on?'✓ ':''}{t[1]}</button>;})}
+              </div>
+            </div>
+            {(ITR_SECTIONS.find(function(s){return s.id==='basics';}).fields).map(function(f){return renderField('basics',f);})}
+          </div>}
+
+          {ITR_SECTIONS.filter(function(s){return s.id!=='basics';}).map(function(sec){
+            if(activeSection!==sec.id)return null;
+            return<div key={sec.id}>
+              <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>{sec.icon} {sec.label}</div>
+              {sec.fields.map(function(f){return renderField(sec.id,f);})}
+            </div>;
+          })}
+
+          {activeSection==='checks'&&<div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>✅ Pre-computation Checks</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>All must be ticked before this client can be marked <b>Ready for Software</b>.</div>
+            {ITR_CHECKS.map(function(c){var on=(internal.checks||{})[c[0]];return<label key={c[0]} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:9,border:'1px solid',borderColor:on?'rgba(34,197,94,0.4)':'var(--tf-border)',background:on?'rgba(34,197,94,0.06)':'transparent',cursor:'pointer'}}>
+              <input type="checkbox" checked={!!on} onChange={function(e){setCheck(c[0],e.target.checked);}} style={{width:17,height:17,cursor:'pointer'}}/>
+              <span style={{fontSize:13,color:'var(--tf-text)',fontWeight:on?600:400}}>{c[1]}</span>
+            </label>;})}
+            <div style={{marginTop:14,padding:'12px 14px',borderRadius:9,background:allChecksDone?'rgba(34,197,94,0.08)':'rgba(245,158,11,0.08)',border:'1px solid',borderColor:allChecksDone?'rgba(34,197,94,0.3)':'rgba(245,158,11,0.3)'}}>
+              <span style={{fontSize:12,fontWeight:600,color:allChecksDone?'#16a34a':'#d97706'}}>{allChecksDone?'✓ All checks done — you can mark this client Ready for Software.':'⚠ Complete all checks above to unlock "Ready for Software".'}</span>
+            </div>
+          </div>}
+
+          {activeSection==='notes'&&<div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>🗒️ Notes & Call Log</div>
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',marginBottom:14}}>
+              <input type="checkbox" checked={!!notes.call_needed} onChange={function(e){setNote('call_needed',e.target.checked);}} style={{width:16,height:16,cursor:'pointer'}}/>
+              <span style={{fontSize:13,color:'var(--tf-text)',fontWeight:600}}>Call with client needed</span>
+            </label>
+            <div style={{marginBottom:12}}><label style={LBL}>Call notes / questions to ask</label><textarea value={notes.call_notes||''} onChange={function(e){setNote('call_notes',e.target.value);}} rows={4} style={Object.assign({},INP,{resize:'vertical'})} placeholder="Questions to ask before/during the client call…"/></div>
+            <div style={{marginBottom:12}}><label style={LBL}>Discrepancies (AIS vs provided, etc.)</label><textarea value={notes.discrepancies||''} onChange={function(e){setNote('discrepancies',e.target.value);}} rows={3} style={Object.assign({},INP,{resize:'vertical'})}/></div>
+            <div><label style={LBL}>Internal remarks</label><textarea value={notes.remarks||''} onChange={function(e){setNote('remarks',e.target.value);}} rows={3} style={Object.assign({},INP,{resize:'vertical'})}/></div>
+          </div>}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── ITR Desk Module ──
+function ITRDeskModule({org,supabase,cu}){
+  var [ay,setAy]=useState(itrDefaultAY());
+  var cacheKey=org.id+'_'+ay;
+  var [loading,setLoading]=useState(!_itrCache[cacheKey]);
+  var [loadError,setLoadError]=useState(null);
+  var [clients,setClients]=useState(_itrCache[cacheKey]?_itrCache[cacheKey].clients:[]);
+  var [records,setRecords]=useState(_itrCache[cacheKey]?_itrCache[cacheKey].records:[]);
+  var [search,setSearch]=useState('');
+  var [statusFilter,setStatusFilter]=useState('all');
+  var [openClient,setOpenClient]=useState(null);
+  var loadingRef=useRef(false);
+
+  useEffect(function(){load();},[org.id,ay]);
+
+  async function load(){
+    if(loadingRef.current)return;loadingRef.current=true;
+    if(!_itrCache[cacheKey])setLoading(true);setLoadError(null);
+    try{
+      var ayStr=ay+'-'+String(ay+1).slice(2);
+      var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone').eq('org_id',org.id).order('name').limit(2000);
+      var rr=await supabase.from('itr_compilation').select('*').eq('org_id',org.id).eq('assessment_year',ayStr).limit(2000);
+      if(rr.error&&rr.error.code==='42P01'){setLoadError('notable');return;}
+      var cl=rc.data||[],rec=rr.data||[];
+      setClients(cl);setRecords(rec);
+      _itrCache[cacheKey]={clients:cl,records:rec};
+    }catch(e){console.error(e);if(!_itrCache[cacheKey])setLoadError('error');}finally{setLoading(false);loadingRef.current=false;}
+  }
+
+  var recByClient={};records.forEach(function(r){recByClient[r.client_id]=r;});
+
+  function upsertLocal(rec){
+    if(!rec)return;
+    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np};return np;});
+  }
+
+  // Filter + search the client list
+  var q=search.trim().toLowerCase();
+  var rows=clients.filter(function(c){
+    if(q){var n=((c.display_name||c.name||'')+' '+(c.pan||'')).toLowerCase();if(n.indexOf(q)<0)return false;}
+    var rec=recByClient[c.id];
+    if(statusFilter==='all')return true;
+    if(statusFilter==='none')return !rec;
+    return rec&&rec.status===statusFilter;
+  });
+  // Sort: in-progress records first, then by name
+  rows.sort(function(a,b){var ra=recByClient[a.id],rb=recByClient[b.id];var pa=ra?1:0,pb=rb?1:0;if(pa!==pb)return pb-pa;return (a.display_name||a.name||'').localeCompare(b.display_name||b.name||'');});
+
+  // Stats
+  var counts={total:records.length};
+  ITR_STATUS.forEach(function(s){counts[s[0]]=records.filter(function(r){return r.status===s[0];}).length;});
+
+  var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
+
+  return<div style={{padding:'0 0 60px'}}>
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>ITR Desk</h2>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Search a client → compile their data, run checks, track completeness. {ayLabel}</div>
+      </div>
+      <select value={ay} onChange={function(e){setAy(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+        {[2023,2024,2025,2026,2027,2028].map(function(y){return<option key={y} value={y}>AY {y}-{String(y+1).slice(2)}</option>;})}
+      </select>
+    </div>
+
+    {loadError==='notable'?<div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:12,padding:'18px 20px',color:'var(--tf-text)'}}>
+      <div style={{fontWeight:700,marginBottom:6}}>⚠ Database table not found</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Run the migration <code>supabase/migrations/20260529_itr_compilation.sql</code> to enable the ITR Desk.</div>
+    </div>:loadError?<div style={{textAlign:'center',padding:32}}><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:
+    loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading ITR desk…</div>:<>
+
+      {/* Status summary pills */}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}>
+        {[['all','All Clients',clients.length,'#6b8cad'],['none','Not Started',clients.length-records.length,'#94a3b8']].concat(ITR_STATUS.map(function(s){return [s[0],s[1],counts[s[0]],s[2]];})).map(function(p){
+          var active=statusFilter===p[0];
+          return<button key={p[0]} onClick={function(){setStatusFilter(p[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:active?p[3]:'var(--tf-border)',background:active?p[3]+'1f':'transparent',color:active?p[3]:'var(--tf-text-sub)',fontSize:12,fontWeight:active?700:500,cursor:'pointer'}}>{p[1]} <b>{p[2]}</b></button>;
+        })}
+      </div>
+
+      {/* Search */}
+      <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="🔍 Search client by name or PAN…" style={{width:'100%',maxWidth:420,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 13px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',marginBottom:16,boxSizing:'border-box'}}/>
+
+      {/* Client list */}
+      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+        {rows.length===0?<div style={{padding:'30px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No clients match.</div>:
+        rows.map(function(c,i){
+          var rec=recByClient[c.id];
+          var sm=rec?itrStatusMeta(rec.status):null;
+          var comp=rec?rec.completeness||0:0;
+          var types=rec&&rec.internal_data&&rec.internal_data.income_types?rec.internal_data.income_types:[];
+          return<div key={c.id} onClick={function(){setOpenClient(c);}} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',borderBottom:i<rows.length-1?'1px solid var(--tf-border)':'none',cursor:'pointer',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}
+            onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=i%2?'rgba(14,42,71,0.02)':'transparent';}}>
+            <div style={{flex:'1 1 200px',minWidth:0}}>
+              <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{c.display_name||c.name}</div>
+              {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
+            </div>
+            {/* income type chips */}
+            <div style={{flex:'1 1 160px',display:'flex',gap:4,flexWrap:'wrap'}}>
+              {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
+            </div>
+            {/* completeness */}
+            <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7}}>
+              <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
+              <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',minWidth:30,textAlign:'right'}}>{comp}%</span>
+            </div>
+            {/* status */}
+            <div style={{flex:'0 0 130px',textAlign:'right'}}>
+              {rec?<span style={{fontSize:11,fontWeight:700,color:sm[2],background:sm[2]+'1a',border:'1px solid '+sm[2]+'33',borderRadius:20,padding:'3px 11px'}}>{sm[1]}</span>:
+              <span style={{fontSize:11,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.08)',borderRadius:20,padding:'3px 11px'}}>+ Start</span>}
+            </div>
+          </div>;
+        })}
+      </div>
+    </>}
+
+    {openClient&&<ITRCompilationPanel org={org} supabase={supabase} cu={cu} client={openClient} ay={ay} existing={recByClient[openClient.id]} onClose={function(){setOpenClient(null);}} onSaved={upsertLocal}/>}
   </div>;
 }
 
@@ -14141,7 +14561,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
 
   var MODULES=[
     {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
-    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
+    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
     {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
     {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   ];
@@ -14219,6 +14639,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
+      {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
