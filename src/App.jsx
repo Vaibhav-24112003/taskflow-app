@@ -6836,8 +6836,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   var [drillType,setDrillType]=useState(null);
   var [drillFilter,setDrillFilter]=useState('all');
   var [ledgerInitClient,setLedgerInitClient]=useState('');
-  var [overviewGroupBy,setOverviewGroupBy]=useState('dept'); // 'dept' | 'wsgroup' | 'none'
-  var [collapsedGroups,setCollapsedGroups]=useState(new Set());
+  var [overviewGroupBy,setOverviewGroupBy]=useState('wsgroup'); // 'dept' | 'wsgroup' | 'none'
+  var [overviewDrillGroup,setOverviewDrillGroup]=useState(null); // null = group tiles level, string = inside a group
 
   var configMap=useMemo(function(){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
@@ -7086,17 +7086,18 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           </div>;
         })}
       </div>
-      {/* Work type cards — grouping controls */}
-      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
+      {/* Grouping mode toggle */}
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:16}}>
         <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginRight:4}}>Group by</span>
-        {[['dept','Department'],['wsgroup','Worksheet Group'],['none','None']].map(function(o){
+        {[['wsgroup','Worksheet Group'],['dept','Department'],['none','All']].map(function(o){
           var active=overviewGroupBy===o[0];
-          return<button key={o[0]} onClick={function(){setOverviewGroupBy(o[0]);}} style={{padding:'4px 12px',borderRadius:20,border:'1px solid',borderColor:active?'#0e2a47':'var(--tf-border)',background:active?'rgba(14,42,71,0.09)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',fontSize:11,fontWeight:active?700:500,cursor:'pointer'}}>{o[1]}</button>;
+          return<button key={o[0]} onClick={function(){setOverviewGroupBy(o[0]);setOverviewDrillGroup(null);setDrillType(null);}} style={{padding:'4px 12px',borderRadius:20,border:'1px solid',borderColor:active?'#0e2a47':'var(--tf-border)',background:active?'rgba(14,42,71,0.09)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',fontSize:11,fontWeight:active?700:500,cursor:'pointer'}}>{o[1]}</button>;
         })}
       </div>
-      {/* Work type cards — grouped */}
+      {/* Work type cards — two-level drill */}
       {(function(){
-        var CARD=function(s){
+        // Shared work-type card (level 2)
+        var WTCARD=function(s){
           var pct=s.total>0?Math.round(s.completed/s.total*100):0;
           var isActive=drillType===s.wt;
           return<div key={s.wt} onClick={function(){setDrillType(isActive?null:s.wt);setDrillFilter('all');}}
@@ -7121,17 +7122,17 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           </div>;
         };
 
+        // No grouping — flat grid
         if(overviewGroupBy==='none'){
           return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12,marginBottom:24}}>
-            {workTypeStats.map(CARD)}
+            {workTypeStats.map(WTCARD)}
           </div>;
         }
 
-        // Build groups
+        // Build groups array
         var groups=[];var ungroupedStats=[];
         if(overviewGroupBy==='dept'){
-          var deptMap={};
-          (orgDepts||[]).forEach(function(d){deptMap[d.id]=d;});
+          var deptMap={};(orgDepts||[]).forEach(function(d){deptMap[d.id]=d;});
           var byDept={};
           workTypeStats.forEach(function(s){
             var cfg=(workTypeConfigs||[]).find(function(c){return c.name===s.wt;});
@@ -7153,59 +7154,63 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           });
           Object.keys(byWsg).forEach(function(g){groups.push({label:g,color:'#6b8cad',stats:byWsg[g]});});
         }
+        if(ungroupedStats.length>0)groups.push({label:'Other',color:'#94a3b8',stats:ungroupedStats,isOther:true});
 
-        var toggleGroup=function(label){setCollapsedGroups(function(prev){var next=new Set(prev);if(next.has(label))next.delete(label);else next.add(label);return next;});};
-        var FOLDER=function(g){
+        // ── LEVEL 2: inside a group ──
+        if(overviewDrillGroup){
+          var activeGroup=groups.find(function(g){return g.label===overviewDrillGroup;})||{label:overviewDrillGroup,stats:[],color:'#6b8cad'};
+          var gDone=activeGroup.stats.reduce(function(s,x){return s+x.completed;},0);
+          var gTot=activeGroup.stats.reduce(function(s,x){return s+x.total;},0);
+          var gOvd=activeGroup.stats.reduce(function(s,x){return s+x.overdue;},0);
+          var gPct=gTot>0?Math.round(gDone/gTot*100):0;
+          return<div style={{marginBottom:24}}>
+            {/* Breadcrumb */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+              <button onClick={function(){setOverviewDrillGroup(null);setDrillType(null);}} style={{display:'flex',alignItems:'center',gap:5,background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>← All Groups</button>
+              <span style={{color:'var(--tf-text-sub)'}}>›</span>
+              {activeGroup.color&&<span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:activeGroup.color,flexShrink:0}}/>}
+              <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{activeGroup.label}</span>
+              <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{activeGroup.stats.length} work types · {gPct}% complete</span>
+              {gOvd>0&&<span style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'2px 9px'}}>{gOvd} overdue</span>}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+              {activeGroup.stats.map(WTCARD)}
+            </div>
+          </div>;
+        }
+
+        // ── LEVEL 1: group summary tiles ──
+        var GROUP_TILE=function(g){
           var gDone=g.stats.reduce(function(s,x){return s+x.completed;},0);
           var gTot=g.stats.reduce(function(s,x){return s+x.total;},0);
           var gOvd=g.stats.reduce(function(s,x){return s+x.overdue;},0);
+          var gPnd=g.stats.reduce(function(s,x){return s+x.pending;},0);
           var gPct=gTot>0?Math.round(gDone/gTot*100):0;
-          var open=!collapsedGroups.has(g.label);
-          return<div key={g.label} style={{marginBottom:12,border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-            <div onClick={function(){toggleGroup(g.label);}} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'var(--tf-surface)',cursor:'pointer',userSelect:'none'}}>
-              <span style={{fontSize:13,color:'var(--tf-text-sub)',transition:'transform 0.18s',display:'inline-block',transform:open?'rotate(90deg)':'rotate(0deg)',lineHeight:1}}>▶</span>
-              {g.color&&<span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:g.color,flexShrink:0}}/>}
-              <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)',flex:1}}>{g.label}</span>
-              <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{g.stats.length} types</span>
-              <span style={{fontSize:11,fontWeight:700,color:gPct===100?'#22c55e':gPct>50?'#0e2a47':'#94a3b8',minWidth:36,textAlign:'right'}}>{gPct}%</span>
-              {gOvd>0&&<span style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'1px 8px'}}>{gOvd} overdue</span>}
-              <div style={{width:60,height:5,borderRadius:3,background:'var(--tf-border)',overflow:'hidden',marginLeft:4}}>
-                <div style={{width:gPct+'%',height:'100%',background:gPct===100?'#22c55e':'#0e2a47',borderRadius:3}}/>
+          return<div key={g.label} onClick={function(){setOverviewDrillGroup(g.label);setDrillType(null);}}
+            style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,padding:'20px 22px',cursor:'pointer',transition:'all 0.15s',position:'relative',overflow:'hidden'}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.boxShadow='0 2px 12px rgba(14,42,71,0.08)';}}
+            onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}>
+            <div style={{position:'absolute',top:0,left:0,width:4,height:'100%',background:g.color,borderRadius:'14px 0 0 14px'}}/>
+            <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,paddingLeft:8}}>
+              <span style={{fontWeight:800,fontSize:16,color:'var(--tf-text)',lineHeight:1.2}}>{g.label}</span>
+              <span style={{fontSize:24,fontWeight:900,color:gPct===100?'#22c55e':gPct>50?'#0e2a47':'#94a3b8',lineHeight:1}}>{gPct}%</span>
+            </div>
+            <div style={{paddingLeft:8,marginBottom:12}}>
+              <div style={{background:'var(--tf-border)',borderRadius:99,height:7,overflow:'hidden'}}>
+                <div style={{width:gPct+'%',height:'100%',background:gPct===100?'#22c55e':'#0e2a47',borderRadius:99,transition:'width 0.4s'}}/>
               </div>
             </div>
-            {open&&<div style={{padding:'12px 14px 14px',background:'var(--tf-bg)'}}>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
-                {g.stats.map(CARD)}
-              </div>
-            </div>}
+            <div style={{display:'flex',gap:14,fontSize:12,paddingLeft:8,flexWrap:'wrap'}}>
+              <span style={{color:'var(--tf-text-sub)'}}><b style={{color:'var(--tf-text)'}}>{g.stats.length}</b> work types</span>
+              <span style={{color:'#22c55e'}}><b>{gDone}</b> done</span>
+              <span style={{color:'#94a3b8'}}><b>{gPnd}</b> pending</span>
+              {gOvd>0&&<span style={{color:'#ef4444',fontWeight:700}}><b>{gOvd}</b> overdue</span>}
+            </div>
+            <div style={{position:'absolute',bottom:14,right:16,fontSize:18,color:'var(--tf-border)'}}>›</div>
           </div>;
         };
-        return<div style={{marginBottom:24}}>
-          {groups.map(FOLDER)}
-          {ungroupedStats.length>0&&<div style={{marginBottom:12,border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
-            {groups.length>0&&(function(){
-              var open=!collapsedGroups.has('__ungrouped');
-              var gDone=ungroupedStats.reduce(function(s,x){return s+x.completed;},0);
-              var gTot=ungroupedStats.reduce(function(s,x){return s+x.total;},0);
-              var gPct=gTot>0?Math.round(gDone/gTot*100):0;
-              return<><div onClick={function(){toggleGroup('__ungrouped');}} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'var(--tf-surface)',cursor:'pointer',userSelect:'none'}}>
-                <span style={{fontSize:13,color:'var(--tf-text-sub)',transition:'transform 0.18s',display:'inline-block',transform:open?'rotate(90deg)':'rotate(0deg)',lineHeight:1}}>▶</span>
-                <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text-sub)',flex:1}}>Other</span>
-                <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{ungroupedStats.length} types</span>
-                <span style={{fontSize:11,fontWeight:700,color:gPct===100?'#22c55e':gPct>50?'#0e2a47':'#94a3b8',minWidth:36,textAlign:'right'}}>{gPct}%</span>
-              </div>
-              {open&&<div style={{padding:'12px 14px 14px',background:'var(--tf-bg)'}}>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
-                  {ungroupedStats.map(CARD)}
-                </div>
-              </div>}</>;
-            })()}
-            {groups.length===0&&<div style={{padding:'12px 14px 14px',background:'var(--tf-bg)'}}>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
-                {ungroupedStats.map(CARD)}
-              </div>
-            </div>}
-          </div>}
+        return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:24}}>
+          {groups.map(GROUP_TILE)}
         </div>;
       })()}
       {/* Drill-down */}
