@@ -6821,7 +6821,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
 // ANALYTICS DASHBOARD
 // ══════════════════════════════════════════════════════════════════
 
-function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
+function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   var [loading,setLoading]=useState(true);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
@@ -6836,6 +6836,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
   var [drillType,setDrillType]=useState(null);
   var [drillFilter,setDrillFilter]=useState('all');
   var [ledgerInitClient,setLedgerInitClient]=useState('');
+  var [overviewGroupBy,setOverviewGroupBy]=useState('dept'); // 'dept' | 'wsgroup' | 'none'
 
   var configMap=useMemo(function(){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
@@ -7061,10 +7062,10 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
     {/* Tab bar */}
     <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--tf-border)',marginBottom:16,overflowX:'auto'}}>
       {TAB_BTN('overview','Overview',null)}
+      {TAB_BTN('ledger','Client Ledger',null)}
       {TAB_BTN('monthly','Monthly',null)}
       {TAB_BTN('clients','Clients',clientStats.length)}
       {TAB_BTN('overdue','Overdue',overdueRows.length)}
-      {TAB_BTN('ledger','Client Ledger',null)}
     </div>
 
     {loadError?<div style={{textAlign:'center',padding:32}}><div style={{color:'var(--tf-text-sub)',marginBottom:12}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadData} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'7px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading analytics...</div>:
@@ -7084,9 +7085,17 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
           </div>;
         })}
       </div>
-      {/* Work type cards */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12,marginBottom:24}}>
-        {workTypeStats.map(function(s){
+      {/* Work type cards — grouping controls */}
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:14}}>
+        <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginRight:4}}>Group by</span>
+        {[['dept','Department'],['wsgroup','Worksheet Group'],['none','None']].map(function(o){
+          var active=overviewGroupBy===o[0];
+          return<button key={o[0]} onClick={function(){setOverviewGroupBy(o[0]);}} style={{padding:'4px 12px',borderRadius:20,border:'1px solid',borderColor:active?'#0e2a47':'var(--tf-border)',background:active?'rgba(14,42,71,0.09)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',fontSize:11,fontWeight:active?700:500,cursor:'pointer'}}>{o[1]}</button>;
+        })}
+      </div>
+      {/* Work type cards — grouped */}
+      {(function(){
+        var CARD=function(s){
           var pct=s.total>0?Math.round(s.completed/s.total*100):0;
           var isActive=drillType===s.wt;
           return<div key={s.wt} onClick={function(){setDrillType(isActive?null:s.wt);setDrillFilter('all');}}
@@ -7109,8 +7118,68 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs}){
               {s.late>0&&<span style={{color:'#ef4444'}}>{s.late} late</span>}
             </div>}
           </div>;
-        })}
-      </div>
+        };
+
+        if(overviewGroupBy==='none'){
+          return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12,marginBottom:24}}>
+            {workTypeStats.map(CARD)}
+          </div>;
+        }
+
+        // Build groups
+        var groups=[];var ungroupedStats=[];
+        if(overviewGroupBy==='dept'){
+          var deptMap={};
+          (orgDepts||[]).forEach(function(d){deptMap[d.id]=d;});
+          var byDept={};
+          workTypeStats.forEach(function(s){
+            var cfg=(workTypeConfigs||[]).find(function(c){return c.name===s.wt;});
+            var dId=cfg&&cfg.department_id;
+            if(dId){if(!byDept[dId])byDept[dId]=[];byDept[dId].push(s);}
+            else ungroupedStats.push(s);
+          });
+          Object.keys(byDept).forEach(function(dId){
+            var dept=deptMap[dId];
+            groups.push({label:dept?dept.name:dId,color:dept?dept.color:'#6b8cad',stats:byDept[dId]});
+          });
+        }else{
+          var byWsg={};
+          workTypeStats.forEach(function(s){
+            var cfg=(workTypeConfigs||[]).find(function(c){return c.name===s.wt;});
+            var wsg=cfg&&cfg.worksheet_group;
+            if(wsg){if(!byWsg[wsg])byWsg[wsg]=[];byWsg[wsg].push(s);}
+            else ungroupedStats.push(s);
+          });
+          Object.keys(byWsg).forEach(function(g){groups.push({label:g,color:'#6b8cad',stats:byWsg[g]});});
+        }
+
+        return<div style={{marginBottom:24}}>
+          {groups.map(function(g){
+            var gPct=g.stats.reduce(function(s,x){return s+x.completed;},0);
+            var gTot=g.stats.reduce(function(s,x){return s+x.total;},0);
+            var gPctVal=gTot>0?Math.round(gPct/gTot*100):0;
+            return<div key={g.label} style={{marginBottom:20}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:g.color,flexShrink:0}}/>
+                <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{g.label}</span>
+                <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:2}}>{g.stats.length} work types · {gPctVal}% complete</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+                {g.stats.map(CARD)}
+              </div>
+            </div>;
+          })}
+          {ungroupedStats.length>0&&<div style={{marginBottom:20}}>
+            {groups.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+              <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:'var(--tf-border)',flexShrink:0}}/>
+              <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text-sub)'}}>Ungrouped</span>
+            </div>}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+              {ungroupedStats.map(CARD)}
+            </div>
+          </div>}
+        </div>;
+      })()}
       {/* Drill-down */}
       {drillData&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
         <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
@@ -14129,7 +14198,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='team'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='team'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
       {/* Analytics */}
-      {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} orgDepts={orgDepts}/>}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
