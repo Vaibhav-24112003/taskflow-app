@@ -6837,6 +6837,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   var [drillFilter,setDrillFilter]=useState('all');
   var [ledgerInitClient,setLedgerInitClient]=useState('');
   var [overviewGroupBy,setOverviewGroupBy]=useState('dept'); // 'dept' | 'wsgroup' | 'none'
+  var [collapsedGroups,setCollapsedGroups]=useState(new Set());
 
   var configMap=useMemo(function(){
     if(!workTypeConfigs||workTypeConfigs.length===0) return DEFAULT_WS_TYPE_CONFIGS;
@@ -7153,30 +7154,57 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           Object.keys(byWsg).forEach(function(g){groups.push({label:g,color:'#6b8cad',stats:byWsg[g]});});
         }
 
-        return<div style={{marginBottom:24}}>
-          {groups.map(function(g){
-            var gPct=g.stats.reduce(function(s,x){return s+x.completed;},0);
-            var gTot=g.stats.reduce(function(s,x){return s+x.total;},0);
-            var gPctVal=gTot>0?Math.round(gPct/gTot*100):0;
-            return<div key={g.label} style={{marginBottom:20}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:g.color,flexShrink:0}}/>
-                <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{g.label}</span>
-                <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:2}}>{g.stats.length} work types · {gPctVal}% complete</span>
+        var toggleGroup=function(label){setCollapsedGroups(function(prev){var next=new Set(prev);if(next.has(label))next.delete(label);else next.add(label);return next;});};
+        var FOLDER=function(g){
+          var gDone=g.stats.reduce(function(s,x){return s+x.completed;},0);
+          var gTot=g.stats.reduce(function(s,x){return s+x.total;},0);
+          var gOvd=g.stats.reduce(function(s,x){return s+x.overdue;},0);
+          var gPct=gTot>0?Math.round(gDone/gTot*100):0;
+          var open=!collapsedGroups.has(g.label);
+          return<div key={g.label} style={{marginBottom:12,border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+            <div onClick={function(){toggleGroup(g.label);}} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'var(--tf-surface)',cursor:'pointer',userSelect:'none'}}>
+              <span style={{fontSize:13,color:'var(--tf-text-sub)',transition:'transform 0.18s',display:'inline-block',transform:open?'rotate(90deg)':'rotate(0deg)',lineHeight:1}}>▶</span>
+              {g.color&&<span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:g.color,flexShrink:0}}/>}
+              <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)',flex:1}}>{g.label}</span>
+              <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{g.stats.length} types</span>
+              <span style={{fontSize:11,fontWeight:700,color:gPct===100?'#22c55e':gPct>50?'#0e2a47':'#94a3b8',minWidth:36,textAlign:'right'}}>{gPct}%</span>
+              {gOvd>0&&<span style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'1px 8px'}}>{gOvd} overdue</span>}
+              <div style={{width:60,height:5,borderRadius:3,background:'var(--tf-border)',overflow:'hidden',marginLeft:4}}>
+                <div style={{width:gPct+'%',height:'100%',background:gPct===100?'#22c55e':'#0e2a47',borderRadius:3}}/>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+            </div>
+            {open&&<div style={{padding:'12px 14px 14px',background:'var(--tf-bg)'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
                 {g.stats.map(CARD)}
               </div>
-            </div>;
-          })}
-          {ungroupedStats.length>0&&<div style={{marginBottom:20}}>
-            {groups.length>0&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-              <span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:'var(--tf-border)',flexShrink:0}}/>
-              <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text-sub)'}}>Ungrouped</span>
             </div>}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
-              {ungroupedStats.map(CARD)}
-            </div>
+          </div>;
+        };
+        return<div style={{marginBottom:24}}>
+          {groups.map(FOLDER)}
+          {ungroupedStats.length>0&&<div style={{marginBottom:12,border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+            {groups.length>0&&(function(){
+              var open=!collapsedGroups.has('__ungrouped');
+              var gDone=ungroupedStats.reduce(function(s,x){return s+x.completed;},0);
+              var gTot=ungroupedStats.reduce(function(s,x){return s+x.total;},0);
+              var gPct=gTot>0?Math.round(gDone/gTot*100):0;
+              return<><div onClick={function(){toggleGroup('__ungrouped');}} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'var(--tf-surface)',cursor:'pointer',userSelect:'none'}}>
+                <span style={{fontSize:13,color:'var(--tf-text-sub)',transition:'transform 0.18s',display:'inline-block',transform:open?'rotate(90deg)':'rotate(0deg)',lineHeight:1}}>▶</span>
+                <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text-sub)',flex:1}}>Other</span>
+                <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{ungroupedStats.length} types</span>
+                <span style={{fontSize:11,fontWeight:700,color:gPct===100?'#22c55e':gPct>50?'#0e2a47':'#94a3b8',minWidth:36,textAlign:'right'}}>{gPct}%</span>
+              </div>
+              {open&&<div style={{padding:'12px 14px 14px',background:'var(--tf-bg)'}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
+                  {ungroupedStats.map(CARD)}
+                </div>
+              </div>}</>;
+            })()}
+            {groups.length===0&&<div style={{padding:'12px 14px 14px',background:'var(--tf-bg)'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:10}}>
+                {ungroupedStats.map(CARD)}
+              </div>
+            </div>}
           </div>}
         </div>;
       })()}
