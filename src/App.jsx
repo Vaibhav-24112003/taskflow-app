@@ -6543,16 +6543,16 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
 var _itrCache = {}; // (org.id+'_'+ay) → { clients, records }
 
 var ITR_DOCS=[
-  {key:'form16',label:'Form 16'},
+  {key:'form16',label:'Form 16',cond:'salary'},
   {key:'ais',label:'AIS'},
   {key:'tis',label:'TIS'},
   {key:'as26',label:'26AS'},
   {key:'lastyr_comp',label:'Last Year Computation'},
   {key:'lastyr_itr',label:'Last Year ITR'},
-  {key:'cg_statement',label:'Capital Gain Statement'},
-  {key:'fno_statement',label:'F&O Statement'},
+  {key:'cg_statement',label:'Capital Gain Statement',cond:'capgains'},
+  {key:'fno_statement',label:'F&O Statement',cond:'fno'},
   {key:'bank_stmt',label:'Bank Statement'},
-  {key:'rent_proof',label:'Rent / HRA Proof'},
+  {key:'rent_proof',label:'Rent / HRA Proof',cond:'rent'},
   {key:'deduction_proof',label:'Deduction Proofs (80C/80D)'},
 ];
 
@@ -6775,9 +6775,19 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
         {/* Section body */}
         <div style={{flex:1,padding:'20px 26px',overflowY:'auto'}}>
           {activeSection==='documents'&&<div>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>📎 Documents Received</div>
-            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>Track what's arrived and what's still pending from the client.</div>
-            {ITR_DOCS.map(function(d){
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>📎 Documents & Income Types</div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Select income types first — this filters the document checklist and shows only relevant sections.</div>
+            {/* Income type selector — drives sections + docs */}
+            <div style={{marginBottom:18,padding:'13px 15px',borderRadius:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)'}}>
+              <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',display:'block',marginBottom:9,textTransform:'uppercase',letterSpacing:'0.05em'}}>Applicable income types</label>
+              <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
+                {ITR_INCOME_TYPES.map(function(t){var on=types.indexOf(t[0])>=0;return<button key={t[0]} onClick={function(){toggleIncomeType(t[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:on?'#0e2a47':'var(--tf-border)',background:on?'rgba(14,42,71,0.1)':'transparent',color:on?'#0e2a47':'var(--tf-text-sub)',fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{on?'✓ ':''}{t[1]}</button>;})}
+              </div>
+              {types.length>0&&<div style={{marginTop:8,fontSize:11,color:'var(--tf-text-sub)'}}>Sections and documents are filtered to these income types. Change anytime.</div>}
+            </div>
+            {/* Doc checklist — filtered by income type */}
+            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Documents checklist</div>
+            {ITR_DOCS.filter(function(d){return !d.cond||types.length===0||types.indexOf(d.cond)>=0;}).map(function(d){
               var st=(internal.docs||{})[d.key]||'';
               return<div key={d.key} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid var(--tf-border)'}}>
                 <span style={{flex:1,fontSize:13,color:'var(--tf-text)'}}>{d.label}</span>
@@ -6790,13 +6800,7 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
           </div>}
 
           {activeSection==='basics'&&<div>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>📋 Basics & Income Types</div>
-            <div style={{marginBottom:18}}>
-              <label style={LBL}>Which incomes does this client have? (drives sections below)</label>
-              <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
-                {ITR_INCOME_TYPES.map(function(t){var on=types.indexOf(t[0])>=0;return<button key={t[0]} onClick={function(){toggleIncomeType(t[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:on?'#0e2a47':'var(--tf-border)',background:on?'rgba(14,42,71,0.1)':'transparent',color:on?'#0e2a47':'var(--tf-text-sub)',fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{on?'✓ ':''}{t[1]}</button>;})}
-              </div>
-            </div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>📋 Basics</div>
             {(ITR_SECTIONS.find(function(s){return s.id==='basics';}).fields).map(function(f){return renderField('basics',f);})}
           </div>}
 
@@ -6847,6 +6851,7 @@ function ITRDeskModule({org,supabase,cu}){
   var [search,setSearch]=useState('');
   var [statusFilter,setStatusFilter]=useState('all');
   var [openClient,setOpenClient]=useState(null);
+  var [showAllClients,setShowAllClients]=useState(false);
   var loadingRef=useRef(false);
 
   useEffect(function(){load();},[org.id,ay]);
@@ -6856,7 +6861,7 @@ function ITRDeskModule({org,supabase,cu}){
     if(!_itrCache[cacheKey])setLoading(true);setLoadError(null);
     try{
       var ayStr=ay+'-'+String(ay+1).slice(2);
-      var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone').eq('org_id',org.id).order('name').limit(2000);
+      var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,itr_applicable').eq('org_id',org.id).order('name').limit(2000);
       var rr=await supabase.from('itr_compilation').select('*').eq('org_id',org.id).eq('assessment_year',ayStr).limit(2000);
       if(rr.error&&rr.error.code==='42P01'){setLoadError('notable');return;}
       var cl=rc.data||[],rec=rr.data||[];
@@ -6872,9 +6877,20 @@ function ITRDeskModule({org,supabase,cu}){
     setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np};return np;});
   }
 
-  // Filter + search the client list
+  async function toggleItrTag(clientId,currentVal,e){
+    e.stopPropagation();
+    var newVal=!currentVal;
+    await supabase.from('clients').update({itr_applicable:newVal}).eq('id',clientId).eq('org_id',org.id);
+    setClients(function(prev){var nc=prev.map(function(c){return c.id===clientId?Object.assign({},c,{itr_applicable:newVal}):c;});if(_itrCache[cacheKey])_itrCache[cacheKey].clients=nc;return nc;});
+  }
+
+  // Base: tagged clients + clients with records (unless showAll)
+  var itrClients=clients.filter(function(c){return c.itr_applicable||!!recByClient[c.id];});
+  var baseClients=showAllClients?clients:itrClients;
+
+  // Filter + search
   var q=search.trim().toLowerCase();
-  var rows=clients.filter(function(c){
+  var rows=baseClients.filter(function(c){
     if(q){var n=((c.display_name||c.name||'')+' '+(c.pan||'')).toLowerCase();if(n.indexOf(q)<0)return false;}
     var rec=recByClient[c.id];
     if(statusFilter==='all')return true;
@@ -6884,9 +6900,9 @@ function ITRDeskModule({org,supabase,cu}){
   // Sort: in-progress records first, then by name
   rows.sort(function(a,b){var ra=recByClient[a.id],rb=recByClient[b.id];var pa=ra?1:0,pb=rb?1:0;if(pa!==pb)return pb-pa;return (a.display_name||a.name||'').localeCompare(b.display_name||b.name||'');});
 
-  // Stats
-  var counts={total:records.length};
-  ITR_STATUS.forEach(function(s){counts[s[0]]=records.filter(function(r){return r.status===s[0];}).length;});
+  // Stats (scoped to current base)
+  var baseCounts={};ITR_STATUS.forEach(function(s){baseCounts[s[0]]=records.filter(function(r){var c=clients.find(function(x){return x.id===r.client_id;});return c&&(showAllClients||c.itr_applicable||!!recByClient[c.id])&&r.status===s[0];}).length;});
+  var baseNotStarted=baseClients.filter(function(c){return !recByClient[c.id];}).length;
 
   var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
 
@@ -6895,11 +6911,18 @@ function ITRDeskModule({org,supabase,cu}){
     <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
       <div>
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>ITR Desk</h2>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Search a client → compile their data, run checks, track completeness. {ayLabel}</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Compile data, run checks, track completeness. {ayLabel}</div>
       </div>
-      <select value={ay} onChange={function(e){setAy(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-        {[2023,2024,2025,2026,2027,2028].map(function(y){return<option key={y} value={y}>AY {y}-{String(y+1).slice(2)}</option>;})}
-      </select>
+      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        {/* ITR clients / All toggle */}
+        <div style={{display:'flex',borderRadius:8,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
+          <button onClick={function(){setShowAllClients(false);}} style={{padding:'6px 13px',border:'none',background:!showAllClients?'rgba(14,42,71,0.12)':'transparent',color:!showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:!showAllClients?700:500,cursor:'pointer'}}>★ ITR Clients <b>{itrClients.length}</b></button>
+          <button onClick={function(){setShowAllClients(true);}} style={{padding:'6px 13px',border:'none',borderLeft:'1px solid var(--tf-border)',background:showAllClients?'rgba(14,42,71,0.12)':'transparent',color:showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:showAllClients?700:500,cursor:'pointer'}}>All {clients.length}</button>
+        </div>
+        <select value={ay} onChange={function(e){setAy(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+          {[2023,2024,2025,2026,2027,2028].map(function(y){return<option key={y} value={y}>AY {y}-{String(y+1).slice(2)}</option>;})}
+        </select>
+      </div>
     </div>
 
     {loadError==='notable'?<div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:12,padding:'18px 20px',color:'var(--tf-text)'}}>
@@ -6910,7 +6933,7 @@ function ITRDeskModule({org,supabase,cu}){
 
       {/* Status summary pills */}
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}>
-        {[['all','All Clients',clients.length,'#6b8cad'],['none','Not Started',clients.length-records.length,'#94a3b8']].concat(ITR_STATUS.map(function(s){return [s[0],s[1],counts[s[0]],s[2]];})).map(function(p){
+        {[['all','All',baseClients.length,'#6b8cad'],['none','Not Started',baseNotStarted,'#94a3b8']].concat(ITR_STATUS.map(function(s){return [s[0],s[1],baseCounts[s[0]],s[2]];})).map(function(p){
           var active=statusFilter===p[0];
           return<button key={p[0]} onClick={function(){setStatusFilter(p[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:active?p[3]:'var(--tf-border)',background:active?p[3]+'1f':'transparent',color:active?p[3]:'var(--tf-text-sub)',fontSize:12,fontWeight:active?700:500,cursor:'pointer'}}>{p[1]} <b>{p[2]}</b></button>;
         })}
@@ -6919,16 +6942,26 @@ function ITRDeskModule({org,supabase,cu}){
       {/* Search */}
       <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="🔍 Search client by name or PAN…" style={{width:'100%',maxWidth:420,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 13px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',marginBottom:16,boxSizing:'border-box'}}/>
 
+      {/* Empty state for ITR clients view */}
+      {!showAllClients&&itrClients.length===0&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'32px',textAlign:'center'}}>
+        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No ITR clients tagged yet</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Switch to "All" view and click ☆ on each client to tag them as ITR filers.</div>
+        <button onClick={function(){setShowAllClients(true);}} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Show All Clients</button>
+      </div>}
+
       {/* Client list */}
-      <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      {(showAllClients||itrClients.length>0)&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
         {rows.length===0?<div style={{padding:'30px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No clients match.</div>:
         rows.map(function(c,i){
           var rec=recByClient[c.id];
           var sm=rec?itrStatusMeta(rec.status):null;
           var comp=rec?rec.completeness||0:0;
           var types=rec&&rec.internal_data&&rec.internal_data.income_types?rec.internal_data.income_types:[];
+          var tagged=!!c.itr_applicable;
           return<div key={c.id} onClick={function(){setOpenClient(c);}} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',borderBottom:i<rows.length-1?'1px solid var(--tf-border)':'none',cursor:'pointer',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}
             onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=i%2?'rgba(14,42,71,0.02)':'transparent';}}>
+            {/* ITR tag star */}
+            <button onClick={function(e){toggleItrTag(c.id,tagged,e);}} title={tagged?'Remove ITR tag':'Tag as ITR client'} style={{background:'none',border:'none',padding:'2px 4px',cursor:'pointer',fontSize:14,color:tagged?'#f59e0b':'#cbd5e1',flexShrink:0}}>{tagged?'★':'☆'}</button>
             <div style={{flex:'1 1 200px',minWidth:0}}>
               <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{c.display_name||c.name}</div>
               {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
@@ -6949,7 +6982,7 @@ function ITRDeskModule({org,supabase,cu}){
             </div>
           </div>;
         })}
-      </div>
+      </div>}
     </>}
 
     {openClient&&<ITRCompilationPanel org={org} supabase={supabase} cu={cu} client={openClient} ay={ay} existing={recByClient[openClient.id]} onClose={function(){setOpenClient(null);}} onSaved={upsertLocal}/>}
