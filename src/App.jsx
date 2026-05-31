@@ -6635,16 +6635,34 @@ var ITR_STATUS=[
 
 function itrStatusMeta(s){return ITR_STATUS.find(function(x){return x[0]===s;})||ITR_STATUS[0];}
 
-function itrComputeCompleteness(internal){
+// Built-in defaults — used when an org hasn't customized its form.
+var ITR_DEFAULT_TEMPLATE={income_types:ITR_INCOME_TYPES,documents:ITR_DOCS,sections:ITR_SECTIONS,checks:ITR_CHECKS};
+
+// Normalize an org template (from itr_templates.template jsonb) into a usable shape, falling back to defaults.
+function itrTemplate(tpl){
+  if(!tpl||typeof tpl!=='object')return ITR_DEFAULT_TEMPLATE;
+  return {
+    income_types:(tpl.income_types&&tpl.income_types.length)?tpl.income_types:ITR_INCOME_TYPES,
+    documents:tpl.documents||ITR_DOCS,
+    sections:tpl.sections||ITR_SECTIONS,
+    checks:tpl.checks||ITR_CHECKS,
+  };
+}
+
+// Generate a stable unique key for a new builder item.
+function itrNewKey(prefix){return (prefix||'k')+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);}
+
+function itrComputeCompleteness(internal,tpl){
   internal=internal||{};
+  var T=itrTemplate(tpl);
   var types=internal.income_types||[];
   var docs=internal.docs||{};
   var checks=internal.checks||{};
   var pieces=[];
   // Docs: count those marked received or n/a as done
-  ITR_DOCS.forEach(function(d){var st=docs[d.key];pieces.push(st==='received'||st==='na');});
+  T.documents.forEach(function(d){var st=docs[d.key];pieces.push(st==='received'||st==='na');});
   // Applicable section fields
-  ITR_SECTIONS.forEach(function(sec){
+  T.sections.forEach(function(sec){
     if(!sec.always&&types.indexOf(sec.cond)<0)return;
     var sd=internal[sec.id]||{};
     sec.fields.forEach(function(f){
@@ -6654,7 +6672,7 @@ function itrComputeCompleteness(internal){
     });
   });
   // Pre-computation checks
-  ITR_CHECKS.forEach(function(c){pieces.push(!!checks[c[0]]);});
+  T.checks.forEach(function(c){pieces.push(!!checks[c[0]]);});
   if(pieces.length===0)return 0;
   var done=pieces.filter(Boolean).length;
   return Math.round(done/pieces.length*100);
@@ -6663,7 +6681,8 @@ function itrComputeCompleteness(internal){
 function itrDefaultAY(){var now=new Date();var y=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;return (y+1);} // filing year base; AY label = base..base+1
 
 // ── ITR Compilation Panel (full-screen overlay) ──
-function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved}){
+function ITRCompilationPanel({org,supabase,cu,client,ay,existing,template,onClose,onSaved}){
+  var TPL=itrTemplate(template);
   var [internal,setInternal]=useState(existing&&existing.internal_data?existing.internal_data:{income_types:[]});
   var [status,setStatus]=useState(existing?existing.status:'compiling');
   var [recId,setRecId]=useState(existing?existing.id:null);
@@ -6673,7 +6692,7 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
   var dirtyRef=useRef(false);
   var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
 
-  var completeness=itrComputeCompleteness(internal);
+  var completeness=itrComputeCompleteness(internal,template);
 
   // Autosave (debounced)
   useEffect(function(){
@@ -6685,7 +6704,7 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
   },[internal,status]);
 
   async function doSave(){
-    var comp=itrComputeCompleteness(internal);
+    var comp=itrComputeCompleteness(internal,template);
     var payload={org_id:org.id,client_id:client.id,assessment_year:ay+'-'+String(ay+1).slice(2),internal_data:internal,status:status,completeness:comp,updated_at:new Date().toISOString()};
     try{
       var res;
@@ -6707,11 +6726,11 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
   function setNote(key,val){touch();setInternal(function(p){var n=Object.assign({},p.notes||{});n[key]=val;var np=Object.assign({},p);np.notes=n;return np;});}
 
   var types=internal.income_types||[];
-  var allChecksDone=ITR_CHECKS.every(function(c){return (internal.checks||{})[c[0]];});
+  var allChecksDone=TPL.checks.every(function(c){return (internal.checks||{})[c[0]];});
 
   // Build visible section nav
   var navItems=[{id:'documents',label:'Documents',icon:'📎'}];
-  ITR_SECTIONS.forEach(function(sec){if(sec.always||types.indexOf(sec.cond)>=0)navItems.push({id:sec.id,label:sec.label,icon:sec.icon});});
+  TPL.sections.forEach(function(sec){if(sec.always||types.indexOf(sec.cond)>=0)navItems.push({id:sec.id,label:sec.label,icon:sec.icon});});
   navItems.push({id:'checks',label:'Pre-computation Checks',icon:'✅'});
   navItems.push({id:'notes',label:'Notes & Call Log',icon:'🗒️'});
 
@@ -6781,13 +6800,13 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
             <div style={{marginBottom:18,padding:'13px 15px',borderRadius:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)'}}>
               <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',display:'block',marginBottom:9,textTransform:'uppercase',letterSpacing:'0.05em'}}>Applicable income types</label>
               <div style={{display:'flex',flexWrap:'wrap',gap:7}}>
-                {ITR_INCOME_TYPES.map(function(t){var on=types.indexOf(t[0])>=0;return<button key={t[0]} onClick={function(){toggleIncomeType(t[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:on?'#0e2a47':'var(--tf-border)',background:on?'rgba(14,42,71,0.1)':'transparent',color:on?'#0e2a47':'var(--tf-text-sub)',fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{on?'✓ ':''}{t[1]}</button>;})}
+                {TPL.income_types.map(function(t){var on=types.indexOf(t[0])>=0;return<button key={t[0]} onClick={function(){toggleIncomeType(t[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:on?'#0e2a47':'var(--tf-border)',background:on?'rgba(14,42,71,0.1)':'transparent',color:on?'#0e2a47':'var(--tf-text-sub)',fontSize:12,fontWeight:on?700:500,cursor:'pointer'}}>{on?'✓ ':''}{t[1]}</button>;})}
               </div>
               {types.length>0&&<div style={{marginTop:8,fontSize:11,color:'var(--tf-text-sub)'}}>Sections and documents are filtered to these income types. Change anytime.</div>}
             </div>
             {/* Doc checklist — filtered by income type */}
             <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Documents checklist</div>
-            {ITR_DOCS.filter(function(d){return !d.cond||types.length===0||types.indexOf(d.cond)>=0;}).map(function(d){
+            {TPL.documents.filter(function(d){return !d.cond||types.length===0||types.indexOf(d.cond)>=0;}).map(function(d){
               var st=(internal.docs||{})[d.key]||'';
               return<div key={d.key} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid var(--tf-border)'}}>
                 <span style={{flex:1,fontSize:13,color:'var(--tf-text)'}}>{d.label}</span>
@@ -6799,12 +6818,12 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
             })}
           </div>}
 
-          {activeSection==='basics'&&<div>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>📋 Basics</div>
-            {(ITR_SECTIONS.find(function(s){return s.id==='basics';}).fields).map(function(f){return renderField('basics',f);})}
-          </div>}
+          {(function(){var bs=TPL.sections.find(function(s){return s.id==='basics';});return activeSection==='basics'&&bs?<div>
+            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>{bs.icon||'📋'} {bs.label||'Basics'}</div>
+            {bs.fields.map(function(f){return renderField('basics',f);})}
+          </div>:null;})()}
 
-          {ITR_SECTIONS.filter(function(s){return s.id!=='basics';}).map(function(sec){
+          {TPL.sections.filter(function(s){return s.id!=='basics';}).map(function(sec){
             if(activeSection!==sec.id)return null;
             return<div key={sec.id}>
               <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>{sec.icon} {sec.label}</div>
@@ -6815,7 +6834,7 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,onClose,onSaved
           {activeSection==='checks'&&<div>
             <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>✅ Pre-computation Checks</div>
             <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>All must be ticked before this client can be marked <b>Ready for Software</b>.</div>
-            {ITR_CHECKS.map(function(c){var on=(internal.checks||{})[c[0]];return<label key={c[0]} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:9,border:'1px solid',borderColor:on?'rgba(34,197,94,0.4)':'var(--tf-border)',background:on?'rgba(34,197,94,0.06)':'transparent',cursor:'pointer'}}>
+            {TPL.checks.map(function(c){var on=(internal.checks||{})[c[0]];return<label key={c[0]} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',marginBottom:6,borderRadius:9,border:'1px solid',borderColor:on?'rgba(34,197,94,0.4)':'var(--tf-border)',background:on?'rgba(34,197,94,0.06)':'transparent',cursor:'pointer'}}>
               <input type="checkbox" checked={!!on} onChange={function(e){setCheck(c[0],e.target.checked);}} style={{width:17,height:17,cursor:'pointer'}}/>
               <span style={{fontSize:13,color:'var(--tf-text)',fontWeight:on?600:400}}>{c[1]}</span>
             </label>;})}
@@ -6852,6 +6871,9 @@ function ITRDeskModule({org,supabase,cu}){
   var [statusFilter,setStatusFilter]=useState('all');
   var [openClient,setOpenClient]=useState(null);
   var [showAllClients,setShowAllClients]=useState(false);
+  var [template,setTemplate]=useState(null);
+  var [showBuilder,setShowBuilder]=useState(false);
+  var [isAdmin,setIsAdmin]=useState(false);
   var loadingRef=useRef(false);
 
   useEffect(function(){load();},[org.id,ay]);
@@ -6867,6 +6889,10 @@ function ITRDeskModule({org,supabase,cu}){
       var cl=rc.data||[],rec=rr.data||[];
       setClients(cl);setRecords(rec);
       _itrCache[cacheKey]={clients:cl,records:rec};
+      // Org form template (silent — falls back to defaults if table/row absent)
+      try{var rt=await supabase.from('itr_templates').select('template').eq('org_id',org.id).maybeSingle();if(rt&&rt.data&&rt.data.template)setTemplate(rt.data.template);}catch(_){}
+      // Role for customize-form gating
+      try{var rm=await supabase.from('organization_members').select('role').eq('org_id',org.id).eq('user_id',cu.id).maybeSingle();var role=rm&&rm.data?rm.data.role:'';if(role==='owner'||role==='admin'||org.created_by===cu.id)setIsAdmin(true);}catch(_){}
     }catch(e){console.error(e);if(!_itrCache[cacheKey])setLoadError('error');}finally{setLoading(false);loadingRef.current=false;}
   }
 
@@ -6914,6 +6940,7 @@ function ITRDeskModule({org,supabase,cu}){
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Compile data, run checks, track completeness. {ayLabel}</div>
       </div>
       <div style={{display:'flex',gap:8,alignItems:'center'}}>
+        {isAdmin&&<button onClick={function(){setShowBuilder(true);}} title="Customize the ITR compilation form for your firm" style={{padding:'6px 13px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer'}}>⚙ Customize Form</button>}
         {/* ITR clients / All toggle */}
         <div style={{display:'flex',borderRadius:8,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
           <button onClick={function(){setShowAllClients(false);}} style={{padding:'6px 13px',border:'none',background:!showAllClients?'rgba(14,42,71,0.12)':'transparent',color:!showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:!showAllClients?700:500,cursor:'pointer'}}>★ ITR Clients <b>{itrClients.length}</b></button>
@@ -6985,7 +7012,162 @@ function ITRDeskModule({org,supabase,cu}){
       </div>}
     </>}
 
-    {openClient&&<ITRCompilationPanel org={org} supabase={supabase} cu={cu} client={openClient} ay={ay} existing={recByClient[openClient.id]} onClose={function(){setOpenClient(null);}} onSaved={upsertLocal}/>}
+    {openClient&&<ITRCompilationPanel org={org} supabase={supabase} cu={cu} client={openClient} ay={ay} existing={recByClient[openClient.id]} template={template} onClose={function(){setOpenClient(null);}} onSaved={upsertLocal}/>}
+    {showBuilder&&<ITRTemplateBuilder org={org} supabase={supabase} template={template} onClose={function(){setShowBuilder(false);}} onSaved={function(tpl){setTemplate(tpl);}}/>}
+  </div>;
+}
+
+// ── ITR Template Builder (full-screen overlay, admin only) ──
+// Edits the org-wide ITR compilation form: income types, document checklist,
+// sections & fields, and pre-computation checks. Stored in itr_templates.template (jsonb).
+function ITRTemplateBuilder({org,supabase,template,onClose,onSaved}){
+  function clone(o){return JSON.parse(JSON.stringify(o));}
+  var [tpl,setTpl]=useState(function(){return clone(itrTemplate(template));});
+  var [tab,setTab]=useState('sections'); // sections | documents | income | checks
+  var [saving,setSaving]=useState(false);
+  var [msg,setMsg]=useState('');
+
+  function update(fn){setTpl(function(p){var np=clone(p);fn(np);return np;});}
+
+  async function save(){
+    setSaving(true);setMsg('');
+    try{
+      var payload={org_id:org.id,template:tpl,updated_at:new Date().toISOString()};
+      var res=await supabase.from('itr_templates').upsert(payload,{onConflict:'org_id'}).select().single();
+      if(res.error){console.error(res.error);setMsg(res.error.code==='42P01'?'Run the itr_templates migration first.':'Save failed.');setSaving(false);return;}
+      if(onSaved)onSaved(tpl);
+      setMsg('Saved');setTimeout(function(){onClose();},500);
+    }catch(e){console.error(e);setMsg('Save failed.');}
+    setSaving(false);
+  }
+  function resetDefaults(){if(window.confirm('Reset the form to built-in defaults? Unsaved customizations will be lost.'))setTpl(clone(ITR_DEFAULT_TEMPLATE));}
+
+  var INP={background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 9px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',boxSizing:'border-box'};
+  var iconBtn={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,cursor:'pointer',color:'var(--tf-text-sub)',fontSize:12,flexShrink:0,display:'inline-flex',alignItems:'center',justifyContent:'center'};
+  var FIELD_TYPES=[['text','Text'],['num','Number (₹)'],['area','Long text'],['select','Dropdown'],['check','Checkbox']];
+
+  function moveItem(arr,idx,dir){var j=idx+dir;if(j<0||j>=arr.length)return;var t=arr[idx];arr[idx]=arr[j];arr[j]=t;}
+
+  // ── INCOME TYPES tab
+  function renderIncome(){
+    return<div>
+      <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Income types drive which sections and documents appear for a client. Keys are auto-managed.</div>
+      {tpl.income_types.map(function(t,i){
+        return<div key={t[0]} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+          <input value={t[1]} onChange={function(e){update(function(n){n.income_types[i][1]=e.target.value;});}} style={Object.assign({},INP,{flex:1})}/>
+          <button style={iconBtn} title="Move up" onClick={function(){update(function(n){moveItem(n.income_types,i,-1);});}}>↑</button>
+          <button style={iconBtn} title="Move down" onClick={function(){update(function(n){moveItem(n.income_types,i,1);});}}>↓</button>
+          <button style={Object.assign({},iconBtn,{color:'#ef4444'})} title="Delete" onClick={function(){update(function(n){n.income_types.splice(i,1);});}}>✕</button>
+        </div>;
+      })}
+      <button onClick={function(){update(function(n){n.income_types.push([itrNewKey('inc'),'New income type']);});}} style={{marginTop:8,background:'rgba(14,42,71,0.08)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'#0e2a47',fontSize:12,fontWeight:700,cursor:'pointer'}}>+ Add income type</button>
+    </div>;
+  }
+
+  // ── DOCUMENTS tab
+  function renderDocuments(){
+    var condOpts=[['','Always show']].concat(tpl.income_types.map(function(t){return [t[0],'Only if: '+t[1]];}));
+    return<div>
+      <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>The document checklist clients are tracked against. Optionally tie a document to an income type so it only appears when relevant.</div>
+      {tpl.documents.map(function(d,i){
+        return<div key={d.key} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+          <input value={d.label} onChange={function(e){update(function(n){n.documents[i].label=e.target.value;});}} style={Object.assign({},INP,{flex:1})}/>
+          <select value={d.cond||''} onChange={function(e){update(function(n){if(e.target.value)n.documents[i].cond=e.target.value;else delete n.documents[i].cond;});}} style={Object.assign({},INP,{cursor:'pointer',flex:'0 0 170px'})}>
+            {condOpts.map(function(o){return<option key={o[0]} value={o[0]}>{o[1]}</option>;})}
+          </select>
+          <button style={iconBtn} title="Move up" onClick={function(){update(function(n){moveItem(n.documents,i,-1);});}}>↑</button>
+          <button style={iconBtn} title="Move down" onClick={function(){update(function(n){moveItem(n.documents,i,1);});}}>↓</button>
+          <button style={Object.assign({},iconBtn,{color:'#ef4444'})} title="Delete" onClick={function(){update(function(n){n.documents.splice(i,1);});}}>✕</button>
+        </div>;
+      })}
+      <button onClick={function(){update(function(n){n.documents.push({key:itrNewKey('doc'),label:'New document'});});}} style={{marginTop:8,background:'rgba(14,42,71,0.08)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'#0e2a47',fontSize:12,fontWeight:700,cursor:'pointer'}}>+ Add document</button>
+    </div>;
+  }
+
+  // ── CHECKS tab
+  function renderChecks(){
+    return<div>
+      <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Pre-computation checks. All must be ticked before a client can be marked <b>Ready for Software</b>.</div>
+      {tpl.checks.map(function(c,i){
+        return<div key={c[0]} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+          <input value={c[1]} onChange={function(e){update(function(n){n.checks[i][1]=e.target.value;});}} style={Object.assign({},INP,{flex:1})}/>
+          <button style={iconBtn} title="Move up" onClick={function(){update(function(n){moveItem(n.checks,i,-1);});}}>↑</button>
+          <button style={iconBtn} title="Move down" onClick={function(){update(function(n){moveItem(n.checks,i,1);});}}>↓</button>
+          <button style={Object.assign({},iconBtn,{color:'#ef4444'})} title="Delete" onClick={function(){update(function(n){n.checks.splice(i,1);});}}>✕</button>
+        </div>;
+      })}
+      <button onClick={function(){update(function(n){n.checks.push([itrNewKey('chk'),'New check']);});}} style={{marginTop:8,background:'rgba(14,42,71,0.08)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'#0e2a47',fontSize:12,fontWeight:700,cursor:'pointer'}}>+ Add check</button>
+    </div>;
+  }
+
+  // ── SECTIONS & FIELDS tab
+  function renderSections(){
+    var condOpts=[['','Always show']].concat(tpl.income_types.map(function(t){return [t[0],'Only if: '+t[1]];}));
+    return<div>
+      <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Sections and the fields inside them. Tie a section to an income type so it only shows when that income applies; "Always show" sections appear for every client.</div>
+      {tpl.sections.map(function(sec,si){
+        return<div key={sec.id} style={{border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px',marginBottom:14,background:'var(--tf-surface)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+            <input value={sec.icon||''} onChange={function(e){update(function(n){n.sections[si].icon=e.target.value;});}} placeholder="📋" style={Object.assign({},INP,{flex:'0 0 46px',textAlign:'center'})}/>
+            <input value={sec.label} onChange={function(e){update(function(n){n.sections[si].label=e.target.value;});}} style={Object.assign({},INP,{flex:1,fontWeight:700})}/>
+            <select value={sec.always?'':(sec.cond||'')} onChange={function(e){update(function(n){if(e.target.value){n.sections[si].cond=e.target.value;delete n.sections[si].always;}else{n.sections[si].always=true;delete n.sections[si].cond;}});}} style={Object.assign({},INP,{cursor:'pointer',flex:'0 0 170px'})}>
+              {condOpts.map(function(o){return<option key={o[0]} value={o[0]}>{o[1]}</option>;})}
+            </select>
+            <button style={iconBtn} title="Move up" onClick={function(){update(function(n){moveItem(n.sections,si,-1);});}}>↑</button>
+            <button style={iconBtn} title="Move down" onClick={function(){update(function(n){moveItem(n.sections,si,1);});}}>↓</button>
+            <button style={Object.assign({},iconBtn,{color:'#ef4444'})} title="Delete section" onClick={function(){if(window.confirm('Delete section "'+sec.label+'" and its fields?'))update(function(n){n.sections.splice(si,1);});}}>✕</button>
+          </div>
+          {/* Fields */}
+          <div style={{paddingLeft:8,borderLeft:'2px solid var(--tf-border)'}}>
+            {(sec.fields||[]).map(function(f,fi){
+              return<div key={f.key} style={{marginBottom:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:7}}>
+                  <input value={f.label} onChange={function(e){update(function(n){n.sections[si].fields[fi].label=e.target.value;});}} style={Object.assign({},INP,{flex:1})}/>
+                  <select value={f.type} onChange={function(e){update(function(n){n.sections[si].fields[fi].type=e.target.value;if(e.target.value==='select'&&!n.sections[si].fields[fi].opts)n.sections[si].fields[fi].opts=[['','—']];});}} style={Object.assign({},INP,{cursor:'pointer',flex:'0 0 130px'})}>
+                    {FIELD_TYPES.map(function(o){return<option key={o[0]} value={o[0]}>{o[1]}</option>;})}
+                  </select>
+                  <button style={iconBtn} title="Move up" onClick={function(){update(function(n){moveItem(n.sections[si].fields,fi,-1);});}}>↑</button>
+                  <button style={iconBtn} title="Move down" onClick={function(){update(function(n){moveItem(n.sections[si].fields,fi,1);});}}>↓</button>
+                  <button style={Object.assign({},iconBtn,{color:'#ef4444'})} title="Delete field" onClick={function(){update(function(n){n.sections[si].fields.splice(fi,1);});}}>✕</button>
+                </div>
+                {f.type==='select'&&<textarea value={(f.opts||[]).map(function(o){return o[0]+'|'+o[1];}).join('\n')} onChange={function(e){var lines=e.target.value.split('\n').map(function(ln){var p=ln.split('|');return [p[0]||'',p[1]!==undefined?p[1]:(p[0]||'')];});update(function(n){n.sections[si].fields[fi].opts=lines;});}} rows={3} placeholder={'value|Label  (one per line)'} style={Object.assign({},INP,{marginTop:5,width:'100%',resize:'vertical',fontFamily:'monospace',fontSize:11.5})}/>}
+              </div>;
+            })}
+            <button onClick={function(){update(function(n){n.sections[si].fields.push({key:itrNewKey('f'),label:'New field',type:'text'});});}} style={{marginTop:4,background:'none',border:'1px dashed var(--tf-border)',borderRadius:7,padding:'5px 11px',color:'var(--tf-text-sub)',fontSize:11.5,fontWeight:600,cursor:'pointer'}}>+ Add field</button>
+          </div>
+        </div>;
+      })}
+      <button onClick={function(){update(function(n){n.sections.push({id:itrNewKey('sec'),label:'New section',icon:'📁',always:true,fields:[]});});}} style={{background:'rgba(14,42,71,0.08)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'8px 16px',color:'#0e2a47',fontSize:12,fontWeight:700,cursor:'pointer'}}>+ Add section</button>
+    </div>;
+  }
+
+  var TABS=[['sections','Sections & Fields'],['documents','Documents'],['income','Income Types'],['checks','Checks']];
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(10,16,28,0.55)',zIndex:9100,display:'flex',justifyContent:'center',alignItems:'stretch',padding:'2vh 2vw'}} onClick={onClose}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',borderRadius:16,width:'100%',maxWidth:920,display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,0.4)'}}>
+      {/* Header */}
+      <div style={{padding:'16px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:14,flexShrink:0}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Customize ITR Form</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Applies to every client's ITR compilation in your firm.</div>
+        </div>
+        {msg&&<span style={{fontSize:12,fontWeight:600,color:msg==='Saved'?'#22c55e':'#ef4444'}}>{msg}</span>}
+        <button onClick={resetDefaults} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer'}}>Reset to defaults</button>
+        <button onClick={save} disabled={saving} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:13,cursor:saving?'default':'pointer',opacity:saving?0.6:1}}>{saving?'Saving…':'Save form'}</button>
+        <button onClick={onClose} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,width:32,height:32,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,flexShrink:0}}>✕</button>
+      </div>
+      {/* Tabs */}
+      <div style={{display:'flex',gap:4,padding:'10px 22px 0',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
+        {TABS.map(function(t){var active=tab===t[0];return<button key={t[0]} onClick={function(){setTab(t[0]);}} style={{background:'none',border:'none',borderBottom:'2px solid '+(active?'#0e2a47':'transparent'),padding:'8px 14px',color:active?'#0e2a47':'var(--tf-text-sub)',fontSize:13,fontWeight:active?700:500,cursor:'pointer',marginBottom:-1}}>{t[1]}</button>;})}
+      </div>
+      {/* Body */}
+      <div style={{flex:1,overflowY:'auto',padding:'20px 26px'}}>
+        {tab==='sections'&&renderSections()}
+        {tab==='documents'&&renderDocuments()}
+        {tab==='income'&&renderIncome()}
+        {tab==='checks'&&renderChecks()}
+      </div>
+    </div>
   </div>;
 }
 
