@@ -6903,8 +6903,11 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [dragClient,setDragClient]=useState(null);
   var [dragOverCol,setDragOverCol]=useState(null);
   var [allocByClient,setAllocByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].allocByClient||{}):{}); // clientId → row.data (assignee slots)
+  var [rowIdByClient,setRowIdByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].rowIdByClient||{}):{}); // clientId → worksheet_row id (for write-back)
   var [members,setMembers]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].members||[]):[]);
   var [memberFilter,setMemberFilter]=useState('all'); // 'all' | 'mine' | <user_id>
+  var [assignFor,setAssignFor]=useState(null); // clientId whose assignment popover is open
+  var [savingAssign,setSavingAssign]=useState(false);
   var loadingRef=useRef(false);
 
   // Workflow hierarchy roles (org-wide), e.g. Assignee / Sub-Assignee / Reviewer
@@ -6931,14 +6934,17 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       // Derive enrolled client IDs + work-allocation (assignee slots) from ITR-flagged work types
       var enrolledIds=new Set();
       var alloc={};
+      var rowIds={};
       var itrWtNames=(workTypeConfigs||[]).filter(function(c){return c.is_itr_worktype;}).map(function(c){return c.name;});
       if(itrWtNames.length>0){
         try{
           var rwsheets=await supabase.from('worksheets').select('id').eq('org_id',org.id).in('work_type',itrWtNames);
           var wsIds=(rwsheets.data||[]).map(function(w){return w.id;});
           if(wsIds.length>0){
-            var rrows=await supabase.from('worksheet_rows').select('client_id,data').in('worksheet_id',wsIds).limit(5000);
+            var rrows=await supabase.from('worksheet_rows').select('id,client_id,data').in('worksheet_id',wsIds).limit(5000);
             (rrows.data||[]).forEach(function(r){if(r.client_id){enrolledIds.add(r.client_id);
+              // Remember a row id per client to write assignment changes back to
+              if(!rowIds[r.client_id])rowIds[r.client_id]=r.id;
               // Merge assignee slots — keep first non-empty per slot across the client's ITR rows
               var d=r.data||{};var cur=alloc[r.client_id]||{};
               Object.keys(d).forEach(function(k){if((k.indexOf('__h_')===0||k==='__assignee')&&d[k]&&!cur[k])cur[k]=d[k];});
@@ -6947,12 +6953,12 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
           }
         }catch(_){}
       }
-      setItrEnrolledIds(enrolledIds);setAllocByClient(alloc);
+      setItrEnrolledIds(enrolledIds);setAllocByClient(alloc);setRowIdByClient(rowIds);
       // Org members (for assignee name/avatar display + filter)
       var mlist=[];
       try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(300);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(300);mlist=rp.data||[];}}catch(_){}
       setMembers(mlist);
-      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,members:mlist};
+      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,rowIdByClient:rowIds,members:mlist};
       // Org form template (silent — falls back to defaults if table/row absent)
       try{var rt=await supabase.from('itr_templates').select('template').eq('org_id',org.id).maybeSingle();if(rt&&rt.data&&rt.data.template)setTemplate(rt.data.template);}catch(_){}
       // Role for customize-form gating
@@ -6974,12 +6980,37 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     }
   }
 
+  // Assign / change a workflow-hierarchy role on a client's ITR worksheet row.
+  // Writes back to worksheet_rows.data.<roleKey> so it stays in sync with the
+  // Worksheets module — and surfaces in Your Diary / Plan My Day for that member.
+  async function assignRole(clientId,roleKey,uid){
+    var rowId=rowIdByClient[clientId];
+    if(!rowId)return; // no ITR worksheet row to attach to (client not enrolled)
+    setSavingAssign(true);
+    try{
+      // Fetch fresh row data, merge the one slot, write back
+      var cur=await supabase.from('worksheet_rows').select('data').eq('id',rowId).single();
+      var nd=Object.assign({},(cur.data&&cur.data.data)||{});
+      if(uid)nd[roleKey]=uid;else delete nd[roleKey];
+      await supabase.from('worksheet_rows').update({data:nd}).eq('id',rowId);
+      // Optimistic local update of allocByClient
+      setAllocByClient(function(prev){
+        var np=Object.assign({},prev);var d=Object.assign({},np[clientId]||{});
+        if(uid)d[roleKey]=uid;else delete d[roleKey];
+        np[clientId]=d;
+        _itrCache[cacheKey]={clients:clients,records:records,itrEnrolledIds:itrEnrolledIds,allocByClient:np,rowIdByClient:rowIdByClient,members:members};
+        return np;
+      });
+    }catch(e){console.error(e);}
+    setSavingAssign(false);
+  }
+
   // ITR client = enrolled in an ITR work type OR already has a record
   function isITRClient(c){return itrEnrolledIds.has(c.id)||!!recByClient[c.id];}
 
   function upsertLocal(rec){
     if(!rec)return;
-    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds,allocByClient:allocByClient,members:members};return np;});
+    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds,allocByClient:allocByClient,rowIdByClient:rowIdByClient,members:members};return np;});
   }
 
   // Base: enrolled in ITR work type + have a record (unless showAll)
@@ -7007,7 +7038,30 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 
   var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
 
-  return<div style={{padding:'0 0 60px'}}>
+  // Assignment popover — pick a member for each workflow-hierarchy role on a client.
+  // Writes back via assignRole() to the client's ITR worksheet row.
+  function renderAssignPopover(clientId){
+    var d=allocByClient[clientId]||{};
+    var canAssign=!!rowIdByClient[clientId];
+    return<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:50,width:230,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'10px 12px'}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Work allocation</div>
+      {!canAssign?<div style={{fontSize:11.5,color:'var(--tf-text-sub)',lineHeight:1.5}}>This client has no ITR worksheet row yet. Add them to an ITR work type in Worksheets first.</div>:
+      hierarchyCols.map(function(hc){
+        return<div key={hc.key} style={{marginBottom:8}}>
+          <div style={{fontSize:10.5,fontWeight:600,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
+          <select value={d[hc.key]||''} disabled={savingAssign} onChange={function(e){assignRole(clientId,hc.key,e.target.value||null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+            <option value="">— Unassigned —</option>
+            {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          </select>
+        </div>;
+      })}
+      <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
+        <button onClick={function(){setAssignFor(null);}} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Done</button>
+      </div>
+    </div>;
+  }
+
+  return<div style={{padding:'0 0 60px'}} onClick={function(){if(assignFor)setAssignFor(null);}}>
     {/* Header */}
     <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
       <div>
@@ -7126,7 +7180,12 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                     {types.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:4}}>
                       {types.slice(0,3).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:9,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:4,padding:'1px 5px'}}>{lbl}</span>;})}
                     </div>}
-                    {(function(){var as=clientAssignees(c.id);if(as.length===0)return null;return<div style={{display:'flex',alignItems:'center',marginBottom:4}}>{as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:18,height:18,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:8,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-4:0,border:'1.5px solid var(--tf-bg)',flexShrink:0}}>{memberInitials(a.uid)}</span>;})}</div>;})()}
+                    <div style={{position:'relative',marginBottom:4}}>
+                      <button onClick={function(e){e.stopPropagation();setAssignFor(assignFor===c.id?null:c.id);}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer'}}>
+                        {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:9.5,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:18,height:18,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:8,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-4:0,border:'1.5px solid var(--tf-bg)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
+                      </button>
+                      {assignFor===c.id&&renderAssignPopover(c.id)}
+                    </div>
                     {rec&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
                       <div style={{flex:1,height:4,borderRadius:2,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
                       <span style={{fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',minWidth:24,textAlign:'right'}}>{comp}%</span>
@@ -7159,9 +7218,13 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
             <div style={{flex:'1 1 140px',display:'flex',gap:4,flexWrap:'wrap'}}>
               {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
             </div>
-            {/* Work allocation — assignee / reviewer avatars */}
-            <div style={{flex:'0 0 110px',display:'flex',alignItems:'center',gap:5}}>
-              {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:10,color:'var(--tf-text-sub)',opacity:0.6}}>—</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:24,height:24,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-7:0,border:'2px solid var(--tf-surface)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
+            {/* Work allocation — assignee / reviewer avatars (click to assign) */}
+            <div style={{flex:'0 0 120px',position:'relative'}}>
+              <button onClick={function(e){e.stopPropagation();setAssignFor(assignFor===c.id?null:c.id);}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:5,background:assignFor===c.id?'rgba(14,42,71,0.08)':'none',border:'1px solid '+(assignFor===c.id?'#0e2a47':'transparent'),borderRadius:20,padding:'3px 8px 3px 5px',cursor:'pointer',width:'100%'}}
+                onMouseEnter={function(e){if(assignFor!==c.id)e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){if(assignFor!==c.id)e.currentTarget.style.background='none';}}>
+                {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:11,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:24,height:24,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-7:0,border:'2px solid var(--tf-surface)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
+              </button>
+              {assignFor===c.id&&renderAssignPopover(c.id)}
             </div>
             <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7}}>
               <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
