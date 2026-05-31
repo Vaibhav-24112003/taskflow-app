@@ -2190,6 +2190,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
   var [search,setSearch]=useState('');
   var [filterStatus,setFilterStatus]=useState('all');
   var [filterWT,setFilterWT]=useState('');
+  var [filterITR,setFilterITR]=useState('all'); // all | itr | non_itr
   var [showForm,setShowForm]=useState(false);
   var [editClient,setEditClient]=useState(null);
   var [showImport,setShowImport]=useState(false);
@@ -2217,19 +2218,27 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
     var a=document.createElement('a');a.href=url;a.download='clients.csv';a.click();URL.revokeObjectURL(url);
     toast('Exported '+clients.length+' clients');
   }
+  async function toggleITR(c){
+    var newVal=!c.itr_applicable;
+    await supabase.from('clients').update({itr_applicable:newVal}).eq('id',c.id);
+    setClients(function(prev){return prev.map(function(x){return x.id===c.id?Object.assign({},x,{itr_applicable:newVal}):x;});});
+  }
+
   var allEnrolledWTs=Array.from(new Set(Object.values(wtEnrollment).flat())).sort();
+  var itrCount=clients.filter(function(c){return c.itr_applicable;}).length;
   var filtered=clients.filter(function(c){
     var q=search.toLowerCase();
     var matchQ=!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q);
     var matchS=filterStatus==='all'||c.status===filterStatus;
     var matchWT=!filterWT||(wtEnrollment[c.id]||[]).includes(filterWT);
-    return matchQ&&matchS&&matchWT;
+    var matchITR=filterITR==='all'||(filterITR==='itr'&&c.itr_applicable)||(filterITR==='non_itr'&&!c.itr_applicable);
+    return matchQ&&matchS&&matchWT&&matchITR;
   });
   var SC={active:'#22c55e',inactive:'#94a3b8',prospect:'#f59e0b'};
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
   return<div style={{padding:'0 0 40px',maxWidth:1100,margin:'0 auto'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
-      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(function(c){return c.status==='active';}).length} active</div></div>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(function(c){return c.status==='active';}).length} active · <span style={{color:'#f59e0b',fontWeight:700}}>★ {itrCount} ITR</span></div></div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button onClick={function(){setShowImport(true);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬆ Import</button>
         <button onClick={exportCSV} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬇ Export</button>
@@ -2246,6 +2255,11 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
         <option value="">All Work Types</option>
         {allEnrolledWTs.map(function(w){return<option key={w} value={w}>{w}</option>;})}
       </select>
+      <select value={filterITR} onChange={function(e){setFilterITR(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+        <option value="all">All Clients</option>
+        <option value="itr">★ ITR Clients</option>
+        <option value="non_itr">Non-ITR only</option>
+      </select>
     </div>
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:filtered.length===0?
       <div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)'}}>
@@ -2254,7 +2268,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr style={{background:'rgba(14,42,71,0.08)'}}>
-            {['Client','Type','Contact','Tax IDs','Work Types','Status','Actions'].map(function(h){return<th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>;})}
+            {['Client','Type','Contact','Tax IDs','Work Types','ITR','Status','Actions'].map(function(h){return<th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>;})}
           </tr></thead>
           <tbody>
             {filtered.map(function(c,i){
@@ -2265,6 +2279,11 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
                 <td style={{padding:'9px 12px'}}>{c.email&&<div style={{fontSize:12}}>{c.email}</div>}{c.phone&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.phone}</div>}</td>
                 <td style={{padding:'9px 12px'}}>{c.pan&&<div style={{fontSize:11,fontFamily:'monospace'}}>{c.pan}</div>}{c.gstin&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>}</td>
                 <td style={{padding:'9px 12px'}}><div style={{display:'flex',flexWrap:'wrap',gap:3}}>{enrolledWTs.length?enrolledWTs.map(function(wt){return<span key={wt} style={{fontSize:10,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:4,padding:'1px 6px'}}>{wt}</span>;}):'-'}</div></td>
+                <td style={{padding:'9px 12px'}}>
+                  <button onClick={function(e){e.stopPropagation();toggleITR(c);}} title={c.itr_applicable?'Remove ITR tag':'Mark as ITR client'} style={{background:c.itr_applicable?'rgba(245,158,11,0.12)':'transparent',border:'1px solid '+(c.itr_applicable?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:20,padding:'3px 10px',color:c.itr_applicable?'#d97706':'var(--tf-text-sub)',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                    {c.itr_applicable?'★ ITR':'☆'}
+                  </button>
+                </td>
                 <td style={{padding:'9px 12px'}}><span style={{background:SC[c.status]+'20',color:SC[c.status],border:'1px solid '+SC[c.status]+'40',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:600,textTransform:'capitalize'}}>{c.status}</span></td>
                 <td style={{padding:'9px 12px'}}><div style={{display:'flex',gap:5}}>
                   <button onClick={function(){setEditClient(c);setShowForm(true);}} style={{background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:6,padding:'3px 9px',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
