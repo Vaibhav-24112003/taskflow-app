@@ -5622,7 +5622,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
 
         {/* View toggle: always available for recurring work types */}
         {cfg.frequency!=='once'&&<div style={{display:'flex',gap:0,border:'1px solid var(--tf-border)',borderRadius:7,overflow:'hidden',flexShrink:0}}>
-          {[{id:'grid',label:'≡ Grid'},{id:'pipeline',label:'⬛ Pipeline'},{id:'funnel',label:'◇ Funnel'}].map(function(v,vi){return<button key={v.id} onClick={function(){setWsView(v.id);}} style={{background:wsView===v.id?'rgba(14,42,71,0.15)':'transparent',border:'none',borderRight:vi<2?'1px solid var(--tf-border)':'none',padding:'5px 10px',color:wsView===v.id?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:wsView===v.id?700:500,whiteSpace:'nowrap'}}>{v.label}</button>;})}
+          {[
+            {id:'grid',label:'Grid',icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="3" cy="4" r="1.1" fill="currentColor"/><circle cx="3" cy="8" r="1.1" fill="currentColor"/><circle cx="3" cy="12" r="1.1" fill="currentColor"/><rect x="6" y="3.4" width="8" height="1.3" rx="0.65" fill="currentColor"/><rect x="6" y="7.4" width="8" height="1.3" rx="0.65" fill="currentColor"/><rect x="6" y="11.4" width="8" height="1.3" rx="0.65" fill="currentColor"/></svg>},
+            {id:'pipeline',label:'Stages',icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="1.6" y="2.5" width="3.6" height="11" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="6.2" y="2.5" width="3.6" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="10.8" y="2.5" width="3.6" height="11" rx="1" stroke="currentColor" strokeWidth="1.3"/></svg>},
+            {id:'funnel',label:'Summary',icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="11" height="2.3" rx="1.15" fill="currentColor"/><rect x="2" y="6.85" width="7" height="2.3" rx="1.15" fill="currentColor"/><rect x="2" y="10.7" width="9" height="2.3" rx="1.15" fill="currentColor"/></svg>}
+          ].map(function(v,vi){return<button key={v.id} onClick={function(){setWsView(v.id);}} style={{display:'inline-flex',alignItems:'center',gap:6,background:wsView===v.id?'rgba(14,42,71,0.15)':'transparent',border:'none',borderRight:vi<2?'1px solid var(--tf-border)':'none',padding:'5px 11px',color:wsView===v.id?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:wsView===v.id?700:500,whiteSpace:'nowrap'}}>{v.icon}{v.label}</button>;})}
         </div>}
 
         {/* Copy assignments from a past period */}
@@ -5797,7 +5801,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       {wsView==='pipeline'&&(!cfg.stages||cfg.stages.length===0)&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'36px 24px',textAlign:'center'}}>
         <div style={{fontSize:32,marginBottom:12}}>⬛</div>
         <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No pipeline stages configured for {activeType}</div>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Kanban view.</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Stages view.</div>
       </div>}
       {wsView==='pipeline'&&cfg.stages&&cfg.stages.length>0&&<div style={{overflowX:'auto',paddingBottom:12}}>
         <div style={{display:'flex',gap:12,minWidth:'max-content'}}>
@@ -5849,7 +5853,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       {wsView==='funnel'&&(!cfg.stages||cfg.stages.length===0)&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'36px 24px',textAlign:'center'}}>
         <div style={{fontSize:32,marginBottom:12}}>◇</div>
         <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No pipeline stages configured for {activeType}</div>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Funnel view.</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Summary view.</div>
       </div>}
       {wsView==='funnel'&&cfg.stages&&cfg.stages.length>0&&<div>
         <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
@@ -6989,7 +6993,11 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
         {isAdmin&&<button onClick={function(){setShowBuilder(true);}} title="Customize the ITR compilation form for your firm" style={{padding:'6px 13px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer'}}>⚙ Customize Form</button>}
         {/* View toggle */}
         <div style={{display:'flex',borderRadius:8,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
-          {[{id:'list',label:'≡ List'},{id:'pipeline',label:'⬛ Pipeline'},{id:'funnel',label:'◇ Funnel'}].map(function(v,vi){return<button key={v.id} onClick={function(){setItrView(v.id);}} style={{background:itrView===v.id?'rgba(14,42,71,0.12)':'transparent',border:'none',borderRight:vi<2?'1px solid var(--tf-border)':'none',padding:'6px 11px',color:itrView===v.id?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:itrView===v.id?700:500,whiteSpace:'nowrap'}}>{v.label}</button>;})}</div>
+          {[
+            {id:'list',label:'List',icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="3" cy="4" r="1.1" fill="currentColor"/><circle cx="3" cy="8" r="1.1" fill="currentColor"/><circle cx="3" cy="12" r="1.1" fill="currentColor"/><rect x="6" y="3.4" width="8" height="1.3" rx="0.65" fill="currentColor"/><rect x="6" y="7.4" width="8" height="1.3" rx="0.65" fill="currentColor"/><rect x="6" y="11.4" width="8" height="1.3" rx="0.65" fill="currentColor"/></svg>},
+            {id:'pipeline',label:'Stages',icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="1.6" y="2.5" width="3.6" height="11" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="6.2" y="2.5" width="3.6" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="10.8" y="2.5" width="3.6" height="11" rx="1" stroke="currentColor" strokeWidth="1.3"/></svg>},
+            {id:'funnel',label:'Summary',icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="11" height="2.3" rx="1.15" fill="currentColor"/><rect x="2" y="6.85" width="7" height="2.3" rx="1.15" fill="currentColor"/><rect x="2" y="10.7" width="9" height="2.3" rx="1.15" fill="currentColor"/></svg>}
+          ].map(function(v,vi){return<button key={v.id} onClick={function(){setItrView(v.id);}} style={{display:'inline-flex',alignItems:'center',gap:6,background:itrView===v.id?'rgba(14,42,71,0.12)':'transparent',border:'none',borderRight:vi<2?'1px solid var(--tf-border)':'none',padding:'6px 12px',color:itrView===v.id?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:itrView===v.id?700:500,whiteSpace:'nowrap'}}>{v.icon}{v.label}</button>;})}</div>
         {/* ITR clients / All toggle */}
         <div style={{display:'flex',borderRadius:8,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
           <button onClick={function(){setShowAllClients(false);}} style={{padding:'6px 13px',border:'none',background:!showAllClients?'rgba(14,42,71,0.12)':'transparent',color:!showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:!showAllClients?700:500,cursor:'pointer'}}>★ ITR Clients <b>{itrClients.length}</b></button>
