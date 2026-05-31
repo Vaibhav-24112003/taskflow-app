@@ -3889,6 +3889,7 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{c.name}</span>
                 <span style={{fontSize:10,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:4,padding:'1px 6px'}}>{FREQ_LABELS[c.frequency]||c.frequency}</span>
+                {c.is_itr_worktype&&<span style={{fontSize:10,fontWeight:700,color:'#d97706',background:'rgba(245,158,11,0.12)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:4,padding:'1px 6px'}}>★ ITR</span>}
                 {c.worksheet_group&&<span style={{fontSize:10,fontWeight:600,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:4,padding:'1px 6px'}}>{c.worksheet_group}</span>}
                 {(c.sop_steps||[]).length>0&&<span style={{fontSize:10,fontWeight:600,color:'#22c55e',background:'rgba(34,197,94,0.1)',border:'1px solid rgba(34,197,94,0.2)',borderRadius:4,padding:'1px 6px'}}>SOP</span>}
                 {!c.is_active&&<span style={{fontSize:10,fontWeight:600,color:'#94a3b8',background:'rgba(148,163,184,0.1)',borderRadius:4,padding:'1px 6px'}}>Inactive</span>}
@@ -3939,6 +3940,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
   var [sopSteps,setSopSteps]=useState(config&&config.sop_steps?config.sop_steps.map(function(s){return{title:s.title||'',description:s.description||'',link:s.link||''};}):[]);
   var [stages,setStages]=useState(config&&config.stages&&config.stages.length>0?config.stages.map(function(s){return{key:s.key||'s_'+Date.now(),label:s.label||'',color:s.color||'#0e2a47'};}): []);
+  var [isItrWorktype,setIsItrWorktype]=useState(config?!!config.is_itr_worktype:false);
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
@@ -4002,7 +4004,8 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       sop_steps:sopSteps.filter(function(s){return s.title.trim();}).map(function(s,i){return{step:i+1,title:s.title.trim(),description:s.description.trim(),link:s.link.trim()};}),
       stages:stages.filter(function(s){return s.label.trim();}).map(function(s,i){return{key:s.key,label:s.label.trim(),color:s.color||'#0e2a47',order:i};}),
       is_active:config?config.is_active:true,
-      sort_order:config?config.sort_order:99
+      sort_order:config?config.sort_order:99,
+      is_itr_worktype:isItrWorktype
     };
     var result;
     if(isEdit){result=await updateWorkTypeConfig(config.id,payload);}
@@ -4052,6 +4055,15 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>days before due date</span>
             </div>
             <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Tasks for this work type appear in Your Diary worklist this many days before the due date. Leave blank to always show. <b>Examples:</b> ITR → 90, Audit → 60, GST → 10, TDS → 15.</div>
+          </div>
+          <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(245,158,11,0.05)'}}>
+            <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
+              <input type="checkbox" checked={isItrWorktype} onChange={function(e){setIsItrWorktype(e.target.checked);}} style={{width:16,height:16,marginTop:2,cursor:'pointer',flexShrink:0}}/>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>★ ITR Work Type</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Clients enrolled in this work type are automatically treated as ITR filers — they appear in ITR Desk and Analytics ITR summary. Their compilation status tracks separately from worksheet status.</div>
+              </div>
+            </label>
           </div>
         </div>}
 
@@ -7484,6 +7496,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   var [clients,setClients]=useState([]);
   var [worksheets,setWorksheets]=useState([]);
   var [allRows,setAllRows]=useState([]);
+  var [itrRecords,setItrRecords]=useState([]);
   var [selectedYear,setSelectedYear]=useState(function(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;});
   var [activeTab,setActiveTab]=useState('overview');
   var [filterMonth,setFilterMonth]=useState(0);
@@ -7513,7 +7526,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
     loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
-    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields,itr_applicable').eq('org_id',org.id).order('name').limit(500);
     // Fetch worksheets for the selected FY year, also include year+1 to catch old calendar-year monthly data (Jan-Mar)
     var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).in('period_year',[selectedYear,selectedYear+1]).limit(1000);
     var clientData=rc.data||[];
@@ -7525,6 +7538,9 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
       if(ws.period_year===selectedYear+1&&ws.frequency==='monthly'&&ws.period_month&&ws.period_month<=3)return true;
       return false;
     });
+    // Fetch ITR compilation records for the AY matching selectedYear (e.g. FY 2026-27 → AY 2027-28)
+    var itrAY=(selectedYear+1)+'-'+String(selectedYear+2).slice(2);
+    try{var ri=await supabase.from('itr_compilation').select('client_id,status,completeness').eq('org_id',org.id).eq('assessment_year',itrAY).limit(2000);if(!ri.error)setItrRecords(ri.data||[]);}catch(_){setItrRecords([]);}
     setClients(clientData);
     setWorksheets(wsData);
     if(wsData.length>0){
@@ -7863,8 +7879,47 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
             <div style={{position:'absolute',bottom:14,right:16,fontSize:18,color:'var(--tf-border)'}}>›</div>
           </div>;
         };
-        return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:24}}>
-          {groups.map(GROUP_TILE)}
+        // ITR Summary tile — shown when any itr_compilation records exist for this AY
+        var itrAY2=(selectedYear+1)+'-'+String(selectedYear+2).slice(2);
+        var itrTaggedClients=clients.filter(function(c){return c.itr_applicable;}).length;
+        var itrWtClients=clients.filter(function(c){return !c.itr_applicable&&(workTypeConfigs||[]).some(function(w){return w.is_itr_worktype;});}).length; // placeholder when no tag
+        var showItrTile=itrRecords.length>0||itrTaggedClients>0;
+        var itrStatusCounts={};ITR_STATUS.forEach(function(s){itrStatusCounts[s[0]]=itrRecords.filter(function(r){return r.status===s[0];}).length;});
+        var itrFiled=itrStatusCounts['filed']||0;
+        var itrTotal=itrTaggedClients||itrRecords.length;
+        var itrPct=itrTotal>0?Math.round(itrFiled/itrTotal*100):0;
+        var avgCompleteness=itrRecords.length>0?Math.round(itrRecords.reduce(function(s,r){return s+(r.completeness||0);},0)/itrRecords.length):0;
+
+        return<div>
+          {showItrTile&&!overviewDrillGroup&&<div style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>ITR Desk — {itrAY2}</div>
+            <div style={{background:'var(--tf-surface)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:14,padding:'18px 22px',position:'relative',overflow:'hidden'}}>
+              <div style={{position:'absolute',top:0,left:0,width:4,height:'100%',background:'#f59e0b',borderRadius:'14px 0 0 14px'}}/>
+              <div style={{paddingLeft:8}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                  <div>
+                    <span style={{fontWeight:800,fontSize:15,color:'var(--tf-text)'}}>★ ITR Filing Progress</span>
+                    <span style={{fontSize:12,color:'var(--tf-text-sub)',marginLeft:10}}>{itrRecords.length} of {itrTaggedClients} clients started · avg {avgCompleteness}% complete</span>
+                  </div>
+                  <span style={{fontSize:18,fontWeight:900,color:itrPct===100?'#22c55e':'#d97706'}}>{itrPct}% filed</span>
+                </div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  {ITR_STATUS.map(function(s){var cnt=itrStatusCounts[s[0]]||0;if(cnt===0&&s[0]!=='compiling')return null;return<div key={s[0]} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:20,background:s[2]+'18',border:'1px solid '+s[2]+'44'}}>
+                    <span style={{width:7,height:7,borderRadius:'50%',background:s[2],display:'inline-block',flexShrink:0}}/>
+                    <span style={{fontSize:12,fontWeight:700,color:s[2]}}>{cnt}</span>
+                    <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{s[1]}</span>
+                  </div>;})}
+                  {itrTaggedClients>itrRecords.length&&<div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',borderRadius:20,background:'rgba(148,163,184,0.12)',border:'1px solid rgba(148,163,184,0.3)'}}>
+                    <span style={{fontSize:12,fontWeight:700,color:'#94a3b8'}}>{itrTaggedClients-itrRecords.length}</span>
+                    <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Not started</span>
+                  </div>}
+                </div>
+              </div>
+            </div>
+          </div>}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:14,marginBottom:24}}>
+            {groups.map(GROUP_TILE)}
+          </div>
         </div>;
       })()}
       {/* Drill-down */}
