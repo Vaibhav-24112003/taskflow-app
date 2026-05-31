@@ -6884,7 +6884,7 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,template,onClos
 }
 
 // ── ITR Desk Module ──
-function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
+function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [ay,setAy]=useState(itrDefaultAY());
   var cacheKey=org.id+'_'+ay;
   var [loading,setLoading]=useState(!_itrCache[cacheKey]);
@@ -6902,7 +6902,19 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
   var [itrView,setItrView]=useState('list'); // 'list' | 'pipeline' | 'funnel'
   var [dragClient,setDragClient]=useState(null);
   var [dragOverCol,setDragOverCol]=useState(null);
+  var [allocByClient,setAllocByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].allocByClient||{}):{}); // clientId → row.data (assignee slots)
+  var [members,setMembers]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].members||[]):[]);
+  var [memberFilter,setMemberFilter]=useState('all'); // 'all' | 'mine' | <user_id>
   var loadingRef=useRef(false);
+
+  // Workflow hierarchy roles (org-wide), e.g. Assignee / Sub-Assignee / Reviewer
+  var hierarchyCols=(workflowHierarchy&&workflowHierarchy.length>0)?workflowHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):[{key:'__assignee',label:'Assignee'}];
+  var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
+  function memberName(uid){var m=memberMap[uid];return m?(m.name||m.email||'—'):null;}
+  function memberInitials(uid){var n=memberName(uid);if(!n)return '?';return n.trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();}
+  // Assignment slots filled for a client, in hierarchy order
+  function clientAssignees(clientId){var d=allocByClient[clientId]||{};var out=[];hierarchyCols.forEach(function(hc){var uid=d[hc.key];if(uid)out.push({label:hc.label,uid:uid});});if(out.length===0&&d.__assignee)out.push({label:'Assignee',uid:d.__assignee});return out;}
+  function clientMatchesMember(clientId,uid){var d=allocByClient[clientId]||{};if(d.__assignee===uid)return true;var ks=Object.keys(d);for(var i=0;i<ks.length;i++){if(ks[i].indexOf('__h_')===0&&d[ks[i]]===uid)return true;}return false;}
 
   useEffect(function(){load();},[org.id,ay]);
 
@@ -6916,21 +6928,31 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
       if(rr.error&&rr.error.code==='42P01'){setLoadError('notable');return;}
       var cl=rc.data||[],rec=rr.data||[];
       setClients(cl);setRecords(rec);
-      // Derive enrolled client IDs from ITR-flagged work types
+      // Derive enrolled client IDs + work-allocation (assignee slots) from ITR-flagged work types
       var enrolledIds=new Set();
+      var alloc={};
       var itrWtNames=(workTypeConfigs||[]).filter(function(c){return c.is_itr_worktype;}).map(function(c){return c.name;});
       if(itrWtNames.length>0){
         try{
           var rwsheets=await supabase.from('worksheets').select('id').eq('org_id',org.id).in('work_type',itrWtNames);
           var wsIds=(rwsheets.data||[]).map(function(w){return w.id;});
           if(wsIds.length>0){
-            var rrows=await supabase.from('worksheet_rows').select('client_id').in('worksheet_id',wsIds).limit(5000);
-            (rrows.data||[]).forEach(function(r){if(r.client_id)enrolledIds.add(r.client_id);});
+            var rrows=await supabase.from('worksheet_rows').select('client_id,data').in('worksheet_id',wsIds).limit(5000);
+            (rrows.data||[]).forEach(function(r){if(r.client_id){enrolledIds.add(r.client_id);
+              // Merge assignee slots — keep first non-empty per slot across the client's ITR rows
+              var d=r.data||{};var cur=alloc[r.client_id]||{};
+              Object.keys(d).forEach(function(k){if((k.indexOf('__h_')===0||k==='__assignee')&&d[k]&&!cur[k])cur[k]=d[k];});
+              alloc[r.client_id]=cur;
+            }});
           }
         }catch(_){}
       }
-      setItrEnrolledIds(enrolledIds);
-      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds};
+      setItrEnrolledIds(enrolledIds);setAllocByClient(alloc);
+      // Org members (for assignee name/avatar display + filter)
+      var mlist=[];
+      try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(300);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(300);mlist=rp.data||[];}}catch(_){}
+      setMembers(mlist);
+      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,members:mlist};
       // Org form template (silent — falls back to defaults if table/row absent)
       try{var rt=await supabase.from('itr_templates').select('template').eq('org_id',org.id).maybeSingle();if(rt&&rt.data&&rt.data.template)setTemplate(rt.data.template);}catch(_){}
       // Role for customize-form gating
@@ -6957,12 +6979,15 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
 
   function upsertLocal(rec){
     if(!rec)return;
-    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds};return np;});
+    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds,allocByClient:allocByClient,members:members};return np;});
   }
 
   // Base: enrolled in ITR work type + have a record (unless showAll)
   var itrClients=clients.filter(isITRClient);
   var baseClients=showAllClients?clients:itrClients;
+  // Member (work-allocation) filter — applies across List / Stages / Summary
+  if(memberFilter==='mine')baseClients=baseClients.filter(function(c){return clientMatchesMember(c.id,cu.id);});
+  else if(memberFilter!=='all')baseClients=baseClients.filter(function(c){return clientMatchesMember(c.id,memberFilter);});
 
   // Filter + search
   var q=search.trim().toLowerCase();
@@ -6977,7 +7002,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
   rows.sort(function(a,b){var ra=recByClient[a.id],rb=recByClient[b.id];var pa=ra?1:0,pb=rb?1:0;if(pa!==pb)return pb-pa;return (a.display_name||a.name||'').localeCompare(b.display_name||b.name||'');});
 
   // Stats (scoped to current base)
-  var baseCounts={};ITR_STATUS.forEach(function(s){baseCounts[s[0]]=records.filter(function(r){var c=clients.find(function(x){return x.id===r.client_id;});return c&&(showAllClients||isITRClient(c))&&r.status===s[0];}).length;});
+  var baseCounts={};ITR_STATUS.forEach(function(s){baseCounts[s[0]]=baseClients.filter(function(c){var r=recByClient[c.id];return r&&r.status===s[0];}).length;});
   var baseNotStarted=baseClients.filter(function(c){return !recByClient[c.id];}).length;
 
   var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
@@ -7003,6 +7028,12 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
           <button onClick={function(){setShowAllClients(false);}} style={{padding:'6px 13px',border:'none',background:!showAllClients?'rgba(14,42,71,0.12)':'transparent',color:!showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:!showAllClients?700:500,cursor:'pointer'}}>★ ITR Clients <b>{itrClients.length}</b></button>
           <button onClick={function(){setShowAllClients(true);}} style={{padding:'6px 13px',border:'none',borderLeft:'1px solid var(--tf-border)',background:showAllClients?'rgba(14,42,71,0.12)':'transparent',color:showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:showAllClients?700:500,cursor:'pointer'}}>All {clients.length}</button>
         </div>
+        {/* Work-allocation member filter */}
+        <select value={memberFilter} onChange={function(e){setMemberFilter(e.target.value);}} title="Filter by assignee / reviewer" style={{background:'var(--tf-surface)',border:'1px solid '+(memberFilter!=='all'?'#0e2a47':'var(--tf-border)'),borderRadius:7,padding:'6px 10px',color:memberFilter!=='all'?'#0e2a47':'var(--tf-text)',fontSize:12,fontWeight:memberFilter!=='all'?700:400,cursor:'pointer',outline:'none'}}>
+          <option value="all">👤 All Members</option>
+          <option value="mine">Mine</option>
+          {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+        </select>
         <select value={ay} onChange={function(e){setAy(Number(e.target.value));}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
           {[2023,2024,2025,2026,2027,2028].map(function(y){return<option key={y} value={y}>AY {y}-{String(y+1).slice(2)}</option>;})}
         </select>
@@ -7095,6 +7126,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
                     {types.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:4}}>
                       {types.slice(0,3).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:9,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:4,padding:'1px 5px'}}>{lbl}</span>;})}
                     </div>}
+                    {(function(){var as=clientAssignees(c.id);if(as.length===0)return null;return<div style={{display:'flex',alignItems:'center',marginBottom:4}}>{as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:18,height:18,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:8,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-4:0,border:'1.5px solid var(--tf-bg)',flexShrink:0}}>{memberInitials(a.uid)}</span>;})}</div>;})()}
                     {rec&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
                       <div style={{flex:1,height:4,borderRadius:2,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
                       <span style={{fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',minWidth:24,textAlign:'right'}}>{comp}%</span>
@@ -7124,8 +7156,12 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
               <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{c.display_name||c.name}</div>
               {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
             </div>
-            <div style={{flex:'1 1 160px',display:'flex',gap:4,flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 140px',display:'flex',gap:4,flexWrap:'wrap'}}>
               {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
+            </div>
+            {/* Work allocation — assignee / reviewer avatars */}
+            <div style={{flex:'0 0 110px',display:'flex',alignItems:'center',gap:5}}>
+              {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:10,color:'var(--tf-text-sub)',opacity:0.6}}>—</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:24,height:24,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-7:0,border:'2px solid var(--tf-surface)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
             </div>
             <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7}}>
               <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
@@ -15027,7 +15063,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
-      {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
