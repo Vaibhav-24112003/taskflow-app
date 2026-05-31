@@ -2190,7 +2190,6 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
   var [search,setSearch]=useState('');
   var [filterStatus,setFilterStatus]=useState('all');
   var [filterWT,setFilterWT]=useState('');
-  var [filterITR,setFilterITR]=useState('all'); // all | itr | non_itr
   var [showForm,setShowForm]=useState(false);
   var [editClient,setEditClient]=useState(null);
   var [showImport,setShowImport]=useState(false);
@@ -2218,27 +2217,26 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
     var a=document.createElement('a');a.href=url;a.download='clients.csv';a.click();URL.revokeObjectURL(url);
     toast('Exported '+clients.length+' clients');
   }
-  async function toggleITR(c){
-    var newVal=!c.itr_applicable;
-    await supabase.from('clients').update({itr_applicable:newVal}).eq('id',c.id);
-    setClients(function(prev){return prev.map(function(x){return x.id===c.id?Object.assign({},x,{itr_applicable:newVal}):x;});});
-  }
 
   var allEnrolledWTs=Array.from(new Set(Object.values(wtEnrollment).flat())).sort();
-  var itrCount=clients.filter(function(c){return c.itr_applicable;}).length;
+  // ITR classification is purely work-type-driven: enrolled in any work type marked is_itr_worktype
+  function isITRClient(c){
+    var enrolled=wtEnrollment[c.id]||[];
+    return enrolled.some(function(wt){return (workTypeConfigs||[]).some(function(cfg){return cfg.name===wt&&cfg.is_itr_worktype;});});
+  }
+  var itrCount=clients.filter(isITRClient).length;
   var filtered=clients.filter(function(c){
     var q=search.toLowerCase();
     var matchQ=!q||c.name.toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q)||(c.pan||'').toLowerCase().includes(q);
     var matchS=filterStatus==='all'||c.status===filterStatus;
     var matchWT=!filterWT||(wtEnrollment[c.id]||[]).includes(filterWT);
-    var matchITR=filterITR==='all'||(filterITR==='itr'&&c.itr_applicable)||(filterITR==='non_itr'&&!c.itr_applicable);
-    return matchQ&&matchS&&matchWT&&matchITR;
+    return matchQ&&matchS&&matchWT;
   });
   var SC={active:'#22c55e',inactive:'#94a3b8',prospect:'#f59e0b'};
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
   return<div style={{padding:'0 0 40px',maxWidth:1100,margin:'0 auto'}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
-      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(function(c){return c.status==='active';}).length} active · <span style={{color:'#f59e0b',fontWeight:700}}>★ {itrCount} ITR</span></div></div>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Client Master</h2><div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{clients.length} clients · {clients.filter(function(c){return c.status==='active';}).length} active{itrCount>0?<span style={{color:'#f59e0b',fontWeight:700}}> · ★ {itrCount} ITR</span>:null}</div></div>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button onClick={function(){setShowImport(true);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬆ Import</button>
         <button onClick={exportCSV} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>⬇ Export</button>
@@ -2255,11 +2253,6 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
         <option value="">All Work Types</option>
         {allEnrolledWTs.map(function(w){return<option key={w} value={w}>{w}</option>;})}
       </select>
-      <select value={filterITR} onChange={function(e){setFilterITR(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
-        <option value="all">All Clients</option>
-        <option value="itr">★ ITR Clients</option>
-        <option value="non_itr">Non-ITR only</option>
-      </select>
     </div>
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading...</div>:filtered.length===0?
       <div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)',background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)'}}>
@@ -2268,22 +2261,18 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
       <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
         <table style={{width:'100%',borderCollapse:'collapse'}}>
           <thead><tr style={{background:'rgba(14,42,71,0.08)'}}>
-            {['Client','Type','Contact','Tax IDs','Work Types','ITR','Status','Actions'].map(function(h){return<th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>;})}
+            {['Client','Type','Contact','Tax IDs','Work Types','Status','Actions'].map(function(h){return<th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>;})}
           </tr></thead>
           <tbody>
             {filtered.map(function(c,i){
               var enrolledWTs=wtEnrollment[c.id]||[];
+              var isITR=isITRClient(c);
               return<tr key={c.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
-                <td style={{padding:'9px 12px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:14}}>{c.name}</div>{c.display_name&&c.display_name!==c.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.display_name}</div>}</td>
+                <td style={{padding:'9px 12px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:14,display:'flex',alignItems:'center',gap:5}}>{c.name}{isITR&&<span style={{fontSize:10,fontWeight:700,color:'#d97706',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:4,padding:'1px 5px'}}>ITR</span>}</div>{c.display_name&&c.display_name!==c.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.display_name}</div>}</td>
                 <td style={{padding:'9px 12px',fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{c.client_type}</td>
                 <td style={{padding:'9px 12px'}}>{c.email&&<div style={{fontSize:12}}>{c.email}</div>}{c.phone&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.phone}</div>}</td>
                 <td style={{padding:'9px 12px'}}>{c.pan&&<div style={{fontSize:11,fontFamily:'monospace'}}>{c.pan}</div>}{c.gstin&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>}</td>
-                <td style={{padding:'9px 12px'}}><div style={{display:'flex',flexWrap:'wrap',gap:3}}>{enrolledWTs.length?enrolledWTs.map(function(wt){return<span key={wt} style={{fontSize:10,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:4,padding:'1px 6px'}}>{wt}</span>;}):'-'}</div></td>
-                <td style={{padding:'9px 12px'}}>
-                  <button onClick={function(e){e.stopPropagation();toggleITR(c);}} title={c.itr_applicable?'Remove ITR tag':'Mark as ITR client'} style={{background:c.itr_applicable?'rgba(245,158,11,0.12)':'transparent',border:'1px solid '+(c.itr_applicable?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:20,padding:'3px 10px',color:c.itr_applicable?'#d97706':'var(--tf-text-sub)',fontSize:11,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
-                    {c.itr_applicable?'★ ITR':'☆'}
-                  </button>
-                </td>
+                <td style={{padding:'9px 12px'}}><div style={{display:'flex',flexWrap:'wrap',gap:3}}>{enrolledWTs.length?enrolledWTs.map(function(wt){var isItrWt=(workTypeConfigs||[]).some(function(cfg){return cfg.name===wt&&cfg.is_itr_worktype;});return<span key={wt} style={{fontSize:10,fontWeight:600,color:isItrWt?'#d97706':'#0e2a47',background:isItrWt?'rgba(245,158,11,0.1)':'rgba(14,42,71,0.1)',border:'1px solid '+(isItrWt?'rgba(245,158,11,0.3)':'rgba(14,42,71,0.25)'),borderRadius:4,padding:'1px 6px'}}>{wt}</span>;}):'-'}</div></td>
                 <td style={{padding:'9px 12px'}}><span style={{background:SC[c.status]+'20',color:SC[c.status],border:'1px solid '+SC[c.status]+'40',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:600,textTransform:'capitalize'}}>{c.status}</span></td>
                 <td style={{padding:'9px 12px'}}><div style={{display:'flex',gap:5}}>
                   <button onClick={function(){setEditClient(c);setShowForm(true);}} style={{background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:6,padding:'3px 9px',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:600}}>Edit</button>
@@ -6891,13 +6880,14 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,template,onClos
 }
 
 // ── ITR Desk Module ──
-function ITRDeskModule({org,supabase,cu}){
+function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
   var [ay,setAy]=useState(itrDefaultAY());
   var cacheKey=org.id+'_'+ay;
   var [loading,setLoading]=useState(!_itrCache[cacheKey]);
   var [loadError,setLoadError]=useState(null);
   var [clients,setClients]=useState(_itrCache[cacheKey]?_itrCache[cacheKey].clients:[]);
   var [records,setRecords]=useState(_itrCache[cacheKey]?_itrCache[cacheKey].records:[]);
+  var [itrEnrolledIds,setItrEnrolledIds]=useState(_itrCache[cacheKey]?_itrCache[cacheKey].itrEnrolledIds:new Set());
   var [search,setSearch]=useState('');
   var [statusFilter,setStatusFilter]=useState('all');
   var [openClient,setOpenClient]=useState(null);
@@ -6919,7 +6909,21 @@ function ITRDeskModule({org,supabase,cu}){
       if(rr.error&&rr.error.code==='42P01'){setLoadError('notable');return;}
       var cl=rc.data||[],rec=rr.data||[];
       setClients(cl);setRecords(rec);
-      _itrCache[cacheKey]={clients:cl,records:rec};
+      // Derive enrolled client IDs from ITR-flagged work types
+      var enrolledIds=new Set();
+      var itrWtNames=(workTypeConfigs||[]).filter(function(c){return c.is_itr_worktype;}).map(function(c){return c.name;});
+      if(itrWtNames.length>0){
+        try{
+          var rwsheets=await supabase.from('worksheets').select('id').eq('org_id',org.id).in('work_type',itrWtNames);
+          var wsIds=(rwsheets.data||[]).map(function(w){return w.id;});
+          if(wsIds.length>0){
+            var rrows=await supabase.from('worksheet_rows').select('client_id').in('worksheet_id',wsIds).limit(5000);
+            (rrows.data||[]).forEach(function(r){if(r.client_id)enrolledIds.add(r.client_id);});
+          }
+        }catch(_){}
+      }
+      setItrEnrolledIds(enrolledIds);
+      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds};
       // Org form template (silent — falls back to defaults if table/row absent)
       try{var rt=await supabase.from('itr_templates').select('template').eq('org_id',org.id).maybeSingle();if(rt&&rt.data&&rt.data.template)setTemplate(rt.data.template);}catch(_){}
       // Role for customize-form gating
@@ -6929,20 +6933,16 @@ function ITRDeskModule({org,supabase,cu}){
 
   var recByClient={};records.forEach(function(r){recByClient[r.client_id]=r;});
 
+  // ITR client = enrolled in an ITR work type OR already has a record
+  function isITRClient(c){return itrEnrolledIds.has(c.id)||!!recByClient[c.id];}
+
   function upsertLocal(rec){
     if(!rec)return;
-    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np};return np;});
+    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds};return np;});
   }
 
-  async function toggleItrTag(clientId,currentVal,e){
-    e.stopPropagation();
-    var newVal=!currentVal;
-    await supabase.from('clients').update({itr_applicable:newVal}).eq('id',clientId).eq('org_id',org.id);
-    setClients(function(prev){var nc=prev.map(function(c){return c.id===clientId?Object.assign({},c,{itr_applicable:newVal}):c;});if(_itrCache[cacheKey])_itrCache[cacheKey].clients=nc;return nc;});
-  }
-
-  // Base: tagged clients + clients with records (unless showAll)
-  var itrClients=clients.filter(function(c){return c.itr_applicable||!!recByClient[c.id];});
+  // Base: enrolled in ITR work type + have a record (unless showAll)
+  var itrClients=clients.filter(isITRClient);
   var baseClients=showAllClients?clients:itrClients;
 
   // Filter + search
@@ -6958,7 +6958,7 @@ function ITRDeskModule({org,supabase,cu}){
   rows.sort(function(a,b){var ra=recByClient[a.id],rb=recByClient[b.id];var pa=ra?1:0,pb=rb?1:0;if(pa!==pb)return pb-pa;return (a.display_name||a.name||'').localeCompare(b.display_name||b.name||'');});
 
   // Stats (scoped to current base)
-  var baseCounts={};ITR_STATUS.forEach(function(s){baseCounts[s[0]]=records.filter(function(r){var c=clients.find(function(x){return x.id===r.client_id;});return c&&(showAllClients||c.itr_applicable||!!recByClient[c.id])&&r.status===s[0];}).length;});
+  var baseCounts={};ITR_STATUS.forEach(function(s){baseCounts[s[0]]=records.filter(function(r){var c=clients.find(function(x){return x.id===r.client_id;});return c&&(showAllClients||isITRClient(c))&&r.status===s[0];}).length;});
   var baseNotStarted=baseClients.filter(function(c){return !recByClient[c.id];}).length;
 
   var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
@@ -7015,11 +7015,10 @@ function ITRDeskModule({org,supabase,cu}){
           var sm=rec?itrStatusMeta(rec.status):null;
           var comp=rec?rec.completeness||0:0;
           var types=rec&&rec.internal_data&&rec.internal_data.income_types?rec.internal_data.income_types:[];
-          var tagged=!!c.itr_applicable;
           return<div key={c.id} onClick={function(){setOpenClient(c);}} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',borderBottom:i<rows.length-1?'1px solid var(--tf-border)':'none',cursor:'pointer',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}
             onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=i%2?'rgba(14,42,71,0.02)':'transparent';}}>
-            {/* ITR tag star */}
-            <button onClick={function(e){toggleItrTag(c.id,tagged,e);}} title={tagged?'Remove ITR tag':'Tag as ITR client'} style={{background:'none',border:'none',padding:'2px 4px',cursor:'pointer',fontSize:14,color:tagged?'#f59e0b':'#cbd5e1',flexShrink:0}}>{tagged?'★':'☆'}</button>
+            {/* narrow color bar */}
+            <div style={{width:3,height:32,borderRadius:2,background:rec?'#6b8cad':'var(--tf-border)',flexShrink:0}}></div>
             <div style={{flex:'1 1 200px',minWidth:0}}>
               <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{c.display_name||c.name}</div>
               {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
@@ -14928,7 +14927,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
-      {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
