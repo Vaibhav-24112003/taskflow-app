@@ -6940,19 +6940,26 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       var rowIds={};
       var dueDates={};
       var itrWtNames=(workTypeConfigs||[]).filter(function(c){return c.is_itr_worktype;}).map(function(c){return c.name;});
+      // AY (ay) → financial year. AY 2026-27 covers income earned in FY 2025-26,
+      // so the selected-AY worksheet is the one whose period_label contains (ay-1).
+      var fyStart=String(ay-1);
       if(itrWtNames.length>0){
         try{
-          var rwsheets=await supabase.from('worksheets').select('id').eq('org_id',org.id).in('work_type',itrWtNames);
-          var wsIds=(rwsheets.data||[]).map(function(w){return w.id;});
+          var rwsheets=await supabase.from('worksheets').select('id,period_label').eq('org_id',org.id).in('work_type',itrWtNames);
+          var wsList=rwsheets.data||[];
+          var wsIds=wsList.map(function(w){return w.id;});
+          // Worksheet(s) for the selected AY's FY — assignment + due-date write target
+          var targetWs={};wsList.forEach(function(w){if((w.period_label||'').indexOf(fyStart)>=0)targetWs[w.id]=1;});
           if(wsIds.length>0){
-            var rrows=await supabase.from('worksheet_rows').select('id,client_id,data,due_date').in('worksheet_id',wsIds).limit(5000);
-            (rrows.data||[]).forEach(function(r){if(r.client_id){enrolledIds.add(r.client_id);
-              // Remember a row id per client to write assignment changes back to
-              if(!rowIds[r.client_id])rowIds[r.client_id]=r.id;
-              if(r.due_date&&!dueDates[r.client_id])dueDates[r.client_id]=r.due_date;
-              // Merge assignee slots — keep first non-empty per slot across the client's ITR rows
-              var d=r.data||{};var cur=alloc[r.client_id]||{};
-              Object.keys(d).forEach(function(k){if((k.indexOf('__h_')===0||k==='__assignee')&&d[k]&&!cur[k])cur[k]=d[k];});
+            var rrows=await supabase.from('worksheet_rows').select('id,client_id,data,due_date,worksheet_id').in('worksheet_id',wsIds).order('created_at',{ascending:true}).limit(5000);
+            (rrows.data||[]).forEach(function(r){if(r.client_id){
+              enrolledIds.add(r.client_id); // ITR classification spans every AY
+              if(!targetWs[r.worksheet_id])return; // only the selected-AY row is the canonical write target
+              // One canonical row per client for this AY (deterministic via created_at order)
+              rowIds[r.client_id]=r.id;
+              dueDates[r.client_id]=r.due_date||undefined;
+              var d=r.data||{};var cur={};
+              Object.keys(d).forEach(function(k){if((k.indexOf('__h_')===0||k==='__assignee')&&d[k])cur[k]=d[k];});
               alloc[r.client_id]=cur;
             }});
           }
