@@ -4,8 +4,13 @@
 - **Repo**: `Vaibhav-24112003/taskflow-app` (public)
 - **Live URL**: `taskflowco.in` (Vercel auto-deploys `main`)
 - **Vercel**: team `team_JrnZNzGZg5cK3lNierDv1nZd`, project `prj_bkkNRdJwlz4HkqqlB2Pdf0H8RnUK`
-- **Supabase**: project `vkpglkblfkehvncnrdtg` (primary) / `vorxrjekbokqkigfabhr` (ap-south-1)
+- **Supabase**: **LIVE = `vorxrjekbokqkigfabhr` (ap-south-1)** — this is the project `taskflowco.in` actually connects to (`VITE_SUPABASE_URL` in Vercel). The MCP connector is bound to it and can run DDL via `apply_migration`. `vkpglkblfkehvncnrdtg` is an old/secondary project — do NOT migrate against it.
 - **Dev branch**: `claude/reference-last-conversation-ff5tF`
+
+> **⚠ Before running ANY migration, verify the live DB — don't trust the label above blindly:**
+> 1. `list_projects` on the Supabase connector → the project it returns is the one the token can actually reach. If `apply_migration` ever errors "You do not have permission", it's a **wrong/inaccessible project ID**, not a read-only token — the connector CAN do DDL.
+> 2. Confirm it's the live one: the deployed bundle preconnects to `https://<ref>.supabase.co`. Fetch the live deployment HTML (Vercel connector `web_fetch_vercel_url` if `taskflowco.in` 403s) and grep the `<link rel="preconnect" ... supabase.co>` — that `<ref>` is the real live DB.
+> 3. Only migrate against the project that satisfies both. As of last check that is `vorxrjekbokqkigfabhr`.
 
 ## Stack
 - **Frontend**: React + Vite SPA (`src/App.jsx` ~14k lines, all modules inline, `var` + hooks, no TypeScript)
@@ -78,6 +83,10 @@ git add src/App.jsx && git commit --no-edit
 | `profiles` | `id`, `name`, `email` |
 | `demo_requests` | Landing page "Book a Demo" form — `name`, `email`, `phone`, `firm_name`, `team_size`, `message`, `status` (new/contacted/converted/declined) |
 | `org_cloud_storage` | Per-org cloud/integration tokens — `provider`, `access_token`, `is_active` |
+| `itr_compilation` | ITR Desk per-client compilation — `org_id`, `client_id`, `assessment_year`, `status`, `completeness`, `client_data`/`internal_data` JSONB |
+| `itr_templates` | One org-wide ITR form template — `org_id` PK, `template` JSONB (sections/fields/docs/income_types/checks) |
+
+**ITR client classification is work-type-driven** (no per-client manual tag): a client is an "ITR client" when enrolled (via `worksheet_rows`) in any work type with `work_type_configs.is_itr_worktype = true`. The old `clients.itr_applicable` column was dropped (migration `20260531_itr_worktype_classification.sql`). ITR Desk, Client Master badges, and the Analytics ITR tile all derive ITR status from enrollment.
 
 `worksheet_rows.data` JSONB keys: `__title`, `__assignee`, `__priority`, `__description`, `__contact`, `__checklist`, `__h_<key>` (workflow hierarchy assignees)
 
