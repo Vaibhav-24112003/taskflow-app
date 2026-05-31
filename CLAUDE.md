@@ -7,6 +7,11 @@
 - **Supabase**: **LIVE = `vorxrjekbokqkigfabhr` (ap-south-1)** — this is the project `taskflowco.in` actually connects to (`VITE_SUPABASE_URL` in Vercel). The MCP connector is bound to it and can run DDL via `apply_migration`. `vkpglkblfkehvncnrdtg` is an old/secondary project — do NOT migrate against it.
 - **Dev branch**: `claude/reference-last-conversation-ff5tF`
 
+> **⚠ Before running ANY migration, verify the live DB — don't trust the label above blindly:**
+> 1. `list_projects` on the Supabase connector → the project it returns is the one the token can actually reach. If `apply_migration` ever errors "You do not have permission", it's a **wrong/inaccessible project ID**, not a read-only token — the connector CAN do DDL.
+> 2. Confirm it's the live one: the deployed bundle preconnects to `https://<ref>.supabase.co`. Fetch the live deployment HTML (Vercel connector `web_fetch_vercel_url` if `taskflowco.in` 403s) and grep the `<link rel="preconnect" ... supabase.co>` — that `<ref>` is the real live DB.
+> 3. Only migrate against the project that satisfies both. As of last check that is `vorxrjekbokqkigfabhr`.
+
 ## Stack
 - **Frontend**: React + Vite SPA (`src/App.jsx` ~14k lines, all modules inline, `var` + hooks, no TypeScript)
 - **Backend**: Supabase (Postgres + Auth + Storage)
