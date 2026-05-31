@@ -9984,13 +9984,22 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id,viewMemberId]);
 
-  // Restart any stalled load when tab becomes visible again (backgrounded fetch fix)
+  // Restart stalled load + refresh on focus.
+  // Reloads when (a) a load was mid-flight, or (b) the module cache was
+  // invalidated elsewhere (e.g. an ITR Desk assignment deletes _dashCache),
+  // so returning to this tab/window shows freshly-assigned work.
   useEffect(function(){
-    function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;load();}}
+    function onVisible(){
+      if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);return;}
+      if(loadingRef.current){loadingRef.current=false;load();return;}
+      if(!_dashCache[org.id]){load();} // cache busted while we were away → refresh
+    }
+    function onFocus(){if(!loadingRef.current&&!_dashCache[org.id])load();}
     document.addEventListener('visibilitychange',onVisible);
-    return function(){document.removeEventListener('visibilitychange',onVisible);};
+    window.addEventListener('focus',onFocus);
+    return function(){document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('focus',onFocus);};
     /* eslint-disable-next-line */
-  },[org.id,cu.id]);
+  },[org.id,cu.id,viewMemberId]);
 
   async function load(){
     if(loadingRef.current)return; // prevent concurrent loads
