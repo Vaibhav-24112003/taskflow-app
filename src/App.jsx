@@ -6904,6 +6904,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [dragOverCol,setDragOverCol]=useState(null);
   var [allocByClient,setAllocByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].allocByClient||{}):{}); // clientId → row.data (assignee slots)
   var [rowIdByClient,setRowIdByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].rowIdByClient||{}):{}); // clientId → worksheet_row id (for write-back)
+  var [dueByClient,setDueByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].dueByClient||{}):{}); // clientId → worksheet_row.due_date
   var [members,setMembers]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].members||[]):[]);
   var [memberFilter,setMemberFilter]=useState('all'); // 'all' | 'mine' | <user_id>
   var [assignFor,setAssignFor]=useState(null); // {clientId, left, top} for the fixed popover
@@ -6937,16 +6938,18 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       var enrolledIds=new Set();
       var alloc={};
       var rowIds={};
+      var dueDates={};
       var itrWtNames=(workTypeConfigs||[]).filter(function(c){return c.is_itr_worktype;}).map(function(c){return c.name;});
       if(itrWtNames.length>0){
         try{
           var rwsheets=await supabase.from('worksheets').select('id').eq('org_id',org.id).in('work_type',itrWtNames);
           var wsIds=(rwsheets.data||[]).map(function(w){return w.id;});
           if(wsIds.length>0){
-            var rrows=await supabase.from('worksheet_rows').select('id,client_id,data').in('worksheet_id',wsIds).limit(5000);
+            var rrows=await supabase.from('worksheet_rows').select('id,client_id,data,due_date').in('worksheet_id',wsIds).limit(5000);
             (rrows.data||[]).forEach(function(r){if(r.client_id){enrolledIds.add(r.client_id);
               // Remember a row id per client to write assignment changes back to
               if(!rowIds[r.client_id])rowIds[r.client_id]=r.id;
+              if(r.due_date&&!dueDates[r.client_id])dueDates[r.client_id]=r.due_date;
               // Merge assignee slots — keep first non-empty per slot across the client's ITR rows
               var d=r.data||{};var cur=alloc[r.client_id]||{};
               Object.keys(d).forEach(function(k){if((k.indexOf('__h_')===0||k==='__assignee')&&d[k]&&!cur[k])cur[k]=d[k];});
@@ -6955,12 +6958,12 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
           }
         }catch(_){}
       }
-      setItrEnrolledIds(enrolledIds);setAllocByClient(alloc);setRowIdByClient(rowIds);
+      setItrEnrolledIds(enrolledIds);setAllocByClient(alloc);setRowIdByClient(rowIds);setDueByClient(dueDates);
       // Org members (for assignee name/avatar display + filter)
       var mlist=[];
       try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(300);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(300);mlist=rp.data||[];}}catch(_){}
       setMembers(mlist);
-      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,rowIdByClient:rowIds,members:mlist};
+      _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,rowIdByClient:rowIds,dueByClient:dueDates,members:mlist};
       // Org form template (silent — falls back to defaults if table/row absent)
       try{var rt=await supabase.from('itr_templates').select('template').eq('org_id',org.id).maybeSingle();if(rt&&rt.data&&rt.data.template)setTemplate(rt.data.template);}catch(_){}
       // Role for customize-form gating
@@ -7000,10 +7003,25 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         var np=Object.assign({},prev);var d=Object.assign({},np[clientId]||{});
         if(uid)d[roleKey]=uid;else delete d[roleKey];
         np[clientId]=d;
-        _itrCache[cacheKey]={clients:clients,records:records,itrEnrolledIds:itrEnrolledIds,allocByClient:np,rowIdByClient:rowIdByClient,members:members};
+        _itrCache[cacheKey]={clients:clients,records:records,itrEnrolledIds:itrEnrolledIds,allocByClient:np,rowIdByClient:rowIdByClient,dueByClient:dueByClient,members:members};
         return np;
       });
       // Bust Diary cache so the assignee sees this work on next Diary open
+      delete _dashCache[org.id];
+    }catch(e){console.error(e);}
+    setSavingAssign(false);
+  }
+
+  // ITR filing deadline default — 31 July of the assessment year (non-audit)
+  var itrDueDefault=ay+'-07-31';
+  // Set / clear the due date on a client's ITR worksheet row (drives Diary date views + Plan My Day)
+  async function setRowDueDate(clientId,dateStr){
+    var rowId=rowIdByClient[clientId];
+    if(!rowId)return;
+    setSavingAssign(true);
+    try{
+      await supabase.from('worksheet_rows').update({due_date:dateStr||null}).eq('id',rowId);
+      setDueByClient(function(prev){var np=Object.assign({},prev);if(dateStr)np[clientId]=dateStr;else delete np[clientId];_itrCache[cacheKey]={clients:clients,records:records,itrEnrolledIds:itrEnrolledIds,allocByClient:allocByClient,rowIdByClient:rowIdByClient,dueByClient:np,members:members};return np;});
       delete _dashCache[org.id];
     }catch(e){console.error(e);}
     setSavingAssign(false);
@@ -7014,7 +7032,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 
   function upsertLocal(rec){
     if(!rec)return;
-    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds,allocByClient:allocByClient,rowIdByClient:rowIdByClient,members:members};return np;});
+    setRecords(function(prev){var i=prev.findIndex(function(x){return x.id===rec.id||x.client_id===rec.client_id;});var np=prev.slice();if(i<0)np.push(rec);else np[i]=rec;_itrCache[cacheKey]={clients:clients,records:np,itrEnrolledIds:itrEnrolledIds,allocByClient:allocByClient,rowIdByClient:rowIdByClient,dueByClient:dueByClient,members:members};return np;});
   }
 
   // Base: enrolled in ITR work type + have a record (unless showAll)
@@ -7049,7 +7067,8 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     return<div onClick={function(e){e.stopPropagation();}}>
       <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Work Allocation</div>
       {!canAssign?<div style={{fontSize:11.5,color:'var(--tf-text-sub)',lineHeight:1.5}}>No ITR worksheet row yet — enrol this client in an ITR work type in Worksheets first.</div>:
-      hierarchyCols.map(function(hc){
+      <>
+      {hierarchyCols.map(function(hc){
         return<div key={hc.key} style={{marginBottom:8}}>
           <div style={{fontSize:10.5,fontWeight:600,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
           <select value={d[hc.key]||''} disabled={savingAssign} onChange={function(e){assignRole(clientId,hc.key,e.target.value||null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
@@ -7058,6 +7077,15 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
           </select>
         </div>;
       })}
+      {/* Due date — drives Diary date views + Plan My Day */}
+      <div style={{marginBottom:8,paddingTop:6,borderTop:'1px solid var(--tf-border)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
+          <span style={{fontSize:10.5,fontWeight:600,color:'var(--tf-text-sub)'}}>Due date</span>
+          {!dueByClient[clientId]&&<button onClick={function(){setRowDueDate(clientId,itrDueDefault);}} style={{background:'none',border:'none',color:'#0e2a47',fontSize:10.5,fontWeight:700,cursor:'pointer',padding:0}}>Set ITR deadline</button>}
+        </div>
+        <input type="date" value={dueByClient[clientId]||''} disabled={savingAssign} onChange={function(e){setRowDueDate(clientId,e.target.value||null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+      </div>
+      </>}
       <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
         <button onClick={onClose} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Done</button>
       </div>
@@ -7067,12 +7095,14 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   // Bulk assign: same role dropdowns applied to all selected clients at once
   function BulkAssignPopover({onClose}){
     var [vals,setVals]=useState({});
+    var [bulkDue,setBulkDue]=useState('');
     async function apply(){
       var clientIds=Array.from(selectedClients);
       for(var ci=0;ci<clientIds.length;ci++){
         var cid=clientIds[ci];
         var keys=Object.keys(vals);
         for(var ki=0;ki<keys.length;ki++){if(vals[keys[ki]])await assignRole(cid,keys[ki],vals[keys[ki]]);}
+        if(bulkDue)await setRowDueDate(cid,bulkDue);
       }
       onClose();
     }
@@ -7087,9 +7117,17 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
           </select>
         </div>;
       })}
+      {/* Bulk due date */}
+      <div style={{marginBottom:8,paddingTop:6,borderTop:'1px solid var(--tf-border)'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:3}}>
+          <span style={{fontSize:10.5,fontWeight:600,color:'var(--tf-text-sub)'}}>Due date</span>
+          <button onClick={function(){setBulkDue(itrDueDefault);}} style={{background:'none',border:'none',color:'#0e2a47',fontSize:10.5,fontWeight:700,cursor:'pointer',padding:0}}>ITR deadline</button>
+        </div>
+        <input type="date" value={bulkDue} onChange={function(e){setBulkDue(e.target.value);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+      </div>
       <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:6}}>
         <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',color:'var(--tf-text-sub)'}}>Cancel</button>
-        <button onClick={apply} disabled={savingAssign||Object.keys(vals).length===0} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:savingAssign?'default':'pointer',opacity:Object.keys(vals).length===0?0.4:1}}>{savingAssign?'Saving…':'Apply'}</button>
+        <button onClick={apply} disabled={savingAssign||(Object.keys(vals).length===0&&!bulkDue)} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:savingAssign?'default':'pointer',opacity:(Object.keys(vals).length===0&&!bulkDue)?0.4:1}}>{savingAssign?'Saving…':'Apply'}</button>
       </div>
     </div>;
   }
@@ -7289,7 +7327,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     </>}
 
     {/* Fixed assignment popover — rendered outside any overflow:hidden ancestor */}
-    {assignFor&&<div onClick={function(e){e.stopPropagation();}} style={{position:'fixed',left:assignFor.left,top:Math.min(assignFor.top,window.innerHeight-280),zIndex:9999,width:240,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'12px 14px'}}>
+    {assignFor&&<div onClick={function(e){e.stopPropagation();}} style={{position:'fixed',left:assignFor.left,top:Math.min(assignFor.top,Math.max(8,window.innerHeight-360)),maxHeight:'calc(100vh - 16px)',overflowY:'auto',zIndex:9999,width:240,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'12px 14px'}}>
       <AssignPopoverContent clientId={assignFor.clientId} onClose={function(){setAssignFor(null);}}/>
     </div>}
     {openClient&&<ITRCompilationPanel org={org} supabase={supabase} cu={cu} client={openClient} ay={ay} existing={recByClient[openClient.id]} template={template} onClose={function(){setOpenClient(null);}} onSaved={upsertLocal}/>}
