@@ -6906,8 +6906,10 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [rowIdByClient,setRowIdByClient]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].rowIdByClient||{}):{}); // clientId → worksheet_row id (for write-back)
   var [members,setMembers]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].members||[]):[]);
   var [memberFilter,setMemberFilter]=useState('all'); // 'all' | 'mine' | <user_id>
-  var [assignFor,setAssignFor]=useState(null); // clientId whose assignment popover is open
+  var [assignFor,setAssignFor]=useState(null); // {clientId, left, top} for the fixed popover
   var [savingAssign,setSavingAssign]=useState(false);
+  var [selectedClients,setSelectedClients]=useState(new Set()); // for bulk assign
+  var [bulkAssignOpen,setBulkAssignOpen]=useState(false);
   var loadingRef=useRef(false);
 
   // Workflow hierarchy roles (org-wide), e.g. Assignee / Sub-Assignee / Reviewer
@@ -7001,6 +7003,8 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         _itrCache[cacheKey]={clients:clients,records:records,itrEnrolledIds:itrEnrolledIds,allocByClient:np,rowIdByClient:rowIdByClient,members:members};
         return np;
       });
+      // Bust Diary cache so the assignee sees this work on next Diary open
+      delete _dashCache[org.id];
     }catch(e){console.error(e);}
     setSavingAssign(false);
   }
@@ -7038,14 +7042,13 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 
   var ayLabel='AY '+ay+'-'+String(ay+1).slice(2);
 
-  // Assignment popover — pick a member for each workflow-hierarchy role on a client.
-  // Writes back via assignRole() to the client's ITR worksheet row.
-  function renderAssignPopover(clientId){
+  // Single-client assignment popover content (shared by inline + bulk)
+  function AssignPopoverContent({clientId,onClose}){
     var d=allocByClient[clientId]||{};
     var canAssign=!!rowIdByClient[clientId];
-    return<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',right:0,zIndex:50,width:230,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'10px 12px'}}>
-      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Work allocation</div>
-      {!canAssign?<div style={{fontSize:11.5,color:'var(--tf-text-sub)',lineHeight:1.5}}>This client has no ITR worksheet row yet. Add them to an ITR work type in Worksheets first.</div>:
+    return<div onClick={function(e){e.stopPropagation();}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Work Allocation</div>
+      {!canAssign?<div style={{fontSize:11.5,color:'var(--tf-text-sub)',lineHeight:1.5}}>No ITR worksheet row yet — enrol this client in an ITR work type in Worksheets first.</div>:
       hierarchyCols.map(function(hc){
         return<div key={hc.key} style={{marginBottom:8}}>
           <div style={{fontSize:10.5,fontWeight:600,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
@@ -7056,12 +7059,42 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         </div>;
       })}
       <div style={{display:'flex',justifyContent:'flex-end',marginTop:4}}>
-        <button onClick={function(){setAssignFor(null);}} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Done</button>
+        <button onClick={onClose} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:'pointer'}}>Done</button>
       </div>
     </div>;
   }
 
-  return<div style={{padding:'0 0 60px'}} onClick={function(){if(assignFor)setAssignFor(null);}}>
+  // Bulk assign: same role dropdowns applied to all selected clients at once
+  function BulkAssignPopover({onClose}){
+    var [vals,setVals]=useState({});
+    async function apply(){
+      var clientIds=Array.from(selectedClients);
+      for(var ci=0;ci<clientIds.length;ci++){
+        var cid=clientIds[ci];
+        var keys=Object.keys(vals);
+        for(var ki=0;ki<keys.length;ki++){if(vals[keys[ki]])await assignRole(cid,keys[ki],vals[keys[ki]]);}
+      }
+      onClose();
+    }
+    return<div onClick={function(e){e.stopPropagation();}} style={{padding:0}}>
+      <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.04em',marginBottom:8}}>Assign {selectedClients.size} client{selectedClients.size!==1?'s':''}</div>
+      {hierarchyCols.map(function(hc){
+        return<div key={hc.key} style={{marginBottom:8}}>
+          <div style={{fontSize:10.5,fontWeight:600,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
+          <select value={vals[hc.key]||''} onChange={function(e){var v=e.target.value;setVals(function(p){var n=Object.assign({},p);if(v)n[hc.key]=v;else delete n[hc.key];return n;});}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+            <option value="">— Unchanged —</option>
+            {members.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+          </select>
+        </div>;
+      })}
+      <div style={{display:'flex',gap:6,justifyContent:'flex-end',marginTop:6}}>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 12px',fontSize:11.5,fontWeight:600,cursor:'pointer',color:'var(--tf-text-sub)'}}>Cancel</button>
+        <button onClick={apply} disabled={savingAssign||Object.keys(vals).length===0} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 14px',fontSize:11.5,fontWeight:700,cursor:savingAssign?'default':'pointer',opacity:Object.keys(vals).length===0?0.4:1}}>{savingAssign?'Saving…':'Apply'}</button>
+      </div>
+    </div>;
+  }
+
+  return<div style={{padding:'0 0 60px'}} onClick={function(){if(assignFor)setAssignFor(null);if(bulkAssignOpen)setBulkAssignOpen(false);}}>
     {/* Header */}
     <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
       <div>
@@ -7180,12 +7213,9 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                     {types.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:4}}>
                       {types.slice(0,3).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:9,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:4,padding:'1px 5px'}}>{lbl}</span>;})}
                     </div>}
-                    <div style={{position:'relative',marginBottom:4}}>
-                      <button onClick={function(e){e.stopPropagation();setAssignFor(assignFor===c.id?null:c.id);}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',padding:0,cursor:'pointer'}}>
-                        {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:9.5,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:18,height:18,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:8,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-4:0,border:'1.5px solid var(--tf-bg)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
-                      </button>
-                      {assignFor===c.id&&renderAssignPopover(c.id)}
-                    </div>
+                    <button onClick={function(e){e.stopPropagation();var ai=assignFor&&assignFor.clientId===c.id;if(ai){setAssignFor(null);return;}var r=e.currentTarget.getBoundingClientRect();setAssignFor({clientId:c.id,left:Math.max(8,r.right-240),top:r.bottom+4});}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',padding:'0 0 4px',cursor:'pointer'}}>
+                      {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:9.5,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:18,height:18,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:8,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-4:0,border:'1.5px solid var(--tf-bg)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
+                    </button>
                     {rec&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
                       <div style={{flex:1,height:4,borderRadius:2,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
                       <span style={{fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',minWidth:24,textAlign:'right'}}>{comp}%</span>
@@ -7201,44 +7231,67 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       </div>}
 
       {/* ── LIST VIEW ── */}
-      {itrView==='list'&&(showAllClients||itrClients.length>0)&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      {itrView==='list'&&(showAllClients||itrClients.length>0)&&<div>
+        {/* Bulk-select toolbar */}
+        {selectedClients.size>0&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',marginBottom:8,background:'rgba(14,42,71,0.06)',border:'1px solid rgba(14,42,71,0.18)',borderRadius:9}}>
+          <span style={{fontSize:12,fontWeight:700,color:'#0e2a47'}}>{selectedClients.size} selected</span>
+          <div style={{position:'relative'}}>
+            <button onClick={function(e){e.stopPropagation();setBulkAssignOpen(!bulkAssignOpen);}} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:7,padding:'5px 13px',fontSize:12,fontWeight:700,cursor:'pointer'}}>Bulk Assign ▾</button>
+            {bulkAssignOpen&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:0,zIndex:9999,width:240,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'12px 14px'}}>
+              <BulkAssignPopover onClose={function(){setBulkAssignOpen(false);}}/>
+            </div>}
+          </div>
+          <button onClick={function(){setSelectedClients(new Set());}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'4px 10px',fontSize:11.5,color:'var(--tf-text-sub)',cursor:'pointer'}}>Clear</button>
+        </div>}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
         {rows.length===0?<div style={{padding:'30px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No clients match.</div>:
         rows.map(function(c,i){
           var rec=recByClient[c.id];
           var sm=rec?itrStatusMeta(rec.status):null;
           var comp=rec?rec.completeness||0:0;
           var types=rec&&rec.internal_data&&rec.internal_data.income_types?rec.internal_data.income_types:[];
-          return<div key={c.id} onClick={function(){setOpenClient(c);}} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',borderBottom:i<rows.length-1?'1px solid var(--tf-border)':'none',cursor:'pointer',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}
-            onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=i%2?'rgba(14,42,71,0.02)':'transparent';}}>
+          var isSel=selectedClients.has(c.id);
+          return<div key={c.id} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',borderBottom:i<rows.length-1?'1px solid var(--tf-border)':'none',background:isSel?'rgba(14,42,71,0.05)':i%2?'rgba(14,42,71,0.02)':'transparent'}}
+            onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=isSel?'rgba(14,42,71,0.05)':i%2?'rgba(14,42,71,0.02)':'transparent';}}>
+            {/* Checkbox */}
+            <input type="checkbox" checked={isSel} onChange={function(e){e.stopPropagation();setSelectedClients(function(prev){var ns=new Set(prev);if(ns.has(c.id))ns.delete(c.id);else ns.add(c.id);return ns;});}} onClick={function(e){e.stopPropagation();}} style={{width:14,height:14,cursor:'pointer',flexShrink:0,accentColor:'#0e2a47'}}/>
             <div style={{width:3,height:32,borderRadius:2,background:rec?itrStatusMeta(rec.status)[2]:'var(--tf-border)',flexShrink:0}}/>
-            <div style={{flex:'1 1 200px',minWidth:0}}>
+            <div style={{flex:'1 1 200px',minWidth:0,cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
               <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{c.display_name||c.name}</div>
               {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
             </div>
-            <div style={{flex:'1 1 140px',display:'flex',gap:4,flexWrap:'wrap'}}>
+            <div style={{flex:'1 1 140px',display:'flex',gap:4,flexWrap:'wrap',cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
               {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
             </div>
-            {/* Work allocation — assignee / reviewer avatars (click to assign) */}
-            <div style={{flex:'0 0 120px',position:'relative'}}>
-              <button onClick={function(e){e.stopPropagation();setAssignFor(assignFor===c.id?null:c.id);}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:5,background:assignFor===c.id?'rgba(14,42,71,0.08)':'none',border:'1px solid '+(assignFor===c.id?'#0e2a47':'transparent'),borderRadius:20,padding:'3px 8px 3px 5px',cursor:'pointer',width:'100%'}}
-                onMouseEnter={function(e){if(assignFor!==c.id)e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){if(assignFor!==c.id)e.currentTarget.style.background='none';}}>
-                {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:11,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:24,height:24,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-7:0,border:'2px solid var(--tf-surface)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
+            {/* Work allocation — click to assign, opens fixed popover (no overflow clipping) */}
+            <div style={{flex:'0 0 120px'}}>
+              <button onClick={function(e){e.stopPropagation();var ai=assignFor&&assignFor.clientId===c.id;if(ai){setAssignFor(null);return;}var r=e.currentTarget.getBoundingClientRect();setAssignFor({clientId:c.id,left:Math.max(8,r.right-240),top:r.bottom+4});}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:5,background:assignFor&&assignFor.clientId===c.id?'rgba(14,42,71,0.08)':'none',border:'1px solid '+(assignFor&&assignFor.clientId===c.id?'#0e2a47':'transparent'),borderRadius:20,padding:'3px 8px 3px 5px',cursor:'pointer'}}
+                onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=assignFor&&assignFor.clientId===c.id?'rgba(14,42,71,0.08)':'none';}}>
+                {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:11,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai2){return<span key={ai2} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:24,height:24,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:9,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai2?-7:0,border:'2px solid var(--tf-surface)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
               </button>
-              {assignFor===c.id&&renderAssignPopover(c.id)}
             </div>
-            <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7}}>
+            <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7,cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
               <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
               <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',minWidth:30,textAlign:'right'}}>{comp}%</span>
             </div>
-            <div style={{flex:'0 0 130px',textAlign:'right'}}>
+            <div style={{flex:'0 0 130px',textAlign:'right',cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
               {rec?<span style={{fontSize:11,fontWeight:700,color:sm[2],background:sm[2]+'1a',border:'1px solid '+sm[2]+'33',borderRadius:20,padding:'3px 11px'}}>{sm[1]}</span>:
               <span style={{fontSize:11,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.08)',borderRadius:20,padding:'3px 11px'}}>+ Start</span>}
             </div>
           </div>;
         })}
+        </div>
+        {rows.length>1&&<div style={{display:'flex',gap:8,padding:'6px 4px'}}>
+          <button onClick={function(){setSelectedClients(new Set(rows.map(function(c){return c.id;})));}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:11.5,cursor:'pointer',padding:'2px 0'}}>Select all {rows.length}</button>
+          {selectedClients.size>0&&<button onClick={function(){setSelectedClients(new Set());}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:11.5,cursor:'pointer',padding:'2px 0'}}>· Clear</button>}
+        </div>}
       </div>}
     </>}
 
+    {/* Fixed assignment popover — rendered outside any overflow:hidden ancestor */}
+    {assignFor&&<div onClick={function(e){e.stopPropagation();}} style={{position:'fixed',left:assignFor.left,top:Math.min(assignFor.top,window.innerHeight-280),zIndex:9999,width:240,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'12px 14px'}}>
+      <AssignPopoverContent clientId={assignFor.clientId} onClose={function(){setAssignFor(null);}}/>
+    </div>}
     {openClient&&<ITRCompilationPanel org={org} supabase={supabase} cu={cu} client={openClient} ay={ay} existing={recByClient[openClient.id]} template={template} onClose={function(){setOpenClient(null);}} onSaved={upsertLocal}/>}
     {showBuilder&&<ITRTemplateBuilder org={org} supabase={supabase} template={template} onClose={function(){setShowBuilder(false);}} onSaved={function(tpl){setTemplate(tpl);}}/>}
   </div>;
