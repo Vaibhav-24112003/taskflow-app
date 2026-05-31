@@ -6895,6 +6895,9 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
   var [template,setTemplate]=useState(null);
   var [showBuilder,setShowBuilder]=useState(false);
   var [isAdmin,setIsAdmin]=useState(false);
+  var [itrView,setItrView]=useState('list'); // 'list' | 'pipeline' | 'funnel'
+  var [dragClient,setDragClient]=useState(null);
+  var [dragOverCol,setDragOverCol]=useState(null);
   var loadingRef=useRef(false);
 
   useEffect(function(){load();},[org.id,ay]);
@@ -6933,6 +6936,18 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
 
   var recByClient={};records.forEach(function(r){recByClient[r.client_id]=r;});
 
+  async function updateStatus(clientId,newStatus){
+    var existing=recByClient[clientId];
+    if(existing){
+      await supabase.from('itr_compilation').update({status:newStatus}).eq('id',existing.id);
+      upsertLocal(Object.assign({},existing,{status:newStatus}));
+    }else{
+      var ayStr=ay+'-'+String(ay+1).slice(2);
+      var res=await supabase.from('itr_compilation').insert({org_id:org.id,client_id:clientId,assessment_year:ayStr,status:newStatus,completeness:0,client_data:{},internal_data:{}}).select().single();
+      if(!res.error)upsertLocal(res.data);
+    }
+  }
+
   // ITR client = enrolled in an ITR work type OR already has a record
   function isITRClient(c){return itrEnrolledIds.has(c.id)||!!recByClient[c.id];}
 
@@ -6970,8 +6985,11 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
         <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>ITR Desk</h2>
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Compile data, run checks, track completeness. {ayLabel}</div>
       </div>
-      <div style={{display:'flex',gap:8,alignItems:'center'}}>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
         {isAdmin&&<button onClick={function(){setShowBuilder(true);}} title="Customize the ITR compilation form for your firm" style={{padding:'6px 13px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer'}}>⚙ Customize Form</button>}
+        {/* View toggle */}
+        <div style={{display:'flex',borderRadius:8,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
+          {[{id:'list',label:'≡ List'},{id:'pipeline',label:'⬛ Pipeline'},{id:'funnel',label:'◇ Funnel'}].map(function(v,vi){return<button key={v.id} onClick={function(){setItrView(v.id);}} style={{background:itrView===v.id?'rgba(14,42,71,0.12)':'transparent',border:'none',borderRight:vi<2?'1px solid var(--tf-border)':'none',padding:'6px 11px',color:itrView===v.id?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:itrView===v.id?700:500,whiteSpace:'nowrap'}}>{v.label}</button>;})}</div>
         {/* ITR clients / All toggle */}
         <div style={{display:'flex',borderRadius:8,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
           <button onClick={function(){setShowAllClients(false);}} style={{padding:'6px 13px',border:'none',background:!showAllClients?'rgba(14,42,71,0.12)':'transparent',color:!showAllClients?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,fontWeight:!showAllClients?700:500,cursor:'pointer'}}>★ ITR Clients <b>{itrClients.length}</b></button>
@@ -7002,13 +7020,89 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
 
       {/* Empty state for ITR clients view */}
       {!showAllClients&&itrClients.length===0&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'32px',textAlign:'center'}}>
-        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No ITR clients tagged yet</div>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Switch to "All" view and click ☆ on each client to tag them as ITR filers.</div>
+        <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>No ITR clients yet</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Mark a Work Type as ★ ITR in Set-up → Work Types to auto-populate ITR clients.</div>
         <button onClick={function(){setShowAllClients(true);}} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Show All Clients</button>
       </div>}
 
-      {/* Client list */}
-      {(showAllClients||itrClients.length>0)&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      {/* ── FUNNEL VIEW ── */}
+      {itrView==='funnel'&&(showAllClients||itrClients.length>0)&&<div>
+        <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:12}}>
+          {(function(){
+            var total=baseClients.length||1;
+            var notStarted=baseClients.filter(function(c){return !recByClient[c.id];}).length;
+            var cols=[{key:'none',label:'Not Started',color:'#94a3b8',count:notStarted}].concat(
+              ITR_STATUS.map(function(s){return{key:s[0],label:s[1],color:s[2],count:baseCounts[s[0]]||0};}));
+            return cols.map(function(col){
+              var pct=Math.round(col.count/total*100);
+              return<div key={col.key} onClick={function(){setStatusFilter(col.key==='none'?'none':col.key);setItrView('list');}} style={{display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}
+                onMouseEnter={function(e){e.currentTarget.style.opacity='0.8';}} onMouseLeave={function(e){e.currentTarget.style.opacity='1';}}>
+                <div style={{width:150,fontSize:12,fontWeight:600,color:'var(--tf-text)',textAlign:'right',flexShrink:0}}>{col.label}</div>
+                <div style={{flex:1,height:34,background:'var(--tf-surface)',borderRadius:7,border:'1px solid var(--tf-border)',overflow:'hidden',position:'relative'}}>
+                  <div style={{width:Math.max(col.count>0?4:0,pct)+'%',height:'100%',background:col.color,opacity:0.85,borderRadius:7,transition:'width 0.4s'}}/>
+                  {col.count>0&&<span style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',fontSize:12,fontWeight:700,color:'#fff',mixBlendMode:'difference'}}>{col.count} client{col.count!==1?'s':''}</span>}
+                </div>
+                <div style={{width:44,textAlign:'right',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',flexShrink:0}}>{pct}%</div>
+              </div>;
+            });
+          })()}
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',marginTop:4}}>Total: {baseClients.length} clients across all stages · Click a bar to filter list view</div>
+      </div>}
+
+      {/* ── PIPELINE KANBAN VIEW ── */}
+      {itrView==='pipeline'&&(showAllClients||itrClients.length>0)&&<div style={{overflowX:'auto',paddingBottom:16}}>
+        <div style={{display:'flex',gap:12,minWidth:'max-content'}}>
+          {[{key:'none',label:'Not Started',color:'#94a3b8'}].concat(ITR_STATUS.map(function(s){return{key:s[0],label:s[1],color:s[2]};})).map(function(col){
+            var colClients=col.key==='none'?baseClients.filter(function(c){return !recByClient[c.id];}):baseClients.filter(function(c){var r=recByClient[c.id];return r&&r.status===col.key;});
+            var isOver=dragOverCol===col.key;
+            return<div key={col.key}
+              onDragOver={function(e){e.preventDefault();setDragOverCol(col.key);}}
+              onDragLeave={function(){setDragOverCol(null);}}
+              onDrop={function(e){e.preventDefault();setDragOverCol(null);if(dragClient&&dragClient.colKey!==col.key){if(col.key==='none'){/* can't drag back to not-started */}else{updateStatus(dragClient.clientId,col.key);}}setDragClient(null);}}
+              style={{width:200,flexShrink:0,background:isOver?'rgba(14,42,71,0.06)':'var(--tf-surface)',border:'1px solid '+(isOver?'#0e2a47':'var(--tf-border)'),borderRadius:12,padding:'0 0 8px',transition:'border-color 0.15s,background 0.15s'}}>
+              {/* Column header */}
+              <div style={{padding:'10px 12px 8px',borderBottom:'2px solid '+col.color,marginBottom:6}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontSize:11,fontWeight:700,color:col.color,textTransform:'uppercase',letterSpacing:'0.04em'}}>{col.label}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',background:'var(--tf-border)',borderRadius:10,padding:'1px 7px'}}>{colClients.length}</span>
+                </div>
+              </div>
+              {/* Cards */}
+              <div style={{padding:'0 8px',display:'flex',flexDirection:'column',gap:6}}>
+                {colClients.map(function(c){
+                  var rec=recByClient[c.id];
+                  var comp=rec?rec.completeness||0:0;
+                  var types=rec&&rec.internal_data&&rec.internal_data.income_types?rec.internal_data.income_types:[];
+                  return<div key={c.id}
+                    draggable={col.key!=='none'}
+                    onDragStart={function(){setDragClient({clientId:c.id,colKey:col.key});}}
+                    onDragEnd={function(){setDragClient(null);setDragOverCol(null);}}
+                    onClick={function(){setOpenClient(c);}}
+                    style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',cursor:'pointer',userSelect:'none',borderLeft:'3px solid '+col.color}}
+                    onMouseEnter={function(e){e.currentTarget.style.boxShadow='0 2px 8px rgba(14,42,71,0.1)';e.currentTarget.style.borderColor='rgba(14,42,71,0.3)';}}
+                    onMouseLeave={function(e){e.currentTarget.style.boxShadow='none';e.currentTarget.style.borderColor='var(--tf-border)';}}>
+                    <div style={{fontWeight:600,fontSize:12,color:'var(--tf-text)',marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
+                    {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:4}}>{c.pan}</div>}
+                    {types.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:4}}>
+                      {types.slice(0,3).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:9,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:4,padding:'1px 5px'}}>{lbl}</span>;})}
+                    </div>}
+                    {rec&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
+                      <div style={{flex:1,height:4,borderRadius:2,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
+                      <span style={{fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',minWidth:24,textAlign:'right'}}>{comp}%</span>
+                    </div>}
+                  </div>;
+                })}
+                {colClients.length===0&&<div style={{padding:'18px 8px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11,opacity:0.5}}>Drop here</div>}
+              </div>
+            </div>;
+          })}
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',marginTop:12}}>Drag cards between columns to move status · Click a card to open details</div>
+      </div>}
+
+      {/* ── LIST VIEW ── */}
+      {itrView==='list'&&(showAllClients||itrClients.length>0)&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
         {rows.length===0?<div style={{padding:'30px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No clients match.</div>:
         rows.map(function(c,i){
           var rec=recByClient[c.id];
@@ -7017,22 +7111,18 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
           var types=rec&&rec.internal_data&&rec.internal_data.income_types?rec.internal_data.income_types:[];
           return<div key={c.id} onClick={function(){setOpenClient(c);}} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 18px',borderBottom:i<rows.length-1?'1px solid var(--tf-border)':'none',cursor:'pointer',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}
             onMouseEnter={function(e){e.currentTarget.style.background='rgba(14,42,71,0.05)';}} onMouseLeave={function(e){e.currentTarget.style.background=i%2?'rgba(14,42,71,0.02)':'transparent';}}>
-            {/* narrow color bar */}
-            <div style={{width:3,height:32,borderRadius:2,background:rec?'#6b8cad':'var(--tf-border)',flexShrink:0}}></div>
+            <div style={{width:3,height:32,borderRadius:2,background:rec?itrStatusMeta(rec.status)[2]:'var(--tf-border)',flexShrink:0}}/>
             <div style={{flex:'1 1 200px',minWidth:0}}>
               <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{c.display_name||c.name}</div>
               {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
             </div>
-            {/* income type chips */}
             <div style={{flex:'1 1 160px',display:'flex',gap:4,flexWrap:'wrap'}}>
               {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
             </div>
-            {/* completeness */}
             <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7}}>
               <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
               <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',minWidth:30,textAlign:'right'}}>{comp}%</span>
             </div>
-            {/* status */}
             <div style={{flex:'0 0 130px',textAlign:'right'}}>
               {rec?<span style={{fontSize:11,fontWeight:700,color:sm[2],background:sm[2]+'1a',border:'1px solid '+sm[2]+'33',borderRadius:20,padding:'3px 11px'}}>{sm[1]}</span>:
               <span style={{fontSize:11,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.08)',borderRadius:20,padding:'3px 11px'}}>+ Start</span>}
