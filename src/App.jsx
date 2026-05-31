@@ -6904,7 +6904,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs}){
     if(!_itrCache[cacheKey])setLoading(true);setLoadError(null);
     try{
       var ayStr=ay+'-'+String(ay+1).slice(2);
-      var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,itr_applicable').eq('org_id',org.id).order('name').limit(2000);
+      var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone').eq('org_id',org.id).order('name').limit(2000);
       var rr=await supabase.from('itr_compilation').select('*').eq('org_id',org.id).eq('assessment_year',ayStr).limit(2000);
       if(rr.error&&rr.error.code==='42P01'){setLoadError('notable');return;}
       var cl=rc.data||[],rec=rr.data||[];
@@ -7525,7 +7525,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
     loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
-    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields,itr_applicable').eq('org_id',org.id).order('name').limit(500);
+    var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
     // Fetch worksheets for the selected FY year, also include year+1 to catch old calendar-year monthly data (Jan-Mar)
     var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).in('period_year',[selectedYear,selectedYear+1]).limit(1000);
     var clientData=rc.data||[];
@@ -7878,10 +7878,12 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
             <div style={{position:'absolute',bottom:14,right:16,fontSize:18,color:'var(--tf-border)'}}>›</div>
           </div>;
         };
-        // ITR Summary tile — shown when any itr_compilation records exist for this AY
+        // ITR Summary tile — shown when any itr_compilation records exist or any client is enrolled in an ITR work type
         var itrAY2=(selectedYear+1)+'-'+String(selectedYear+2).slice(2);
-        var itrTaggedClients=clients.filter(function(c){return c.itr_applicable;}).length;
-        var itrWtClients=clients.filter(function(c){return !c.itr_applicable&&(workTypeConfigs||[]).some(function(w){return w.is_itr_worktype;});}).length; // placeholder when no tag
+        var itrWtNames=(workTypeConfigs||[]).filter(function(w){return w.is_itr_worktype;}).map(function(w){return w.name;});
+        var itrWsIds={};worksheets.forEach(function(ws){if(itrWtNames.indexOf(ws.work_type)>=0)itrWsIds[ws.id]=1;});
+        var itrEnrolledSet={};allRows.forEach(function(r){if(itrWsIds[r.worksheet_id]&&r.client_id)itrEnrolledSet[r.client_id]=1;});
+        var itrTaggedClients=Object.keys(itrEnrolledSet).length;
         var showItrTile=itrRecords.length>0||itrTaggedClients>0;
         var itrStatusCounts={};ITR_STATUS.forEach(function(s){itrStatusCounts[s[0]]=itrRecords.filter(function(r){return r.status===s[0];}).length;});
         var itrFiled=itrStatusCounts['filed']||0;
