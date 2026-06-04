@@ -11029,8 +11029,12 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <Calendar size={18} strokeWidth={2.2} color="#0e2a47"/>
             <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</div>
           </div>
-          <button onClick={function(){setPlanOpen(false);}} title="Collapse panel"
-            style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <button onClick={onGoToPlan} title="Open full planner tab"
+              style={{background:'#0f172a',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>▶ Full Planner</button>
+            <button onClick={function(){setPlanOpen(false);}} title="Collapse panel"
+              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+          </div>
         </div>
         <div style={{fontSize:11,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>
           {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}
@@ -15284,7 +15288,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id||isAnyDeptManager;
 
   var MODULES=[
-    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'}]},
+    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
     {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
     {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
