@@ -9972,6 +9972,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [filter,setFilter]=useState('all');
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('board'); // 'list' | 'board' | 'calendar' | 'grid' | 'urgency'
+  var [planOpen,setPlanOpen]=useState(false); // Plan My Day side panel — collapsed by default to give the board full width
   var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
   // Create Task modal state
   var [showCreate,setShowCreate]=useState(false);
@@ -10412,6 +10413,12 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'6px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(91,108,240,0.3)'}}>
               + Create Task
             </button>}
+            <button onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan My Day':'Show Plan My Day'}
+              style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'6px 11px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+              <Calendar size={14} strokeWidth={2}/>
+              Plan My Day
+              {myDayTasks.length>0&&<span style={{fontSize:9,fontWeight:800,background:planOpen?'rgba(255,255,255,0.2)':'rgba(14,42,71,0.12)',color:planOpen?'#fff':'#0e2a47',padding:'1px 6px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{myDayTasks.length}</span>}
+            </button>
           </div>
         </div>
         {/* Row 2: filter pills + view toggles + date filter + member */}
@@ -11013,13 +11020,17 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       </div>
     </div>
 
-    {/* ══ RIGHT COLUMN: My Day Panel 340px ══ */}
-    <div style={{width:340,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+    {/* ══ RIGHT COLUMN: Plan My Day panel (collapsible via the calendar toggle) ══ */}
+    {planOpen&&<div style={{width:360,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {/* Header */}
       <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:4}}>
-          <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</div>
-          <button onClick={onGoToPlan} style={{background:'#0f172a',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>▶ Start focus</button>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <Calendar size={18} strokeWidth={2.2} color="#0e2a47"/>
+            <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</div>
+          </div>
+          <button onClick={function(){setPlanOpen(false);}} title="Collapse panel"
+            style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
         </div>
         <div style={{fontSize:11,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>
           {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}
@@ -11209,7 +11220,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           </div>
         </div>
       </div>
-    </div>
+    </div>}
 
     {/* Toast */}
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.kind==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:700,boxShadow:'0 10px 30px rgba(0,0,0,0.2)',zIndex:1000}}>{toast.msg}</div>}
@@ -15273,7 +15284,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id||isAnyDeptManager;
 
   var MODULES=[
-    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
+    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
     {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
     {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
