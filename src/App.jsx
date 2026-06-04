@@ -9971,7 +9971,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [loading,setLoading]=useState(!_dc);
   var [filter,setFilter]=useState('all');
   var [dateFilter,setDateFilter]=useState('all');
-  var [dashView,setDashView]=useState('list'); // 'list' | 'urgency' | 'kanban'
+  var [dashView,setDashView]=useState('board'); // 'list' | 'board' | 'calendar' | 'grid' | 'urgency'
   var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
   // Create Task modal state
   var [showCreate,setShowCreate]=useState(false);
@@ -9985,6 +9985,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [ctHierarchy,setCtHierarchy]=useState({});
   var [ctChecklist,setCtChecklist]=useState([]);
   var [ctSaving,setCtSaving]=useState(false);
+  var [ctStatus,setCtStatus]=useState('pending');
   var [toast,setToast]=useState(null);
   var wfHierarchy=workflowHierarchy||[];
   var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
@@ -10221,7 +10222,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{data:d}):r;});});
   }
 
-  function resetCreateForm(){setCtClientId('');setCtWorkType('');setCtTitle('');setCtDesc('');setCtPriority('medium');setCtDueDate('');setCtContact('');setCtHierarchy({});setCtChecklist([]);setShowCreate(false);}
+  function resetCreateForm(){setCtClientId('');setCtWorkType('');setCtTitle('');setCtDesc('');setCtPriority('medium');setCtDueDate('');setCtContact('');setCtHierarchy({});setCtChecklist([]);setCtStatus('pending');setShowCreate(false);}
 
   // Resolve (find or create) a worksheet for the chosen work type. If wtName is empty,
   // returns the Unclassified worksheet for this org (creates if missing).
@@ -10266,7 +10267,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       if(ctContact.trim())rowData.__contact=ctContact.trim();
       var validChecklist=ctChecklist.filter(function(c){return c.text&&c.text.trim();});
       if(validChecklist.length>0)rowData.__checklist=validChecklist;
-      var newRow={worksheet_id:ws.id,client_id:ctClientId,org_id:org.id,data:rowData,due_date:ctDueDate||null,due_label:ctTitle.trim()||(ctWorkType?'Task':'Unclassified'),status:'pending'};
+      var newRow={worksheet_id:ws.id,client_id:ctClientId,org_id:org.id,data:rowData,due_date:ctDueDate||null,due_label:ctTitle.trim()||(ctWorkType?'Task':'Unclassified'),status:ctStatus||'pending'};
       var ins=await supabase.from('worksheet_rows').insert(newRow).select().single();
       if(ins.error||!ins.data){showToast('Failed to create task','err');setCtSaving(false);return;}
       showToast('Task created!');
@@ -10703,49 +10704,164 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           </div>)}
 
         {/* BOARD VIEW — kanban by status */}
-        {dashView==='board'&&<div style={{display:'flex',gap:12,overflowX:'auto',paddingBottom:8}}>
+        {dashView==='board'&&<div style={{display:'flex',gap:14,overflowX:'auto',paddingBottom:8,alignItems:'flex-start'}}>
           {[
-            {id:'pending',label:'Pending',color:'#94a3b8'},
-            {id:'in_progress',label:'In Progress',color:'#3b82f6'},
-            {id:'under_review',label:'Under Review',color:'#f59e0b'}
+            {id:'pending',label:'To Do',color:'#64748b',bg:'rgba(100,116,139,0.07)'},
+            {id:'in_progress',label:'In Progress',color:'#3b82f6',bg:'rgba(59,130,246,0.07)'},
+            {id:'under_review',label:'In Review',color:'#8b5cf6',bg:'rgba(139,92,246,0.07)'}
           ].map(function(col){
-            var colRows=railFiltered.filter(function(r){return (r.status||'pending')===col.id;});
+            var colRows=railFiltered.filter(function(r){return getEffectiveStatusDash(r)===col.id;});
             return<div key={col.id}
               onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='move';}}
               onDrop={function(e){e.preventDefault();var id=e.dataTransfer.getData('text/plain');if(id)updateStatus(id,col.id);}}
-              style={{flex:'0 0 280px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,display:'flex',flexDirection:'column',minHeight:0,maxHeight:'calc(100vh - 240px)'}}>
-              <div style={{padding:'10px 12px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              style={{flex:'0 0 300px',background:col.bg,border:'1px solid var(--tf-border)',borderTop:'3px solid '+col.color,borderRadius:10,display:'flex',flexDirection:'column',minHeight:120}}>
+              {/* Column header */}
+              <div style={{padding:'10px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
-                  <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{col.label}</span>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:col.color,flexShrink:0}}/>
+                  <span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{col.label}</span>
+                  <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',padding:'1px 7px',borderRadius:10,fontFamily:"'JetBrains Mono',monospace"}}>{colRows.length}</span>
                 </div>
-                <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',padding:'2px 7px',borderRadius:10,fontFamily:"'JetBrains Mono',monospace"}}>{colRows.length}</span>
+                <button onClick={function(){setCtStatus(col.id);setShowCreate(true);}} title={'Add task to '+col.label}
+                  style={{background:col.color,border:'none',borderRadius:6,width:24,height:24,color:'#fff',cursor:'pointer',fontSize:16,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,flexShrink:0}}>+</button>
               </div>
-              <div style={{flex:1,overflowY:'auto',padding:10}}>
-                {colRows.length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',padding:'20px 0'}}>—</div>}
+              {/* Cards */}
+              <div style={{padding:'0 10px 10px 10px',display:'flex',flexDirection:'column',gap:8}}>
+                {colRows.length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',padding:'16px 0',fontStyle:'italic'}}>No tasks</div>}
                 {colRows.map(function(r){
                   var rd=r.data||{};var c=clientMap[r.client_id]||{};var ws=wsMap[r.worksheet_id]||{};
                   var isOver=r.due_date&&r.due_date<todayStr;
                   var inMyDay=myDayIds.includes(r.id)||r.due_date===todayStr;var isHidden=myDayHidden.includes(r.id);
                   var showInDay=inMyDay&&!isHidden;
-                  return<div key={r.id} draggable onDragStart={function(e){e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';}}
-                    onClick={function(){toggleExpand(r.id);}}
-                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(isOver?'#ef4444':col.color),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:'grab'}}>
-                    <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rd.__title||c.display_name||c.name||'Task'}</div>
-                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',marginBottom:6}}>
-                      {ws.work_type&&<span style={{fontSize:10,fontWeight:700,color:'#0e2a47',background:'rgba(14,42,71,0.12)',padding:'1px 6px',borderRadius:4}}>{ws.work_type}</span>}
-                      {showInDay&&<span style={{fontSize:9,fontWeight:800,color:'#f59e0b',letterSpacing:'0.04em'}}>☀ IN MY DAY</span>}
-                    </div>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6}}>
-                      <span style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.display_name||c.name||''}</span>
-                      <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
-                        {r.due_date&&<span style={{fontSize:10,fontWeight:600,color:isOver?'#ef4444':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{isOver?'⚠ ':''}{r.due_date}</span>}
-                        <button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from My Day':'Add to My Day'}
-                          style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 5px',color:showInDay?'#f59e0b':'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>☀</button>
+                  var isExpanded=expandedRow===r.id;var isEditing=editingRow===r.id;
+                  var priority=(rd.__priority||'medium');
+                  var clTotal=(rd.__checklist||[]).length;var clDone=(rd.__checklist||[]).filter(function(x){return x.done;}).length;
+                  var assigneeId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
+                  var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
+                  var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
+                  var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
+                  return<div key={r.id}>
+                    {/* Card */}
+                    <div draggable={!isExpanded}
+                      onDragStart={function(e){if(isExpanded){e.preventDefault();return;}e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';}}
+                      onClick={function(){toggleExpand(r.id);}}
+                      style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(isOver?'#ef4444':col.color),borderRadius:8,padding:'10px 12px',cursor:'pointer',transition:'box-shadow 0.15s',boxShadow:isExpanded?'0 4px 16px rgba(14,42,71,0.12)':'none'}}
+                      onMouseEnter={function(e){if(!isExpanded)e.currentTarget.style.boxShadow='0 2px 8px rgba(14,42,71,0.1)';}}
+                      onMouseLeave={function(e){if(!isExpanded)e.currentTarget.style.boxShadow='none';}}>
+                      {/* Title row */}
+                      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:6,marginBottom:6}}>
+                        <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',lineHeight:1.35,flex:1}}>{rd.__title||c.display_name||c.name||'Task'}</div>
+                        <span style={{fontSize:9,transform:isExpanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.15s',color:'var(--tf-text-sub)',flexShrink:0,marginTop:2}}>▼</span>
                       </div>
+                      {/* Meta pills */}
+                      <div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap',marginBottom:6}}>
+                        {ws.work_type&&<span style={{fontSize:10,fontWeight:700,color:'#0e2a47',background:'rgba(14,42,71,0.1)',padding:'1px 6px',borderRadius:4}}>{ws.work_type}</span>}
+                        {priority!=='medium'&&<span style={{fontSize:9,fontWeight:800,color:PC[priority],background:priority==='urgent'?'rgba(239,68,68,0.1)':priority==='high'?'rgba(245,158,11,0.1)':'rgba(148,163,184,0.1)',padding:'1px 6px',borderRadius:4,textTransform:'uppercase',letterSpacing:'0.04em'}}>{priority}</span>}
+                        {showInDay&&<span style={{fontSize:9,fontWeight:800,color:'#f59e0b',letterSpacing:'0.04em'}}>☀</span>}
+                        {clTotal>0&&<span style={{fontSize:9,color:clDone===clTotal?'#22c55e':'var(--tf-text-sub)',fontWeight:700}}>✓ {clDone}/{clTotal}</span>}
+                      </div>
+                      {/* Bottom: client + assignee + due + my day */}
+                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
+                        <span style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{c.display_name||c.name||''}</span>
+                        <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+                          {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
+                          {r.due_date&&<span style={{fontSize:10,fontWeight:600,color:isOver?'#ef4444':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>{isOver?'⚠ ':''}{r.due_date.slice(5)}</span>}
+                          <button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from My Day':'Add to My Day'}
+                            style={{background:'none',border:'none',cursor:'pointer',fontSize:12,opacity:showInDay?1:0.3,color:'#f59e0b',padding:0,lineHeight:1}}
+                            onMouseEnter={function(e){e.currentTarget.style.opacity='1';}}
+                            onMouseLeave={function(e){e.currentTarget.style.opacity=showInDay?'1':'0.3';}}>☀</button>
+                        </div>
+                      </div>
+                      {rd.__description&&!isExpanded&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:6,lineHeight:1.4,overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{rd.__description}</div>}
                     </div>
+                    {/* Expanded detail panel */}
+                    {isExpanded&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderTop:'none',borderRadius:'0 0 8px 8px',padding:'10px 12px'}}>
+                      {!isEditing?<div>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
+                          <span style={{fontSize:10,fontWeight:800,color:PC[priority],background:priority==='urgent'?'rgba(239,68,68,0.1)':priority==='high'?'rgba(245,158,11,0.1)':priority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 8px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{priority}</span>
+                          {rd.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📞 {rd.__contact}</span>}
+                          <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+                            <select value={r.status||'pending'} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(r.id,e.target.value);}}
+                              style={{background:'var(--tf-bg)',border:'1px solid',borderColor:SC[r.status||'pending'],borderRadius:20,padding:'3px 8px',color:SC[r.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none'}}>
+                              <option value="pending">To Do</option><option value="in_progress">In Progress</option><option value="under_review">In Review</option><option value="completed">Done</option>
+                            </select>
+                            <button onClick={function(e){e.stopPropagation();startEditing(r);}}
+                              style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit</button>
+                          </div>
+                        </div>
+                        {rd.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{rd.__description}</div>}
+                        {clTotal>0&&<div style={{marginBottom:6}}>
+                          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:5}}>Checklist ({clDone}/{clTotal})</div>
+                          {rd.__checklist.map(function(item,ci){
+                            return<div key={ci} style={{display:'flex',alignItems:'center',gap:8,marginBottom:4,cursor:'pointer'}} onClick={function(e){e.stopPropagation();toggleChecklistItem(r.id,ci);}}>
+                              <div style={{width:14,height:14,borderRadius:3,border:'1.5px solid',borderColor:item.done?'#22c55e':'var(--tf-border)',background:item.done?'#22c55e':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                                {item.done&&<span style={{color:'#fff',fontSize:9,fontWeight:900}}>✓</span>}
+                              </div>
+                              <span style={{fontSize:11,color:item.done?'var(--tf-text-sub)':'var(--tf-text)',textDecoration:item.done?'line-through':'none'}}>{item.text}</span>
+                            </div>;
+                          })}
+                        </div>}
+                        {!rd.__description&&clTotal===0&&!rd.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic',marginBottom:4}}>No details. Click Edit to add.</div>}
+                      </div>
+                      :<div onClick={function(e){e.stopPropagation();}}>
+                        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                            <div>
+                              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Title</label>
+                              <input type="text" value={editData.title} onChange={function(e){setEditData(function(p){return Object.assign({},p,{title:e.target.value});});}}
+                                style={{width:'100%',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div>
+                              <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Priority</label>
+                              <select value={editData.priority} onChange={function(e){setEditData(function(p){return Object.assign({},p,{priority:e.target.value});});}}
+                                style={{width:'100%',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none'}}>
+                                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Contact</label>
+                            <input type="text" value={editData.contact} onChange={function(e){setEditData(function(p){return Object.assign({},p,{contact:e.target.value});});}}
+                              placeholder="e.g., Mr. Sharma (+91 98xxx)"
+                              style={{width:'100%',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div>
+                            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Description</label>
+                            <textarea value={editData.description} onChange={function(e){setEditData(function(p){return Object.assign({},p,{description:e.target.value});});}} rows={3}
+                              placeholder="Details, context, instructions…"
+                              style={{width:'100%',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 8px',color:'var(--tf-text)',fontSize:12,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                          </div>
+                          <div>
+                            <label style={{display:'block',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:2}}>Checklist</label>
+                            {editData.checklist.map(function(item,ci){
+                              return<div key={ci} style={{display:'flex',gap:5,alignItems:'center',marginBottom:4}}>
+                                <input type="text" value={item.text} onChange={function(e){var v=e.target.value;setEditData(function(p){var nc=p.checklist.map(function(x,i){return i===ci?{text:v,done:x.done}:x;});return Object.assign({},p,{checklist:nc});});}}
+                                  style={{flex:1,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'5px 7px',color:'var(--tf-text)',fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                                <button onClick={function(){setEditData(function(p){return Object.assign({},p,{checklist:p.checklist.filter(function(_,i){return i!==ci;})});});}}
+                                  style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,width:24,height:24,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}>×</button>
+                              </div>;
+                            })}
+                            <button onClick={function(){setEditData(function(p){return Object.assign({},p,{checklist:[].concat(p.checklist,[{text:'',done:false}])});});}}
+                              style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:5,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,width:'100%'}}>+ Add item</button>
+                          </div>
+                          <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+                            <button onClick={function(e){e.stopPropagation();setEditingRow(null);}}
+                              style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>Cancel</button>
+                            <button onClick={function(e){e.stopPropagation();saveRowData(r.id);}}
+                              style={{background:'linear-gradient(135deg,#3b82f6,#2563eb)',border:'none',borderRadius:6,padding:'5px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Save</button>
+                          </div>
+                        </div>
+                      </div>}
+                    </div>}
+                    {/* Add below affordance */}
+                    {!isExpanded&&<button onClick={function(e){e.stopPropagation();setCtStatus(col.id);setShowCreate(true);}} title="Add a task below"
+                      style={{display:'none',width:'100%',background:'none',border:'1px dashed var(--tf-border)',borderRadius:6,padding:'3px 0',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,marginTop:2,fontFamily:'inherit'}}
+                      className="board-add-below">+ Add</button>}
                   </div>;
                 })}
+                {/* Add to column button at bottom */}
+                <button onClick={function(){setCtStatus(col.id);setShowCreate(true);}}
+                  style={{background:'none',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit',textAlign:'left',marginTop:2}}>+ Add task</button>
               </div>
             </div>;
           })}
