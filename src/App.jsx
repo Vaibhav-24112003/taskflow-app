@@ -6702,7 +6702,10 @@ function itrComputeCompleteness(internal,tpl){
   return Math.round(done/pieces.length*100);
 }
 
-function itrDefaultAY(){var now=new Date();var y=now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;return (y+1);} // filing year base; AY label = base..base+1
+// Current ITR filing-season Assessment Year (start year). India: after 1 Apr we
+// file the FY that just ended — e.g. Apr–Dec 2026 → file FY 2025-26 = AY 2026-27,
+// so return 2026. Before Apr, the prior FY's AY is still active.
+function itrDefaultAY(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;} // AY label = base..base+1
 
 // ── ITR Compilation Panel (full-screen overlay) ──
 function ITRCompilationPanel({org,supabase,cu,client,ay,existing,template,onClose,onSaved}){
