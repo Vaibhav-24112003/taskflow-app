@@ -9957,7 +9957,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   </div>;
 }
 
-function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan}){
+function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan,allWorkspaces}){
   var _dc=_dashCache[org.id]||null;
   var [rows,setRows]=useState(_dc?_dc.rows:[]);
   var [clients,setClients]=useState(_dc?_dc.clients:[]);
@@ -11020,209 +11020,20 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       </div>
     </div>
 
-    {/* ══ RIGHT COLUMN: Plan My Day panel (collapsible via the calendar toggle) ══ */}
-    {planOpen&&<div style={{width:360,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      {/* Header */}
-      <div style={{padding:'16px 16px 12px',borderBottom:'1px solid var(--tf-border)',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:4}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <Calendar size={18} strokeWidth={2.2} color="#0e2a47"/>
-            <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</div>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <button onClick={onGoToPlan} title="Open full planner tab"
-              style={{background:'#0f172a',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>▶ Full Planner</button>
-            <button onClick={function(){setPlanOpen(false);}} title="Collapse panel"
-              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
-          </div>
+    {/* ══ RIGHT COLUMN: Plan My Day panel (full PlanMyDayView, collapsible via calendar toggle) ══ */}
+    {planOpen&&<div style={{width:480,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {/* Slim header — just title + close */}
+      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <Calendar size={16} strokeWidth={2.2} color="#0e2a47"/>
+          <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</span>
         </div>
-        <div style={{fontSize:11,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>
-          {new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})}
-        </div>
-        {/* Capacity bar */}
-        <div style={{marginTop:12}}>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--tf-text-sub)',marginBottom:4,fontFamily:"'JetBrains Mono',monospace"}}>
-            <span>Capacity</span>
-            <span>{myDayTasks.length} tasks / 8h</span>
-          </div>
-          <div style={{height:6,background:'var(--tf-surface)',borderRadius:3,overflow:'hidden'}}>
-            <div style={{height:'100%',width:Math.min(100,(myDayTasks.length/8)*100)+'%',background:'#0e2a47',borderRadius:3,transition:'width 0.3s'}}/>
-          </div>
-        </div>
-        {/* Summary pills */}
-        <div style={{display:'flex',gap:6,marginTop:10}}>
-          {[
-            {label:'Scheduled',value:myDayTasks.length,color:'#0e2a47'},
-            {label:'Done',value:0,color:'#22c55e'},
-            {label:'Overdue',value:stats.overdue,color:'#ef4444'},
-          ].map(function(p){return<div key={p.label} style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 8px',textAlign:'center'}}>
-            <div style={{fontSize:16,fontWeight:800,color:p.color,fontFamily:"'JetBrains Mono',monospace"}}>{p.value}</div>
-            <div style={{fontSize:9,color:'var(--tf-text-sub)',fontWeight:600,textTransform:'uppercase',letterSpacing:'0.04em'}}>{p.label}</div>
-          </div>;})}
-        </div>
+        <button onClick={function(){setPlanOpen(false);}} title="Collapse"
+          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
       </div>
-
-      {/* Scrollable body */}
-      <div style={{flex:1,overflowY:'auto',padding:'12px 14px'}}>
-        {/* Morning */}
-        {morningTasks.length>0&&<div style={{marginBottom:14}}>
-          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Morning</div>
-          {morningTasks.map(function(row,idx){
-            var rd=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id]||{};
-            var assigneeId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
-            var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
-            var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
-            var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
-            var statusLabel=row.status==='in_progress'?'● Now':row.status==='completed'?'✓ Done':idx===0?'Up next':'Pending';
-            var statusColor=row.status==='in_progress'?'#22c55e':row.status==='completed'?'#94a3b8':idx===0?'#f59e0b':'var(--tf-text-sub)';
-            var showLog=myDayLogId===row.id;
-            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid '+(showLog?'#0e2a47':'var(--tf-border)'),borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,marginBottom:4}}>
-                <span style={{fontSize:10,fontWeight:700,color:statusColor,fontFamily:"'JetBrains Mono',monospace"}}>{statusLabel}</span>
-                <div style={{display:'flex',alignItems:'center',gap:5}}>
-                  {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
-                  <button onClick={function(){var next=!showLog;setMyDayLogId(next?row.id:null);if(next)setMyDayLogForm({client_id:row.client_id||'',work_type:ws.work_type||rd.__title||'',hours:1,minutes:0,notes:''}); }} title="Send to Log"
-                    style={{background:showLog?'rgba(14,42,71,0.15)':'none',border:'1px solid '+(showLog?'#0e2a47':'var(--tf-border)'),color:showLog?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap',lineHeight:1}}>
-                    → Log
-                  </button>
-                  <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
-                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}
-                    onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
-                    onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
-                </div>
-              </div>
-              <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
-              {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:showLog?6:0}}>{client.display_name||client.name}</div>}
-              {showLog&&<div style={{marginTop:8,background:'rgba(14,42,71,0.06)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:8,padding:'10px 12px'}}>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>→ Send to Daily Log</div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                  <div style={{gridColumn:'1/-1'}}>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Work Type / Task</div>
-                    <input value={myDayLogForm.work_type} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{work_type:e.target.value});});}} placeholder="e.g. ITR Filing…" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Hours</div>
-                    <input type="number" min="0" max="24" value={myDayLogForm.hours} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{hours:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Mins</div>
-                    <input type="number" min="0" max="59" value={myDayLogForm.minutes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{minutes:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div style={{gridColumn:'1/-1'}}>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Notes</div>
-                    <input value={myDayLogForm.notes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{notes:e.target.value});});}} placeholder="What did you do?" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={function(){sendMyDayLog(row);}} disabled={myDayLoggingId===row.id} style={{background:'#0e2a47',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,opacity:myDayLoggingId===row.id?0.6:1}}>{myDayLoggingId===row.id?'Logging…':'Save to Log'}</button>
-                  <button onClick={function(){setMyDayLogId(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>Cancel</button>
-                </div>
-              </div>}
-            </div>;
-          })}
-        </div>}
-
-        {/* Afternoon */}
-        {afternoonTasks.length>0&&<div style={{marginBottom:14}}>
-          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Afternoon</div>
-          {afternoonTasks.map(function(row){
-            var rd=row.data||{};var client=clientMap[row.client_id];var ws=wsMap[row.worksheet_id]||{};
-            var showLog=myDayLogId===row.id;
-            return<div key={row.id} style={{background:'var(--tf-surface)',border:'1px solid '+(showLog?'#0e2a47':'var(--tf-border)'),borderRadius:9,padding:'9px 11px',marginBottom:7,position:'relative'}}>
-              <div style={{display:'flex',alignItems:'flex-start',gap:6}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',lineHeight:1.3,marginBottom:3}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
-                  {client&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{client.display_name||client.name}</div>}
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-                  <button onClick={function(){var next=!showLog;setMyDayLogId(next?row.id:null);if(next)setMyDayLogForm({client_id:row.client_id||'',work_type:ws.work_type||rd.__title||'',hours:1,minutes:0,notes:''}); }} title="Send to Log"
-                    style={{background:showLog?'rgba(14,42,71,0.15)':'none',border:'1px solid '+(showLog?'#0e2a47':'var(--tf-border)'),color:showLog?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:10,padding:'2px 7px',borderRadius:4,fontWeight:600,whiteSpace:'nowrap',lineHeight:1}}>
-                    → Log
-                  </button>
-                  <button onClick={function(){removeFromMyDay(row.id);}} title="Remove from My Day"
-                    style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'0 2px',lineHeight:1}}
-                    onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}}
-                    onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
-                </div>
-              </div>
-              {showLog&&<div style={{marginTop:8,background:'rgba(14,42,71,0.06)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:8,padding:'10px 12px'}}>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>→ Send to Daily Log</div>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:6}}>
-                  <div style={{gridColumn:'1/-1'}}>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Work Type / Task</div>
-                    <input value={myDayLogForm.work_type} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{work_type:e.target.value});});}} placeholder="e.g. ITR Filing…" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Hours</div>
-                    <input type="number" min="0" max="24" value={myDayLogForm.hours} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{hours:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Mins</div>
-                    <input type="number" min="0" max="59" value={myDayLogForm.minutes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{minutes:e.target.value});});}} style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                  <div style={{gridColumn:'1/-1'}}>
-                    <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:2}}>Notes</div>
-                    <input value={myDayLogForm.notes} onChange={function(e){setMyDayLogForm(function(f){return Object.assign({},f,{notes:e.target.value});});}} placeholder="What did you do?" style={{width:'100%',boxSizing:'border-box',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit'}}/>
-                  </div>
-                </div>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={function(){sendMyDayLog(row);}} disabled={myDayLoggingId===row.id} style={{background:'#0e2a47',border:'none',borderRadius:6,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,opacity:myDayLoggingId===row.id?0.6:1}}>{myDayLoggingId===row.id?'Logging…':'Save to Log'}</button>
-                  <button onClick={function(){setMyDayLogId(null);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>Cancel</button>
-                </div>
-              </div>}
-            </div>;
-          })}
-        </div>}
-
-        {myDayTasks.length===0&&<div style={{textAlign:'center',padding:'20px 0',color:'var(--tf-text-sub)',fontSize:12}}>
-          <div style={{fontSize:28,marginBottom:8}}>☀</div>
-          <div style={{fontWeight:600}}>No tasks planned for today</div>
-          <div style={{fontSize:11,marginTop:4}}>Add tasks using the ☀ button</div>
-        </div>}
-
-        {/* Suggested for today */}
-        {suggestedTasks.length>0&&<div style={{marginTop:14}}>
-          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-            <span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em'}}>Suggested for today</span>
-            <span style={{fontSize:9,color:'var(--tf-text-sub)',opacity:0.6}}>· overdue</span>
-          </div>
-          {suggestedTasks.map(function(row){
-            var rd=row.data||{};var client=clientMap[row.client_id];
-            return<div key={row.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'rgba(239,68,68,0.03)',border:'1px solid rgba(239,68,68,0.12)',borderRadius:8,marginBottom:6}}>
-              <span style={{fontSize:13,color:'var(--tf-text-sub)',opacity:0.4}}>⠿</span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rd.__title||(client?(client.display_name||client.name):'Task')}</div>
-                <div style={{fontSize:10,color:'#ef4444',fontWeight:600}}>Due {row.due_date?new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div>
-              </div>
-              <button onClick={function(){addToMyDay(row.id);}} title="Add to My Day"
-                style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:700,flexShrink:0,whiteSpace:'nowrap'}}>
-                ☀ Add
-              </button>
-            </div>;
-          })}
-        </div>}
-
-        {/* Mini calendar — 2-week grid */}
-        <div style={{marginTop:18,padding:'12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10}}>
-          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>2-Week View</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:2,textAlign:'center'}}>
-            {['M','T','W','T','F','S','S'].map(function(d,i){return<div key={i} style={{fontSize:8,fontWeight:700,color:'var(--tf-text-sub)',padding:'2px 0'}}>{d}</div>;})}
-            {calDays.map(function(d,i){
-              var dStr=calDayStrings[i];
-              var isT=dStr===todayStr;
-              var dotCount=calDotMap[dStr]||0;
-              return<div key={i} style={{display:'flex',flexDirection:'column',alignItems:'center',padding:'3px 1px'}}>
-                <div style={{width:20,height:20,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',
-                  background:isT?'#0e2a47':'transparent',
-                  color:isT?'#fff':'var(--tf-text)',
-                  fontSize:10,fontWeight:isT?800:500,fontFamily:"'JetBrains Mono',monospace"}}>
-                  {d.getDate()}
-                </div>
-                {dotCount>0&&<div style={{width:4,height:4,borderRadius:'50%',background:isT?'#fff':'#0e2a47',marginTop:1}}/>}
-              </div>;
-            })}
-          </div>
-        </div>
+      {/* Full PlanMyDayView in scrollable body */}
+      <div style={{flex:1,overflowY:'auto',padding:'0 4px'}}>
+        <PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces||[]} org={org} allProfiles={[]} workTypeConfigs={workTypeConfigs} workflowHierarchy={workflowHierarchy} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>
       </div>
     </div>}
 
@@ -15288,7 +15099,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id||isAnyDeptManager;
 
   var MODULES=[
-    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
+    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
     {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
     {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
@@ -15362,8 +15173,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var sidebarW=sidebarOpen?236:52;
   var moduleContent=<>
       {/* Your Diary */}
-      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){setTab('plan');localStorage.setItem('tf_lastOrgTab','plan');}}/>}
-      {orgModule==='diary'&&tab==='plan'&&<PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces} org={org} allProfiles={[]} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
+      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces}/>}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
