@@ -16077,6 +16077,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   }
 
   async function loadTasks(){
+    // If org context is provided but has no workspaces, there are no workspace tasks — bail to avoid cross-org leak
+    if(org&&orgWsIds.length===0){setAllTasks([]);return;}
     var q=supabase.from('tasks').select('id,title,status,priority,due_date,workspace_id,checklist,assignees,created_by,description').order('priority').limit(500);
     if(org&&orgWsIds.length>0){
       q=q.in('workspace_id',orgWsIds);
@@ -16099,7 +16101,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     var insertObj={user_id:cu.id,plan_date:planDate,sort_order:maxOrder+1,source_type:item._kind==='task'?'task':'worksheet_row',source_id:item._id};
     if(item._kind==='task')insertObj.task_id=item._id;
     var r=await supabase.from('daily_plans').insert(insertObj).select().single();
-    if(r.error){showToast(r.error.message,'err');return;}
+    if(r.error){showToast(r.error.code==='23505'?'Already in plan for this date':'Failed to add: '+r.error.message,'err');return;}
     var workspace=item._kind==='task'?(orgWs.find(function(w){return w.id===item._workspace_id;})||null):null;
     setPlan(function(p){return[...p,Object.assign({},r.data,{item:item,workspace:workspace})];});
     showToast('Added to plan ✓');
