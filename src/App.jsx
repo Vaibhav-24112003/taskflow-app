@@ -9988,6 +9988,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [ctSaving,setCtSaving]=useState(false);
   var [ctStatus,setCtStatus]=useState('pending');
   var [toast,setToast]=useState(null);
+  var [planRefreshKey,setPlanRefreshKey]=useState(0);
   var wfHierarchy=workflowHierarchy||[];
   var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
   var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):[{key:'__assignee',label:'Assignee'}];
@@ -10330,9 +10331,20 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   function toggleMyDay(rowId){
     var inDay=myDayIds.includes(rowId)||(rows.find(function(r){return r.id===rowId;})||{}).due_date===todayLocalStr2();
     var hidden=myDayHidden.includes(rowId);
-    if(inDay&&!hidden)removeFromMyDay(rowId);else addToMyDay(rowId);
+    if(inDay&&!hidden){removeFromMyDay(rowId);}else{addToMyDay(rowId);addRowToPlan(rowId);}
   }
   function todayLocalStr2(){var _td=new Date();return _td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');}
+
+  async function addRowToPlan(rowId){
+    var _td=new Date();
+    var pd=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');
+    // get current max sort_order for this user+date
+    var existing=await supabase.from('daily_plans').select('sort_order').eq('user_id',cu.id).eq('plan_date',pd).order('sort_order',{ascending:false}).limit(1);
+    var nextOrder=((existing.data&&existing.data[0]&&existing.data[0].sort_order)||0)+1;
+    var r=await supabase.from('daily_plans').insert({user_id:cu.id,plan_date:pd,source_type:'worksheet_row',source_id:rowId,sort_order:nextOrder,done:false}).select('id').single();
+    if(r.error&&r.error.code!=='23505')return; // silently ignore duplicates
+    setPlanRefreshKey(function(k){return k+1;});
+  }
 
   // Greeting
   var displayName=(cu&&cu.user_metadata&&cu.user_metadata.full_name)||(cu&&cu.email?(cu.email||'').split('@')[0]:'')||'there';
@@ -11021,7 +11033,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     </div>
 
     {/* ══ RIGHT COLUMN: Plan My Day panel (full PlanMyDayView, collapsible via calendar toggle) ══ */}
-    {planOpen&&<div style={{width:480,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+    {planOpen&&<div
+      onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='copy';}}
+      onDrop={function(e){e.preventDefault();var rowId=e.dataTransfer.getData('text/plain');if(rowId){addToMyDay(rowId);addRowToPlan(rowId);}}}
+      style={{width:480,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {/* Slim header — just title + close */}
       <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -11033,7 +11048,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       </div>
       {/* Full PlanMyDayView in scrollable body */}
       <div style={{flex:1,overflowY:'auto',padding:'0 4px'}}>
-        <PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces||[]} org={org} allProfiles={[]} workTypeConfigs={workTypeConfigs} workflowHierarchy={workflowHierarchy} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} compact={true}/>
+        <PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces||[]} org={org} allProfiles={[]} workTypeConfigs={workTypeConfigs} workflowHierarchy={workflowHierarchy} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} compact={true} refreshKey={planRefreshKey}/>
       </div>
     </div>}
 
@@ -15728,7 +15743,7 @@ function ClientFormPublic({supabase,token}){
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
 // ══════════════════════════════════════════════════════════════════
-function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy, orgGroups, orgGroupMemberships, compact}){
+function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy, orgGroups, orgGroupMemberships, compact, refreshKey}){
   var today=new Date();
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var [planDate,setPlanDate]=useState(todayStr);
@@ -15845,6 +15860,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   useEffect(function(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();}},[planDate,org&&org.id,planUserId]);
   useEffect(function(){if(org)loadClients();},[org&&org.id]);
   useEffect(function(){if(org)loadOrgMembers();},[org&&org.id]);
+  useEffect(function(){if(refreshKey>0)refreshAll();},[refreshKey]); // eslint-disable-line
 
   function refreshAll(){loadPlan();loadTasks();if(org){loadWsRows();loadBcTasks();loadClients();}}
 
