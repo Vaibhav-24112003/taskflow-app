@@ -11033,7 +11033,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       </div>
       {/* Full PlanMyDayView in scrollable body */}
       <div style={{flex:1,overflowY:'auto',padding:'0 4px'}}>
-        <PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces||[]} org={org} allProfiles={[]} workTypeConfigs={workTypeConfigs} workflowHierarchy={workflowHierarchy} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>
+        <PlanMyDayView cu={cu} supabase={supabase} workspaces={allWorkspaces||[]} org={org} allProfiles={[]} workTypeConfigs={workTypeConfigs} workflowHierarchy={workflowHierarchy} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} compact={true}/>
       </div>
     </div>}
 
@@ -15728,7 +15728,7 @@ function ClientFormPublic({supabase,token}){
 // ══════════════════════════════════════════════════════════════════
 // PLAN MY DAY
 // ══════════════════════════════════════════════════════════════════
-function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy, orgGroups, orgGroupMemberships}){
+function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConfigs, workflowHierarchy, orgGroups, orgGroupMemberships, compact}){
   var today=new Date();
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   var [planDate,setPlanDate]=useState(todayStr);
@@ -16205,9 +16205,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var bcOtherPending=bcOther.filter(function(x){var s=x.status;return s==='not_started'||s==='in_progress'||s==='reviewing';});
   var bcOtherDone=bcOther.filter(function(x){var s=x.status;return s==='done'||s==='approved';});
 
-  return<div style={{maxWidth:1020,margin:'0 auto',padding:'0 0 60px'}}>
-    {/* Header */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:10,paddingBottom:16,borderBottom:'1px solid var(--tf-border)'}}>
+  return<div style={{maxWidth:compact?'none':1020,margin:compact?0:'0 auto',padding:compact?'0 0 32px':'0 0 60px'}}>
+    {/* Header — hidden in compact/panel mode since panel already shows the title */}
+    {!compact&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:10,paddingBottom:16,borderBottom:'1px solid var(--tf-border)'}}>
       <div>
         <div style={{fontSize:11,fontWeight:700,color:'#0e2a47',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}>Daily Planner</div>
         <h2 style={{fontSize:20,fontWeight:700,color:'var(--tf-text)',margin:0,letterSpacing:'-0.01em'}}>Plan My Day{org&&<span style={{fontWeight:400,color:'var(--tf-text-sub)'}}> · {org.name}</span>}</h2>
@@ -16235,10 +16235,32 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
           <span style={{fontSize:15,lineHeight:1}}>+</span>Create Task
         </button>}
       </div>
-    </div>
+    </div>}
+
+    {/* Compact mode toolbar — date nav + actions in a single tight row */}
+    {compact&&<div style={{display:'flex',alignItems:'center',gap:6,padding:'10px 12px',borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap',background:'var(--tf-surface)'}}>
+      {isReadOnly&&<div style={{fontSize:11,color:'#f59e0b',fontWeight:600,width:'100%',marginBottom:4}}>Viewing {viewingMember.name}'s plan</div>}
+      {/* Date nav */}
+      <div style={{display:'flex',alignItems:'center',gap:2,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'2px 3px',flexShrink:0}}>
+        <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()-1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:5,padding:'3px 7px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,lineHeight:1}}>‹</button>
+        <div style={{textAlign:'center',minWidth:80}}>
+          <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',lineHeight:1.2}}>{dateLabel}</div>
+          <input type="date" value={planDate} onChange={function(e){setPlanDate(e.target.value);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:9,cursor:'pointer',outline:'none',fontFamily:'inherit',display:'block',width:'100%',textAlign:'center',lineHeight:1}}/>
+        </div>
+        <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:5,padding:'3px 7px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,lineHeight:1}}>›</button>
+      </div>
+      {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>Today</button>}
+      <button onClick={refreshAll} disabled={loading} title="Refresh" style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,opacity:loading?0.6:1,lineHeight:1}} title="Refresh">{loading?'↻…':'↻'}</button>
+      <div style={{flex:1}}/>
+      {canViewOthers&&orgMembers.length>0&&<select value={viewingMember?viewingMember.id:''} onChange={function(e){var uid=e.target.value;if(!uid){setViewingMember(null);}else{var m=orgMembers.find(function(x){return x.id===uid;});setViewingMember(m?{id:m.id,name:m.name||m.email}:null);}setShowPicker(false);}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',fontFamily:'inherit',maxWidth:110}}>
+        {renderGroupedMemberOptions(orgMembers.filter(function(m){return m.id!==cu.id;}),orgGroups||[],orgGroupMemberships||[],'My Plan')}
+      </select>}
+      {!isReadOnly&&<button onClick={function(){setShowPicker(function(v){return !v;});}} style={{background:showPicker?'#0e2a47':'var(--tf-panel)',border:'1px solid '+(showPicker?'#0e2a47':'var(--tf-border)'),borderRadius:6,padding:'4px 9px',color:showPicker?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>+ Add</button>}
+      {!isReadOnly&&org&&<button onClick={function(){setShowCreate(true);}} style={{background:'#1e40af',border:'none',borderRadius:6,padding:'4px 9px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>+ Task</button>}
+    </div>}
 
     {/* Progress bar */}
-    {total>0&&<div style={{marginBottom:18}}>
+    {total>0&&<div style={{marginBottom:compact?8:18,padding:compact?'8px 12px 0':0}}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
         <span style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>{done} of {total} completed</span>
         <span style={{fontSize:11,fontWeight:700,color:pct===100?'#16a34a':'#0e2a47'}}>{pct}%</span>
@@ -16248,9 +16270,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       </div>
     </div>}
 
-    <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+    <div style={{display:'flex',flexDirection:compact?'column':'row',gap:compact?0:16,alignItems:'flex-start'}}>
       {/* Plan list */}
-      <div style={{flex:1,minWidth:0}}>
+      <div style={{flex:1,minWidth:0,padding:compact?'12px 12px 0':0}}>
         {loadError?<div style={{textAlign:'center',padding:40}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadPlan} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>:
         loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading...</div>:
         plan.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
@@ -16472,8 +16494,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
         </div>}
       </div>
 
-      {/* Task Picker Panel */}
-      {showPicker&&!isReadOnly&&<div style={{width:360,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
+      {/* Task Picker Panel — side panel in full view, inline below plan in compact/panel mode */}
+      {showPicker&&!isReadOnly&&<div style={compact?{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderTop:'none',display:'flex',flexDirection:'column',maxHeight:380,overflow:'hidden'}:{width:360,flexShrink:0,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxHeight:'80vh',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'14px 14px 10px',borderBottom:'1px solid var(--tf-border)'}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
             <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Add to Plan</div>
