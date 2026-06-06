@@ -1426,6 +1426,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     return true
   })
   const [showCmdBar,setShowCmdBar]=useState(false)
+  const [showNotesDrawer,setShowNotesDrawer]=useState(false)
   const [orgNavTarget,setOrgNavTarget]=useState(null)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
@@ -1805,6 +1806,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {isAdminEmail(cu?.email)&&<button onClick={()=>setShowAdminShell(true)} title="Platform Admin Dashboard" style={{padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5}}>🛡 Admin</button>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAdminShell(true)}/>
+      {/* Quick Notes — floating, available on every screen */}
+      <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotesDrawer?'rgba(99,102,241,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'rgba(99,102,241,0.4)':'var(--tf-border)'),color:showNotesDrawer?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#6366f1'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
       {/* Support / help icon */}
       <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#0e2a47'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
         <LifeBuoy size={14}/>
@@ -1844,6 +1847,18 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {adminModule==='users'&&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><UsersAdmin/></Suspense>}
     {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
     {showAdminShell&&isAdminEmail(cu?.email)&&<Suspense fallback={null}><AdminShell cu={cu} onClose={()=>setShowAdminShell(false)}/></Suspense>}
+    {/* Quick Notes drawer — slides in from right, available on every screen */}
+    {showNotesDrawer&&<div onClick={()=>setShowNotesDrawer(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.35)',zIndex:9000,display:'flex',justifyContent:'flex-end'}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:420,maxWidth:'92vw',height:'100%',background:'var(--tf-panel)',borderLeft:'1px solid var(--tf-border)',boxShadow:'-10px 0 40px rgba(0,0,0,0.2)',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:16}}>📝</span><span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Quick Notes</span></div>
+          <button onClick={()=>setShowNotesDrawer(false)} title="Close" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15}}>×</button>
+        </div>
+        <div style={{flex:1,overflow:'hidden'}}>
+          {activeOrg?<NotesModule org={activeOrg} cu={cu} mode="drawer"/>:<div style={{padding:30,textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>Open an organisation to use notes.</div>}
+        </div>
+      </div>
+    </div>}
     {!adminModule&&!activeWs
       ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
@@ -9957,6 +9972,338 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   </div>;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// NOTES — free-form personal notes with block editor + org sharing
+// mode: 'full' (Diary tab, two-pane) | 'drawer' (floating quick panel)
+// ═══════════════════════════════════════════════════════════════════
+function _noteBid(){return Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-3);}
+var NOTE_COLORS=['','#fef3c7','#dbeafe','#dcfce7','#fae8ff','#fee2e2','#e0e7ff'];
+
+function NotesModule({org,cu,mode}){
+  var compact=mode==='drawer';
+  var [notes,setNotes]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [activeId,setActiveId]=useState(null);
+  var [search,setSearch]=useState('');
+  var [members,setMembers]=useState([]);
+  var [shareMap,setShareMap]=useState({}); // noteId -> [{user_id,can_edit}]
+  var [myShares,setMyShares]=useState({}); // noteId -> can_edit (notes shared TO me)
+  var [shareNoteId,setShareNoteId]=useState(null);
+  var [toast,setToast]=useState(null);
+  var notesRef=useRef([]);
+  var saveTimers=useRef({});
+  useEffect(function(){notesRef.current=notes;},[notes]);
+  function showToast(m,k){setToast({m:m,k:k||'ok'});setTimeout(function(){setToast(null);},2200);}
+
+  useEffect(function(){load();loadMembers();/* eslint-disable-next-line */},[org&&org.id,cu.id]);
+
+  async function load(){
+    setLoading(true);
+    var r=await supabase.from('notes').select('*').order('pinned',{ascending:false}).order('updated_at',{ascending:false}).limit(500);
+    var list=(r.data||[]).filter(function(n){return !org||!n.org_id||n.org_id===org.id||n.owner_id!==cu.id;});
+    setNotes(list);
+    var ownIds=list.filter(function(n){return n.owner_id===cu.id;}).map(function(n){return n.id;});
+    if(ownIds.length>0){
+      var s=await supabase.from('note_shares').select('note_id,user_id,can_edit').in('note_id',ownIds);
+      var map={};(s.data||[]).forEach(function(row){(map[row.note_id]=map[row.note_id]||[]).push(row);});
+      setShareMap(map);
+    }else{setShareMap({});}
+    var ms=await supabase.from('note_shares').select('note_id,can_edit').eq('user_id',cu.id);
+    var mine={};(ms.data||[]).forEach(function(row){mine[row.note_id]=row.can_edit;});
+    setMyShares(mine);
+    setLoading(false);
+    if(!compact&&list.length>0)setActiveId(function(cur){return cur&&list.find(function(n){return n.id===cur;})?cur:list[0].id;});
+  }
+  async function loadMembers(){
+    if(!org){setMembers([]);return;}
+    var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(300);
+    var ids=(rm.data||[]).map(function(m){return m.user_id;});
+    if(ids.length===0){setMembers([]);return;}
+    var rp=await supabase.from('profiles').select('id,name,email').in('id',ids);
+    setMembers((rp.data||[]).map(function(p){var mm=(rm.data||[]).find(function(x){return x.user_id===p.id;});return{id:p.id,name:p.name,email:p.email,role:mm?mm.role:'member'};}));
+  }
+
+  function canEdit(n){return n.owner_id===cu.id||myShares[n.id]===true;}
+  function isOwner(n){return n.owner_id===cu.id;}
+
+  async function createNote(){
+    var row={owner_id:cu.id,org_id:org?org.id:null,title:'',blocks:[{id:_noteBid(),type:'text',text:''}],color:'',pinned:false};
+    var r=await supabase.from('notes').insert(row).select('*').single();
+    if(r.error){showToast('Create failed: '+r.error.message,'err');return;}
+    setNotes(function(p){return [r.data].concat(p);});
+    setActiveId(r.data.id);
+  }
+  async function deleteNote(id){
+    if(!window.confirm('Delete this note? This cannot be undone.'))return;
+    var r=await supabase.from('notes').delete().eq('id',id);
+    if(r.error){showToast('Delete failed','err');return;}
+    setNotes(function(p){var nx=p.filter(function(n){return n.id!==id;});if(activeId===id)setActiveId(nx[0]?nx[0].id:null);return nx;});
+  }
+  function saveNow(id){
+    var n=notesRef.current.find(function(x){return x.id===id;});
+    if(!n)return;
+    supabase.from('notes').update({title:n.title,blocks:n.blocks,color:n.color,pinned:n.pinned}).eq('id',id).then(function(){});
+  }
+  function scheduleSave(id){clearTimeout(saveTimers.current[id]);saveTimers.current[id]=setTimeout(function(){saveNow(id);},700);}
+  function patchNote(id,patch,immediate){
+    setNotes(function(prev){return prev.map(function(n){return n.id===id?Object.assign({},n,patch):n;});});
+    if(immediate){setTimeout(function(){saveNow(id);},0);}else{scheduleSave(id);}
+  }
+
+  // ── Block operations ──
+  function updateBlock(noteId,bid,patch){
+    var n=notesRef.current.find(function(x){return x.id===noteId;});if(!n)return;
+    var blocks=(n.blocks||[]).map(function(b){return b.id===bid?Object.assign({},b,patch):b;});
+    patchNote(noteId,{blocks:blocks});
+  }
+  function addBlock(noteId,afterId,type){
+    var n=notesRef.current.find(function(x){return x.id===noteId;});if(!n)return;
+    var nb={id:_noteBid(),type:type};
+    if(type==='todo')nb.text='',nb.done=false;
+    else if(type==='table')nb.cells=[['',''],['','']];
+    else if(type==='divider'){}
+    else nb.text='';
+    var blocks=(n.blocks||[]).slice();
+    var idx=afterId?blocks.findIndex(function(b){return b.id===afterId;}):blocks.length-1;
+    blocks.splice(idx+1,0,nb);
+    patchNote(noteId,{blocks:blocks},true);
+  }
+  function deleteBlock(noteId,bid){
+    var n=notesRef.current.find(function(x){return x.id===noteId;});if(!n)return;
+    var blocks=(n.blocks||[]).filter(function(b){return b.id!==bid;});
+    if(blocks.length===0)blocks=[{id:_noteBid(),type:'text',text:''}];
+    patchNote(noteId,{blocks:blocks},true);
+  }
+  function moveBlock(noteId,bid,dir){
+    var n=notesRef.current.find(function(x){return x.id===noteId;});if(!n)return;
+    var blocks=(n.blocks||[]).slice();var i=blocks.findIndex(function(b){return b.id===bid;});
+    var j=i+dir;if(j<0||j>=blocks.length)return;
+    var tmp=blocks[i];blocks[i]=blocks[j];blocks[j]=tmp;
+    patchNote(noteId,{blocks:blocks},true);
+  }
+
+  // ── Sharing ──
+  async function toggleShare(noteId,userId,enable){
+    if(enable){
+      var r=await supabase.from('note_shares').insert({note_id:noteId,user_id:userId,can_edit:false});
+      if(r.error&&r.error.code!=='23505'){showToast('Share failed','err');return;}
+    }else{
+      await supabase.from('note_shares').delete().eq('note_id',noteId).eq('user_id',userId);
+    }
+    refreshShares(noteId);
+  }
+  async function setShareEdit(noteId,userId,canEd){
+    await supabase.from('note_shares').update({can_edit:canEd}).eq('note_id',noteId).eq('user_id',userId);
+    refreshShares(noteId);
+  }
+  async function refreshShares(noteId){
+    var s=await supabase.from('note_shares').select('note_id,user_id,can_edit').eq('note_id',noteId);
+    setShareMap(function(prev){var nx=Object.assign({},prev);nx[noteId]=s.data||[];return nx;});
+  }
+
+  var filtered=notes.filter(function(n){
+    if(!search)return true;
+    var q=search.toLowerCase();
+    if((n.title||'').toLowerCase().indexOf(q)>=0)return true;
+    return (n.blocks||[]).some(function(b){return (b.text||'').toLowerCase().indexOf(q)>=0;});
+  });
+  var activeNote=notes.find(function(n){return n.id===activeId;});
+
+  function notePreview(n){
+    var t=(n.blocks||[]).map(function(b){if(b.type==='todo')return (b.done?'✓ ':'☐ ')+(b.text||'');if(b.type==='table')return '▦ table';if(b.type==='divider')return '—';return b.text||'';}).join(' · ').trim();
+    return t||'Empty note';
+  }
+  function memberName(id){var m=members.find(function(x){return x.id===id;});return m?(m.name||m.email||'Member'):'Member';}
+
+  // ── Block renderer ──
+  function renderBlock(n,b,editable){
+    var common={fontSize:compact?12:13,color:'var(--tf-text)',fontFamily:'inherit'};
+    if(b.type==='divider'){
+      return<div key={b.id} style={{display:'flex',alignItems:'center',gap:6,margin:'6px 0'}}>
+        <div style={{flex:1,height:1,background:'var(--tf-border)'}}/>
+        {editable&&<button onClick={function(){deleteBlock(n.id,b.id);}} title="Remove" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,opacity:0.5}}>×</button>}
+      </div>;
+    }
+    if(b.type==='todo'){
+      return<div key={b.id} style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:4}}>
+        <button onClick={function(){if(editable)updateBlock(n.id,b.id,{done:!b.done});}} disabled={!editable}
+          style={{width:16,height:16,marginTop:2,borderRadius:4,border:'1.5px solid',borderColor:b.done?'#22c55e':'var(--tf-border)',background:b.done?'#22c55e':'transparent',cursor:editable?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,padding:0}}>
+          {b.done&&<span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span>}
+        </button>
+        <textarea value={b.text||''} readOnly={!editable} rows={1}
+          onChange={function(e){updateBlock(n.id,b.id,{text:e.target.value});}}
+          onInput={function(e){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}}
+          placeholder="To-do…"
+          style={Object.assign({},common,{flex:1,background:'transparent',border:'none',outline:'none',resize:'none',textDecoration:b.done?'line-through':'none',color:b.done?'var(--tf-text-sub)':'var(--tf-text)',padding:0,lineHeight:1.5,overflow:'hidden'})}/>
+        {editable&&<div style={{display:'flex',gap:2,flexShrink:0,opacity:0.5}}>
+          <button onClick={function(){moveBlock(n.id,b.id,-1);}} title="Up" style={_blkBtn}>↑</button>
+          <button onClick={function(){deleteBlock(n.id,b.id);}} title="Remove" style={_blkBtn}>×</button>
+        </div>}
+      </div>;
+    }
+    if(b.type==='table'){
+      var cells=b.cells||[['','']];
+      return<div key={b.id} style={{marginBottom:8}}>
+        <div style={{overflowX:'auto',border:'1px solid var(--tf-border)',borderRadius:6}}>
+          <table style={{borderCollapse:'collapse',width:'100%'}}>
+            <tbody>
+              {cells.map(function(row,ri){return<tr key={ri}>{row.map(function(cell, ci){return<td key={ci} style={{border:'1px solid var(--tf-border)',padding:0,minWidth:60}}>
+                <input value={cell} readOnly={!editable}
+                  onChange={function(e){var nc=cells.map(function(r,i){return i===ri?r.map(function(c,j){return j===ci?e.target.value:c;}):r;});updateBlock(n.id,b.id,{cells:nc});}}
+                  style={Object.assign({},common,{width:'100%',background:ri===0?'var(--tf-surface)':'transparent',border:'none',outline:'none',padding:'5px 7px',fontWeight:ri===0?700:400,boxSizing:'border-box'})}/>
+              </td>;})}</tr>;})}
+            </tbody>
+          </table>
+        </div>
+        {editable&&<div style={{display:'flex',gap:5,marginTop:4}}>
+          <button onClick={function(){var nc=cells.concat([cells[0].map(function(){return '';})]);updateBlock(n.id,b.id,{cells:nc});}} style={_miniBtn}>+ Row</button>
+          <button onClick={function(){var nc=cells.map(function(r){return r.concat(['']);});updateBlock(n.id,b.id,{cells:nc});}} style={_miniBtn}>+ Col</button>
+          <button onClick={function(){deleteBlock(n.id,b.id);}} style={Object.assign({},_miniBtn,{color:'#ef4444'})}>Delete</button>
+        </div>}
+      </div>;
+    }
+    // text / heading
+    var isH=b.type==='heading';
+    return<div key={b.id} style={{display:'flex',alignItems:'flex-start',gap:6,marginBottom:isH?2:4}}>
+      <textarea value={b.text||''} readOnly={!editable} rows={1}
+        onChange={function(e){updateBlock(n.id,b.id,{text:e.target.value});}}
+        onInput={function(e){e.target.style.height='auto';e.target.style.height=e.target.scrollHeight+'px';}}
+        ref={function(el){if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}}
+        placeholder={isH?'Heading':'Write something…'}
+        style={Object.assign({},common,{flex:1,background:'transparent',border:'none',outline:'none',resize:'none',padding:0,lineHeight:1.5,overflow:'hidden',fontWeight:isH?800:400,fontSize:isH?(compact?15:17):common.fontSize})}/>
+      {editable&&<div style={{display:'flex',gap:2,flexShrink:0,opacity:0.4}}>
+        <button onClick={function(){moveBlock(n.id,b.id,-1);}} title="Up" style={_blkBtn}>↑</button>
+        <button onClick={function(){deleteBlock(n.id,b.id);}} title="Remove" style={_blkBtn}>×</button>
+      </div>}
+    </div>;
+  }
+
+  function renderEditor(n){
+    var editable=canEdit(n);
+    var sharedToMe=!isOwner(n);
+    return<div style={{display:'flex',flexDirection:'column',height:'100%',background:n.color||'var(--tf-panel)',borderRadius:compact?8:0}}>
+      {/* Editor toolbar */}
+      <div style={{padding:compact?'8px 10px':'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:8,flexShrink:0,flexWrap:'wrap'}}>
+        <input value={n.title||''} readOnly={!editable} onChange={function(e){patchNote(n.id,{title:e.target.value});}}
+          placeholder="Untitled note"
+          style={{flex:1,minWidth:120,background:'transparent',border:'none',outline:'none',fontSize:compact?15:18,fontWeight:800,color:'var(--tf-text)',fontFamily:'inherit'}}/>
+        {sharedToMe&&<span style={{fontSize:10,fontWeight:700,color:'#6366f1',background:'rgba(99,102,241,0.12)',padding:'2px 8px',borderRadius:10}}>{editable?'Shared · can edit':'Shared · view only'}</span>}
+        {isOwner(n)&&<button onClick={function(){patchNote(n.id,{pinned:!n.pinned},true);}} title={n.pinned?'Unpin':'Pin'} style={{background:'none',border:'none',cursor:'pointer',fontSize:15,opacity:n.pinned?1:0.4}}>📌</button>}
+        {isOwner(n)&&<button onClick={function(){setShareNoteId(n.id);refreshShares(n.id);}} title="Share" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>👥 Share{(shareMap[n.id]||[]).length>0?' ('+(shareMap[n.id]||[]).length+')':''}</button>}
+        {isOwner(n)&&<button onClick={function(){deleteNote(n.id);}} title="Delete note" style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,color:'#ef4444',cursor:'pointer',fontSize:13}}>🗑</button>}
+      </div>
+      {/* Color strip (owner) */}
+      {isOwner(n)&&<div style={{display:'flex',gap:5,padding:compact?'6px 10px':'8px 16px',flexShrink:0,alignItems:'center'}}>
+        {NOTE_COLORS.map(function(col){return<button key={col||'none'} onClick={function(){patchNote(n.id,{color:col},true);}} title={col?'Color':'No color'}
+          style={{width:18,height:18,borderRadius:'50%',border:(n.color||'')===col?'2px solid #0e2a47':'1px solid var(--tf-border)',background:col||'var(--tf-panel)',cursor:'pointer',position:'relative'}}>{!col&&<span style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'var(--tf-text-sub)'}}>∅</span>}</button>;})}
+      </div>}
+      {/* Blocks */}
+      <div style={{flex:1,overflowY:'auto',padding:compact?'8px 12px 12px':'14px 18px 18px'}}>
+        {(n.blocks||[]).map(function(b){return renderBlock(n,b,editable);})}
+        {editable&&<div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10,paddingTop:10,borderTop:'1px dashed var(--tf-border)'}}>
+          <button onClick={function(){addBlock(n.id,null,'text');}} style={_addBtn}>+ Text</button>
+          <button onClick={function(){addBlock(n.id,null,'heading');}} style={_addBtn}>+ Heading</button>
+          <button onClick={function(){addBlock(n.id,null,'todo');}} style={_addBtn}>+ Checkbox</button>
+          <button onClick={function(){addBlock(n.id,null,'table');}} style={_addBtn}>+ Table</button>
+          <button onClick={function(){addBlock(n.id,null,'divider');}} style={_addBtn}>+ Divider</button>
+        </div>}
+      </div>
+    </div>;
+  }
+
+  // ── List item ──
+  function renderListItem(n){
+    var active=n.id===activeId;
+    return<button key={n.id} onClick={function(){setActiveId(n.id);}}
+      style={{display:'block',width:'100%',textAlign:'left',background:active?'var(--tf-surface-hov)':(n.color||'var(--tf-panel)'),border:'1px solid '+(active?'#6366f1':'var(--tf-border)'),borderLeft:'3px solid '+(n.color?'#6366f1':(active?'#6366f1':'var(--tf-border)')),borderRadius:8,padding:'9px 11px',cursor:'pointer',marginBottom:7}}>
+      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
+        {n.pinned&&<span style={{fontSize:10}}>📌</span>}
+        <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.title||'Untitled'}</span>
+        {n.owner_id!==cu.id&&<span style={{fontSize:9,fontWeight:700,color:'#6366f1'}}>shared</span>}
+        {n.owner_id===cu.id&&(shareMap[n.id]||[]).length>0&&<span style={{fontSize:9,color:'var(--tf-text-sub)'}}>👥{(shareMap[n.id]||[]).length}</span>}
+      </div>
+      <div style={{fontSize:11,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{notePreview(n)}</div>
+    </button>;
+  }
+
+  var shareModal=shareNoteId&&(function(){
+    var n=notes.find(function(x){return x.id===shareNoteId;});if(!n)return null;
+    var shares=shareMap[shareNoteId]||[];
+    return<div onClick={function(e){if(e.target===e.currentTarget)setShareNoteId(null);}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:420,maxHeight:'80vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{padding:'16px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div><div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>Share note</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{n.title||'Untitled'} · with org members</div></div>
+          <button onClick={function(){setShareNoteId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,width:30,height:30,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:'auto',padding:'10px 14px'}}>
+          {members.filter(function(m){return m.id!==cu.id;}).length===0&&<div style={{padding:20,textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No other org members to share with.</div>}
+          {members.filter(function(m){return m.id!==cu.id;}).map(function(m){
+            var sh=shares.find(function(s){return s.user_id===m.id;});
+            return<div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 6px',borderBottom:'1px solid var(--tf-border)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.name||m.email}</div>
+                <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{m.email}</div>
+              </div>
+              {sh&&<label style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'var(--tf-text-sub)',cursor:'pointer'}}>
+                <input type="checkbox" checked={!!sh.can_edit} onChange={function(e){setShareEdit(shareNoteId,m.id,e.target.checked);}}/>can edit
+              </label>}
+              <button onClick={function(){toggleShare(shareNoteId,m.id,!sh);}}
+                style={{background:sh?'rgba(239,68,68,0.1)':'#6366f1',border:sh?'1px solid rgba(239,68,68,0.3)':'none',borderRadius:6,padding:'5px 11px',color:sh?'#ef4444':'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>{sh?'Remove':'Share'}</button>
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>;
+  })();
+
+  // ── DRAWER MODE ──
+  if(compact){
+    return<div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+      <div style={{padding:'8px 12px',display:'flex',gap:6,alignItems:'center',flexShrink:0,borderBottom:'1px solid var(--tf-border)'}}>
+        {activeId&&activeNote?<button onClick={function(){setActiveId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>‹ All</button>
+          :<input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search notes…" style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none'}}/>}
+        <button onClick={createNote} style={{background:'#6366f1',border:'none',borderRadius:7,padding:'6px 11px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}>+ New</button>
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'10px 12px'}}>
+        {loading?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:12}}>Loading…</div>
+          :activeId&&activeNote?renderEditor(activeNote)
+          :filtered.length===0?<div style={{textAlign:'center',padding:'30px 10px',color:'var(--tf-text-sub)'}}><div style={{fontSize:26,marginBottom:8}}>📝</div><div style={{fontSize:13,fontWeight:600}}>No notes yet</div><div style={{fontSize:11,marginTop:3}}>Tap + New to jot something down.</div></div>
+          :filtered.map(renderListItem)}
+      </div>
+      {shareModal}
+      {toast&&<div style={{position:'fixed',bottom:20,right:20,background:toast.k==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'9px 15px',borderRadius:8,fontSize:12,fontWeight:600,zIndex:10001}}>{toast.m}</div>}
+    </div>;
+  }
+
+  // ── FULL MODE (Diary tab, two-pane) ──
+  return<div style={{display:'flex',height:'100%',overflow:'hidden'}}>
+    {/* List pane */}
+    <div style={{width:300,flexShrink:0,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)'}}>
+      <div style={{padding:'14px 14px 10px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <h2 style={{margin:0,fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>📝 Notes</h2>
+          <button onClick={createNote} style={{background:'#6366f1',border:'none',borderRadius:8,padding:'7px 13px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Note</button>
+        </div>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search notes…" style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'0 12px 14px'}}>
+        {loading?<div style={{textAlign:'center',padding:30,color:'var(--tf-text-sub)',fontSize:13}}>Loading…</div>
+          :filtered.length===0?<div style={{textAlign:'center',padding:'40px 10px',color:'var(--tf-text-sub)'}}><div style={{fontSize:30,marginBottom:8}}>📝</div><div style={{fontSize:14,fontWeight:600}}>No notes yet</div><div style={{fontSize:12,marginTop:4}}>Create your first note.</div></div>
+          :filtered.map(renderListItem)}
+      </div>
+    </div>
+    {/* Editor pane */}
+    <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
+      {activeNote?renderEditor(activeNote):<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100%',color:'var(--tf-text-sub)',flexDirection:'column',gap:8}}><div style={{fontSize:36}}>📝</div><div style={{fontSize:14}}>Select a note or create a new one.</div></div>}
+    </div>
+    {shareModal}
+    {toast&&<div style={{position:'fixed',bottom:20,right:20,background:toast.k==='err'?'#ef4444':'#22c55e',color:'#fff',padding:'10px 16px',borderRadius:8,fontSize:13,fontWeight:600,zIndex:10001}}>{toast.m}</div>}
+  </div>;
+}
+var _blkBtn={background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,padding:'0 3px',lineHeight:1};
+var _miniBtn={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700};
+var _addBtn={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'};
+
 function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan,allWorkspaces}){
   var _dc=_dashCache[org.id]||null;
   var [rows,setRows]=useState(_dc?_dc.rows:[]);
@@ -15176,7 +15523,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id||isAnyDeptManager;
 
   var MODULES=[
-    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'}]},
+    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'notes',label:'Notes'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
     {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
     {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
@@ -15251,6 +15598,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var moduleContent=<>
       {/* Your Diary */}
       {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces}/>}
+      {orgModule==='diary'&&tab==='notes'&&<NotesModule org={org} cu={cu} mode="full"/>}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
