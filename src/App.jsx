@@ -10799,6 +10799,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
                   // Quick filter: dim non-matching cards
                   var matchesFilter=!boardSearch||(rd.__title||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0||(c.display_name||c.name||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0||(ws.work_type||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0;
+                  if(!matchesFilter)return null;
                   return<div key={r.id}
                     onDragOver={function(e){
                       if(dragSrc&&dragSrc.colId===col.id&&dragSrc.rowId!==r.id){
@@ -10818,8 +10819,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                         });
                         setDragSrc(null);
                       }
-                    }}
-                    style={{opacity:matchesFilter?1:0.25,transition:'opacity 0.15s'}}>
+                    }}>
                     {/* Card */}
                     <div draggable={!isExpanded}
                       onDragStart={function(e){if(isExpanded){e.preventDefault();return;}e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';setDragSrc({rowId:r.id,colId:col.id,idx:rIdx});}}
