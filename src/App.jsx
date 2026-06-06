@@ -9989,6 +9989,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [ctStatus,setCtStatus]=useState('pending');
   var [toast,setToast]=useState(null);
   var [planRefreshKey,setPlanRefreshKey]=useState(0);
+  var [boardSearch,setBoardSearch]=useState('');
+  var [colOrder,setColOrder]=useState({}); // {colId: [rowId, ...]} — manual sort order within column
+  var [dragSrc,setDragSrc]=useState(null); // {rowId, colId, idx} for intra-column reorder
   var wfHierarchy=workflowHierarchy||[];
   var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
   var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):[{key:'__assignee',label:'Assignee'}];
@@ -10723,16 +10726,51 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           </div>)}
 
         {/* BOARD VIEW — kanban by status */}
-        {dashView==='board'&&<div style={{display:'flex',gap:14,overflowX:'auto',paddingBottom:8,alignItems:'flex-start'}}>
+        {dashView==='board'&&<div style={{display:'flex',flexDirection:'column',gap:0,height:'100%'}}>
+          {/* Quick filter bar */}
+          <div style={{padding:'8px 2px 10px',flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
+            <div style={{position:'relative',flex:'0 0 260px'}}>
+              <span style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'var(--tf-text-sub)',fontSize:13,pointerEvents:'none'}}>🔍</span>
+              <input
+                type="text" value={boardSearch} onChange={function(e){setBoardSearch(e.target.value);}}
+                placeholder="Filter by client or task…"
+                style={{width:'100%',paddingLeft:30,paddingRight:boardSearch?28:10,paddingTop:6,paddingBottom:6,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
+              {boardSearch&&<button onClick={function(){setBoardSearch('');}} style={{position:'absolute',right:7,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button>}
+            </div>
+            {boardSearch&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing matches only — others dimmed</span>}
+          </div>
+          <div style={{display:'flex',gap:14,overflowX:'auto',paddingBottom:8,alignItems:'flex-start',flex:1}}>
           {[
             {id:'pending',label:'To Do',color:'#64748b',bg:'rgba(100,116,139,0.07)'},
             {id:'in_progress',label:'In Progress',color:'#3b82f6',bg:'rgba(59,130,246,0.07)'},
             {id:'under_review',label:'In Review',color:'#8b5cf6',bg:'rgba(139,92,246,0.07)'}
           ].map(function(col){
-            var colRows=railFiltered.filter(function(r){return getEffectiveStatusDash(r)===col.id;});
+            var baseRows=railFiltered.filter(function(r){return getEffectiveStatusDash(r)===col.id;});
+            // Apply saved column order
+            var order=colOrder[col.id];
+            var colRows=order
+              ?[].concat(order.filter(function(id){return baseRows.find(function(r){return r.id===id;});}).map(function(id){return baseRows.find(function(r){return r.id===id;});}),
+                         baseRows.filter(function(r){return !order.includes(r.id);}))
+              :baseRows;
             return<div key={col.id}
               onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='move';}}
-              onDrop={function(e){e.preventDefault();var id=e.dataTransfer.getData('text/plain');if(id)updateStatus(id,col.id);}}
+              onDrop={function(e){
+                e.preventDefault();
+                var id=e.dataTransfer.getData('text/plain');
+                if(!id)return;
+                if(dragSrc&&dragSrc.colId===col.id){
+                  // intra-column reorder: dropped on column body (not on a card) → move to end
+                  setColOrder(function(prev){
+                    var cur=colRows.map(function(r){return r.id;});
+                    var filtered=cur.filter(function(x){return x!==id;});
+                    filtered.push(id);
+                    return Object.assign({},prev,{[col.id]:filtered});
+                  });
+                  setDragSrc(null);
+                }else{
+                  updateStatus(id,col.id);
+                }
+              }}
               style={{flex:'0 0 300px',background:col.bg,border:'1px solid var(--tf-border)',borderTop:'3px solid '+col.color,borderRadius:10,display:'flex',flexDirection:'column',minHeight:120}}>
               {/* Column header */}
               <div style={{padding:'10px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -10747,7 +10785,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               {/* Cards */}
               <div style={{padding:'0 10px 10px 10px',display:'flex',flexDirection:'column',gap:8}}>
                 {colRows.length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',padding:'16px 0',fontStyle:'italic'}}>No tasks</div>}
-                {colRows.map(function(r){
+                {colRows.map(function(r,rIdx){
                   var rd=r.data||{};var c=clientMap[r.client_id]||{};var ws=wsMap[r.worksheet_id]||{};
                   var isOver=r.due_date&&r.due_date<todayStr;
                   var inMyDay=myDayIds.includes(r.id)||r.due_date===todayStr;var isHidden=myDayHidden.includes(r.id);
@@ -10759,10 +10797,33 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
                   var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
                   var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
-                  return<div key={r.id}>
+                  // Quick filter: dim non-matching cards
+                  var matchesFilter=!boardSearch||(rd.__title||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0||(c.display_name||c.name||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0||(ws.work_type||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0;
+                  return<div key={r.id}
+                    onDragOver={function(e){
+                      if(dragSrc&&dragSrc.colId===col.id&&dragSrc.rowId!==r.id){
+                        e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';
+                      }
+                    }}
+                    onDrop={function(e){
+                      if(dragSrc&&dragSrc.colId===col.id&&dragSrc.rowId!==r.id){
+                        e.preventDefault();e.stopPropagation();
+                        var srcId=dragSrc.rowId;
+                        setColOrder(function(prev){
+                          var cur=colRows.map(function(x){return x.id;});
+                          var filtered=cur.filter(function(x){return x!==srcId;});
+                          var tgtIdx=filtered.indexOf(r.id);
+                          filtered.splice(tgtIdx,0,srcId);
+                          return Object.assign({},prev,{[col.id]:filtered});
+                        });
+                        setDragSrc(null);
+                      }
+                    }}
+                    style={{opacity:matchesFilter?1:0.25,transition:'opacity 0.15s'}}>
                     {/* Card */}
                     <div draggable={!isExpanded}
-                      onDragStart={function(e){if(isExpanded){e.preventDefault();return;}e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';}}
+                      onDragStart={function(e){if(isExpanded){e.preventDefault();return;}e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';setDragSrc({rowId:r.id,colId:col.id,idx:rIdx});}}
+                      onDragEnd={function(){setDragSrc(null);}}
                       onClick={function(){toggleExpand(r.id);}}
                       style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(isOver?'#ef4444':col.color),borderRadius:8,padding:'10px 12px',cursor:'pointer',transition:'box-shadow 0.15s',boxShadow:isExpanded?'0 4px 16px rgba(14,42,71,0.12)':'none'}}
                       onMouseEnter={function(e){if(!isExpanded)e.currentTarget.style.boxShadow='0 2px 8px rgba(14,42,71,0.1)';}}
@@ -10884,6 +10945,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               </div>
             </div>;
           })}
+          </div>
         </div>}
 
         {/* CALENDAR VIEW — month grid with tasks on due dates */}
