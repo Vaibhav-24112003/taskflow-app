@@ -2962,8 +2962,43 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
       </div>}
     </div>
 
-    {/* Workspace Assignment (from original OrgManagementPanel) */}
-    <OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>
+    {/* ── Modules & Features ── */}
+    <div style={{marginTop:32,marginBottom:32}}>
+      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px'}}>Modules &amp; Features</h2>
+      <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 16px',lineHeight:1.5}}>Turn off modules your firm doesn't need. Disabled modules hide from the sidebar for all members. Core modules (Diary, WorkZone worksheets, Set-up) cannot be disabled.</p>
+      {(function(){
+        var SECTIONS=[
+          {key:'library',label:'Library',desc:'Credentials, SOPs, tools and study resources.',icon:'📚',defaultOn:true},
+          {key:'team',label:'Team Module',desc:'Attendance logs, leaves and activity tracking.',icon:'👥',defaultOn:true},
+          {key:'analytics',label:'Analytics',desc:'Org-wide performance charts for owners/admins.',icon:'📊',defaultOn:true},
+          {key:'comms',label:'Communication',desc:'Client Connect portal and mailing.',icon:'✉️',defaultOn:true},
+          {key:'billing',label:'Billing',desc:'Invoices, proposals, payments and exports.',icon:'💳',defaultOn:true},
+          {key:'masterdata_groups',label:'Groups & Teams (Master Data)',desc:'Groups & Teams tab inside Master Data.',icon:'🏷️',defaultOn:true},
+          {key:'workzone_itr',label:'ITR Desk (WorkZone tab)',desc:'ITR compilation desk inside WorkZone.',icon:'📋',defaultOn:true},
+          {key:'workzone_bigclients',label:'Big Clients (WorkZone tab)',desc:'Big-client tracking inside WorkZone.',icon:'⭐',defaultOn:true},
+          {key:'workzone_board',label:'Board (WorkZone tab)',desc:'Kanban board view inside WorkZone.',icon:'🗂️',defaultOn:true},
+          {key:'depts',label:'Departments',desc:'Department structure and dept-level access control.',icon:'🏢',defaultOn:true},
+        ];
+        return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxWidth:760,margin:'0 auto'}}>
+          {SECTIONS.map(function(s,i){
+            var on=isFlagOn(s.key,s.defaultOn);
+            return<div key={s.key} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 18px',borderBottom:i<SECTIONS.length-1?'1px solid var(--tf-border)':'none',background:on?'transparent':'rgba(239,68,68,0.03)'}}>
+              <span style={{fontSize:20,flexShrink:0,opacity:on?1:0.4}}>{s.icon}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:on?'var(--tf-text)':'var(--tf-text-sub)'}}>{s.label}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{s.desc}</div>
+              </div>
+              {savingFlags&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>saving…</div>}
+              <button onClick={function(){toggleFlag(s.key,s.defaultOn);}} disabled={savingFlags}
+                title={on?'Disable this module':'Enable this module'}
+                style={{flexShrink:0,width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',position:'relative',background:on?'#22c55e':'#cbd5e1',transition:'background 0.2s',padding:0}}>
+                <span style={{position:'absolute',top:2,left:on?22:2,width:20,height:20,borderRadius:10,background:'#fff',boxShadow:'0 1px 3px rgba(0,0,0,0.25)',transition:'left 0.2s',display:'block'}}/>
+              </button>
+            </div>;
+          })}
+        </div>;
+      })()}
+    </div>
 
     {/* ── Modules & Features ── */}
     <div style={{marginTop:32,marginBottom:32}}>
