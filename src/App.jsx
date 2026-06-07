@@ -2784,6 +2784,8 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
   var [orgLogoUrl,setOrgLogoUrl]=useState(org.logo_url||'');
   var [orgLogoPos,setOrgLogoPos]=useState(org.logo_position||'left');
   var [uploadingLogo,setUploadingLogo]=useState(false);
+  var [featureFlags,setFeatureFlags]=useState(org.feature_flags||{});
+  var [savingFlags,setSavingFlags]=useState(false);
 
   async function handleLogoUpload(e){
     var file=e.target.files&&e.target.files[0];if(!file)return;
@@ -2835,6 +2837,23 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
     org.name=orgName.trim();org.description=orgDesc.trim()||null;org.address=orgAddress.trim()||null;org.gstin=orgGstin.trim().toUpperCase()||null;org.logo_url=orgLogoUrl.trim()||null;org.logo_position=orgLogoPos;
     showToast('Organisation info saved!');
   }
+
+  async function saveFeatureFlags(flags){
+    setSavingFlags(true);
+    var res=await supabase.from('organizations').update({feature_flags:flags}).eq('id',org.id);
+    setSavingFlags(false);
+    if(res.error){showToast(res.error.message,'err');return;}
+    org.feature_flags=flags;
+    setFeatureFlags(flags);
+    showToast('Module settings saved!');
+  }
+  function toggleFlag(key,defaultOn){
+    var current=featureFlags[key];
+    var cur=current===undefined?defaultOn:current;
+    var next=Object.assign({},featureFlags,{[key]:!cur});
+    saveFeatureFlags(next);
+  }
+  function isFlagOn(key,defaultOn){var v=featureFlags[key];return v===undefined?defaultOn:v;}
 
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4,display:'block'};
@@ -3591,6 +3610,44 @@ function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
         </>}
       </div>
     </div>
+    {/* ── Modules & Features ── */}
+    <div style={{marginBottom:32}}>
+      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px'}}>Modules &amp; Features</h2>
+      <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 16px',lineHeight:1.5}}>Turn off modules your firm doesn't need. Disabled modules hide from the sidebar for all members. Core modules (Diary, WorkZone worksheets, Set-up) cannot be disabled.</p>
+      {(function(){
+        var SECTIONS=[
+          {key:'library',label:'Library',desc:'Credentials, SOPs, tools and study resources.',icon:'📚',defaultOn:true},
+          {key:'team',label:'Team Module',desc:'Attendance logs, leaves and activity tracking.',icon:'👥',defaultOn:true},
+          {key:'analytics',label:'Analytics',desc:'Org-wide performance charts for owners/admins.',icon:'📊',defaultOn:true},
+          {key:'comms',label:'Communication',desc:'Client Connect portal and mailing.',icon:'✉️',defaultOn:true},
+          {key:'billing',label:'Billing',desc:'Invoices, proposals, payments and exports.',icon:'💳',defaultOn:true},
+          {key:'masterdata_groups',label:'Groups & Teams (Master Data)',desc:'Groups & Teams tab inside Master Data.',icon:'🏷️',defaultOn:true},
+          {key:'workzone_itr',label:'ITR Desk (WorkZone tab)',desc:'ITR compilation desk inside WorkZone.',icon:'📋',defaultOn:true},
+          {key:'workzone_bigclients',label:'Big Clients (WorkZone tab)',desc:'Big-client tracking inside WorkZone.',icon:'⭐',defaultOn:true},
+          {key:'workzone_board',label:'Board (WorkZone tab)',desc:'Kanban board view inside WorkZone.',icon:'🗂️',defaultOn:true},
+          {key:'depts',label:'Departments',desc:'Department structure and dept-level access control.',icon:'🏢',defaultOn:true},
+        ];
+        return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+          {SECTIONS.map(function(s,i){
+            var on=isFlagOn(s.key,s.defaultOn);
+            return<div key={s.key} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 18px',borderBottom:i<SECTIONS.length-1?'1px solid var(--tf-border)':'none',background:on?'transparent':'rgba(239,68,68,0.03)'}}>
+              <span style={{fontSize:20,flexShrink:0,opacity:on?1:0.4}}>{s.icon}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:on?'var(--tf-text)':'var(--tf-text-sub)'}}>{s.label}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{s.desc}</div>
+              </div>
+              {savingFlags&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>saving…</div>}
+              <button onClick={function(){toggleFlag(s.key,s.defaultOn);}} disabled={savingFlags}
+                title={on?'Disable this module':'Enable this module'}
+                style={{flexShrink:0,width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',position:'relative',background:on?'#22c55e':'#cbd5e1',transition:'background 0.2s',padding:0}}>
+                <span style={{position:'absolute',top:2,left:on?22:2,width:20,height:20,borderRadius:10,background:'#fff',boxShadow:'0 1px 3px rgba(0,0,0,0.25)',transition:'left 0.2s',display:'block'}}/>
+              </button>
+            </div>;
+          })}
+        </div>;
+      })()}
+    </div>
+
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
   </div>;
 }
@@ -15522,21 +15579,38 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var isAnyDeptManager=(orgDeptMembers||[]).some(function(dm){return dm.user_id===cu.id&&dm.is_head===true;});
   var canSeeAnalytics=myRole==='owner'||myRole==='admin'||org.created_by===cu.id||isAnyDeptManager;
 
+  var ff=org.feature_flags||{};
+  function ffOn(key){var v=ff[key];return v===undefined?true:v;}
+
+  // WorkZone tabs — some can be toggled off per org
+  var workzoneTabs=[{id:'worksheets',label:'Worksheets'}];
+  if(ffOn('workzone_board'))workzoneTabs.push({id:'board',label:'Board'});
+  if(ffOn('workzone_itr'))workzoneTabs.push({id:'itr',label:'ITR Desk'});
+  if(ffOn('workzone_bigclients'))workzoneTabs.push({id:'bigclients',label:'Big Clients'});
+  workzoneTabs.push({id:'teamview',label:'Team Workload'});
+
+  // Master Data tabs — Groups toggleable
+  var masterdataTabs=[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'}];
+  if(ffOn('masterdata_groups'))masterdataTabs.push({id:'groups',label:'Groups & Teams'});
+
+  // Set-up tabs — Departments toggleable
+  var setupTabs=[{id:'members',label:'Members & Invites'}];
+  if(ffOn('depts'))setupTabs.push({id:'departments',label:'Departments'});
+  setupTabs.push({id:'settings',label:'Org Settings'});
+
   var MODULES=[
     {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'notes',label:'Notes'}]},
-    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:[{id:'worksheets',label:'Worksheets'},{id:'board',label:'Board'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
-    {id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
-    {id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
+    {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:workzoneTabs},
   ];
-  if(canSeeAnalytics){
+  if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]});
+  if(ffOn('team'))MODULES.push({id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]});
+  if(canSeeAnalytics&&ffOn('analytics')){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
-  MODULES.push(
-    {id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
-    {id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]},
-    {id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
-    {id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:[{id:'members',label:'Members & Invites'},{id:'departments',label:'Departments'},{id:'settings',label:'Org Settings'}]}
-  );
+  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]});
+  if(ffOn('billing'))MODULES.push({id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]});
+  MODULES.push({id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:masterdataTabs});
+  MODULES.push({id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:setupTabs});
   var DEFAULT_MEMBER_MODULES=['diary','workzone','library'];
   if(myRole!=='owner'&&myRole!=='admin'&&org.created_by!==cu.id&&myModuleAccess!==null){
     MODULES=MODULES.filter(function(m){
