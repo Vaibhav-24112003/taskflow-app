@@ -2962,9 +2962,6 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
       </div>}
     </div>
 
-    {/* Workspace Assignment (from original OrgManagementPanel) */}
-    <OrgManagementPanel cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>
-
     {/* ── Modules & Features ── */}
     <div style={{marginTop:32,marginBottom:32}}>
       <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px'}}>Modules &amp; Features</h2>
