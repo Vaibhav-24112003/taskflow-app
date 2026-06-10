@@ -10838,11 +10838,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,opacity:loading?0.6:1}}>
               <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.3s'}}>↻</span>{loading?'…':'Refresh'}
             </button>
-            {isSelf&&<button onClick={function(){setShowCreate(true);}}
+            {isSelf&&<button data-tour="tour-createtask" onClick={function(){setShowCreate(true);}}
               style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'6px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(91,108,240,0.3)'}}>
               + Create Task
             </button>}
-            <button onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
+            <button data-tour="tour-plantoday" onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
               style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'6px 11px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
               <Calendar size={14} strokeWidth={2}/>
               Plan Today
@@ -10872,7 +10872,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             </button>;
           })}
           <div style={{flex:1}}/>
-          <div style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3}}>
+          <div data-tour="tour-views" style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3}}>
             {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'},{id:'urgency',Icon:Zap,label:'Urgency'}].map(function(v){
               var active=dashView===v.id;
               var Ico=v.Icon;
@@ -10902,7 +10902,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           </select>}
         </div>
         {/* Row 3: Work-type filter strip */}
-        <div style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:2,marginTop:8}}>
+        <div data-tour="tour-worktypestrip" style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:2,marginTop:8}}>
           {[{id:'all',label:'All Work Types',count:stats.total},{id:'today',label:'Due Today',count:stats.today}]
             .concat(Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
               var ov=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
@@ -15516,78 +15516,120 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
 }
 
 // ── Coachmark Tour ──────────────────────────────────────────────────
+// Runs INSIDE real module views (navigates there first), spotlights live
+// elements, and points at them with curved arrows.
 var TOUR_STEPS=[
-  {target:'tour-modules',title:'Your Modules',body:'Everything in TaskFlow lives in a module. Click any card to open it — each one is a focused workspace for a specific part of your practice.',pos:'bottom',icon:'🗂️'},
-  {target:'tour-mywork',title:'My Work — Your Daily Hub',body:'Start here every day. See your assigned tasks, plan your day, log time, and track what\'s due. Personal to you — your diary inside the firm.',pos:'bottom',icon:'📖'},
-  {target:'tour-workzone',title:'WorkZone — All Client Work',body:'Your firm\'s central operations board. Worksheets track every client\'s compliance work by period. The Board gives a Kanban view across all work types.',pos:'bottom',icon:'💼'},
-  {target:'tour-masterdata',title:'Master Data — Clients & Work Types',body:'Set up clients, enroll them in work types (GST, ITR, etc.), and configure stages and due dates. Everything your worksheets pull from lives here.',pos:'bottom',icon:'🗄️'},
-  {target:'tour-sidebar',title:'Quick Navigation',body:'The left sidebar gives you one-click access to every module and its sub-tabs. Collapse it with the ◀ button to get more screen space.',pos:'right',icon:'🧭'},
-  {target:'tour-setup',title:'Set-up & Team',body:'Invite members, manage roles and departments, and configure your organisation settings. Only owners and admins can see this.',pos:'bottom',icon:'⚙️'},
+  {module:'diary',tab:'home',target:'tour-createtask',title:'Create a Task',body:'Spin up a personal to-do or a client task in seconds. It lands in your list and on your calendar instantly.',pos:'bottom',icon:'➕'},
+  {module:'diary',tab:'home',target:'tour-plantoday',title:'Plan Your Day',body:'Open the Plan Today panel to drag the work you\'ll tackle today into a focused list — and log time against it when you\'re done.',pos:'bottom',icon:'🗓️'},
+  {module:'diary',tab:'home',target:'tour-views',title:'Five Ways to See Your Work',body:'Switch between List, Board (Kanban), Calendar, Grid and Urgency views — the same tasks, the angle that fits the moment.',pos:'bottom',icon:'👁️'},
+  {module:'diary',tab:'home',target:'tour-worktypestrip',title:'Filter by Work Type',body:'Jump straight to GST, ITR, TDS or any work type. The red dot flags overdue items so nothing slips.',pos:'top',icon:'🏷️'},
+  {module:'diary',tab:'home',target:'tour-sidebar',title:'Move Between Modules',body:'The sidebar is your map — WorkZone for all client work, Master Data for clients & work types, Team, Billing and more. One click away, anytime.',pos:'right',icon:'🧭'},
 ];
 
-function CoachmarkTour({onDone}){
-  var [step,setStep]=useState(0);
+function CoachmarkTour({step,setStep,onDone,navigate}){
   var [rect,setRect]=useState(null);
+  var retryRef=useRef(null);
   var PAD=12;
+  var cur=TOUR_STEPS[step];
 
   useEffect(function(){
-    positionStep(step);
+    var t=TOUR_STEPS[step];
+    if(!t)return;
+    // Navigate into the right view first, then find the element (with retries
+    // while the module mounts/renders).
+    if(navigate)navigate(t.module,t.tab);
+    var tries=0;
+    function attempt(){
+      var el=document.querySelector('[data-tour="'+t.target+'"]');
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'});
+        // Re-read after the smooth scroll settles
+        setTimeout(function(){
+          var r=el.getBoundingClientRect();
+          setRect({top:r.top,left:r.left,width:r.width,height:r.height});
+        },180);
+        return;
+      }
+      tries++;
+      if(tries<25){retryRef.current=setTimeout(attempt,120);}
+      else setRect(null);
+    }
+    attempt();
+    return function(){if(retryRef.current)clearTimeout(retryRef.current);};
+  // eslint-disable-next-line
   },[step]);
 
-  function positionStep(s){
-    var t=TOUR_STEPS[s];
-    if(!t)return;
-    var el=document.querySelector('[data-tour="'+t.target+'"]');
-    if(!el){setRect(null);return;}
-    var r=el.getBoundingClientRect();
-    setRect({top:r.top,left:r.left,width:r.width,height:r.height});
-    // Scroll element into view smoothly
-    el.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'});
-  }
+  // Reposition on resize/scroll without changing step
+  useEffect(function(){
+    function reflow(){
+      var t=TOUR_STEPS[step];if(!t)return;
+      var el=document.querySelector('[data-tour="'+t.target+'"]');
+      if(el){var r=el.getBoundingClientRect();setRect({top:r.top,left:r.left,width:r.width,height:r.height});}
+    }
+    window.addEventListener('resize',reflow);window.addEventListener('scroll',reflow,true);
+    return function(){window.removeEventListener('resize',reflow);window.removeEventListener('scroll',reflow,true);};
+  },[step]);
 
-  function next(){
-    if(step>=TOUR_STEPS.length-1){onDone();return;}
-    setStep(function(s){return s+1;});
-  }
-  function prev(){if(step>0)setStep(function(s){return s-1;});}
+  function next(){if(step>=TOUR_STEPS.length-1){onDone();return;}setStep(step+1);}
+  function prev(){if(step>0)setStep(step-1);}
 
-  var cur=TOUR_STEPS[step];
   if(!cur)return null;
 
+  var vw=window.innerWidth,vh=window.innerHeight;
+  var TIPW=312,TIPH=200;
   // Tooltip position relative to spotlight rect
-  var tipStyle={position:'fixed',zIndex:9100,background:'#0e1929',border:'1px solid rgba(127,163,199,0.3)',borderRadius:14,padding:'18px 20px',maxWidth:300,boxShadow:'0 20px 60px rgba(0,0,0,0.6)',color:'#fff'};
+  var tip={top:vh/2-TIPH/2,left:vw/2-TIPW/2};
   if(rect){
-    var vw=window.innerWidth,vh=window.innerHeight;
     if(cur.pos==='bottom'){
-      tipStyle.top=rect.top+rect.height+PAD+8;
-      tipStyle.left=Math.max(12,Math.min(rect.left+(rect.width/2)-150,vw-312));
+      tip.top=rect.top+rect.height+PAD+22;
+      tip.left=Math.max(14,Math.min(rect.left+(rect.width/2)-TIPW/2,vw-TIPW-14));
+    } else if(cur.pos==='top'){
+      tip.top=Math.max(14,rect.top-TIPH-PAD-22);
+      tip.left=Math.max(14,Math.min(rect.left+(rect.width/2)-TIPW/2,vw-TIPW-14));
     } else if(cur.pos==='right'){
-      tipStyle.left=rect.left+rect.width+PAD+8;
-      tipStyle.top=Math.max(12,Math.min(rect.top+(rect.height/2)-80,vh-200));
+      tip.left=Math.min(rect.left+rect.width+PAD+22,vw-TIPW-14);
+      tip.top=Math.max(14,Math.min(rect.top+(rect.height/2)-TIPH/2,vh-TIPH-14));
     } else {
-      tipStyle.top=Math.max(12,rect.top-180);
-      tipStyle.left=Math.max(12,Math.min(rect.left+(rect.width/2)-150,vw-312));
+      tip.top=Math.max(14,rect.top-TIPH-22);
+      tip.left=Math.max(14,Math.min(rect.left+(rect.width/2)-TIPW/2,vw-TIPW-14));
     }
-  } else {
-    tipStyle.top='50%';tipStyle.left='50%';tipStyle.transform='translate(-50%,-50%)';
+  }
+
+  // Curved-arrow geometry: from the tooltip toward the spotlight target.
+  var arrow=null;
+  if(rect){
+    var tgtCx=rect.left+rect.width/2, tgtCy=rect.top+rect.height/2;
+    var sx,sy,ex,ey,cx,cy;
+    if(cur.pos==='bottom'){ sx=tip.left+TIPW/2; sy=tip.top-6; ex=tgtCx; ey=rect.top+rect.height+PAD+2; cx=(sx+ex)/2+40; cy=(sy+ey)/2; }
+    else if(cur.pos==='top'){ sx=tip.left+TIPW/2; sy=tip.top+TIPH+6; ex=tgtCx; ey=rect.top-PAD-2; cx=(sx+ex)/2-40; cy=(sy+ey)/2; }
+    else if(cur.pos==='right'){ sx=tip.left-6; sy=tip.top+TIPH/2; ex=rect.left+rect.width+PAD+2; ey=tgtCy; cx=(sx+ex)/2; cy=(sy+ey)/2-40; }
+    else { sx=tip.left+TIPW/2; sy=tip.top+TIPH+6; ex=tgtCx; ey=rect.top-PAD-2; cx=(sx+ex)/2; cy=(sy+ey)/2; }
+    arrow={d:'M '+sx+' '+sy+' Q '+cx+' '+cy+' '+ex+' '+ey,ex,ey};
   }
 
   return<div style={{position:'fixed',inset:0,zIndex:9000,pointerEvents:'none'}}>
-    {/* Dark overlay with spotlight hole */}
+    {/* Dark overlay with spotlight hole + curved arrow */}
     <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'all'}} onClick={next}>
       <defs>
         <mask id="cmask">
           <rect width="100%" height="100%" fill="white"/>
           {rect&&<rect x={rect.left-PAD} y={rect.top-PAD} width={rect.width+PAD*2} height={rect.height+PAD*2} rx={10} fill="black"/>}
         </mask>
+        <marker id="cmarrow" markerWidth="11" markerHeight="11" refX="7" refY="5" orient="auto">
+          <path d="M1,1 L9,5 L1,9 L3.5,5 z" fill="#7fa3c7"/>
+        </marker>
       </defs>
-      <rect width="100%" height="100%" fill="rgba(5,8,20,0.72)" mask="url(#cmask)"/>
+      <rect width="100%" height="100%" fill="rgba(5,8,20,0.74)" mask="url(#cmask)"/>
+      {arrow&&<path d={arrow.d} fill="none" stroke="#7fa3c7" strokeWidth="2.5" strokeDasharray="6 5" markerEnd="url(#cmarrow)" style={{filter:'drop-shadow(0 2px 4px rgba(0,0,0,0.4))'}}/>}
     </svg>
     {/* Spotlight border glow */}
-    {rect&&<div style={{position:'fixed',top:rect.top-PAD,left:rect.left-PAD,width:rect.width+PAD*2,height:rect.height+PAD*2,borderRadius:10,border:'2px solid rgba(127,163,199,0.7)',boxShadow:'0 0 0 4px rgba(127,163,199,0.12)',pointerEvents:'none',zIndex:9050,transition:'all 0.25s ease'}}/>}
+    {rect&&<div style={{position:'fixed',top:rect.top-PAD,left:rect.left-PAD,width:rect.width+PAD*2,height:rect.height+PAD*2,borderRadius:10,border:'2px solid rgba(127,163,199,0.85)',boxShadow:'0 0 0 4px rgba(127,163,199,0.14),0 0 30px rgba(127,163,199,0.25)',pointerEvents:'none',zIndex:9050,transition:'all 0.25s ease'}}/>}
     {/* Tooltip */}
-    <div style={Object.assign({},tipStyle,{pointerEvents:'all'})}>
-      <div style={{fontSize:22,marginBottom:8}}>{cur.icon}</div>
+    <div style={{position:'fixed',top:tip.top,left:tip.left,width:TIPW,zIndex:9100,background:'#0e1929',border:'1px solid rgba(127,163,199,0.35)',borderRadius:14,padding:'18px 20px',boxShadow:'0 20px 60px rgba(0,0,0,0.6)',color:'#fff',pointerEvents:'all',boxSizing:'border-box',transition:'top 0.25s ease, left 0.25s ease'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+        <span style={{width:34,height:34,borderRadius:9,background:'rgba(127,163,199,0.15)',border:'1px solid rgba(127,163,199,0.3)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,flexShrink:0}}>{cur.icon}</span>
+        <span style={{fontSize:11,fontWeight:700,color:'#7fa3c7',fontFamily:"'JetBrains Mono',monospace"}}>STEP {step+1}/{TOUR_STEPS.length}</span>
+      </div>
       <div style={{fontSize:15,fontWeight:800,marginBottom:6,letterSpacing:'-0.01em'}}>{cur.title}</div>
       <div style={{fontSize:13,color:'#a8bdd4',lineHeight:1.55,marginBottom:16}}>{cur.body}</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
@@ -15640,6 +15682,8 @@ function SetupWizard({org,cu,supabase,onClose}){
   var [customWT,setCustomWT]=useState('');
   var [showCustomInput,setShowCustomInput]=useState(false);
   var [clientText,setClientText]=useState('');
+  var [createdClients,setCreatedClients]=useState([]); // [{id,name}] from step 2 insert
+  var [attachMap,setAttachMap]=useState({}); // {clientId: {workType: true}}
   var [inviteRows,setInviteRows]=useState([{email:'',role:'member'}]);
   var [busy,setBusy]=useState(false);
   var [err,setErr]=useState('');
@@ -15671,26 +15715,70 @@ function SetupWizard({org,cu,supabase,onClose}){
   }
 
   async function saveClients(){
-    if(clientLines.length===0){setStep(3);return;}
+    if(clientLines.length===0){setStep(selWT.length>0&&createdClients.length>0?3:4);return;}
     setBusy(true);setErr('');
     var batch=clientLines.map(function(l){
       return{org_id:org.id,name:l.name,pan:l.panValid?l.pan:null,status:'active',created_by:cu.id};
     });
-    var r=await supabase.from('clients').insert(batch);
+    var r=await supabase.from('clients').insert(batch).select('id,name');
     setBusy(false);
     if(r.error){setErr(r.error.message);return;}
     madeChanges.current=true;
-    setStep(3);
+    var made=r.data||[];
+    setCreatedClients(made);
+    // Pre-tick every selected work type for every client (common case: the
+    // firm does the same services for most clients — one click to deselect).
+    var m={};made.forEach(function(c){m[c.id]={};selWT.forEach(function(wt){m[c.id][wt]=true;});});
+    setAttachMap(m);
+    // Skip the attach matrix if there are no work types to attach.
+    setStep(selWT.length>0?3:4);
+  }
+
+  function toggleAttach(clientId,wt){
+    setAttachMap(function(prev){
+      var np=Object.assign({},prev);
+      np[clientId]=Object.assign({},np[clientId]);
+      np[clientId][wt]=!np[clientId][wt];
+      return np;
+    });
+  }
+  function toggleAttachColumn(wt){
+    // If every client already has this WT, clear it; else set it for all.
+    var allOn=createdClients.every(function(c){return attachMap[c.id]&&attachMap[c.id][wt];});
+    setAttachMap(function(prev){
+      var np=Object.assign({},prev);
+      createdClients.forEach(function(c){np[c.id]=Object.assign({},np[c.id]);np[c.id][wt]=!allOn;});
+      return np;
+    });
+  }
+  var attachCount=createdClients.reduce(function(acc,c){return acc+selWT.filter(function(wt){return attachMap[c.id]&&attachMap[c.id][wt];}).length;},0);
+
+  async function saveAttach(){
+    if(attachCount===0){setStep(4);return;}
+    setBusy(true);setErr('');
+    // Enrollment is driven by clients.custom_fields.work_types (comma list).
+    // Worksheets auto-create rows for enrolled clients when opened.
+    var updates=createdClients.map(function(c){
+      var wts=selWT.filter(function(wt){return attachMap[c.id]&&attachMap[c.id][wt];});
+      return supabase.from('clients').update({custom_fields:{work_types:wts.join(',')}}).eq('id',c.id);
+    });
+    var results=await Promise.all(updates);
+    setBusy(false);
+    var firstErr=results.find(function(r){return r.error;});
+    if(firstErr){setErr(firstErr.error.message);return;}
+    madeChanges.current=true;
+    setStep(4);
   }
 
   async function saveInvites(){
-    if(validInvites.length===0){setStep(4);return;}
+    if(validInvites.length===0){setStep(5);return;}
     setBusy(true);setErr('');
     var batch=validInvites.map(function(r){return{org_id:org.id,inviter_id:cu.id,invitee_email:r.email,role:r.role,status:'pending'};});
     var res=await supabase.from('org_invitations').insert(batch);
     setBusy(false);
     if(res.error){setErr(res.error.message);return;}
-    setStep(4);
+    madeChanges.current=true;
+    setStep(5);
   }
 
   function updateInviteRow(i,field,val){
@@ -15702,8 +15790,9 @@ function SetupWizard({org,cu,supabase,onClose}){
   var STEPS=[
     {n:1,label:'Work Types',icon:'🧾'},
     {n:2,label:'Clients',icon:'👤'},
-    {n:3,label:'Team',icon:'👥'},
-    {n:4,label:'Done',icon:'✓'},
+    {n:3,label:'Attach',icon:'🔗'},
+    {n:4,label:'Team',icon:'👥'},
+    {n:5,label:'Done',icon:'✓'},
   ];
 
   var BTN={background:'linear-gradient(135deg,#0e2a47,#1d4670)',border:'none',borderRadius:9,padding:'10px 24px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:busy?0.6:1,display:'flex',alignItems:'center',gap:6,fontFamily:'inherit'};
@@ -15817,13 +15906,62 @@ function SetupWizard({org,cu,supabase,onClose}){
         </div>}
         {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
-          <button onClick={function(){setStep(3);}} style={GHOST}>Skip — add later</button>
+          <button onClick={function(){setStep(4);}} style={GHOST}>Skip — add later</button>
           <button onClick={saveClients} disabled={busy} style={BTN}>{busy?'Adding…':<><span>{clientLines.length>0?'Add '+clientLines.length+' Client'+(clientLines.length!==1?'s':''):'Continue'}</span><span>→</span></>}</button>
         </div>
       </div>}
 
-      {/* ── Step 3: Team Invites ── */}
+      {/* ── Step 3: Attach Work Types to Clients ── */}
       {step===3&&<div>
+        <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:16}}>
+          <div style={{width:42,height:42,borderRadius:11,background:'linear-gradient(135deg,#0891b2,#0e7490)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>🔗</div>
+          <div>
+            <h2 style={{fontSize:19,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.02em'}}>Attach work types to clients</h2>
+            <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0,lineHeight:1.5}}>Tick which services each client gets — this enrolls them so their worksheets fill in automatically. Tap a column header to toggle a whole work type.</p>
+          </div>
+        </div>
+        {createdClients.length===0
+          ?<div style={{textAlign:'center',padding:'28px 0',color:'var(--tf-text-sub)',fontSize:13}}>No clients to enroll. <button onClick={function(){setStep(4);}} style={{background:'none',border:'none',color:'#0891b2',cursor:'pointer',fontWeight:700,fontFamily:'inherit'}}>Skip →</button></div>
+          :<div style={{border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden'}}>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:Math.min(560,180+selWT.length*92)}}>
+                <thead>
+                  <tr style={{background:'var(--tf-surface)'}}>
+                    <th style={{position:'sticky',left:0,background:'var(--tf-surface)',padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',zIndex:1}}>Client</th>
+                    {selWT.map(function(wt){
+                      var allOn=createdClients.every(function(c){return attachMap[c.id]&&attachMap[c.id][wt];});
+                      return<th key={wt} onClick={function(){toggleAttachColumn(wt);}} title="Toggle for all clients" style={{padding:'8px 6px',textAlign:'center',fontSize:10.5,fontWeight:700,color:allOn?'#0891b2':'var(--tf-text-sub)',borderBottom:'1px solid var(--tf-border)',borderLeft:'1px solid var(--tf-border)',cursor:'pointer',whiteSpace:'nowrap',userSelect:'none'}}>{wt}</th>;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {createdClients.map(function(c,i){
+                    return<tr key={c.id} style={{background:i%2?'rgba(0,0,0,0.015)':'transparent'}}>
+                      <td style={{position:'sticky',left:0,background:i%2?'var(--tf-panel)':'var(--tf-panel)',padding:'8px 12px',fontSize:13,fontWeight:600,color:'var(--tf-text)',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap',maxWidth:170,overflow:'hidden',textOverflow:'ellipsis'}}>{c.name}</td>
+                      {selWT.map(function(wt){
+                        var on=attachMap[c.id]&&attachMap[c.id][wt];
+                        return<td key={wt} onClick={function(){toggleAttach(c.id,wt);}} style={{padding:'8px 6px',textAlign:'center',borderBottom:'1px solid var(--tf-border)',borderLeft:'1px solid var(--tf-border)',cursor:'pointer'}}>
+                          <span style={{display:'inline-flex',width:20,height:20,borderRadius:6,border:'1.5px solid '+(on?'#0891b2':'var(--tf-border)'),background:on?'#0891b2':'transparent',color:'#fff',fontSize:12,fontWeight:800,alignItems:'center',justifyContent:'center'}}>{on?'✓':''}</span>
+                        </td>;
+                      })}
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>}
+        {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <button onClick={function(){setStep(2);}} style={GHOST}>← Back</button>
+            <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{attachCount} enrolment{attachCount!==1?'s':''}</span>
+          </div>
+          <button onClick={saveAttach} disabled={busy} style={BTN}>{busy?'Saving…':<><span>Continue</span><span>→</span></>}</button>
+        </div>
+      </div>}
+
+      {/* ── Step 4: Team Invites ── */}
+      {step===4&&<div>
         <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:18}}>
           <div style={{width:42,height:42,borderRadius:11,background:'linear-gradient(135deg,#7c3aed,#6d28d9)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>👥</div>
           <div>
@@ -15853,18 +15991,19 @@ function SetupWizard({org,cu,supabase,onClose}){
         </button>
         {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
-          <button onClick={function(){setStep(4);}} style={GHOST}>Skip — invite later</button>
+          <button onClick={function(){setStep(5);}} style={GHOST}>Skip — invite later</button>
           <button onClick={saveInvites} disabled={busy} style={BTN}>{busy?'Sending…':<><span>{validInvites.length>0?'Invite '+validInvites.length+' Member'+(validInvites.length!==1?'s':''):'Continue'}</span><span>→</span></>}</button>
         </div>
       </div>}
 
-      {/* ── Step 4: Success + Tour CTA ── */}
-      {step===4&&<div style={{textAlign:'center',padding:'8px 0 4px'}}>
+      {/* ── Step 5: Success + Tour CTA ── */}
+      {step===5&&<div style={{textAlign:'center',padding:'8px 0 4px'}}>
         <div style={{width:64,height:64,borderRadius:18,background:'linear-gradient(135deg,#22c55e,#16a34a)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,margin:'0 auto 18px',boxShadow:'0 12px 30px rgba(34,197,94,0.3)'}}>✓</div>
         <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.02em'}}>{org.name} is ready!</h2>
         <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px',lineHeight:1.6,maxWidth:380,marginLeft:'auto',marginRight:'auto'}}>
           {selWT.length>0&&<><strong style={{color:'var(--tf-text)'}}>{selWT.length} work type{selWT.length!==1?'s':''}</strong> configured. </>}
           {clientLines.length>0&&<><strong style={{color:'var(--tf-text)'}}>{clientLines.length} client{clientLines.length!==1?'s':''}</strong> added. </>}
+          {attachCount>0&&<><strong style={{color:'var(--tf-text)'}}>{attachCount} enrolment{attachCount!==1?'s':''}</strong> made. </>}
           {validInvites.length>0&&<><strong style={{color:'var(--tf-text)'}}>{validInvites.length} invite{validInvites.length!==1?'s':''}</strong> sent. </>}
           Take a quick tour to see how everything fits together.
         </p>
@@ -15955,6 +16094,13 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   }
   var [showWizard,setShowWizard]=useState(false);
   var [showTour,setShowTour]=useState(false);
+  var [tourStep,setTourStep]=useState(0);
+  function startTour(){setTourStep(0);setShowTour(true);}
+  function tourNavigate(mod,tab){
+    if(mod===undefined)return;
+    setOrgModule(mod);setTab(tab||'');
+    if(mod){localStorage.setItem('tf_lastOrgModule',mod);if(tab)localStorage.setItem('tf_lastOrgTab',tab);}
+  }
   async function maybeShowWizard(configs){
     if(configs.length>0)return;
     if(localStorage.getItem('tf_setupdone_'+org.id))return;
@@ -15967,14 +16113,12 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     var rc=await supabase.from('clients').select('id',{count:'exact',head:true}).eq('org_id',org.id);
     if((rc.count||0)===0)setShowWizard(true);
   }
-  function closeWizard(changed,startTour){
+  function closeWizard(changed,launchTour){
     localStorage.setItem('tf_setupdone_'+org.id,'1');
     setShowWizard(false);
     if(changed)loadWTC();
-    // Navigate to launcher so tour can see module cards
-    setOrgModule(null);setTab('');
-    localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');
-    if(startTour)setTimeout(function(){setShowTour(true);},350);
+    if(launchTour)setTimeout(startTour,300);
+    else{setOrgModule(null);setTab('');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}
   }
   async function loadMyRole(){
     if(org.created_by===cu.id){setMyRole('owner');return;}
@@ -16053,7 +16197,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(orgModule===null){
     return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
-      {showTour&&<CoachmarkTour onDone={function(){setShowTour(false);}}/>}
+      {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate}/>}
       <div style={{flex:1,overflow:'auto',padding:'20px 24px 60px'}}>
         <div style={{maxWidth:1100,margin:'0 auto'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
@@ -16062,7 +16206,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
               <div style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Modules</div>
               <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}}>Pick a module to get focused. Each one groups a specific workflow.</div>
             </div>
-            <button onClick={function(){setShowTour(true);}} title="Take a guided tour" style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',flexShrink:0,whiteSpace:'nowrap'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.color='#0e2a47';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-sub)';}}>
+            <button onClick={startTour} title="Take a guided tour" style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',flexShrink:0,whiteSpace:'nowrap'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.color='#0e2a47';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-sub)';}}>
               <HelpCircle size={13}/>
               <span>Take a Tour</span>
             </button>
@@ -16137,7 +16281,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
-      {showTour&&<CoachmarkTour onDone={function(){setShowTour(false);}}/>}
+      {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate}/>}
       {/* Left sidebar — dark navy, no separate header row, back button lives here */}
       <div data-tour="tour-sidebar" style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
         <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
