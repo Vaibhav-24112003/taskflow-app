@@ -3000,11 +3000,24 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
       })()}
     </div>
 
+    {org.created_by===cu.id&&<div style={{marginTop:32,marginBottom:16,borderTop:'1px solid var(--tf-border)',paddingTop:24}}>
+      <h3 style={{fontSize:15,fontWeight:700,color:'#ef4444',margin:'0 0 6px'}}>Danger Zone</h3>
+      <p style={{fontSize:12,color:'var(--tf-text-sub)',margin:'0 0 14px',lineHeight:1.5}}>Deleting a practice is permanent and cannot be undone. All clients, work types, worksheets and member data will be lost.</p>
+      <button onClick={async function(){
+        if(!window.confirm('Delete "'+org.name+'" permanently? This cannot be undone.'))return;
+        var confirm2=window.prompt('Type the practice name to confirm: '+org.name);
+        if(confirm2!==org.name){showToast('Name did not match — not deleted','err');return;}
+        var res=await supabase.from('organizations').delete().eq('id',org.id);
+        if(res.error){showToast(res.error.message,'err');return;}
+        window.location.reload();
+      }} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'8px 18px',color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:700}}>
+        Delete Practice…
+      </button>
+    </div>}
+
     {toast&&<div style={{position:'fixed',bottom:24,right:24,background:toast.type==='err'?'#ef4444':'#22c55e',color:'#fff',borderRadius:10,padding:'11px 18px',fontSize:13,fontWeight:600,zIndex:9999}}>{toast.msg}</div>}
   </div>;
 }
-
-// ── Departments Panel ─────────────────────────────────────────────
 function DepartmentsPanel({org,cu,supabase}){
   var [depts,setDepts]=useState([]);
   var [members,setMembers]=useState([]);
