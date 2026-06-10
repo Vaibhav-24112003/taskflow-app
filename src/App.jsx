@@ -62,9 +62,9 @@ const SCPAL = ['#64748b','#0e2a47','#f59e0b','#10b981','#ec4899','#06b6d4','#1d4
 
 // ── Access Control ─────────────────────────────────────────────────────────────
 var PERMISSION_NODES=[
-  {id:'diary',label:'Your Diary',module:'diary'},
-  {id:'diary.worklist',label:'Worklist',module:'diary',section:'worklist'},
-  {id:'diary.planmyday',label:'Plan My Day',module:'diary',section:'planmyday'},
+  {id:'diary',label:'My Work',module:'diary'},
+  {id:'diary.worklist',label:'Work',module:'diary',section:'worklist'},
+  {id:'diary.planmyday',label:'Plan Today',module:'diary',section:'planmyday'},
   {id:'workzone',label:'WorkZone',module:'workzone'},
   {id:'workzone.worksheets',label:'Worksheets',module:'workzone',section:'worksheets'},
   {id:'workzone.board',label:'Board',module:'workzone',section:'board'},
@@ -1145,7 +1145,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
    COMMAND BAR  ⌘K — universal search & jump
 ────────────────────────────────────────────────────── */
 var CMD_MODULES=[
-  {id:'diary',label:'Your Diary',tabs:[{id:'home',label:'Worklist'},{id:'plan',label:'Plan My Day'}]},
+  {id:'diary',label:'My Work',tabs:[{id:'home',label:'Work'},{id:'plan',label:'Plan Today'}]},
   {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
@@ -1674,7 +1674,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     const views=[
     {id:'board',label:'My Board',icon:'⊞'},
     {id:'team',label:'Team',icon:'&'},
-    {id:'plan',label:'Plan My Day',icon:'🗓'},
+    {id:'plan',label:'Plan Today',icon:'🗓'},
     {id:'recurring',label:'Recurring',icon:'🔁'},
     {id:'list',label:'All Tasks',icon:'☰'},
     {id:'dashboard',label:'Dashboard',icon:'*'},
@@ -2965,45 +2965,7 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
     {/* ── Modules & Features ── */}
     <div style={{marginTop:32,marginBottom:32}}>
       <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px'}}>Modules &amp; Features</h2>
-      <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 16px',lineHeight:1.5}}>Turn off modules your firm doesn't need. Disabled modules hide from the sidebar for all members. Core modules (Diary, WorkZone worksheets, Set-up) cannot be disabled.</p>
-      {(function(){
-        var SECTIONS=[
-          {key:'library',label:'Library',desc:'Credentials, SOPs, tools and study resources.',icon:'📚',defaultOn:true},
-          {key:'team',label:'Team Module',desc:'Attendance logs, leaves and activity tracking.',icon:'👥',defaultOn:true},
-          {key:'analytics',label:'Analytics',desc:'Org-wide performance charts for owners/admins.',icon:'📊',defaultOn:true},
-          {key:'comms',label:'Communication',desc:'Client Connect portal and mailing.',icon:'✉️',defaultOn:true},
-          {key:'billing',label:'Billing',desc:'Invoices, proposals, payments and exports.',icon:'💳',defaultOn:true},
-          {key:'masterdata_groups',label:'Groups & Teams (Master Data)',desc:'Groups & Teams tab inside Master Data.',icon:'🏷️',defaultOn:true},
-          {key:'workzone_itr',label:'ITR Desk (WorkZone tab)',desc:'ITR compilation desk inside WorkZone.',icon:'📋',defaultOn:true},
-          {key:'workzone_bigclients',label:'Big Clients (WorkZone tab)',desc:'Big-client tracking inside WorkZone.',icon:'⭐',defaultOn:true},
-          {key:'workzone_board',label:'Board (WorkZone tab)',desc:'Kanban board view inside WorkZone.',icon:'🗂️',defaultOn:true},
-          {key:'depts',label:'Departments',desc:'Department structure and dept-level access control.',icon:'🏢',defaultOn:true},
-        ];
-        return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden',maxWidth:760,margin:'0 auto'}}>
-          {SECTIONS.map(function(s,i){
-            var on=isFlagOn(s.key,s.defaultOn);
-            return<div key={s.key} style={{display:'flex',alignItems:'center',gap:14,padding:'13px 18px',borderBottom:i<SECTIONS.length-1?'1px solid var(--tf-border)':'none',background:on?'transparent':'rgba(239,68,68,0.03)'}}>
-              <span style={{fontSize:20,flexShrink:0,opacity:on?1:0.4}}>{s.icon}</span>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:on?'var(--tf-text)':'var(--tf-text-sub)'}}>{s.label}</div>
-                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{s.desc}</div>
-              </div>
-              {savingFlags&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>saving…</div>}
-              <button onClick={function(){toggleFlag(s.key,s.defaultOn);}} disabled={savingFlags}
-                title={on?'Disable this module':'Enable this module'}
-                style={{flexShrink:0,width:44,height:24,borderRadius:12,border:'none',cursor:'pointer',position:'relative',background:on?'#22c55e':'#cbd5e1',transition:'background 0.2s',padding:0}}>
-                <span style={{position:'absolute',top:2,left:on?22:2,width:20,height:20,borderRadius:10,background:'#fff',boxShadow:'0 1px 3px rgba(0,0,0,0.25)',transition:'left 0.2s',display:'block'}}/>
-              </button>
-            </div>;
-          })}
-        </div>;
-      })()}
-    </div>
-
-    {/* ── Modules & Features ── */}
-    <div style={{marginTop:32,marginBottom:32}}>
-      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px'}}>Modules &amp; Features</h2>
-      <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 16px',lineHeight:1.5}}>Turn off modules your firm doesn't need. Disabled modules hide from the sidebar for all members. Core modules (Diary, WorkZone worksheets, Set-up) cannot be disabled.</p>
+      <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 16px',lineHeight:1.5}}>Turn off modules your firm doesn't need. Disabled modules hide from the sidebar for all members. Core modules (My Work, WorkZone worksheets, Set-up) cannot be disabled.</p>
       {(function(){
         var SECTIONS=[
           {key:'library',label:'Library',desc:'Credentials, SOPs, tools and study resources.',icon:'📚',defaultOn:true},
@@ -3547,7 +3509,7 @@ function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
   var [toast,setToast]=useState(null);
 
   var ALL_MODULES=[
-    {id:'diary',label:'Your Diary',icon:'📓'},
+    {id:'diary',label:'My Work',icon:'📓'},
     {id:'workzone',label:'WorkZone',icon:'💼'},
     {id:'library',label:'Library',icon:'📚'},
     {id:'team',label:'Team',icon:'👥'},
@@ -4145,12 +4107,12 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
             <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Work types with the same group name will appear under one worksheet tab with sub-tabs.</div>
           </div>
           <div style={{marginBottom:14}}>
-            <label style={LBL}>Worklist Prep Window <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
+            <label style={LBL}>Work Prep Window <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
               <input type="number" min="0" max="365" value={prepDays} onChange={function(e){setPrepDays(e.target.value);}} style={Object.assign({},INP,{width:80})} placeholder="—"/>
               <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>days before due date</span>
             </div>
-            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Tasks for this work type appear in Your Diary worklist this many days before the due date. Leave blank to always show. <b>Examples:</b> ITR → 90, Audit → 60, GST → 10, TDS → 15.</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Tasks for this work type appear in My Work this many days before the due date. Leave blank to always show. <b>Examples:</b> ITR → 90, Audit → 60, GST → 10, TDS → 15.</div>
           </div>
           <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(245,158,11,0.05)'}}>
             <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
@@ -10852,7 +10814,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           <div>
             {isSelf
               ?<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{greet}, {firstName} 👋</div>
-              :<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{viewingName}'s Worklist</div>}
+              :<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{viewingName}'s Work</div>}
             <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:3,fontFamily:"'JetBrains Mono',monospace"}}>
               {stats.total} works · <span style={{color:'#ef4444'}}>{stats.overdue} overdue</span> · <span style={{color:'#f59e0b'}}>{stats.today} due today</span>
               {!isSelf&&<span style={{color:'#8b5cf6',fontFamily:'inherit'}}> · Viewing {viewingName}</span>}
@@ -10867,10 +10829,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'6px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(91,108,240,0.3)'}}>
               + Create Task
             </button>}
-            <button onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan My Day':'Show Plan My Day'}
+            <button onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
               style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'6px 11px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
               <Calendar size={14} strokeWidth={2}/>
-              Plan My Day
+              Plan Today
               {myDayTasks.length>0&&<span style={{fontSize:9,fontWeight:800,background:planOpen?'rgba(255,255,255,0.2)':'rgba(14,42,71,0.12)',color:planOpen?'#fff':'#0e2a47',padding:'1px 6px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{myDayTasks.length}</span>}
             </button>
           </div>
@@ -10922,7 +10884,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           </select>
           {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');setWsRailFilter('all');}}
             style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'5px 9px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit'}}>
-            <option value={cu.id}>My Worklist</option>
+            <option value={cu.id}>My Work</option>
             {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
           </select>}
         </div>
@@ -11062,7 +11024,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                         {row.due_date&&<span style={{fontSize:10,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
                           {isOverdue?'Overdue':isToday?'Today':new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}
                         </span>}
-                        <button onClick={function(e){e.stopPropagation();toggleMyDay(row.id);}} title={inMyDay?'Remove from My Day':'Add to My Day'}
+                        <button onClick={function(e){e.stopPropagation();toggleMyDay(row.id);}} title={inMyDay?'Remove from Plan Today':'Add to Plan Today'}
                           style={{background:'none',border:'none',cursor:'pointer',fontSize:12,opacity:inMyDay?1:0.3,color:'#f59e0b',padding:'0 2px',lineHeight:1}}
                           onMouseEnter={function(e){e.currentTarget.style.opacity='1';}}
                           onMouseLeave={function(e){e.currentTarget.style.opacity=inMyDay?'1':'0.3';}}>☀</button>
@@ -11285,7 +11247,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                         <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
                           {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
                           {r.due_date&&<span style={{fontSize:10,fontWeight:600,color:isOver?'#ef4444':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>{isOver?'⚠ ':''}{r.due_date.slice(5)}</span>}
-                          <button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from My Day':'Add to My Day'}
+                          <button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from Plan Today':'Add to Plan Today'}
                             style={{background:'none',border:'none',cursor:'pointer',fontSize:12,opacity:showInDay?1:0.3,color:'#f59e0b',padding:0,lineHeight:1}}
                             onMouseEnter={function(e){e.currentTarget.style.opacity='1';}}
                             onMouseLeave={function(e){e.currentTarget.style.opacity=showInDay?'1':'0.3';}}>☀</button>
@@ -11455,7 +11417,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 4px',fontSize:10,fontWeight:600,color:'var(--tf-text)',fontFamily:'inherit',cursor:'pointer',width:'100%'}}>
                 <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Review</option><option value="completed">Done</option>
               </select></div>
-              <div><button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from My Day':'Add to My Day'}
+              <div><button onClick={function(e){e.stopPropagation();toggleMyDay(r.id);}} title={showInDay?'Remove from Plan Today':'Add to Plan Today'}
                 style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 5px',color:showInDay?'#f59e0b':'var(--tf-text-sub)',cursor:'pointer',fontSize:11}}>☀</button></div>
             </div>;
           })}
@@ -11515,7 +11477,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                     {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff',flexShrink:0}} title={assigneeName}>{assigneeInitials}</div>}
                     <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
                       {row.due_date&&<span style={{fontSize:10,fontWeight:700,color:isOverdue?'#ef4444':isToday?'#f59e0b':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>{isOverdue?'Overdue':isToday?'Today':new Date(row.due_date+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
-                      <button onClick={function(e){e.stopPropagation();toggleMyDay(row.id);}} title={inMyDay?'Remove from My Day':'Add to My Day'}
+                      <button onClick={function(e){e.stopPropagation();toggleMyDay(row.id);}} title={inMyDay?'Remove from Plan Today':'Add to Plan Today'}
                         style={{background:'none',border:'none',cursor:'pointer',fontSize:11,opacity:inMyDay?1:0.3,color:'#f59e0b',padding:'0 2px',lineHeight:1}}
                         onMouseEnter={function(e){e.currentTarget.style.opacity='1';}}
                         onMouseLeave={function(e){e.currentTarget.style.opacity=inMyDay?'1':'0.3';}}>☀</button>
@@ -11542,7 +11504,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <Calendar size={16} strokeWidth={2.2} color="#0e2a47"/>
-          <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Plan My Day</span>
+          <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Plan Today</span>
         </div>
         <button onClick={function(){setPlanOpen(false);}} title="Collapse"
           style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:28,height:28,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:15,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
@@ -15634,7 +15596,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   setupTabs.push({id:'settings',label:'Org Settings'});
 
   var MODULES=[
-    {id:'diary',label:'Your Diary',icon:BookOpen,desc:'Your worklist, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Worklist'},{id:'notes',label:'Notes'}]},
+    {id:'diary',label:'My Work',icon:BookOpen,desc:'Your work, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Work'},{id:'notes',label:'Notes'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:workzoneTabs},
   ];
   if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]});
@@ -16746,8 +16708,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     {/* Header — hidden in compact/panel mode since panel already shows the title */}
     {!compact&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18,flexWrap:'wrap',gap:10,paddingBottom:16,borderBottom:'1px solid var(--tf-border)'}}>
       <div>
-        <div style={{fontSize:11,fontWeight:700,color:'#0e2a47',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}>Daily Planner</div>
-        <h2 style={{fontSize:20,fontWeight:700,color:'var(--tf-text)',margin:0,letterSpacing:'-0.01em'}}>Plan My Day{org&&<span style={{fontWeight:400,color:'var(--tf-text-sub)'}}> · {org.name}</span>}</h2>
+        <div style={{fontSize:11,fontWeight:700,color:'#0e2a47',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}>Plan Today</div>
+        <h2 style={{fontSize:20,fontWeight:700,color:'var(--tf-text)',margin:0,letterSpacing:'-0.01em'}}>Plan Today{org&&<span style={{fontWeight:400,color:'var(--tf-text-sub)'}}> · {org.name}</span>}</h2>
         {isReadOnly&&<div style={{fontSize:12,color:'#f59e0b',marginTop:2,fontWeight:500}}>Viewing {viewingMember.name}'s plan (read-only)</div>}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
