@@ -15526,14 +15526,15 @@ var TOUR_STEPS=[
   {module:'diary',tab:'home',target:'tour-sidebar',title:'Move Between Modules',body:'The sidebar is your map — WorkZone for all client work, Master Data for clients & work types, Team, Billing and more. One click away, anytime.',pos:'right',icon:'🧭'},
 ];
 
-function CoachmarkTour({step,setStep,onDone,navigate}){
+function CoachmarkTour({step,setStep,onDone,navigate,steps}){
+  var TS=steps&&steps.length?steps:TOUR_STEPS;
   var [rect,setRect]=useState(null);
   var retryRef=useRef(null);
   var PAD=12;
-  var cur=TOUR_STEPS[step];
+  var cur=TS[step];
 
   useEffect(function(){
-    var t=TOUR_STEPS[step];
+    var t=TS[step];
     if(!t)return;
     // Navigate into the right view first, then find the element (with retries
     // while the module mounts/renders).
@@ -15562,7 +15563,7 @@ function CoachmarkTour({step,setStep,onDone,navigate}){
   // Reposition on resize/scroll without changing step
   useEffect(function(){
     function reflow(){
-      var t=TOUR_STEPS[step];if(!t)return;
+      var t=TS[step];if(!t)return;
       var el=document.querySelector('[data-tour="'+t.target+'"]');
       if(el){var r=el.getBoundingClientRect();setRect({top:r.top,left:r.left,width:r.width,height:r.height});}
     }
@@ -15570,7 +15571,7 @@ function CoachmarkTour({step,setStep,onDone,navigate}){
     return function(){window.removeEventListener('resize',reflow);window.removeEventListener('scroll',reflow,true);};
   },[step]);
 
-  function next(){if(step>=TOUR_STEPS.length-1){onDone();return;}setStep(step+1);}
+  function next(){if(step>=TS.length-1){onDone();return;}setStep(step+1);}
   function prev(){if(step>0)setStep(step-1);}
 
   if(!cur)return null;
@@ -15634,12 +15635,12 @@ function CoachmarkTour({step,setStep,onDone,navigate}){
       <div style={{fontSize:13,color:'#a8bdd4',lineHeight:1.55,marginBottom:16}}>{cur.body}</div>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
         <div style={{display:'flex',gap:4}}>
-          {TOUR_STEPS.map(function(_,i){return<div key={i} style={{width:i===step?16:6,height:6,borderRadius:3,background:i===step?'#7fa3c7':'rgba(255,255,255,0.2)',transition:'all 0.2s'}}/>;})}
+          {TS.map(function(_,i){return<div key={i} style={{width:i===step?16:6,height:6,borderRadius:3,background:i===step?'#7fa3c7':'rgba(255,255,255,0.2)',transition:'all 0.2s'}}/>;})}
         </div>
         <div style={{display:'flex',gap:8}}>
           <button onClick={function(e){e.stopPropagation();onDone();}} style={{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:12,fontWeight:600,padding:'4px 8px',fontFamily:'inherit'}}>Skip</button>
           {step>0&&<button onClick={function(e){e.stopPropagation();prev();}} style={{background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:7,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>Back</button>}
-          <button onClick={function(e){e.stopPropagation();next();}} style={{background:'#1d4670',border:'1px solid rgba(127,163,199,0.3)',borderRadius:7,padding:'6px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>{step===TOUR_STEPS.length-1?'Done ✓':'Next →'}</button>
+          <button onClick={function(e){e.stopPropagation();next();}} style={{background:'#1d4670',border:'1px solid rgba(127,163,199,0.3)',borderRadius:7,padding:'6px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>{step===TS.length-1?'Done ✓':'Next →'}</button>
         </div>
       </div>
     </div>
@@ -16180,6 +16181,34 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     });
   }
 
+  // Build the guided-tour steps from the modules this user can actually see.
+  // Starts with a deep-dive into My Work, then visits every other module —
+  // navigating into each one and spotlighting its sidebar entry.
+  var TOUR_MODULE_COPY={
+    workzone:{icon:'💼',title:'WorkZone — All Client Work',body:'Your firm\'s operations hub. Worksheets track each client\'s compliance by period, the Board is a Kanban across work types, plus ITR Desk, Big Clients and Team Workload.'},
+    masterdata:{icon:'🗄️',title:'Master Data — Clients & Work Types',body:'Your client master, work-type configuration and groups. The work types you attached to clients flow from here into every worksheet.'},
+    library:{icon:'📚',title:'Library — Firm Knowledge',body:'A secure vault for client credentials, SOPs, tools and study resources — everything your team needs in one place.'},
+    team:{icon:'🧑‍🤝‍🧑',title:'Team — People & Attendance',body:'Track attendance, approve leaves and review activity logs for everyone in the practice.'},
+    analytics:{icon:'📊',title:'Analytics — The Big Picture',body:'Organisation-wide performance: workload, completion rates and the ITR summary — for owners and admins.'},
+    comms:{icon:'✉️',title:'Communication — Reach Clients',body:'Send Q&A forms, data requests and emails through shareable links. Files land straight in your own cloud.'},
+    billing:{icon:'🧾',title:'Billing — Get Paid',body:'Invoices, proposals, payments and statements, with one-click exports for Tally and Zoho.'},
+    setup:{icon:'⚙️',title:'Set-up — Run Your Org',body:'Invite members, manage roles and departments, and control organisation settings. Owners and admins only.'},
+  };
+  var tourSteps=[];
+  if(MODULES.some(function(m){return m.id==='diary';})){
+    tourSteps.push(
+      {module:'diary',tab:'home',target:'tour-createtask',title:'Create a Task',body:'Spin up a personal to-do or a client task in seconds. It lands in your list and on your calendar instantly.',pos:'bottom',icon:'➕'},
+      {module:'diary',tab:'home',target:'tour-plantoday',title:'Plan Your Day',body:'Open the Plan Today panel to drag the work you\'ll tackle today into a focused list — and log time against it when you\'re done.',pos:'bottom',icon:'🗓️'},
+      {module:'diary',tab:'home',target:'tour-views',title:'Five Ways to See Your Work',body:'Switch between List, Board (Kanban), Calendar, Grid and Urgency views — the same tasks, the angle that fits the moment.',pos:'bottom',icon:'👁️'},
+      {module:'diary',tab:'home',target:'tour-worktypestrip',title:'Filter by Work Type',body:'Jump straight to GST, ITR, TDS or any work type. The red dot flags overdue items so nothing slips.',pos:'top',icon:'🏷️'}
+    );
+  }
+  MODULES.forEach(function(m){
+    if(m.id==='diary')return;
+    var copy=TOUR_MODULE_COPY[m.id]||{icon:'📦',title:m.label,body:m.desc};
+    tourSteps.push({module:m.id,tab:(m.tabs&&m.tabs[0]&&m.tabs[0].id)||'',target:'tour-nav-'+m.id,title:copy.title,body:copy.body,pos:'right',icon:copy.icon});
+  });
+
   function openModule(m){var mod=m.id;var t=m.tabs&&m.tabs[0]?m.tabs[0].id:'';setOrgModule(mod);setTab(t);localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}
   function backToLauncher(){setOrgModule(null);setTab('');setWsInitWorkType(null);setWsInitMineOnly(false);localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');}
   function navigateToWorkType(wt){
@@ -16197,7 +16226,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(orgModule===null){
     return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
-      {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate}/>}
+      {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate} steps={tourSteps}/>}
       <div style={{flex:1,overflow:'auto',padding:'20px 24px 60px'}}>
         <div style={{maxWidth:1100,margin:'0 auto'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
@@ -16281,7 +16310,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
-      {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate}/>}
+      {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate} steps={tourSteps}/>}
       {/* Left sidebar — dark navy, no separate header row, back button lives here */}
       <div data-tour="tour-sidebar" style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
         <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
@@ -16296,7 +16325,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
           {MODULES.map(function(m){
             var isActive=orgModule===m.id;
             var hasTabs=m.tabs&&m.tabs.length>1;
-            return<div key={m.id}>
+            return<div key={m.id} data-tour={'tour-nav-'+m.id}>
               <button onClick={function(){openModule(m);if(!sidebarOpen)setSidebarOpen(true);}} title={sidebarOpen?'':m.label}
                 style={{width:'100%',textAlign:'left',background:isActive?'rgba(255,255,255,0.08)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
                 onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.04)';}}
