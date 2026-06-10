@@ -2121,7 +2121,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
     {showMembers&&activeWs&&<MembersModal open onClose={()=>setShowMembers(false)} ws={activeWs} wsMembers={wsMembers} cu={cu} myRole={myRole} showToast={showToast}/>}
       {showTransferOwner&&<TransferOwnerModal open={showTransferOwner} ws={activeWs} wsMembers={wsMembers} cu={cu} supabase={supabase} onClose={()=>setShowTransferOwner(false)} onTransferred={()=>{setShowTransferOwner(false);showToast('Ownership transferred');loadWs();}}/> }
     <Confirm open={!!delWs} icon="⚠️" title="Delete workspace?" body={`Delete "${delWs?.name}" and all tasks?`} confirmLabel="Delete" onConfirm={()=>delWsHandler(delWs?.id)} onCancel={()=>setDelWs(null)}/>
-      {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/> }
+      {showCreateOrg&&<OrgCreateModal open={showCreateOrg} cu={cu} supabase={supabase} onClose={function(){setShowCreateOrg(false);}} onCreated={async function(newOrg){setShowCreateOrg(false);var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);if(newOrg){setActiveOrg(newOrg);localStorage.setItem('tf_lastOrgId',newOrg.id);setActiveWsId(null);}}}/> }
       {showSupportModal && (
         <div onClick={()=>setShowSupportModal(false)} style={{position:'fixed',inset:0,background:'rgba(5,8,20,0.7)',backdropFilter:'blur(6px)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:560,maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 30px 90px rgba(0,0,0,.45)'}}>
@@ -6604,11 +6604,11 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
     if(!name.trim()){setErr('Name required');return;}
     setSaving(true);
     var slug='org'+Date.now();
-    var res=await supabase.from('organizations').insert({name:name.trim(),slug:slug,created_by:cu.id});
+    var res=await supabase.from('organizations').insert({name:name.trim(),slug:slug,created_by:cu.id}).select().single();
     setSaving(false);
     if(res.error){setErr(res.error.message);return;}
     setName('');setErr('');
-    onCreated();
+    onCreated(res.data);
   };
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
     <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
