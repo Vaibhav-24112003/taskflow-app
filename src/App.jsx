@@ -3007,8 +3007,9 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
         if(!window.confirm('Delete "'+org.name+'" permanently? This cannot be undone.'))return;
         var confirm2=window.prompt('Type the practice name to confirm: '+org.name);
         if(confirm2!==org.name){showToast('Name did not match — not deleted','err');return;}
-        var res=await supabase.from('organizations').delete().eq('id',org.id);
+        var res=await supabase.from('organizations').delete().eq('id',org.id).select('id');
         if(res.error){showToast(res.error.message,'err');return;}
+        if(!res.data||res.data.length===0){showToast('Delete failed — you may not have permission','err');return;}
         window.location.reload();
       }} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'8px 18px',color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:700}}>
         Delete Practice…
