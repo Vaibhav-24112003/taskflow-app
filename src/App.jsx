@@ -17348,7 +17348,23 @@ export default function App(){
   useEffect(()=>{
     const onBlocked=(b)=>alert('Your account has been blocked'+(b?.blocked_reason?': '+b.blocked_reason:'.'))
 
-    supabase.auth.getSession().then(({data:{session}})=>{
+    // Race getSession against a timeout. In some in-app webviews (Gmail, etc.)
+    // Supabase's getSession() can hang on the Web Locks API and never resolve,
+    // leaving the app stuck on the "Loading…" screen forever. The timeout
+    // guarantees we always leave the loading state.
+    var bootSettled=false
+    Promise.race([
+      supabase.auth.getSession(),
+      new Promise(function(res){setTimeout(function(){res({data:{session:null},_timedOut:true})},8000)})
+    ]).then(({data:{session},_timedOut})=>{
+      if(bootSettled)return
+      bootSettled=true
+      if(_timedOut){
+        // getSession stalled — stop loading; onAuthStateChange will still fire
+        // INITIAL_SESSION if/when the real session resolves.
+        setLoading(false); initRef.current=true
+        return
+      }
       setSession(session)
       if(session){
         handleAuth(session.user)
@@ -17358,6 +17374,8 @@ export default function App(){
         setLoading(false); initRef.current=true
       }
     })
+    // Absolute safety net: never let the spinner outlive 12s regardless of cause.
+    var hardStop=setTimeout(function(){setLoading(false)},12000)
     const{data:{subscription}}=supabase.auth.onAuthStateChange(async(event,session)=>{
       const wasBlocked=await handleAuthEvent(event,session,onBlocked)
       if(wasBlocked){setSession(null);authIdRef.current=null;return}
@@ -17368,7 +17386,7 @@ export default function App(){
       if(event==='TOKEN_REFRESHED')return // don't reset state on silent token refresh
       if(!initRef.current||event==='USER_UPDATED'||(event==='SIGNED_IN'&&isNew))handleAuth(session.user)
     })
-    return()=>subscription.unsubscribe()
+    return()=>{clearTimeout(hardStop);subscription.unsubscribe()}
   },[])
 
   const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
