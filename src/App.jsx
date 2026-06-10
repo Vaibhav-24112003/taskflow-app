@@ -15502,6 +15502,134 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
   </div>;
 }
 
+// ── First-run Setup Wizard ─────────────────────────────────────────
+// Shown to the org owner/admin when the org has no work types and no clients.
+var WIZARD_PRESETS=[
+  {name:'GST Returns',desc:'GSTR-1 & GSTR-3B monthly filing',icon:'🧾'},
+  {name:'ITR',desc:'Income tax returns — yearly',icon:'📋'},
+  {name:'TDS Returns',desc:'Quarterly TDS return filing',icon:'📄'},
+  {name:'TDS Payments',desc:'Monthly TDS challan payments',icon:'💸'},
+  {name:'Accounts',desc:'Monthly book-keeping',icon:'📚'},
+  {name:'Audit',desc:'Yearly statutory / tax audit',icon:'🔍'},
+  {name:'Payroll',desc:'Monthly salary processing',icon:'👥'},
+  {name:'Other',desc:'Anything else your firm does',icon:'📌'},
+];
+function SetupWizard({org,cu,supabase,onClose}){
+  var [step,setStep]=useState(1);
+  var [selWT,setSelWT]=useState(['GST Returns','ITR','TDS Returns']);
+  var [clientText,setClientText]=useState('');
+  var [inviteText,setInviteText]=useState('');
+  var [busy,setBusy]=useState(false);
+  var [err,setErr]=useState('');
+  var madeChanges=useRef(false);
+
+  function toggleWT(name){setSelWT(function(prev){return prev.includes(name)?prev.filter(function(n){return n!==name;}):prev.concat([name]);});}
+
+  async function saveWorkTypes(){
+    if(selWT.length===0){setStep(2);return;}
+    setBusy(true);setErr('');
+    var batch=selWT.map(function(name,i){
+      var d=DEFAULT_WS_TYPE_CONFIGS[name]||DEFAULT_WS_TYPE_CONFIGS['Other'];
+      return{org_id:org.id,name:name,frequency:d.frequency,columns:d.cols,due_day:d.due_day||null,due_month:d.due_month||null,is_active:true,sort_order:i};
+    });
+    var r=await supabase.from('work_type_configs').insert(batch);
+    setBusy(false);
+    if(r.error){setErr(r.error.message);return;}
+    madeChanges.current=true;
+    setStep(2);
+  }
+
+  async function saveClients(){
+    var lines=clientText.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+    if(lines.length===0){setStep(3);return;}
+    setBusy(true);setErr('');
+    var batch=lines.map(function(l){
+      var parts=l.split(',').map(function(p){return p.trim();});
+      var pan=(parts[1]||'').toUpperCase();
+      return{org_id:org.id,name:parts[0],pan:/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)?pan:null,status:'active',created_by:cu.id};
+    });
+    var r=await supabase.from('clients').insert(batch);
+    setBusy(false);
+    if(r.error){setErr(r.error.message);return;}
+    madeChanges.current=true;
+    setStep(3);
+  }
+
+  async function saveInvites(){
+    var emails=inviteText.split(/[\n,;]+/).map(function(e){return e.trim().toLowerCase();}).filter(function(e){return e.includes('@');});
+    if(emails.length===0){onClose(madeChanges.current);return;}
+    setBusy(true);setErr('');
+    var batch=emails.map(function(e){return{org_id:org.id,inviter_id:cu.id,invitee_email:e,role:'member',status:'pending'};});
+    var r=await supabase.from('org_invitations').insert(batch);
+    setBusy(false);
+    if(r.error){setErr(r.error.message);return;}
+    onClose(madeChanges.current);
+  }
+
+  var BTN={background:'#0e2a47',border:'none',borderRadius:8,padding:'9px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:busy?0.6:1};
+  var GHOST={background:'transparent',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,padding:'9px 12px'};
+  var TA={width:'100%',minHeight:120,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'};
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(5,8,20,0.6)',backdropFilter:'blur(4px)',zIndex:8000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:16,width:'100%',maxWidth:620,maxHeight:'88vh',overflow:'auto',padding:'28px 30px',boxShadow:'0 24px 70px rgba(0,0,0,0.4)'}}>
+      {/* Progress */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:18}}>
+        {[1,2,3].map(function(s){return<div key={s} style={{flex:1,height:4,borderRadius:2,background:s<=step?'#0e2a47':'var(--tf-border)',transition:'background 0.3s'}}/>;})}
+        <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{step}/3</span>
+      </div>
+
+      {step===1&&<div>
+        <h2 style={{fontSize:21,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.02em'}}>Welcome to {org.name} 👋</h2>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 18px',lineHeight:1.5}}>Let's set up your practice in 3 quick steps. First — what work does your firm do? Pick the work types and we'll create them with standard due dates and checklists.</p>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:18}}>
+          {WIZARD_PRESETS.map(function(p){
+            var on=selWT.includes(p.name);
+            return<button key={p.name} onClick={function(){toggleWT(p.name);}}
+              style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:on?'rgba(14,42,71,0.07)':'var(--tf-surface)',border:'1.5px solid '+(on?'#0e2a47':'var(--tf-border)'),borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'border-color 0.15s'}}>
+              <span style={{fontSize:18}}>{p.icon}</span>
+              <span style={{flex:1,minWidth:0}}>
+                <span style={{display:'block',fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{p.name}</span>
+                <span style={{display:'block',fontSize:10.5,color:'var(--tf-text-sub)',marginTop:1}}>{p.desc}</span>
+              </span>
+              <span style={{width:18,height:18,borderRadius:5,border:'1.5px solid '+(on?'#0e2a47':'var(--tf-border)'),background:on?'#0e2a47':'transparent',color:'#fff',fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on?'✓':''}</span>
+            </button>;
+          })}
+        </div>
+        {err&&<div style={{fontSize:12,color:'#ef4444',marginBottom:10}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <button onClick={function(){onClose(madeChanges.current);}} style={GHOST}>Skip setup</button>
+          <button onClick={saveWorkTypes} disabled={busy} style={BTN}>{busy?'Creating…':'Continue →'}</button>
+        </div>
+      </div>}
+
+      {step===2&&<div>
+        <h2 style={{fontSize:21,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.02em'}}>Add your clients</h2>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 14px',lineHeight:1.5}}>Type one client per line. Add a PAN after a comma if you have it — you can fill the rest later in Master Data, or bulk-import from Excel anytime.</p>
+        <textarea value={clientText} onChange={function(e){setClientText(e.target.value);}} style={TA}
+          placeholder={'Sharma Traders, ABCDE1234F\nGupta & Sons\nMehta Textiles Pvt Ltd'}/>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:6}}>{clientText.split('\n').filter(function(l){return l.trim();}).length} clients to add</div>
+        {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16}}>
+          <button onClick={function(){setStep(3);}} style={GHOST}>Skip — add later</button>
+          <button onClick={saveClients} disabled={busy} style={BTN}>{busy?'Adding…':'Continue →'}</button>
+        </div>
+      </div>}
+
+      {step===3&&<div>
+        <h2 style={{fontSize:21,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.02em'}}>Invite your team</h2>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 14px',lineHeight:1.5}}>Enter team member emails (one per line or comma-separated). They'll get an invitation when they sign in to TaskFlow with that email.</p>
+        <textarea value={inviteText} onChange={function(e){setInviteText(e.target.value);}} style={Object.assign({},TA,{minHeight:90})}
+          placeholder={'priya@yourfirm.com\nrahul@yourfirm.com'}/>
+        {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16}}>
+          <button onClick={function(){onClose(madeChanges.current);}} style={GHOST}>Skip — invite later</button>
+          <button onClick={saveInvites} disabled={busy} style={BTN}>{busy?'Finishing…':'Finish ✓'}</button>
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}){
   const hasModule=(m)=>trialGate?.hasModule?.(m)??false;
@@ -15555,6 +15683,25 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   async function loadWTC(){
     var r=await getAllWorkTypeConfigs(org.id);
     setWorkTypeConfigs(r.data||[]);
+    maybeShowWizard(r.data||[]);
+  }
+  var [showWizard,setShowWizard]=useState(false);
+  async function maybeShowWizard(configs){
+    if(configs.length>0)return;
+    if(localStorage.getItem('tf_setupdone_'+org.id))return;
+    var isMgr=org.created_by===cu.id;
+    if(!isMgr){
+      var rm=await supabase.from('organization_members').select('role').eq('org_id',org.id).eq('user_id',cu.id).maybeSingle();
+      isMgr=rm.data&&(rm.data.role==='owner'||rm.data.role==='admin');
+    }
+    if(!isMgr)return;
+    var rc=await supabase.from('clients').select('id',{count:'exact',head:true}).eq('org_id',org.id);
+    if((rc.count||0)===0)setShowWizard(true);
+  }
+  function closeWizard(changed){
+    localStorage.setItem('tf_setupdone_'+org.id,'1');
+    setShowWizard(false);
+    if(changed)loadWTC();
   }
   async function loadMyRole(){
     if(org.created_by===cu.id){setMyRole('owner');return;}
@@ -15632,6 +15779,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   // Module launcher view — no extra header row, back button inline
   if(orgModule===null){
     return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
+      {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
       <div style={{flex:1,overflow:'auto',padding:'20px 24px 60px'}}>
         <div style={{maxWidth:1100,margin:'0 auto'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
@@ -15709,6 +15857,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
+      {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
       {/* Left sidebar — dark navy, no separate header row, back button lives here */}
       <div style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
         <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
