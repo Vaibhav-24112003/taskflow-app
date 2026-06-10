@@ -15515,35 +15515,153 @@ function SOPsLibraryModule({org,supabase,cu,workTypeConfigs}){
   </div>;
 }
 
+// ── Coachmark Tour ──────────────────────────────────────────────────
+var TOUR_STEPS=[
+  {target:'tour-modules',title:'Your Modules',body:'Everything in TaskFlow lives in a module. Click any card to open it — each one is a focused workspace for a specific part of your practice.',pos:'bottom',icon:'🗂️'},
+  {target:'tour-mywork',title:'My Work — Your Daily Hub',body:'Start here every day. See your assigned tasks, plan your day, log time, and track what\'s due. Personal to you — your diary inside the firm.',pos:'bottom',icon:'📖'},
+  {target:'tour-workzone',title:'WorkZone — All Client Work',body:'Your firm\'s central operations board. Worksheets track every client\'s compliance work by period. The Board gives a Kanban view across all work types.',pos:'bottom',icon:'💼'},
+  {target:'tour-masterdata',title:'Master Data — Clients & Work Types',body:'Set up clients, enroll them in work types (GST, ITR, etc.), and configure stages and due dates. Everything your worksheets pull from lives here.',pos:'bottom',icon:'🗄️'},
+  {target:'tour-sidebar',title:'Quick Navigation',body:'The left sidebar gives you one-click access to every module and its sub-tabs. Collapse it with the ◀ button to get more screen space.',pos:'right',icon:'🧭'},
+  {target:'tour-setup',title:'Set-up & Team',body:'Invite members, manage roles and departments, and configure your organisation settings. Only owners and admins can see this.',pos:'bottom',icon:'⚙️'},
+];
+
+function CoachmarkTour({onDone}){
+  var [step,setStep]=useState(0);
+  var [rect,setRect]=useState(null);
+  var PAD=12;
+
+  useEffect(function(){
+    positionStep(step);
+  },[step]);
+
+  function positionStep(s){
+    var t=TOUR_STEPS[s];
+    if(!t)return;
+    var el=document.querySelector('[data-tour="'+t.target+'"]');
+    if(!el){setRect(null);return;}
+    var r=el.getBoundingClientRect();
+    setRect({top:r.top,left:r.left,width:r.width,height:r.height});
+    // Scroll element into view smoothly
+    el.scrollIntoView({behavior:'smooth',block:'nearest',inline:'nearest'});
+  }
+
+  function next(){
+    if(step>=TOUR_STEPS.length-1){onDone();return;}
+    setStep(function(s){return s+1;});
+  }
+  function prev(){if(step>0)setStep(function(s){return s-1;});}
+
+  var cur=TOUR_STEPS[step];
+  if(!cur)return null;
+
+  // Tooltip position relative to spotlight rect
+  var tipStyle={position:'fixed',zIndex:9100,background:'#0e1929',border:'1px solid rgba(127,163,199,0.3)',borderRadius:14,padding:'18px 20px',maxWidth:300,boxShadow:'0 20px 60px rgba(0,0,0,0.6)',color:'#fff'};
+  if(rect){
+    var vw=window.innerWidth,vh=window.innerHeight;
+    if(cur.pos==='bottom'){
+      tipStyle.top=rect.top+rect.height+PAD+8;
+      tipStyle.left=Math.max(12,Math.min(rect.left+(rect.width/2)-150,vw-312));
+    } else if(cur.pos==='right'){
+      tipStyle.left=rect.left+rect.width+PAD+8;
+      tipStyle.top=Math.max(12,Math.min(rect.top+(rect.height/2)-80,vh-200));
+    } else {
+      tipStyle.top=Math.max(12,rect.top-180);
+      tipStyle.left=Math.max(12,Math.min(rect.left+(rect.width/2)-150,vw-312));
+    }
+  } else {
+    tipStyle.top='50%';tipStyle.left='50%';tipStyle.transform='translate(-50%,-50%)';
+  }
+
+  return<div style={{position:'fixed',inset:0,zIndex:9000,pointerEvents:'none'}}>
+    {/* Dark overlay with spotlight hole */}
+    <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'all'}} onClick={next}>
+      <defs>
+        <mask id="cmask">
+          <rect width="100%" height="100%" fill="white"/>
+          {rect&&<rect x={rect.left-PAD} y={rect.top-PAD} width={rect.width+PAD*2} height={rect.height+PAD*2} rx={10} fill="black"/>}
+        </mask>
+      </defs>
+      <rect width="100%" height="100%" fill="rgba(5,8,20,0.72)" mask="url(#cmask)"/>
+    </svg>
+    {/* Spotlight border glow */}
+    {rect&&<div style={{position:'fixed',top:rect.top-PAD,left:rect.left-PAD,width:rect.width+PAD*2,height:rect.height+PAD*2,borderRadius:10,border:'2px solid rgba(127,163,199,0.7)',boxShadow:'0 0 0 4px rgba(127,163,199,0.12)',pointerEvents:'none',zIndex:9050,transition:'all 0.25s ease'}}/>}
+    {/* Tooltip */}
+    <div style={Object.assign({},tipStyle,{pointerEvents:'all'})}>
+      <div style={{fontSize:22,marginBottom:8}}>{cur.icon}</div>
+      <div style={{fontSize:15,fontWeight:800,marginBottom:6,letterSpacing:'-0.01em'}}>{cur.title}</div>
+      <div style={{fontSize:13,color:'#a8bdd4',lineHeight:1.55,marginBottom:16}}>{cur.body}</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+        <div style={{display:'flex',gap:4}}>
+          {TOUR_STEPS.map(function(_,i){return<div key={i} style={{width:i===step?16:6,height:6,borderRadius:3,background:i===step?'#7fa3c7':'rgba(255,255,255,0.2)',transition:'all 0.2s'}}/>;})}
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={function(e){e.stopPropagation();onDone();}} style={{background:'none',border:'none',color:'rgba(255,255,255,0.4)',cursor:'pointer',fontSize:12,fontWeight:600,padding:'4px 8px',fontFamily:'inherit'}}>Skip</button>
+          {step>0&&<button onClick={function(e){e.stopPropagation();prev();}} style={{background:'rgba(255,255,255,0.08)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:7,padding:'6px 14px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:'inherit'}}>Back</button>}
+          <button onClick={function(e){e.stopPropagation();next();}} style={{background:'#1d4670',border:'1px solid rgba(127,163,199,0.3)',borderRadius:7,padding:'6px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>{step===TOUR_STEPS.length-1?'Done ✓':'Next →'}</button>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
 // ── First-run Setup Wizard ─────────────────────────────────────────
 // Shown to the org owner/admin when the org has no work types and no clients.
 var WIZARD_PRESETS=[
-  {name:'GST Returns',desc:'GSTR-1 & GSTR-3B monthly filing',icon:'🧾'},
-  {name:'ITR',desc:'Income tax returns — yearly',icon:'📋'},
-  {name:'TDS Returns',desc:'Quarterly TDS return filing',icon:'📄'},
-  {name:'TDS Payments',desc:'Monthly TDS challan payments',icon:'💸'},
-  {name:'Accounts',desc:'Monthly book-keeping',icon:'📚'},
-  {name:'Audit',desc:'Yearly statutory / tax audit',icon:'🔍'},
-  {name:'Payroll',desc:'Monthly salary processing',icon:'👥'},
-  {name:'Other',desc:'Anything else your firm does',icon:'📌'},
+  {name:'GST Returns',desc:'GSTR-1 & GSTR-3B monthly filing',icon:'🧾',freq:'Monthly',color:'#0e2a47'},
+  {name:'ITR',desc:'Income tax returns — yearly',icon:'📋',freq:'Yearly',color:'#4f46e5'},
+  {name:'TDS Returns',desc:'Quarterly TDS return filing',icon:'📄',freq:'Quarterly',color:'#0891b2'},
+  {name:'TDS Payments',desc:'Monthly TDS challan payments',icon:'💸',freq:'Monthly',color:'#059669'},
+  {name:'Accounts',desc:'Monthly book-keeping',icon:'📚',freq:'Monthly',color:'#d97706'},
+  {name:'Audit',desc:'Yearly statutory / tax audit',icon:'🔍',freq:'Yearly',color:'#7c3aed'},
+  {name:'Payroll',desc:'Monthly salary processing',icon:'👥',freq:'Monthly',color:'#db2777'},
+  {name:'Other',desc:'Anything else your firm does',icon:'📌',freq:'Custom',color:'#475569'},
 ];
+
+var PAN_RE=/^[A-Z]{5}[0-9]{4}[A-Z]$/;
+
+function parseClientLines(text){
+  return text.split('\n').map(function(l){
+    var t=l.trim();
+    if(!t)return null;
+    var parts=t.split(',').map(function(p){return p.trim();});
+    var name=parts[0]||'';
+    var pan=(parts[1]||'').toUpperCase().replace(/\s/g,'');
+    return{name,pan,panValid:PAN_RE.test(pan),raw:t};
+  }).filter(Boolean);
+}
+
+function parseInviteLines(text){
+  return text.split(/[\n,;]+/).map(function(e){return e.trim().toLowerCase();}).filter(function(e){return e.includes('@')&&e.includes('.');});
+}
+
 function SetupWizard({org,cu,supabase,onClose}){
   var [step,setStep]=useState(1);
   var [selWT,setSelWT]=useState(['GST Returns','ITR','TDS Returns']);
+  var [customWT,setCustomWT]=useState('');
+  var [showCustomInput,setShowCustomInput]=useState(false);
   var [clientText,setClientText]=useState('');
-  var [inviteText,setInviteText]=useState('');
+  var [inviteRows,setInviteRows]=useState([{email:'',role:'member'}]);
   var [busy,setBusy]=useState(false);
   var [err,setErr]=useState('');
   var madeChanges=useRef(false);
 
+  var clientLines=parseClientLines(clientText);
+  var validInvites=inviteRows.filter(function(r){return r.email.includes('@')&&r.email.includes('.');});
+
   function toggleWT(name){setSelWT(function(prev){return prev.includes(name)?prev.filter(function(n){return n!==name;}):prev.concat([name]);});}
+  function addCustomWT(){
+    var n=customWT.trim();
+    if(!n)return;
+    if(!selWT.includes(n))setSelWT(function(p){return p.concat([n]);});
+    setCustomWT('');setShowCustomInput(false);
+  }
 
   async function saveWorkTypes(){
     if(selWT.length===0){setStep(2);return;}
     setBusy(true);setErr('');
     var batch=selWT.map(function(name,i){
       var d=DEFAULT_WS_TYPE_CONFIGS[name]||DEFAULT_WS_TYPE_CONFIGS['Other'];
-      return{org_id:org.id,name:name,frequency:d.frequency,columns:d.cols,due_day:d.due_day||null,due_month:d.due_month||null,is_active:true,sort_order:i};
+      return{org_id:org.id,name,frequency:d.frequency,columns:d.cols,due_day:d.due_day||null,due_month:d.due_month||null,is_active:true,sort_order:i};
     });
     var r=await supabase.from('work_type_configs').insert(batch);
     setBusy(false);
@@ -15553,13 +15671,10 @@ function SetupWizard({org,cu,supabase,onClose}){
   }
 
   async function saveClients(){
-    var lines=clientText.split('\n').map(function(l){return l.trim();}).filter(Boolean);
-    if(lines.length===0){setStep(3);return;}
+    if(clientLines.length===0){setStep(3);return;}
     setBusy(true);setErr('');
-    var batch=lines.map(function(l){
-      var parts=l.split(',').map(function(p){return p.trim();});
-      var pan=(parts[1]||'').toUpperCase();
-      return{org_id:org.id,name:parts[0],pan:/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)?pan:null,status:'active',created_by:cu.id};
+    var batch=clientLines.map(function(l){
+      return{org_id:org.id,name:l.name,pan:l.panValid?l.pan:null,status:'active',created_by:cu.id};
     });
     var r=await supabase.from('clients').insert(batch);
     setBusy(false);
@@ -15569,76 +15684,216 @@ function SetupWizard({org,cu,supabase,onClose}){
   }
 
   async function saveInvites(){
-    var emails=inviteText.split(/[\n,;]+/).map(function(e){return e.trim().toLowerCase();}).filter(function(e){return e.includes('@');});
-    if(emails.length===0){onClose(madeChanges.current);return;}
+    if(validInvites.length===0){setStep(4);return;}
     setBusy(true);setErr('');
-    var batch=emails.map(function(e){return{org_id:org.id,inviter_id:cu.id,invitee_email:e,role:'member',status:'pending'};});
-    var r=await supabase.from('org_invitations').insert(batch);
+    var batch=validInvites.map(function(r){return{org_id:org.id,inviter_id:cu.id,invitee_email:r.email,role:r.role,status:'pending'};});
+    var res=await supabase.from('org_invitations').insert(batch);
     setBusy(false);
-    if(r.error){setErr(r.error.message);return;}
-    onClose(madeChanges.current);
+    if(res.error){setErr(res.error.message);return;}
+    setStep(4);
   }
 
-  var BTN={background:'#0e2a47',border:'none',borderRadius:8,padding:'9px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:busy?0.6:1};
-  var GHOST={background:'transparent',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,padding:'9px 12px'};
-  var TA={width:'100%',minHeight:120,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'};
+  function updateInviteRow(i,field,val){
+    setInviteRows(function(prev){return prev.map(function(r,idx){return idx===i?Object.assign({},r,{[field]:val}):r;});});
+  }
+  function addInviteRow(){setInviteRows(function(p){return p.concat([{email:'',role:'member'}]);});}
+  function removeInviteRow(i){setInviteRows(function(p){return p.filter(function(_,idx){return idx!==i;});});}
 
-  return<div style={{position:'fixed',inset:0,background:'rgba(5,8,20,0.6)',backdropFilter:'blur(4px)',zIndex:8000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-    <div style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:16,width:'100%',maxWidth:620,maxHeight:'88vh',overflow:'auto',padding:'28px 30px',boxShadow:'0 24px 70px rgba(0,0,0,0.4)'}}>
-      {/* Progress */}
-      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:18}}>
-        {[1,2,3].map(function(s){return<div key={s} style={{flex:1,height:4,borderRadius:2,background:s<=step?'#0e2a47':'var(--tf-border)',transition:'background 0.3s'}}/>;})}
-        <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",flexShrink:0}}>{step}/3</span>
+  var STEPS=[
+    {n:1,label:'Work Types',icon:'🧾'},
+    {n:2,label:'Clients',icon:'👤'},
+    {n:3,label:'Team',icon:'👥'},
+    {n:4,label:'Done',icon:'✓'},
+  ];
+
+  var BTN={background:'linear-gradient(135deg,#0e2a47,#1d4670)',border:'none',borderRadius:9,padding:'10px 24px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,opacity:busy?0.6:1,display:'flex',alignItems:'center',gap:6,fontFamily:'inherit'};
+  var GHOST={background:'transparent',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,padding:'10px 12px',fontFamily:'inherit'};
+  var INPUT={width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',boxSizing:'border-box'};
+  var SELECT={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',color:'var(--tf-text)',fontSize:12,fontWeight:600,outline:'none',fontFamily:'inherit',cursor:'pointer'};
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(5,8,20,0.72)',backdropFilter:'blur(6px)',zIndex:8000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:18,width:'100%',maxWidth:640,maxHeight:'90vh',overflow:'auto',boxShadow:'0 32px 80px rgba(0,0,0,0.5)'}}>
+
+      {/* Header */}
+      <div style={{padding:'24px 28px 0',borderBottom:'1px solid var(--tf-border)',paddingBottom:20}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+          <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text-sub)'}}>Setting up <span style={{color:'var(--tf-text)',fontWeight:800}}>{org.name}</span></div>
+          <button onClick={function(){onClose(madeChanges.current);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:18,lineHeight:1,padding:2,fontFamily:'inherit'}} title="Close">×</button>
+        </div>
+        {/* Step pills */}
+        <div style={{display:'flex',gap:6}}>
+          {STEPS.map(function(s){
+            var done=step>s.n;var active=step===s.n;
+            return<div key={s.n} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:20,background:done?'rgba(34,197,94,0.1)':active?'rgba(14,42,71,0.1)':'transparent',border:'1px solid '+(done?'rgba(34,197,94,0.3)':active?'rgba(14,42,71,0.3)':'var(--tf-border)'),transition:'all 0.2s'}}>
+              <span style={{width:18,height:18,borderRadius:'50%',background:done?'#22c55e':active?'#0e2a47':'var(--tf-border)',color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{done?'✓':s.n}</span>
+              <span style={{fontSize:11,fontWeight:700,color:done?'#22c55e':active?'var(--tf-text)':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{s.label}</span>
+            </div>;
+          })}
+        </div>
       </div>
 
+      <div style={{padding:'22px 28px 24px'}}>
+
+      {/* ── Step 1: Work Types ── */}
       {step===1&&<div>
-        <h2 style={{fontSize:21,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.02em'}}>Welcome to {org.name} 👋</h2>
-        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 18px',lineHeight:1.5}}>Let's set up your practice in 3 quick steps. First — what work does your firm do? Pick the work types and we'll create them with standard due dates and checklists.</p>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:18}}>
+        <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:18}}>
+          <div style={{width:42,height:42,borderRadius:11,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>🧾</div>
+          <div>
+            <h2 style={{fontSize:19,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.02em'}}>What work does your firm do?</h2>
+            <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0,lineHeight:1.5}}>Select all that apply — we'll pre-configure due dates and checklists for each. You can add more later.</p>
+          </div>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:14}}>
           {WIZARD_PRESETS.map(function(p){
             var on=selWT.includes(p.name);
             return<button key={p.name} onClick={function(){toggleWT(p.name);}}
-              style={{display:'flex',alignItems:'center',gap:10,padding:'11px 13px',background:on?'rgba(14,42,71,0.07)':'var(--tf-surface)',border:'1.5px solid '+(on?'#0e2a47':'var(--tf-border)'),borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'border-color 0.15s'}}>
-              <span style={{fontSize:18}}>{p.icon}</span>
+              style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:on?'rgba(14,42,71,0.06)':'var(--tf-surface)',border:'1.5px solid '+(on?p.color:'var(--tf-border)'),borderRadius:11,cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'all 0.15s',position:'relative'}}>
+              <span style={{width:34,height:34,borderRadius:9,background:on?p.color+'18':'var(--tf-bg)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0,border:'1px solid '+(on?p.color+'40':'var(--tf-border)')}}>{p.icon}</span>
               <span style={{flex:1,minWidth:0}}>
                 <span style={{display:'block',fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{p.name}</span>
-                <span style={{display:'block',fontSize:10.5,color:'var(--tf-text-sub)',marginTop:1}}>{p.desc}</span>
+                <span style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
+                  <span style={{fontSize:10,fontWeight:700,color:p.color,background:p.color+'15',border:'1px solid '+p.color+'30',borderRadius:4,padding:'1px 5px'}}>{p.freq}</span>
+                  <span style={{fontSize:10.5,color:'var(--tf-text-sub)'}}>{p.desc}</span>
+                </span>
               </span>
-              <span style={{width:18,height:18,borderRadius:5,border:'1.5px solid '+(on?'#0e2a47':'var(--tf-border)'),background:on?'#0e2a47':'transparent',color:'#fff',fontSize:12,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on?'✓':''}</span>
+              <span style={{width:20,height:20,borderRadius:6,border:'1.5px solid '+(on?p.color:'var(--tf-border)'),background:on?p.color:'transparent',color:'#fff',fontSize:11,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.15s'}}>{on?'✓':''}</span>
             </button>;
           })}
         </div>
-        {err&&<div style={{fontSize:12,color:'#ef4444',marginBottom:10}}>{err}</div>}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <button onClick={function(){onClose(madeChanges.current);}} style={GHOST}>Skip setup</button>
-          <button onClick={saveWorkTypes} disabled={busy} style={BTN}>{busy?'Creating…':'Continue →'}</button>
+        {/* Custom work type */}
+        {selWT.filter(function(n){return!WIZARD_PRESETS.find(function(p){return p.name===n;});}).map(function(n){
+          return<div key={n} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(99,102,241,0.06)',border:'1.5px solid rgba(99,102,241,0.3)',borderRadius:9,marginBottom:6}}>
+            <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',flex:1}}>📌 {n}</span>
+            <button onClick={function(){setSelWT(function(p){return p.filter(function(x){return x!==n;});});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,lineHeight:1,fontFamily:'inherit'}}>×</button>
+          </div>;
+        })}
+        {showCustomInput
+          ?<div style={{display:'flex',gap:8,marginBottom:10}}>
+            <input value={customWT} onChange={function(e){setCustomWT(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCustomWT();if(e.key==='Escape'){setShowCustomInput(false);setCustomWT('');}}}
+              style={Object.assign({},INPUT,{flex:1})} placeholder="e.g. FEMA Compliance, Valuation…" autoFocus/>
+            <button onClick={addCustomWT} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'9px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',whiteSpace:'nowrap'}}>Add</button>
+            <button onClick={function(){setShowCustomInput(false);setCustomWT('');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontFamily:'inherit'}}>Cancel</button>
+          </div>
+          :<button onClick={function(){setShowCustomInput(true);}} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'1px dashed var(--tf-border)',borderRadius:9,padding:'8px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',marginBottom:10,width:'100%',justifyContent:'center'}}>
+            <span style={{fontSize:16}}>+</span> Add custom work type
+          </button>}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:4,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>{selWT.length} work type{selWT.length!==1?'s':''} selected</div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={function(){onClose(madeChanges.current);}} style={GHOST}>Skip setup</button>
+            <button onClick={saveWorkTypes} disabled={busy} style={BTN}>{busy?<><span>Creating…</span></>:<><span>Continue</span><span>→</span></>}</button>
+          </div>
         </div>
+        {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
       </div>}
 
+      {/* ── Step 2: Clients ── */}
       {step===2&&<div>
-        <h2 style={{fontSize:21,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.02em'}}>Add your clients</h2>
-        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 14px',lineHeight:1.5}}>Type one client per line. Add a PAN after a comma if you have it — you can fill the rest later in Master Data, or bulk-import from Excel anytime.</p>
-        <textarea value={clientText} onChange={function(e){setClientText(e.target.value);}} style={TA}
-          placeholder={'Sharma Traders, ABCDE1234F\nGupta & Sons\nMehta Textiles Pvt Ltd'}/>
-        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:6}}>{clientText.split('\n').filter(function(l){return l.trim();}).length} clients to add</div>
+        <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:18}}>
+          <div style={{width:42,height:42,borderRadius:11,background:'linear-gradient(135deg,#059669,#047857)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>👤</div>
+          <div>
+            <h2 style={{fontSize:19,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.02em'}}>Add your clients</h2>
+            <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0,lineHeight:1.5}}>One client per line. Optionally add PAN after a comma — the rest can be filled later in Master Data.</p>
+          </div>
+        </div>
+        <textarea value={clientText} onChange={function(e){setClientText(e.target.value);}}
+          style={{width:'100%',minHeight:130,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 14px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:"'JetBrains Mono',monospace",resize:'vertical',boxSizing:'border-box',lineHeight:1.8}}
+          placeholder={'Sharma Traders, ABCDE1234F\nGupta & Sons\nMehta Textiles Pvt Ltd, BCDEG5678H'}/>
+        {/* Live parse preview */}
+        {clientLines.length>0&&<div style={{marginTop:10,borderRadius:10,border:'1px solid var(--tf-border)',overflow:'hidden'}}>
+          <div style={{padding:'6px 12px',background:'var(--tf-surface)',borderBottom:'1px solid var(--tf-border)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Preview — {clientLines.length} client{clientLines.length!==1?'s':''}</span>
+            <span style={{fontSize:11,color:'#22c55e',fontWeight:700}}>{clientLines.filter(function(c){return c.panValid;}).length} with valid PAN</span>
+          </div>
+          <div style={{maxHeight:130,overflowY:'auto'}}>
+            {clientLines.map(function(c,i){
+              return<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 12px',borderBottom:i<clientLines.length-1?'1px solid var(--tf-border)':'none',background:i%2===0?'transparent':'rgba(0,0,0,0.015)'}}>
+                <span style={{width:22,height:22,borderRadius:'50%',background:'linear-gradient(135deg,#059669,#047857)',color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{(c.name[0]||'?').toUpperCase()}</span>
+                <span style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name||<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>unnamed</span>}</span>
+                {c.pan&&<span style={{fontSize:10.5,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",padding:'2px 6px',borderRadius:5,background:c.panValid?'rgba(34,197,94,0.1)':'rgba(239,68,68,0.1)',color:c.panValid?'#22c55e':'#ef4444',border:'1px solid '+(c.panValid?'rgba(34,197,94,0.3)':'rgba(239,68,68,0.3)')}}>{c.pan} {c.panValid?'✓':'✗'}</span>}
+              </div>;
+            })}
+          </div>
+        </div>}
         {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
           <button onClick={function(){setStep(3);}} style={GHOST}>Skip — add later</button>
-          <button onClick={saveClients} disabled={busy} style={BTN}>{busy?'Adding…':'Continue →'}</button>
+          <button onClick={saveClients} disabled={busy} style={BTN}>{busy?'Adding…':<><span>{clientLines.length>0?'Add '+clientLines.length+' Client'+(clientLines.length!==1?'s':''):'Continue'}</span><span>→</span></>}</button>
         </div>
       </div>}
 
+      {/* ── Step 3: Team Invites ── */}
       {step===3&&<div>
-        <h2 style={{fontSize:21,fontWeight:800,color:'var(--tf-text)',margin:'0 0 6px',letterSpacing:'-0.02em'}}>Invite your team</h2>
-        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 14px',lineHeight:1.5}}>Enter team member emails (one per line or comma-separated). They'll get an invitation when they sign in to TaskFlow with that email.</p>
-        <textarea value={inviteText} onChange={function(e){setInviteText(e.target.value);}} style={Object.assign({},TA,{minHeight:90})}
-          placeholder={'priya@yourfirm.com\nrahul@yourfirm.com'}/>
+        <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:18}}>
+          <div style={{width:42,height:42,borderRadius:11,background:'linear-gradient(135deg,#7c3aed,#6d28d9)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>👥</div>
+          <div>
+            <h2 style={{fontSize:19,fontWeight:800,color:'var(--tf-text)',margin:'0 0 4px',letterSpacing:'-0.02em'}}>Invite your team</h2>
+            <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:0,lineHeight:1.5}}>They'll be notified when they sign in with this email. You can set their role now and change it later.</p>
+          </div>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}>
+          {inviteRows.map(function(row,i){
+            return<div key={i} style={{display:'flex',gap:8,alignItems:'center'}}>
+              <div style={{flex:1,position:'relative'}}>
+                <input value={row.email} onChange={function(e){updateInviteRow(i,'email',e.target.value);}}
+                  style={Object.assign({},INPUT,{paddingLeft:32})} placeholder="name@yourfirm.com" type="email"/>
+                <span style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',fontSize:13,pointerEvents:'none'}}>✉️</span>
+              </div>
+              <select value={row.role} onChange={function(e){updateInviteRow(i,'role',e.target.value);}} style={Object.assign({},SELECT,{minWidth:100})}>
+                <option value="member">Member</option>
+                <option value="admin">Admin</option>
+                <option value="owner">Owner</option>
+              </select>
+              {inviteRows.length>1&&<button onClick={function(){removeInviteRow(i);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:7,width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:16,flexShrink:0,fontFamily:'inherit'}}>×</button>}
+            </div>;
+          })}
+        </div>
+        <button onClick={addInviteRow} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'1px dashed var(--tf-border)',borderRadius:9,padding:'8px 14px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',marginBottom:4,width:'100%',justifyContent:'center'}}>
+          <span style={{fontSize:16}}>+</span> Add another person
+        </button>
         {err&&<div style={{fontSize:12,color:'#ef4444',marginTop:8}}>{err}</div>}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16}}>
-          <button onClick={function(){onClose(madeChanges.current);}} style={GHOST}>Skip — invite later</button>
-          <button onClick={saveInvites} disabled={busy} style={BTN}>{busy?'Finishing…':'Finish ✓'}</button>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,paddingTop:16,borderTop:'1px solid var(--tf-border)'}}>
+          <button onClick={function(){setStep(4);}} style={GHOST}>Skip — invite later</button>
+          <button onClick={saveInvites} disabled={busy} style={BTN}>{busy?'Sending…':<><span>{validInvites.length>0?'Invite '+validInvites.length+' Member'+(validInvites.length!==1?'s':''):'Continue'}</span><span>→</span></>}</button>
         </div>
       </div>}
+
+      {/* ── Step 4: Success + Tour CTA ── */}
+      {step===4&&<div style={{textAlign:'center',padding:'8px 0 4px'}}>
+        <div style={{width:64,height:64,borderRadius:18,background:'linear-gradient(135deg,#22c55e,#16a34a)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:30,margin:'0 auto 18px',boxShadow:'0 12px 30px rgba(34,197,94,0.3)'}}>✓</div>
+        <h2 style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',margin:'0 0 8px',letterSpacing:'-0.02em'}}>{org.name} is ready!</h2>
+        <p style={{fontSize:13,color:'var(--tf-text-sub)',margin:'0 0 24px',lineHeight:1.6,maxWidth:380,marginLeft:'auto',marginRight:'auto'}}>
+          {selWT.length>0&&<><strong style={{color:'var(--tf-text)'}}>{selWT.length} work type{selWT.length!==1?'s':''}</strong> configured. </>}
+          {clientLines.length>0&&<><strong style={{color:'var(--tf-text)'}}>{clientLines.length} client{clientLines.length!==1?'s':''}</strong> added. </>}
+          {validInvites.length>0&&<><strong style={{color:'var(--tf-text)'}}>{validInvites.length} invite{validInvites.length!==1?'s':''}</strong> sent. </>}
+          Take a quick tour to see how everything fits together.
+        </p>
+        {/* Module highlight cards */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:24,textAlign:'left'}}>
+          {[
+            {icon:'📖',title:'My Work',desc:'Your daily task list, calendar and time log.',color:'#6366f1'},
+            {icon:'💼',title:'WorkZone',desc:'Worksheets & board for all client work.',color:'#0e2a47'},
+            {icon:'🗄️',title:'Master Data',desc:'Manage clients and work type settings.',color:'#7c3aed'},
+            {icon:'⚙️',title:'Set-up',desc:'Invite members and configure your org.',color:'#475569'},
+          ].map(function(m){
+            return<div key={m.title} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'12px 14px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:11}}>
+              <span style={{width:34,height:34,borderRadius:9,background:m.color+'18',border:'1px solid '+m.color+'30',display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,flexShrink:0}}>{m.icon}</span>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:2}}>{m.title}</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.4}}>{m.desc}</div>
+              </div>
+            </div>;
+          })}
+        </div>
+        <div style={{display:'flex',gap:10,justifyContent:'center'}}>
+          <button onClick={function(){onClose(true,false);}} style={Object.assign({},GHOST,{border:'1px solid var(--tf-border)',borderRadius:9,padding:'10px 20px'})}>Go to app</button>
+          <button onClick={function(){onClose(true,true);}} style={Object.assign({},BTN,{padding:'10px 24px',background:'linear-gradient(135deg,#0e2a47,#1d4670)',boxShadow:'0 8px 24px rgba(14,42,71,0.3)'})}>
+            <span>🗺️</span><span>Take a Tour</span>
+          </button>
+        </div>
+      </div>}
+
+      </div>
     </div>
   </div>;
 }
@@ -15699,6 +15954,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     maybeShowWizard(r.data||[]);
   }
   var [showWizard,setShowWizard]=useState(false);
+  var [showTour,setShowTour]=useState(false);
   async function maybeShowWizard(configs){
     if(configs.length>0)return;
     if(localStorage.getItem('tf_setupdone_'+org.id))return;
@@ -15711,10 +15967,14 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     var rc=await supabase.from('clients').select('id',{count:'exact',head:true}).eq('org_id',org.id);
     if((rc.count||0)===0)setShowWizard(true);
   }
-  function closeWizard(changed){
+  function closeWizard(changed,startTour){
     localStorage.setItem('tf_setupdone_'+org.id,'1');
     setShowWizard(false);
     if(changed)loadWTC();
+    // Navigate to launcher so tour can see module cards
+    setOrgModule(null);setTab('');
+    localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');
+    if(startTour)setTimeout(function(){setShowTour(true);},350);
   }
   async function loadMyRole(){
     if(org.created_by===cu.id){setMyRole('owner');return;}
@@ -15793,18 +16053,24 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(orgModule===null){
     return<div style={{flex:1,display:'flex',flexDirection:'column',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
+      {showTour&&<CoachmarkTour onDone={function(){setShowTour(false);}}/>}
       <div style={{flex:1,overflow:'auto',padding:'20px 24px 60px'}}>
         <div style={{maxWidth:1100,margin:'0 auto'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
             <button onClick={onBack} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,flexShrink:0,whiteSpace:'nowrap'}}>&#x2190; Back</button>
-            <div>
+            <div style={{flex:1}}>
               <div style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em'}}>Modules</div>
               <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:1}}>Pick a module to get focused. Each one groups a specific workflow.</div>
             </div>
+            <button onClick={function(){setShowTour(true);}} title="Take a guided tour" style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:'inherit',flexShrink:0,whiteSpace:'nowrap'}} onMouseEnter={function(e){e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.color='#0e2a47';}} onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.color='var(--tf-text-sub)';}}>
+              <HelpCircle size={13}/>
+              <span>Take a Tour</span>
+            </button>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
+          <div data-tour="tour-modules" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
             {MODULES.map(function(m){
-              return<button key={m.id} onClick={function(){openModule(m);}}
+              var tourAttr={'data-tour':'tour-'+m.id};
+              return<button key={m.id} onClick={function(){openModule(m);}} {...tourAttr}
                 style={{textAlign:'left',padding:20,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,cursor:'pointer',position:'relative',transition:'transform 0.16s, border-color 0.16s, box-shadow 0.16s',fontFamily:'inherit'}}
                 onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.boxShadow='0 10px 30px rgba(0,0,0,0.12)';}}
                 onMouseLeave={function(e){e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}>
@@ -15871,8 +16137,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
+      {showTour&&<CoachmarkTour onDone={function(){setShowTour(false);}}/>}
       {/* Left sidebar — dark navy, no separate header row, back button lives here */}
-      <div style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
+      <div data-tour="tour-sidebar" style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
         <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
           {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'#8696b3',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
             <span style={{flexShrink:0}}>&#x2190;</span>
