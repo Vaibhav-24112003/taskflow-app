@@ -36,39 +36,22 @@
 | `src/AnnouncementsAdmin.jsx` | Announcements CRUD (223 lines) |
 | `supabase/migrations/` | SQL migration files for DB changes |
 
-## Git / Push Flow
-The local proxy blocks direct git push. Use PAT every time:
+## Git / Push Flow — DIRECT TO MAIN
+**Always commit and push directly to `main`.** Vercel auto-deploys on every push, so this is instant promotion with no PR branch drift or merge conflicts.
+
 ```bash
-# Push branch (PAT stored in your password manager / environment — do not hardcode here):
-git push https://<YOUR_PAT>@github.com/Vaibhav-24112003/taskflow-app.git <branch>
-# Refresh local remote-tracking ref after push:
-git fetch https://<YOUR_PAT>@github.com/Vaibhav-24112003/taskflow-app.git <branch>:refs/remotes/origin/<branch>
+# Commit and push directly to main (PAT — never hardcode):
+git add <files>
+git config user.email noreply@anthropic.com && git config user.name Claude
+git commit -m "description"
+git commit --amend --no-edit --reset-author   # fix committer email for stop hook
+git push https://<YOUR_PAT>@github.com/Vaibhav-24112003/taskflow-app.git main
 ```
 > Rotate PAT at https://github.com/settings/tokens — never commit the literal token.
 
-## PR / Merge Flow
-```bash
-# Create PR
-curl -s -X POST -H "Authorization: token <PAT>" -H "Content-Type: application/json" \
-  "https://api.github.com/repos/Vaibhav-24112003/taskflow-app/pulls" \
-  -d '{"title":"...","head":"<branch>","base":"main","body":"..."}'
+**No PRs needed.** Direct push to main = instant Vercel deploy = live on `taskflowco.in` in ~60s.
 
-# Squash-merge
-curl -s -X PUT -H "Authorization: token <PAT>" \
-  "https://api.github.com/repos/Vaibhav-24112003/taskflow-app/pulls/<N>/merge" \
-  -d '{"merge_method":"squash","commit_title":"... (#N)"}'
-```
-`mcp__github__create_pull_request` returns 403 (integration scope issue) — use curl instead.
-
-### Merge conflict resolution (squash-merge pattern)
-When a PR was squash-merged to main and the branch diverges:
-```bash
-git fetch origin main
-git merge origin/main --no-edit
-# If conflict in App.jsx:
-git checkout --ours src/App.jsx   # branch has all latest changes
-git add src/App.jsx && git commit --no-edit
-```
+> Old squash-merge PR pattern caused branch drift on every merge — avoid it.
 
 ## Key Database Tables
 | Table | Purpose |
