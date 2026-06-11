@@ -4395,7 +4395,6 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 // Default column configs per work type (used as seed for work_type_configs table)
 var DEFAULT_WS_TYPE_CONFIGS = {
   'GST Returns':  {frequency:'monthly',  due_day:11, cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
-  'GSTR Returns': {frequency:'monthly',  due_day:11, cols:[{key:'gstr1_recv',label:'GSTR1 Rcvd'},{key:'gstr1_done',label:'GSTR1 Filed'},{key:'gstr3b_recv',label:'GSTR3B Rcvd'},{key:'gstr3b_done',label:'GSTR3B Filed'}]},
   'ITR':          {frequency:'yearly',   due_day:31, due_month:7, cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'}]},
   'TDS Returns':  {frequency:'quarterly',due_day:31, cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Filed'},{key:'challan',label:'Challan Paid'}]},
   'TDS Payments': {frequency:'monthly',  due_day:7,  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Paid'}]},
@@ -15675,10 +15674,6 @@ function parseClientLines(text){
   }).filter(Boolean);
 }
 
-function parseInviteLines(text){
-  return text.split(/[\n,;]+/).map(function(e){return e.trim().toLowerCase();}).filter(function(e){return e.includes('@')&&e.includes('.');});
-}
-
 function SetupWizard({org,cu,supabase,onClose}){
   var [step,setStep]=useState(1);
   var [selWT,setSelWT]=useState(['GST Returns','ITR','TDS Returns']);
@@ -17840,7 +17835,10 @@ export default function App(){
     return()=>{clearTimeout(hardStop);subscription.unsubscribe()}
   },[])
 
-  const onSignOut=async()=>{await signOut();setSession(null);authIdRef.current=null;setPendingInvites([])}
+  const onSignOut=async()=>{
+    _dashCache={};_worksheetsCache={};_billingCache={};_ccCache={};_commsCache={};_itrCache={};
+    await signOut();setSession(null);authIdRef.current=null;setPendingInvites([]);
+  }
 
   const handleSignIn=async()=>{setSignInLoading(true);try{await signInWithGoogle()}catch(e){console.error(e);setSignInLoading(false)}}
   if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
