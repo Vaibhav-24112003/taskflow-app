@@ -10413,6 +10413,17 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id,viewMemberId]);
 
+  // Plan Today IDs — DB-backed list of worksheet_row source_ids planned for today
+  var [planTodayIds,setPlanTodayIds]=useState([]);
+  useEffect(function(){
+    var cancelled=false;
+    var _td=new Date();
+    var pd=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');
+    supabase.from('daily_plans').select('source_id').eq('user_id',cu.id).eq('plan_date',pd).eq('source_type','worksheet_row')
+      .then(function(r){if(!cancelled&&r.data)setPlanTodayIds(r.data.map(function(x){return x.source_id;}));});
+    return function(){cancelled=true;};
+  },[org.id,cu.id,planRefreshKey]);
+
   // Restart stalled load + refresh on focus.
   // Reloads when (a) a load was mid-flight, or (b) the module cache was
   // invalidated elsewhere (e.g. an ITR Desk assignment deletes _dashCache),
@@ -10708,48 +10719,18 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   // New 3-column layout state
   var [wsRailFilter,setWsRailFilter]=useState('all'); // 'all' | 'today' | work_type_name
-  var [myDayIds,setMyDayIds]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_mydayids_'+org.id)||'[]');}catch(e){return[];}});
-  var [myDayHidden,setMyDayHidden]=useState(function(){try{var _td=new Date();var _ts=_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');var raw=localStorage.getItem('tf_mydayhidden_'+org.id+'_'+_ts);return raw?JSON.parse(raw):[];}catch(e){return[];}});
   var [quickAdd,setQuickAdd]=useState('');
-  var [myDayLogId,setMyDayLogId]=useState(null);
-  var [myDayLogForm,setMyDayLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
-  var [myDayLoggingId,setMyDayLoggingId]=useState(null);
 
-  function _hiddenKey(){var _td=new Date();return 'tf_mydayhidden_'+org.id+'_'+(_td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0'));}
-  function addToMyDay(rowId){
-    setMyDayIds(function(prev){if(prev.includes(rowId))return prev;var next=[...prev,rowId];localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));return next;});
-    setMyDayHidden(function(prev){if(!prev.includes(rowId))return prev;var next=prev.filter(function(x){return x!==rowId;});localStorage.setItem(_hiddenKey(),JSON.stringify(next));return next;});
+  async function toggleMyDay(rowId){
+    if(planTodayIds.includes(rowId)){
+      setPlanTodayIds(function(prev){return prev.filter(function(id){return id!==rowId;});});
+      await supabase.from('daily_plans').delete().eq('user_id',cu.id).eq('plan_date',todayStr).eq('source_type','worksheet_row').eq('source_id',rowId);
+      setPlanRefreshKey(function(k){return k+1;});
+    }else{
+      setPlanTodayIds(function(prev){return prev.includes(rowId)?prev:[...prev,rowId];});
+      await addRowToPlan(rowId);
+    }
   }
-  function removeFromMyDay(rowId){
-    setMyDayIds(function(prev){if(!prev.includes(rowId))return prev;var next=prev.filter(function(x){return x!==rowId;});localStorage.setItem('tf_mydayids_'+org.id,JSON.stringify(next));return next;});
-    setMyDayHidden(function(prev){if(prev.includes(rowId))return prev;var next=[...prev,rowId];localStorage.setItem(_hiddenKey(),JSON.stringify(next));return next;});
-  }
-  async function sendMyDayLog(row){
-    var f=myDayLogForm;
-    if(!f.work_type.trim()&&!f.client_id){showToast('Enter work type or client','err');return;}
-    var hrs=Number(f.hours)||0;var mins=Number(f.minutes)||0;
-    if(hrs===0&&mins===0){showToast('Enter time spent','err');return;}
-    var ws=wsMap[row.worksheet_id]||{};
-    setMyDayLoggingId(row.id);
-    var r=await supabase.from('attendance_time_logs').insert({
-      org_id:org.id,user_id:cu.id,date:todayStr,
-      client_id:f.client_id||row.client_id||null,
-      work_type:f.work_type.trim()||ws.work_type||'Work',
-      hours:hrs,minutes:mins,
-      notes:f.notes.trim()||null
-    }).select('id').single();
-    setMyDayLoggingId(null);
-    if(r.error){showToast('Log failed: '+r.error.message,'err');return;}
-    setMyDayLogId(null);
-    setMyDayLogForm({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
-    showToast('Logged ✓');
-  }
-  function toggleMyDay(rowId){
-    var inDay=myDayIds.includes(rowId)||(rows.find(function(r){return r.id===rowId;})||{}).due_date===todayLocalStr2();
-    var hidden=myDayHidden.includes(rowId);
-    if(inDay&&!hidden){removeFromMyDay(rowId);}else{addToMyDay(rowId);addRowToPlan(rowId);}
-  }
-  function todayLocalStr2(){var _td=new Date();return _td.getFullYear()+'-'+String(_td.getMonth()+1).padStart(2,'0')+'-'+String(_td.getDate()).padStart(2,'0');}
 
   async function addRowToPlan(rowId){
     var _td=new Date();
@@ -10799,11 +10780,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var clientPillColors=['#0e2a47','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b'];
   function clientColor(id){var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return clientPillColors[n%clientPillColors.length];}
 
-  // My Day planned tasks
-  var myDayTasks=rows.filter(function(r){if(myDayHidden.includes(r.id))return false;return r.due_date===todayStr||myDayIds.includes(r.id);});
-  var morningTasks=myDayTasks.slice(0,Math.ceil(myDayTasks.length/2));
-  var afternoonTasks=myDayTasks.slice(Math.ceil(myDayTasks.length/2));
-  var suggestedTasks=rows.filter(function(r){return r.due_date&&r.due_date<todayStr&&!myDayIds.includes(r.id)&&!myDayHidden.includes(r.id);}).slice(0,5);
+  // Plan Today — tasks the user has explicitly added for today (DB-backed)
+  var myDayTasks=rows.filter(function(r){return planTodayIds.includes(r.id);});
+  var suggestedTasks=rows.filter(function(r){return r.due_date&&r.due_date<todayStr&&!planTodayIds.includes(r.id);}).slice(0,5);
 
   // Mini calendar data (2-week grid)
   var calStart=new Date(today);
@@ -10976,7 +10955,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   var isOverdue=row.due_date&&row.due_date<todayStr;
                   var isToday=row.due_date===todayStr;
                   var isReview=role.label.toLowerCase().indexOf('review')>=0||row.status==='under_review';
-                  var inMyDay=myDayIds.includes(row.id);
+                  var inMyDay=planTodayIds.includes(row.id);
                   var rd=row.data||{};
                   var priority=rd.__priority||'medium';
                   var rowTitle=rd.__title||'';
@@ -11201,8 +11180,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 {colRows.map(function(r,rIdx){
                   var rd=r.data||{};var c=clientMap[r.client_id]||{};var ws=wsMap[r.worksheet_id]||{};
                   var isOver=r.due_date&&r.due_date<todayStr;
-                  var inMyDay=myDayIds.includes(r.id)||r.due_date===todayStr;var isHidden=myDayHidden.includes(r.id);
-                  var showInDay=inMyDay&&!isHidden;
+                  var showInDay=planTodayIds.includes(r.id);
                   var isExpanded=expandedRow===r.id;var isEditing=editingRow===r.id;
                   var priority=(rd.__priority||'medium');
                   var clTotal=(rd.__checklist||[]).length;var clDone=(rd.__checklist||[]).filter(function(x){return x.done;}).length;
@@ -11414,8 +11392,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             var aId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
             var am=aId?orgMembers.find(function(m){return m.id===aId;}):null;
             var isOver=r.due_date&&r.due_date<todayStr;
-            var inMyDay=myDayIds.includes(r.id)||r.due_date===todayStr;var isHidden=myDayHidden.includes(r.id);
-            var showInDay=inMyDay&&!isHidden;
+            var showInDay=planTodayIds.includes(r.id);
             return<div key={r.id} onClick={function(){toggleExpand(r.id);}}
               style={{display:'grid',gridTemplateColumns:'1fr 160px 120px 90px 90px 90px 32px',gap:0,padding:'8px 12px',borderBottom:'1px solid var(--tf-border)',fontSize:12,cursor:'pointer',alignItems:'center',background:isOver?'rgba(239,68,68,0.03)':'transparent',borderLeft:isOver?'2px solid #ef4444':'2px solid transparent'}}
               onMouseEnter={function(e){e.currentTarget.style.background=isOver?'rgba(239,68,68,0.06)':'var(--tf-surface)';}}
@@ -11463,7 +11440,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 var clientName=client?(client.display_name||client.name):'';
                 var rowTitle=rd.__title||(client?(client.display_name||client.name):'')||'Task';
                 var priority=rd.__priority||'medium';
-                var inMyDay=myDayIds.includes(row.id);
+                var inMyDay=planTodayIds.includes(row.id);
                 var role=getRole(row);
                 var isOverdue=row.due_date&&row.due_date<todayStr;
                 var isToday=row.due_date===todayStr;
@@ -11510,7 +11487,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     {/* ══ RIGHT COLUMN: Plan My Day panel (full PlanMyDayView, collapsible via calendar toggle) ══ */}
     {planOpen&&<div
       onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='copy';}}
-      onDrop={function(e){e.preventDefault();var rowId=e.dataTransfer.getData('text/plain');if(rowId){addToMyDay(rowId);addRowToPlan(rowId);}}}
+      onDrop={function(e){e.preventDefault();var rowId=e.dataTransfer.getData('text/plain');if(rowId)toggleMyDay(rowId);}}
       style={{width:480,flexShrink:0,borderLeft:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {/* Slim header — just title + close */}
       <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
