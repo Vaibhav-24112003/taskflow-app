@@ -4409,6 +4409,53 @@ var DEFAULT_WS_TYPE_CONFIGS = {
 var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var QUARTERS=['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
 
+// Returns upcoming statutory filing deadlines derived from work_type_configs.
+// Each entry: { date, name, daysLeft }. Sorted by date, capped at 10.
+function computeStatutoryDeadlines(configs, today, daysAhead) {
+  var now=today||new Date();
+  var cutoff=new Date(now);cutoff.setDate(cutoff.getDate()+(daysAhead||45));
+  var results=[];
+  (configs||[]).filter(function(c){return c.is_active&&(c.due_day||(c.due_dates&&c.due_dates.length));}).forEach(function(cfg){
+    var freq=cfg.frequency;var dueDay=cfg.due_day;var dueMonth=cfg.due_month;
+    var firstDue=(cfg.due_dates||[])[0];
+    function push(deadline){
+      if(deadline>=now&&deadline<=cutoff){
+        results.push({date:deadline,name:cfg.name,daysLeft:Math.round((deadline-now)/86400000)});return true;
+      }return false;
+    }
+    if(freq==='monthly'){
+      var hasMap=firstDue&&firstDue.monthly_map;
+      for(var mi=0;mi<=2;mi++){
+        var refDate=new Date(now.getFullYear(),now.getMonth()+mi,1);
+        var pm=refDate.getMonth()+1;var day=dueDay;
+        var month=refDate.getMonth()+1;var year=refDate.getFullYear();
+        if(hasMap&&firstDue.monthly_map[pm]){
+          var e=firstDue.monthly_map[pm];day=e.day||day;
+          if(e.due_month){month=e.due_month;if(e.due_month<pm&&mi===0)year++;}
+        }
+        if(!day)break;
+        if(push(new Date(year,month-1,day)))break;
+      }
+    }else if(freq==='yearly'){
+      var m=dueMonth||7;var d=dueDay||31;var y=now.getFullYear();
+      var dl=new Date(y,m-1,d);if(dl<now)dl=new Date(y+1,m-1,d);
+      push(dl);
+    }else if(freq==='quarterly'){
+      var hasQMap=firstDue&&firstDue.quarterly_map;
+      var qDates=hasQMap?[1,2,3,4].map(function(q){var e=firstDue.quarterly_map[q]||firstDue.quarterly_map[String(q)];return(e&&e.day)?{day:e.day,month:e.due_month}:null;}).filter(Boolean)
+        :[{day:dueDay||31,month:7},{day:dueDay||31,month:10},{day:dueDay||31,month:1},{day:dueDay||31,month:5}];
+      qDates.forEach(function(qd){
+        var y=now.getFullYear();var dl=new Date(y,qd.month-1,qd.day);
+        if(dl<now)dl=new Date(y+1,qd.month-1,qd.day);
+        if(dl>=now&&dl<=cutoff)results.push({date:dl,name:cfg.name,daysLeft:Math.round((dl-now)/86400000)});
+      });
+    }
+  });
+  results.sort(function(a,b){return a.date-b.date;});
+  var seen=new Set();
+  return results.filter(function(r){var k=r.name+r.date.toISOString().slice(0,10);if(seen.has(k))return false;seen.add(k);return true;}).slice(0,10);
+}
+
 function getPeriodLabel(freq, year, month, quarter){
   if(freq==='once')     return 'One-time';
   if(freq==='monthly'){
@@ -10493,6 +10540,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
   var today=new Date();today.setHours(0,0,0,0);
   var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  var upcomingDeadlines=computeStatutoryDeadlines(workTypeConfigs,today,45);
 
   function getRole(r){
     var d=r.data||{};
@@ -10905,6 +10953,23 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
       {/* Scrollable body */}
       <div style={{flex:1,overflowY:'auto',padding:'14px 18px'}}>
+        {/* Statutory Deadlines strip */}
+        {upcomingDeadlines.length>0&&<div style={{marginBottom:14,padding:'10px 14px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10}}>
+          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:7}}>⚖ Statutory Deadlines</div>
+          <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:2}}>
+            {upcomingDeadlines.map(function(d,i){
+              var c=d.daysLeft<=3?'#ef4444':d.daysLeft<=7?'#f59e0b':d.daysLeft<=14?'#8b5cf6':'#64748b';
+              var bg=d.daysLeft<=3?'rgba(239,68,68,0.07)':d.daysLeft<=7?'rgba(245,158,11,0.07)':d.daysLeft<=14?'rgba(139,92,246,0.07)':'var(--tf-surface)';
+              var ds=d.date.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+              var badge=d.daysLeft===0?'Today':d.daysLeft===1?'Tmrw':d.daysLeft+'d';
+              return<div key={i} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:bg,border:'1px solid '+c+'44',borderRadius:20,flexShrink:0,cursor:'default'}}>
+                <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{d.name}</span>
+                <span style={{fontSize:9,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{ds}</span>
+                <span style={{fontSize:9,fontWeight:800,color:c,background:c+'18',padding:'1px 5px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{badge}</span>
+              </div>;
+            })}
+          </div>
+        </div>}
         {/* Quick-add bar */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'var(--tf-panel)',border:'1px dashed var(--tf-border)',borderRadius:10,marginBottom:14}}>
           <span style={{fontSize:14,color:'var(--tf-text-sub)',fontWeight:700}}>+</span>
