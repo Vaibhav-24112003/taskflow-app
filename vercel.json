@@ -1,0 +1,16 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "taskflowco.in" }],
+      "destination": "https://www.taskflowco.in/$1",
+      "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "http://taskflowco.in" }],
+      "destination": "https://www.taskflowco.in/$1",
+      "permanent": true
+    }
+  ]
+}
