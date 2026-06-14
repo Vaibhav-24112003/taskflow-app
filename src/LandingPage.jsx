@@ -211,12 +211,12 @@ function BookDemoModal({ open, onClose }) {
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 const NAV_LINKS = [
-  { label: 'Product',   href: '#product'    },
-  { label: 'Modules',   href: '#modules'    },
-  { label: 'Pricing',   href: '#pricing'    },
-  { label: 'Customers', href: '#customers'  },
-  { label: 'Docs',      href: '#faq'        },
-  { label: 'Support',   href: '#support'    },
+  { label: 'Product',  href: '#product'  },
+  { label: 'Modules',  href: '#modules'  },
+  { label: 'Features', href: '#features' },
+  { label: 'Pricing',  href: '#pricing'  },
+  { label: 'FAQ',      href: '#faq'      },
+  { label: 'Support',  href: '#support'  },
 ]
 
 function scrollTo(id) {
@@ -415,15 +415,13 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
           <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>The operating system for your practice.</p>
           <p className="lp-lede" style={{ margin: '24px auto 0' }}>Worksheets, recurring work, client portal, billing and team workload — all in one place. For service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
-            <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
+            <button className="lp-btn lp-btn-primary" onClick={onOpenDemo}>Book a demo</button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenAuth} disabled={loading}>
               {loading ? 'Signing in…' : 'Start free →'}
             </button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo}>Book a demo</button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Launch tour</button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenITR} style={{ background: 'rgba(14,42,71,.08)', borderColor: 'rgba(14,42,71,.3)', color: '#0e2a47' }}>📊 ITR Season</button>
-            <button className="lp-btn lp-btn-link" onClick={onOpenTour}>Website tour →</button>
           </div>
-          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 22, fontSize: 12, color: 'var(--lp-text-mut)' }} className="lp-mono">
+          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 18, fontSize: 12, color: 'var(--lp-text-mut)', flexWrap: 'wrap', alignItems: 'center' }} className="lp-mono">
+            <button onClick={onOpenLaunch} style={{ background: 'none', border: 'none', color: 'var(--lp-text-sub)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>▶ Watch 2-min tour</button>
             <span>✓ No credit card</span><span>✓ Setup in 10 minutes</span>
           </div>
         </div>
@@ -435,7 +433,7 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function Stats() {
-  const stats = [['1', 'Practice onboard'], ['62 hrs', 'saved per firm/month'], ['100%', 'on-time delivery rate'], ['∞', 'Excel sheets replaced']]
+  const stats = [['8', 'modules in one workspace'], ['10+', 'compliance work types'], ['10 min', 'to your first worksheet'], ['Mumbai', 'your data stays in India']]
   return (
     <section id="customers" className="lp-sec" style={{ paddingTop: 32, paddingBottom: 32, borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)', background: 'var(--lp-alt)' }}>
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
@@ -556,7 +554,7 @@ function Features() {
     { t: 'Audit trail', d: 'Every status change, comment and doc upload is logged.', icon: '⎘', c: '#f59e0b', span: 2 },
   ]
   return (
-    <section id="pricing" className="lp-sec">
+    <section id="features" className="lp-sec">
       <div className="lp-container">
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <div className="lp-eyebrow">Built for the work you actually do</div>
@@ -576,6 +574,73 @@ function Features() {
             )
           })}
         </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Pricing ───────────────────────────────────────────────────────────────────
+// NOTE: ₹499 is an INDICATIVE founding-firm figure — confirm/replace the real
+// number in PRICE_PER_SEAT before promoting pricing in sales material.
+const PRICE_PER_SEAT = 499
+function Pricing({ onOpenAuth, loading, onOpenDemo }) {
+  const included = [
+    'All 8 modules — My Work, WorkZone, Team, Analytics, Communication, Billing, Master Data, Setup',
+    'Unlimited clients, work types & worksheets',
+    'Recurring compliance tasks (GST · TDS · ITR · Audit · Payroll)',
+    'Branded client portal & document requests',
+    'Time logging, capacity planning & team workload',
+    'Tally / Zoho / CSV exports',
+    'Data hosted in India (AWS Mumbai)',
+  ]
+  return (
+    <section id="pricing" className="lp-sec">
+      <div className="lp-container">
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <div className="lp-eyebrow">Pricing</div>
+          <h2 className="lp-h2" style={{ marginTop: 8 }}>Simple per-seat pricing.<br />No per-module upsells.</h2>
+          <p className="lp-lede" style={{ margin: '16px auto 0', textAlign: 'center' }}>One price covers the whole platform. Pay for the people on your team — not for features.</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, maxWidth: 880, margin: '0 auto' }}>
+          {/* Practice plan */}
+          <div style={{ background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 16, padding: '28px 26px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'inline-flex', alignSelf: 'flex-start', fontSize: 11, fontWeight: 700, color: '#0e2a47', background: 'rgba(14,42,71,.1)', border: '1px solid rgba(14,42,71,.22)', borderRadius: 100, padding: '4px 12px', marginBottom: 16 }} className="lp-mono">FOUNDING FIRM</div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span className="lp-mono" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--lp-text)' }}>₹{PRICE_PER_SEAT}</span>
+              <span style={{ fontSize: 14, color: 'var(--lp-text-sub)' }}>/ user / month</span>
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--lp-text-mut)', marginTop: 6 }} className="lp-mono">5-seat minimum · billed monthly · cancel anytime</div>
+            <div style={{ height: 1, background: 'var(--lp-border)', margin: '20px 0' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+              {included.map(f => (
+                <div key={f} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, lineHeight: 1.5, color: 'var(--lp-text-sub)' }}>
+                  <span style={{ color: '#10b981', fontWeight: 700, flexShrink: 0 }}>✓</span><span>{f}</span>
+                </div>
+              ))}
+            </div>
+            <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading} style={{ width: '100%', justifyContent: 'center', marginTop: 22 }}>
+              {loading ? 'Signing in…' : 'Start free →'}
+            </button>
+            <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--lp-text-mut)', marginTop: 10 }} className="lp-mono">No credit card to start</div>
+          </div>
+          {/* Firm / Enterprise plan */}
+          <div style={{ background: 'var(--lp-surface)', border: '1px solid var(--lp-border)', borderRadius: 16, padding: '28px 26px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'inline-flex', alignSelf: 'flex-start', fontSize: 11, fontWeight: 700, color: 'var(--lp-text-sub)', background: 'var(--lp-alt)', border: '1px solid var(--lp-border)', borderRadius: 100, padding: '4px 12px', marginBottom: 16 }} className="lp-mono">LARGER FIRM</div>
+            <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-.02em', color: 'var(--lp-text)' }}>Let's talk</div>
+            <div style={{ fontSize: 12.5, color: 'var(--lp-text-mut)', marginTop: 6 }} className="lp-mono">Volume seats · onboarding · migration help</div>
+            <div style={{ height: 1, background: 'var(--lp-border)', margin: '20px 0' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+              {['Everything in the founding-firm plan', 'Volume pricing beyond 20 seats', 'Guided migration from Excel / Practice Pro / Munimji', 'Priority onboarding & a named contact', 'Custom work-type templates for your practice'].map(f => (
+                <div key={f} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', fontSize: 13, lineHeight: 1.5, color: 'var(--lp-text-sub)' }}>
+                  <span style={{ color: '#10b981', fontWeight: 700, flexShrink: 0 }}>✓</span><span>{f}</span>
+                </div>
+              ))}
+            </div>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo} style={{ width: '100%', justifyContent: 'center', marginTop: 22 }}>Book a demo</button>
+            <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--lp-text-mut)', marginTop: 10 }} className="lp-mono">We'll reply within 24 hours</div>
+          </div>
+        </div>
+        <p style={{ textAlign: 'center', fontSize: 12.5, color: 'var(--lp-text-mut)', marginTop: 22 }}>Prices in INR, exclusive of GST. Founding-firm rate is locked for your first year.</p>
       </div>
     </section>
   )
@@ -893,10 +958,10 @@ function FinalCTA({ onOpenAuth, loading, onOpenDemo }) {
         <h2 className="lp-h1" style={{ maxWidth: 820, margin: '0 auto' }}>Make tomorrow's<br />deadline day quiet.</h2>
         <p className="lp-lede" style={{ margin: '24px auto 32px' }}>Get started in minutes. No credit card. Bring your team. We'll get out of the way.</p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
-            {loading ? 'Signing in…' : 'Start free trial →'}
+          <button className="lp-btn lp-btn-primary" onClick={onOpenDemo}>Book a demo</button>
+          <button className="lp-btn lp-btn-ghost" onClick={onOpenAuth} disabled={loading}>
+            {loading ? 'Signing in…' : 'Start free →'}
           </button>
-          <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo}>Book a demo</button>
         </div>
       </div>
     </section>
@@ -908,7 +973,7 @@ function Footer() {
   return (
     <footer style={{ borderTop: '1px solid var(--lp-border)', padding: '48px 0 32px', background: 'var(--lp-bg)' }}>
       <div className="lp-container">
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: 32, marginBottom: 40 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 32, marginBottom: 40 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <TaskflowLogo size={20} />
@@ -916,22 +981,22 @@ function Footer() {
             <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants.</div>
           </div>
           {[
-            ['Product', ['Modules', 'Pricing', 'Changelog', 'Roadmap', 'Status']],
-            ['Company', ['About', 'Blog', 'Customers', 'Careers', 'Press']],
-            ['Resources', ['Docs', 'API', 'Help center', 'Webinars', 'Migrate from Excel']],
-            ['Legal', ['Privacy', 'Terms', 'Security', 'GDPR', 'DPA']],
+            ['Product', [['Modules', '#modules'], ['Features', '#features'], ['Pricing', '#pricing'], ['FAQ', '#faq']]],
+            ['Practice', [['Security', '#security'], ['Support', '#support'], ['Book a demo', '#support']]],
           ].map(([h, ls]) => (
             <div key={h}>
               <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 12, fontWeight: 700 }}>{h}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {ls.map(l => <a key={l} href="#" style={{ fontSize: 12.5, color: 'var(--lp-text-sub)' }}>{l}</a>)}
+                {ls.map(([l, href]) => (
+                  <a key={l} href={href} onClick={e => { e.preventDefault(); scrollTo(href) }} style={{ fontSize: 12.5, color: 'var(--lp-text-sub)' }}>{l}</a>
+                ))}
               </div>
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
-          <span>© 2026 TaskFlowCo · All rights reserved · Made in India 🇮🇳</span>
-          <span>v 2.4.1 · all systems operational</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', paddingTop: 20, borderTop: '1px solid var(--lp-border)', fontSize: 11.5, color: 'var(--lp-text-mut)' }} className="lp-mono">
+          <span>© 2026 TaskFlowCo · Made in India 🇮🇳</span>
+          <span>Privacy &amp; Terms: <a href="mailto:support@taskflowco.in" style={{ color: 'var(--lp-text-sub)' }}>support@taskflowco.in</a></span>
         </div>
       </div>
     </footer>
@@ -1133,6 +1198,7 @@ export default function LandingPage({ onSignIn, loading }) {
       <TourVideo />
       <Compliance />
       <Security />
+      <Pricing onOpenAuth={openAuth} loading={loading} onOpenDemo={openDemo} />
       <FAQ />
       <Support />
       <FinalCTA onOpenAuth={openAuth} loading={loading} onOpenDemo={openDemo} />
