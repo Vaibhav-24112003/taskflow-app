@@ -10846,38 +10846,24 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
     {/* ══ MAIN COLUMN: Worksheets + Task List ══ */}
     <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-      {/* Sticky header */}
-      <div style={{flexShrink:0,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'14px 18px 10px'}}>
-        {/* Row 1: Greeting + actions */}
-        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12,marginBottom:10}}>
-          <div>
-            {isSelf
-              ?<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{greet}, {firstName} 👋</div>
-              :<div style={{fontSize:22,fontWeight:800,color:'var(--tf-text)',letterSpacing:'-0.02em',lineHeight:1.2}}>{viewingName}'s Work</div>}
-            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:3,fontFamily:"'JetBrains Mono',monospace"}}>
-              {stats.total} works · <span style={{color:'#ef4444'}}>{stats.overdue} overdue</span> · <span style={{color:'#f59e0b'}}>{stats.today} due today</span>
-              {!isSelf&&<span style={{color:'#8b5cf6',fontFamily:'inherit'}}> · Viewing {viewingName}</span>}
-            </div>
+      {/* Sticky header — 2 rows */}
+      <div style={{flexShrink:0,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'10px 18px 8px'}}>
+        {/* Row 1: compact greeting left · filter pills centre · controls right */}
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+          {/* Greeting (compact) */}
+          <div style={{marginRight:6,minWidth:0}}>
+            <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap'}}>
+              {isSelf?greet+', '+firstName:viewingName+''s Work'}
+            </span>
+            <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:8,fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
+              {stats.total} works
+              {stats.overdue>0&&<span style={{color:'#ef4444'}}> · {stats.overdue} overdue</span>}
+              {stats.today>0&&<span style={{color:'#f59e0b'}}> · {stats.today} today</span>}
+            </span>
           </div>
-          <div style={{display:'flex',gap:6,alignItems:'center',flexShrink:0,flexWrap:'wrap'}}>
-            <button onClick={function(){load();}} disabled={loading} title="Reload tasks"
-              style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,opacity:loading?0.6:1}}>
-              <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.3s'}}>↻</span>{loading?'…':'Refresh'}
-            </button>
-            {isSelf&&<button data-tour="tour-createtask" onClick={function(){setShowCreate(true);}}
-              style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'6px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(91,108,240,0.3)'}}>
-              + Create Task
-            </button>}
-            <button data-tour="tour-plantoday" onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
-              style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'6px 11px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-              <Calendar size={14} strokeWidth={2}/>
-              Plan Today
-              {myDayTasks.length>0&&<span style={{fontSize:9,fontWeight:800,background:planOpen?'rgba(255,255,255,0.2)':'rgba(14,42,71,0.12)',color:planOpen?'#fff':'#0e2a47',padding:'1px 6px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{myDayTasks.length}</span>}
-            </button>
-          </div>
-        </div>
-        {/* Row 2: filter pills + view toggles + date filter + member */}
-        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+          {/* Divider */}
+          <div style={{width:1,height:16,background:'var(--tf-border)',flexShrink:0}}/>
+          {/* Status filter pills */}
           {[
             {id:'all',label:'All',count:stats.total},
             {id:'today',label:'Today',count:stats.today},
@@ -10888,30 +10874,32 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             var isOverdue=pill.id==='overdue';
             var isReview=pill.id==='review';
             return<button key={pill.id} onClick={function(){setFilter(pill.id);}}
-              style={{display:'flex',alignItems:'center',gap:6,padding:'5px 11px',borderRadius:100,border:'1px solid',
+              style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:100,border:'1px solid',
                 borderColor:active?(isOverdue?'rgba(239,68,68,0.5)':isReview?'rgba(14,165,233,0.5)':'var(--tf-text)'):'var(--tf-border)',
-                background:active?(pill.id==='all'?'#0f172a':isOverdue?'rgba(239,68,68,0.1)':isReview?'rgba(14,165,233,0.1)':'rgba(14,42,71,0.1)'):'var(--tf-panel)',
+                background:active?(pill.id==='all'?'#0f172a':isOverdue?'rgba(239,68,68,0.1)':isReview?'rgba(14,165,233,0.1)':'rgba(14,42,71,0.1)'):'transparent',
                 color:active?(pill.id==='all'?'#fff':isOverdue?'#ef4444':isReview?'#0ea5e9':'#0e2a47'):(isOverdue?'#ef4444':isReview?'#0ea5e9':'var(--tf-text-sub)'),
-                fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>
+                fontSize:11,fontWeight:active?700:500,cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap'}}>
               {pill.label}
-              {pill.count>0&&<span style={{fontSize:10,fontWeight:700,opacity:0.8}}>{pill.count}</span>}
+              {pill.count>0&&<span style={{fontSize:9,fontWeight:700,opacity:0.75,fontFamily:"'JetBrains Mono',monospace"}}>{pill.count}</span>}
             </button>;
           })}
           <div style={{flex:1}}/>
-          <div data-tour="tour-views" style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3}}>
+          {/* View toggles */}
+          <div data-tour="tour-views" style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3,flexShrink:0}}>
             {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'},{id:'urgency',Icon:Zap,label:'Urgency'}].map(function(v){
               var active=dashView===v.id;
               var Ico=v.Icon;
               return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label} aria-label={v.label}
-                style={{display:'flex',alignItems:'center',justifyContent:'center',width:28,height:26,borderRadius:6,border:'none',background:active?'#fff':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit',boxShadow:active?'0 1px 3px rgba(14,42,71,0.18),0 0 0 1px rgba(14,42,71,0.12)':'none',transition:'background .15s, color .15s, box-shadow .15s'}}
+                style={{display:'flex',alignItems:'center',justifyContent:'center',width:26,height:24,borderRadius:5,border:'none',background:active?'#fff':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit',boxShadow:active?'0 1px 3px rgba(14,42,71,0.18),0 0 0 1px rgba(14,42,71,0.12)':'none',transition:'background .15s, color .15s, box-shadow .15s'}}
                 onMouseEnter={function(e){if(!active)e.currentTarget.style.color='#0e2a47';}}
                 onMouseLeave={function(e){if(!active)e.currentTarget.style.color='var(--tf-text-sub)';}}>
-                <Ico size={15} strokeWidth={active?2.2:1.8}/>
+                <Ico size={14} strokeWidth={active?2.2:1.8}/>
               </button>;
             })}
           </div>
+          {/* Date filter */}
           <select value={dateFilter} onChange={function(e){setDateFilter(e.target.value);}}
-            style={{background:dateFilter!=='all'?'rgba(59,130,246,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:7,padding:'5px 9px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit'}}>
+            style={{background:dateFilter!=='all'?'rgba(59,130,246,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:7,padding:'4px 8px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit',flexShrink:0}}>
             <option value="all">All Dates</option>
             <option value="overdue">Overdue</option>
             <option value="today">Due Today</option>
@@ -10921,14 +10909,34 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <option value="next30">Next 30 Days</option>
             <option value="nodate">No Due Date</option>
           </select>
+          {/* Member picker */}
           {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');setWsRailFilter('all');}}
-            style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'5px 9px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit'}}>
+            style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'4px 8px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit',flexShrink:0}}>
             <option value={cu.id}>My Work</option>
             {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
           </select>}
+          {/* Divider */}
+          <div style={{width:1,height:16,background:'var(--tf-border)',flexShrink:0}}/>
+          {/* Action buttons */}
+          <button onClick={function(){load();}} disabled={loading} title="Reload"
+            style={{background:'transparent',border:'none',borderRadius:6,padding:'4px 6px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:13,opacity:loading?0.5:1,lineHeight:1,flexShrink:0}}
+            onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}}
+            onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>
+            <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.5s'}}>↻</span>
+          </button>
+          {isSelf&&<button data-tour="tour-createtask" onClick={function(){setShowCreate(true);}}
+            style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:4,boxShadow:'0 2px 6px rgba(91,108,240,0.28)',flexShrink:0,whiteSpace:'nowrap'}}>
+            + Task
+          </button>}
+          <button data-tour="tour-plantoday" onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
+            style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'5px 10px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
+            <Calendar size={13} strokeWidth={2}/>
+            Plan Today
+            {myDayTasks.length>0&&<span style={{fontSize:9,fontWeight:800,background:planOpen?'rgba(255,255,255,0.2)':'rgba(14,42,71,0.12)',color:planOpen?'#fff':'#0e2a47',padding:'1px 5px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{myDayTasks.length}</span>}
+          </button>
         </div>
-        {/* Row 3: Work-type filter strip */}
-        <div data-tour="tour-worktypestrip" style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:2,marginTop:8}}>
+        {/* Row 2: Work-type filter strip */}
+        <div data-tour="tour-worktypestrip" style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:2}}>
           {[{id:'all',label:'All Work Types',count:stats.total},{id:'today',label:'Due Today',count:stats.today}]
             .concat(Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
               var ov=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
