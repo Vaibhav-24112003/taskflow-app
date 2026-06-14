@@ -4,8 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Inline SVG favicon — avoids a 404 + an extra HTTP request -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23635bff'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+    <!-- Brand favicon — crawlable file so Google can show our logo in search results -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/logo.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#0e2a47" />
 
     <!-- Speed up first auth/data round-trips -->
     <link rel="preconnect" href="https://vorxrjekbokqkigfabhr.supabase.co" crossorigin />
@@ -20,8 +22,9 @@
     <meta name="description" content="TaskFlowCo: GST worksheets, ITR tracking, client management and team workload — all in one place. Built for CA, CS, CMA, tax consultants and advisory firms in India. One platform to run your entire practice." />
     <meta name="keywords" content="TaskFlowCo, practice management software, CA software India, CS software, CMA software, tax consultant software, GST filing software, ITR management, TDS tracking, compliance software India, CA firm software, advocate practice management" />
     <meta name="robots" content="index, follow" />
-    <meta name="application-name" content="TaskFlow" />
+    <meta name="application-name" content="TaskFlowCo" />
     <meta name="author" content="TaskFlowCo" />
+    <meta name="theme-color" content="#0e2a47" />
     <link rel="canonical" href="https://www.taskflowco.in/" />
 
     <!-- Open Graph -->
@@ -87,6 +90,13 @@
           "@id": "https://www.taskflowco.in/#organization",
           "name": "TaskFlowCo",
           "url": "https://www.taskflowco.in/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://www.taskflowco.in/logo.svg",
+            "width": 512,
+            "height": 512
+          },
+          "image": "https://www.taskflowco.in/logo.svg",
           "description": "TaskFlowCo builds practice management software for Indian CA, CS and CMA firms — GST worksheets, ITR tracking, team workload, billing and client portal in one platform.",
           "foundingLocation": {
             "@type": "Country",

@@ -439,7 +439,7 @@ function Stats() {
       <div className="lp-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
         {stats.map(([v, l]) => (
           <div key={l} style={{ textAlign: 'center' }}>
-            <div className="lp-mono" style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.03em', background: 'linear-gradient(180deg,#fff,#8693b0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{v}</div>
+            <div className="lp-mono" style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-.03em', color: 'var(--lp-text)' }}>{v}</div>
             <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', fontWeight: 500, marginTop: 4 }}>{l}</div>
           </div>
         ))}
@@ -1071,7 +1071,7 @@ function Footer() {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 32, marginBottom: 40 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <TaskflowLogo size={20} />
+              <TaskflowLogo size={20} inkColor="var(--lp-text)" />
             </div>
             <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>TaskFlowCo is the operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants across India.</div>
           </div>
