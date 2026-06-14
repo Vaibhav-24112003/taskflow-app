@@ -5672,59 +5672,55 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No work types assigned</div>
       <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to Client Master Data → edit each client → Work Types tab to assign work types.</div>
     </div>:<div>
-      {/* Department filter pills */}
-      {(orgDepts||[]).length>0&&<div style={{display:'flex',gap:6,overflowX:'auto',padding:'0 0 10px',flexShrink:0,marginBottom:2}}>
-        <button onClick={function(){setDeptFilter('all');setActiveType(null);setActiveGroup(null);}}
-          style={{padding:'4px 12px',borderRadius:20,border:'1px solid var(--tf-border)',background:deptFilter==='all'?'#0e2a47':'var(--tf-surface)',color:deptFilter==='all'?'#fff':'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,fontFamily:'inherit'}}>All Depts</button>
-        {(orgDepts||[]).map(function(d){return<button key={d.id} onClick={function(){setDeptFilter(d.id);setActiveType(null);setActiveGroup(null);}}
-          style={{padding:'4px 12px',borderRadius:20,border:'1px solid '+(deptFilter===d.id?d.color:'var(--tf-border)'),background:deptFilter===d.id?d.color+'20':'var(--tf-surface)',color:deptFilter===d.id?d.color:'var(--tf-text-sub)',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',flexShrink:0,fontFamily:'inherit'}}>{d.name}</button>;})}
-      </div>}
-      {/* Work type tabs — with grouping support */}
-      <div data-tour="tour-ws-tabs" style={{display:'flex',gap:4,marginBottom:0,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
-        {tabLayout.map(function(tab){
-          var isActiveTab=tab.isGroup?activeGroup===tab.label:activeType===tab.types[0];
-          return<button key={tab.label} onClick={function(){
-            if(tab.isGroup){
-              setActiveGroup(tab.label);
-              // Select first work type in group
-              var firstType=tab.types[0];
-              setActiveType(firstType);
-              var cfg2g=WS_TYPE_CONFIGS[firstType];
-              var f2=cfg2g?cfg2g.frequency:'monthly';
-              var p2=getDefaultPeriod(f2,cfg2g);
-              setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
-            }else{
-              setActiveGroup(null);
-              setActiveType(tab.types[0]);
-              var cfg2t=WS_TYPE_CONFIGS[tab.types[0]];
-              var f2=cfg2t?cfg2t.frequency:'monthly';
-              var p2=getDefaultPeriod(f2,cfg2t);
-              setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
-            }
-            clearFilters();
-          }} style={{padding:'8px 16px',border:'none',borderBottom:isActiveTab?('2px solid '+(tab.isUnclassified?'#f59e0b':'#0e2a47')):'2px solid transparent',background:'none',color:isActiveTab?(tab.isUnclassified?'#f59e0b':'#0e2a47'):(tab.isUnclassified?'#f59e0b':'var(--tf-text-sub)'),cursor:'pointer',fontSize:12,fontWeight:isActiveTab?700:(tab.isUnclassified?700:500),whiteSpace:'nowrap',transition:'all 0.15s'}}>
-            {tab.isUnclassified&&<span style={{marginRight:4}}>🏷</span>}
-            {(function(){var wtc=!tab.isGroup&&!tab.isUnclassified&&(workTypeConfigs||[]).find(function(c){return c.name===tab.types[0];});var dept=wtc&&wtc.department_id&&(orgDepts||[]).find(function(d){return d.id===wtc.department_id;});return dept?<span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:dept.color,marginRight:5,verticalAlign:'middle'}} title={dept.name}/>:null;})()}
-            {tab.label}{tab.isGroup&&<span style={{fontSize:9,marginLeft:4,color:'#f59e0b',fontWeight:700}}>▾</span>}
-          </button>;
-        })}
-      </div>
-      {/* Sub-tabs for grouped work types */}
-      {activeGroup&&<div style={{display:'flex',gap:2,padding:'6px 0',marginBottom:8,borderBottom:'1px solid var(--tf-border)',flexWrap:'wrap'}}>
-        {(tabLayout.find(function(t){return t.label===activeGroup;})||{types:[]}).types.map(function(t){
-          var active=activeType===t;
+      {/* Work type picker — single dropdown replaces 3 nav levels (dept pills + tabs + sub-tabs) */}
+      <div data-tour="tour-ws-tabs" style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+        <select value={activeType||''} onChange={function(e){
+          var t=e.target.value;
+          if(!t)return;
+          setActiveGroup(null);
+          setActiveType(t);
           var cfg2=WS_TYPE_CONFIGS[t]||{};
-          return<button key={t} onClick={function(){
-            setActiveType(t);
-            var f2=cfg2.frequency||'monthly';
-            var p2=getDefaultPeriod(f2,cfg2);
-            setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
-            clearFilters();
-          }} style={{padding:'5px 12px',borderRadius:'100px',border:active?'1.5px solid rgba(14,42,71,0.5)':'1.5px solid var(--tf-border)',background:active?'rgba(14,42,71,0.1)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,whiteSpace:'nowrap',transition:'all 0.15s'}}>
-            {t}<span style={{fontSize:9,marginLeft:4,color:'var(--tf-text-mut)'}}>{(cfg2.frequency||'monthly').charAt(0).toUpperCase()}</span>
-          </button>;
-        })}
-      </div>}
+          var f2=cfg2.frequency||'monthly';
+          var p2=getDefaultPeriod(f2,cfg2);
+          setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
+          clearFilters();
+        }} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text)',fontSize:13,fontWeight:600,cursor:'pointer',outline:'none',fontFamily:'inherit',minWidth:180,maxWidth:280}}>
+          {(orgDepts||[]).length>0
+            ?(function(){
+              // Group by department
+              var deptMap={};
+              allTypes.forEach(function(t){
+                var wtc=(workTypeConfigs||[]).find(function(c){return c.name===t;});
+                var deptId=wtc&&wtc.department_id||'__none';
+                if(!deptMap[deptId])deptMap[deptId]=[];
+                deptMap[deptId].push(t);
+              });
+              var result=[];
+              (orgDepts||[]).forEach(function(d){
+                if(deptMap[d.id]&&deptMap[d.id].length){
+                  result.push(<optgroup key={d.id} label={d.name}>
+                    {deptMap[d.id].map(function(t){return<option key={t} value={t}>{t==='Unclassified'?'🏷 Unclassified':t}</option>;})}
+                  </optgroup>);
+                }
+              });
+              if(deptMap['__none']&&deptMap['__none'].length){
+                result.push(<optgroup key="__none" label="General">
+                  {deptMap['__none'].map(function(t){return<option key={t} value={t}>{t==='Unclassified'?'🏷 Unclassified':t}</option>;})}
+                </optgroup>);
+              }
+              return result;
+            })()
+            :allTypes.map(function(t){return<option key={t} value={t}>{t==='Unclassified'?'🏷 Unclassified':t}</option>;})}
+        </select>
+        {/* Dept quick-filter (compact pill, only when depts exist) */}
+        {(orgDepts||[]).length>0&&<select value={deptFilter} onChange={function(e){
+          setDeptFilter(e.target.value);
+          setActiveType(null);setActiveGroup(null);
+        }} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:deptFilter!=='all'?'#0e2a47':'var(--tf-text-sub)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
+          <option value="all">All depts</option>
+          {(orgDepts||[]).map(function(d){return<option key={d.id} value={d.id}>{d.name}</option>;})}
+        </select>}
+      </div>
 
       {/* Period selector + toolbar */}
       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,flexWrap:'wrap'}}>
