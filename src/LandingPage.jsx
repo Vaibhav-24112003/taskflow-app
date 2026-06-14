@@ -409,11 +409,11 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
         <div style={{ textAlign: 'center', maxWidth: 880, margin: '0 auto 56px' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(14,42,71,.1)', border: '1px solid rgba(14,42,71,.25)', fontSize: 12, fontWeight: 600, color: '#0e2a47', marginBottom: 24 }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0e2a47', boxShadow: '0 0 12px #0e2a47' }} />
-            Built for CA · CS · CMA · Tax & Legal Consultants · Advocates
+            TaskFlowCo — Built for CA · CS · CMA · Tax & Legal Consultants
           </div>
           <h1 className="lp-h1" style={{ marginBottom: 12 }}>Stop juggling. <span style={{ background: 'linear-gradient(90deg,#0e2a47,#5b8cb8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Start flowing.</span></h1>
-          <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>The operating system for your practice.</p>
-          <p className="lp-lede" style={{ margin: '24px auto 0' }}>Worksheets, recurring work, client portal, billing and team workload — all in one place. For service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
+          <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>The practice management platform by TaskFlowCo.</p>
+          <p className="lp-lede" style={{ margin: '24px auto 0' }}>GST worksheets, recurring compliance, client portal, billing and team workload — all in one place. TaskFlowCo is built for service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
             <button className="lp-btn lp-btn-primary" onClick={onOpenDemo}>Book a demo</button>
             <button className="lp-btn lp-btn-ghost" onClick={onOpenAuth} disabled={loading}>
@@ -494,6 +494,92 @@ function Problem() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── How it works ──────────────────────────────────────────────────────────────
+function HowItWorks() {
+  const steps = [
+    {
+      num: '01',
+      title: 'Add clients & work types',
+      desc: 'Import your client list from CSV or add manually. Pick the compliance work types your practice handles — GST, ITR, TDS, Audit, Payroll — and configure your team roles.',
+      aside: '~10 min to first client',
+      color: '#6b8cad',
+    },
+    {
+      num: '02',
+      title: 'WorkZone generates your worksheets',
+      desc: 'One worksheet per work type, per period. All your clients in rows, statuses visible at a glance. Recurring tasks auto-generate on the right date — zero copy-pasting.',
+      aside: 'Auto-generated, every period',
+      color: '#6366f1',
+    },
+    {
+      num: '03',
+      title: 'Team files, logs, and bills',
+      desc: "Staff update status as they work. Plan Today shows who does what next. When work is complete, raise invoices straight from completed rows — no double entry.",
+      aside: 'Invoice in 1 click',
+      color: '#10b981',
+    },
+  ]
+  return (
+    <section className="lp-sec" style={{ background: 'var(--lp-alt)', borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)' }}>
+      <div className="lp-container">
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <div className="lp-eyebrow">How TaskFlowCo works</div>
+          <h2 className="lp-h2" style={{ marginTop: 8 }}>Up and running<br />in under an hour.</h2>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 2, position: 'relative' }}>
+          {steps.map((s, i) => {
+            const r = hex2rgb(s.color)
+            return (
+              <div key={i} style={{ padding: '32px 28px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: i === 0 ? '14px 0 0 14px' : i === 2 ? '0 14px 14px 0' : 0, position: 'relative', overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, background: `radial-gradient(circle,rgba(${r},.1),transparent 70%)`, pointerEvents: 'none' }} />
+                <div className="lp-mono" style={{ fontSize: 36, fontWeight: 900, color: `rgba(${r},.18)`, lineHeight: 1, marginBottom: 16, letterSpacing: '-.04em' }}>{s.num}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 10 }}>{s.title}</div>
+                <div style={{ fontSize: 13, color: 'var(--lp-text-sub)', lineHeight: 1.6, marginBottom: 16 }}>{s.desc}</div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: `rgba(${r},.1)`, border: `1px solid rgba(${r},.22)`, borderRadius: 6 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color }} />
+                  <span className="lp-mono" style={{ fontSize: 10.5, fontWeight: 700, color: s.color }}>{s.aside}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Social proof ──────────────────────────────────────────────────────────────
+function SocialProof() {
+  const outcomes = [
+    { stat: '100+', label: 'clients tracked per work type', sub: 'One worksheet replaces 100 Excel files', icon: '⊞', color: '#6b8cad' },
+    { stat: '0', label: 'deadlines missed with recurring tasks', sub: 'GST, TDS, ITR — auto-generated every period', icon: '↻', color: '#10b981' },
+    { stat: '1', label: 'screen for your entire team\'s workload', sub: 'See who\'s busy, who has capacity, what\'s overdue', icon: '◔', color: '#6366f1' },
+    { stat: '<2h', label: 'to migrate from Excel', sub: 'CSV import for clients, work types in 10 min', icon: '↑', color: '#f59e0b' },
+  ]
+  return (
+    <section className="lp-sec" style={{ paddingTop: 48, paddingBottom: 48, borderBottom: '1px solid var(--lp-border)' }}>
+      <div className="lp-container">
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <div className="lp-eyebrow">What changes when you use TaskFlowCo</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+          {outcomes.map(o => {
+            const r = hex2rgb(o.color)
+            return (
+              <div key={o.stat} style={{ padding: '22px 20px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 14, textAlign: 'center' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: `rgba(${r},.12)`, color: o.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, margin: '0 auto 14px' }}>{o.icon}</div>
+                <div className="lp-mono" style={{ fontSize: 30, fontWeight: 900, color: o.color, letterSpacing: '-.04em', lineHeight: 1, marginBottom: 6 }}>{o.stat}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, lineHeight: 1.3 }}>{o.label}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--lp-text-sub)', lineHeight: 1.5 }}>{o.sub}</div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </section>
@@ -920,6 +1006,15 @@ function Support() {
                 </div>
                 <span style={{ fontSize: 15, color: 'var(--lp-text-mut)' }}>↗</span>
               </a>
+              <a href="https://wa.me/message/taskflowco" onClick={e => e.preventDefault()} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11, textDecoration: 'none', transition: 'all .15s ease', cursor: 'default', opacity: .7 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(37,211,102,.14)', color: '#25d366', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text)' }}>WhatsApp support</div>
+                  <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginTop: 2 }}>Coming soon — email us for now</div>
+                </div>
+              </a>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
                 <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(99,102,241,.14)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>?</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -978,7 +1073,7 @@ function Footer() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
               <TaskflowLogo size={20} />
             </div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>The operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants.</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.6, maxWidth: 300 }}>TaskFlowCo is the operating system for service-first practices — CA, CS, CMA, tax consultants, advisory firms, advocates and consultants across India.</div>
           </div>
           {[
             ['Product', [['Modules', '#modules'], ['Features', '#features'], ['Pricing', '#pricing'], ['FAQ', '#faq']]],
@@ -1193,6 +1288,8 @@ export default function LandingPage({ onSignIn, loading }) {
       <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} onOpenITR={() => setItrOpen(true)} onOpenDemo={openDemo} />
       <Stats />
       <Problem />
+      <HowItWorks />
+      <SocialProof />
       <Modules />
       <Features />
       <TourVideo />
