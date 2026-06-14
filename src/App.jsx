@@ -6026,7 +6026,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </select>
         <div style={{display:'flex',alignItems:'center',gap:4}}>
           <input type="date" value={bulkStartDate} onChange={function(e){setBulkStartDate(e.target.value);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'4px 7px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
-          <button onClick={bulkUpdateStartDate} style={{background:'#6366f1',border:'none',borderRadius:7,padding:'5px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Set Start By</button>
+          <button onClick={bulkUpdateStartDate} style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'5px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Set Start By</button>
         </div>
         <div style={{display:'flex',gap:3}}>
           <button onClick={function(){bulkPushStartDateBy(-7);}} title="Pull start dates earlier by 7 days" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>−7d</button>
@@ -10375,7 +10375,7 @@ function NotesModule({org,cu,mode}){
       <div style={{padding:'8px 12px',display:'flex',gap:6,alignItems:'center',flexShrink:0,borderBottom:'1px solid var(--tf-border)'}}>
         {activeId&&activeNote?<button onClick={function(){setActiveId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>‹ All</button>
           :<input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search notes…" style={{flex:1,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none'}}/>}
-        <button onClick={createNote} style={{background:'#6366f1',border:'none',borderRadius:7,padding:'6px 11px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}>+ New</button>
+        <button onClick={createNote} style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'6px 11px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,flexShrink:0}}>+ New</button>
       </div>
       <div style={{flex:1,overflowY:'auto',padding:'10px 12px'}}>
         {loading?<div style={{textAlign:'center',padding:24,color:'var(--tf-text-sub)',fontSize:12}}>Loading…</div>
@@ -10395,7 +10395,7 @@ function NotesModule({org,cu,mode}){
       <div style={{padding:'14px 14px 10px',flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <h2 style={{margin:0,fontSize:18,fontWeight:800,color:'var(--tf-text)'}}>📝 Notes</h2>
-          <button onClick={createNote} style={{background:'#6366f1',border:'none',borderRadius:8,padding:'7px 13px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Note</button>
+          <button onClick={createNote} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 13px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Note</button>
         </div>
         <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search notes…" style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box'}}/>
       </div>
@@ -10856,9 +10856,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               {isSelf?greet+', '+firstName:viewingName+''s Work'}
             </span>
             <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:8,fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
-              {stats.total} works
+              {stats.total} tasks
               {stats.overdue>0&&<span style={{color:'#ef4444'}}> · {stats.overdue} overdue</span>}
-              {stats.today>0&&<span style={{color:'#f59e0b'}}> · {stats.today} today</span>}
+              {stats.today>0&&<span style={{color:'#f59e0b'}}> · {stats.today} due today</span>}
             </span>
           </div>
           {/* Divider */}
@@ -10925,7 +10925,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.5s'}}>↻</span>
           </button>
           {isSelf&&<button data-tour="tour-createtask" onClick={function(){setShowCreate(true);}}
-            style={{background:'#5b6cf0',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:4,boxShadow:'0 2px 6px rgba(91,108,240,0.28)',flexShrink:0,whiteSpace:'nowrap'}}>
+            style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:4,boxShadow:'0 2px 8px rgba(14,42,71,0.3)',flexShrink:0,whiteSpace:'nowrap'}}>
             + Task
           </button>}
           <button data-tour="tour-plantoday" onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
@@ -16196,7 +16196,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(ffOn('workzone_board'))workzoneTabs.push({id:'board',label:'Board'});
   if(ffOn('workzone_itr'))workzoneTabs.push({id:'itr',label:'ITR Desk'});
   if(ffOn('workzone_bigclients'))workzoneTabs.push({id:'bigclients',label:'Big Clients'});
-  workzoneTabs.push({id:'teamview',label:'Team Workload'});
+  workzoneTabs.push({id:'teamview',label:'Team View'});
 
   // Master Data tabs — Groups toggleable
   var masterdataTabs=[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'}];
