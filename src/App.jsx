@@ -10849,7 +10849,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           {/* Greeting (compact) */}
           <div style={{marginRight:6,minWidth:0}}>
             <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap'}}>
-              {isSelf?greet+', '+firstName:viewingName+''s Work'}
+              {isSelf?greet+', '+firstName:viewingName+"'s Work"}
             </span>
             <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:8,fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
               {stats.total} tasks
