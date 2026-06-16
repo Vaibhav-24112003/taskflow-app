@@ -15122,6 +15122,14 @@ function ClientConnectModule({org,supabase,cu}){
   var [savingStorage,setSavingStorage]=useState(false);
   var [msgText,setMsgText]=useState('');
   var [sendingMsg,setSendingMsg]=useState(false);
+  // Enhancements: reusable templates, bulk send, standalone public form, task linkage
+  var [formTemplates,setFormTemplates]=useState(_ccc?_ccc.formTemplates||[]:[]);
+  var [createMode,setCreateMode]=useState('single'); // 'single' | 'bulk' | 'public'
+  var [ccSection,setCcSection]=useState('clients'); // 'clients' | 'public' | 'templates'
+  var [bulkClientIds,setBulkClientIds]=useState([]);
+  var [bulkSearch,setBulkSearch]=useState('');
+  var [linkRowId,setLinkRowId]=useState('');
+  var [linkRows,setLinkRows]=useState([]); // open worksheet_rows for the selected client (for auto-fill linkage)
 
   function showToast(msg,kind){setToast({msg,kind:kind||'ok'});setTimeout(function(){setToast(null);},2400);}
 
@@ -15135,7 +15143,7 @@ function ClientConnectModule({org,supabase,cu}){
     else{setStorToken('');setStorRootPath('/TaskFlow Uploads');setStorEmail('');}
   },[showStorage,storTab,cloudStorages]);
 
-  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;if(!_ccCache[org.id])setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current&&!_ccCache[org.id]){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}var cl=rc.data||[],req=rr.data||[],cs=sc.data||[];setClients(cl);setRequests(req);setResponses(resData);setCcMessages(msgData);setCloudStorages(cs);_ccCache[org.id]={clients:cl,requests:req,responses:resData,ccMessages:msgData,cloudStorages:cs};}catch(e){console.error(e);if(gen===loadGenRef.current&&!_ccCache[org.id])setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadAll(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;if(!_ccCache[org.id])setLoading(true);setLoadError(null);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current&&!_ccCache[org.id]){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan').eq('org_id',org.id).order('name').limit(2000);var rr=await supabase.from('client_connect_requests').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(500);var sc=await supabase.from('org_cloud_storage').select('*').eq('org_id',org.id);var reqIds=(rr.data||[]).map(function(r){return r.id;});var resData=[],msgData=[];if(reqIds.length>0){var rres=await supabase.from('client_connect_responses').select('*').in('request_id',reqIds).limit(2000);var rmsg=await supabase.from('client_connect_messages').select('*').in('request_id',reqIds).order('created_at',{ascending:true}).limit(2000);resData=rres.data||[];msgData=rmsg.data||[];}var rt=await supabase.from('cc_form_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(200);var cl=rc.data||[],req=rr.data||[],cs=sc.data||[],ft=rt.data||[];setClients(cl);setRequests(req);setResponses(resData);setCcMessages(msgData);setCloudStorages(cs);setFormTemplates(ft);_ccCache[org.id]={clients:cl,requests:req,responses:resData,ccMessages:msgData,cloudStorages:cs,formTemplates:ft};}catch(e){console.error(e);if(gen===loadGenRef.current&&!_ccCache[org.id])setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   function getActiveStorage(){return cloudStorages.find(function(s){return s.is_active;})||null;}
   function getClientDefaultStorage(clientId){
@@ -15165,16 +15173,84 @@ function ClientConnectModule({org,supabase,cu}){
   }
 
   async function createRequest(){
-    if(!newTitle.trim()||!selClientId){showToast('Title and client required','err');return;}
+    if(!newTitle.trim()){showToast('Title required','err');return;}
+    if(createMode==='single'&&!selClientId){showToast('Select a client','err');return;}
+    if(createMode==='bulk'&&bulkClientIds.length===0){showToast('Select at least one client','err');return;}
     setCreating(true);
-    var eProv=getEffectiveProvider(selClientId);
-    var payload={org_id:org.id,client_id:selClientId,created_by:cu.id,title:newTitle.trim(),description:newDesc.trim()||null,questions:newQuestions,due_date:newDue||null,cloud_provider:eProv==='taskflow'?null:eProv};
-    var {data,error}=await supabase.from('client_connect_requests').insert(payload).select().single();
-    if(error){showToast(error.message,'err');setCreating(false);return;}
-    setRequests(function(p){return[data,...p];});
-    setNewTitle('');setNewDesc('');setNewDue('');setNewQuestions([]);setReqStorProvider(null);
+    function buildPayload(clientId){
+      var eProv=clientId?getEffectiveProvider(clientId):(getActiveStorage()?getActiveStorage().provider:'taskflow');
+      return{org_id:org.id,client_id:clientId,created_by:cu.id,title:newTitle.trim(),description:newDesc.trim()||null,questions:newQuestions,due_date:newDue||null,cloud_provider:eProv==='taskflow'?null:eProv,is_public:createMode==='public',link_row_id:(createMode==='single'&&linkRowId)?linkRowId:null};
+    }
+    if(createMode==='bulk'){
+      var rows=bulkClientIds.map(buildPayload);
+      var {data,error}=await supabase.from('client_connect_requests').insert(rows).select();
+      if(error){showToast(error.message,'err');setCreating(false);return;}
+      setRequests(function(p){return (data||[]).concat(p);});
+      showToast((data||[]).length+' requests created — copy each link from the client list.');
+    }else{
+      var payload=buildPayload(createMode==='public'?null:selClientId);
+      var res=await supabase.from('client_connect_requests').insert(payload).select().single();
+      if(res.error){showToast(res.error.message,'err');setCreating(false);return;}
+      setRequests(function(p){return[res.data,...p];});
+      showToast(createMode==='public'?'Public form created! Copy the link to share anywhere.':'Request created! Copy the link to share with client.');
+    }
+    setNewTitle('');setNewDesc('');setNewDue('');setNewQuestions([]);setReqStorProvider(null);setLinkRowId('');setBulkClientIds([]);
     setShowCreate(false);setCreating(false);
-    showToast('Request created! Copy the link to share with client.');
+  }
+
+  // ── Reusable form templates ──────────────────────────────────
+  async function saveAsTemplate(){
+    if(newQuestions.length===0){showToast('Add at least one question first','err');return;}
+    var nm=window.prompt('Template name (e.g. "ITR Document Collection"):',newTitle.trim()||'');
+    if(!nm||!nm.trim())return;
+    var payload={org_id:org.id,created_by:cu.id,name:nm.trim(),description:newDesc.trim()||null,questions:newQuestions};
+    var r=await supabase.from('cc_form_templates').insert(payload).select().single();
+    if(r.error){showToast(r.error.message,'err');return;}
+    setFormTemplates(function(p){return[r.data].concat(p);});
+    showToast('Template "'+nm.trim()+'" saved');
+  }
+  function applyTemplate(t){
+    if(!t)return;
+    if(!newTitle.trim())setNewTitle(t.name||'');
+    if(!newDesc.trim()&&t.description)setNewDesc(t.description);
+    // Re-key question ids so they're unique to this request
+    setNewQuestions((t.questions||[]).map(function(q,i){return Object.assign({},q,{id:(Date.now()+i)+''});}));
+  }
+  async function deleteTemplate(id){
+    if(!window.confirm('Delete this template?'))return;
+    var r=await supabase.from('cc_form_templates').delete().eq('id',id);
+    if(r.error){showToast('Only the creator can delete this template','err');return;}
+    setFormTemplates(function(p){return p.filter(function(t){return t.id!==id;});});
+  }
+
+  // ── Auto-fill: load open tasks for a client to optionally link ──
+  useEffect(function(){
+    if(!showCreate||createMode!=='single'||!selClientId){setLinkRows([]);return;}
+    var cancelled=false;
+    supabase.from('worksheet_rows').select('id,due_date,data,worksheet_id,status').eq('org_id',org.id).eq('client_id',selClientId).neq('status','completed').limit(50)
+      .then(function(r){if(!cancelled)setLinkRows(r.data||[]);});
+    return function(){cancelled=true;};
+  },[showCreate,createMode,selClientId,org.id]);
+
+  // Apply a client's submitted response to the linked task: mark Data Received + attach file links
+  async function applyResponseToTask(req,resp){
+    if(!req||!req.link_row_id){showToast('No task linked to this request','err');return;}
+    var rowRes=await supabase.from('worksheet_rows').select('id,data').eq('id',req.link_row_id).single();
+    if(rowRes.error||!rowRes.data){showToast('Linked task not found','err');return;}
+    var d=Object.assign({},rowRes.data.data||{});
+    // Attach a note + any uploaded files into the task's description/checklist
+    var ans=resp.answers||{};
+    var fileLinks=[];
+    (req.questions||[]).forEach(function(q){
+      var v=ans[q.id];
+      if(q.type==='file'&&v&&v.name){fileLinks.push((v.url?v.url:v.name));}
+    });
+    var stamp='Client Connect response received '+new Date().toLocaleDateString('en-IN')+(fileLinks.length?(' · files: '+fileLinks.join(', ')):'');
+    d.__description=(d.__description?d.__description+'\n\n':'')+stamp;
+    await supabase.from('worksheet_rows').update({data:d,status:'in_progress'}).eq('id',req.link_row_id);
+    await supabase.from('client_connect_requests').update({applied_at:new Date().toISOString()}).eq('id',req.id);
+    setRequests(function(p){return p.map(function(x){return x.id===req.id?Object.assign({},x,{applied_at:new Date().toISOString()}):x;});});
+    showToast('Applied to linked task — marked In Progress');
   }
 
   async function saveStorageConnection(){
@@ -15234,7 +15310,17 @@ function ClientConnectModule({org,supabase,cu}){
   return<div style={{display:'flex',height:'calc(100vh - 110px)',minHeight:0}}>
     {/* Sidebar */}
     <div style={{width:220,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',flexShrink:0}}>
-      <div style={{padding:'12px 12px 8px',borderBottom:'1px solid var(--tf-border)'}}>
+      {/* Section nav */}
+      <div style={{padding:'8px 8px 0',display:'flex',flexDirection:'column',gap:2}}>
+        {[{id:'public',icon:'🌐',label:'Public Forms',count:requests.filter(function(r){return r.is_public;}).length},{id:'templates',icon:'★',label:'Templates',count:formTemplates.length}].map(function(s){
+          var act=ccSection===s.id;
+          return<button key={s.id} onClick={function(){setCcSection(s.id);setSelClientId(null);}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',textAlign:'left',padding:'8px 10px',border:'none',borderRadius:8,background:act?'rgba(14,42,71,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700,color:act?'#0e2a47':'var(--tf-text-sub)'}}>
+            <span>{s.icon}</span><span style={{flex:1}}>{s.label}</span>{s.count>0&&<span style={{fontSize:10,background:'rgba(14,42,71,0.12)',borderRadius:10,padding:'1px 7px',color:'#0e2a47'}}>{s.count}</span>}
+          </button>;
+        })}
+      </div>
+      <div style={{padding:'8px 12px',borderBottom:'1px solid var(--tf-border)',marginTop:4}}>
+        <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6,padding:'0 2px'}}>Clients</div>
         <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients…" style={{width:'100%',boxSizing:'border-box',padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none'}}/>
       </div>
       <div style={{flex:1,overflowY:'auto'}}>
@@ -15243,7 +15329,7 @@ function ClientConnectModule({org,supabase,cu}){
           var cReqs=requests.filter(function(r){return r.client_id===c.id;});
           var pending=cReqs.filter(function(r){return r.status==='sent';}).length;
           var isActive=c.id===selClientId;
-          return<button key={c.id} onClick={function(){setSelClientId(c.id);setMainTab('requests');}} style={{width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:isActive?'rgba(14,42,71,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:isActive?'3px solid #0e2a47':'3px solid transparent'}}>
+          return<button key={c.id} onClick={function(){setSelClientId(c.id);setMainTab('requests');setCcSection('clients');}} style={{width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:isActive&&ccSection==='clients'?'rgba(14,42,71,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:isActive&&ccSection==='clients'?'3px solid #0e2a47':'3px solid transparent'}}>
             <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
             <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{cReqs.length} req{cReqs.length!==1?'s':''}{pending>0?' · '+pending+' pending':''}</div>
           </button>;
@@ -15253,15 +15339,84 @@ function ClientConnectModule({org,supabase,cu}){
 
     {/* Main area */}
     <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0}}>
-      {!selClient?
+      {ccSection==='templates'?
+        <div style={{flex:1,overflowY:'auto',padding:20}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap'}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>★ Form Templates</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Reusable question sets — load one when creating a request, for one client or many.</div>
+            </div>
+            <button onClick={function(){setCreateMode('single');setNewQuestions([]);setNewTitle('');setNewDesc('');setShowCreate(true);}} style={{padding:'8px 14px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>+ Build &amp; Save New</button>
+          </div>
+          {formTemplates.length===0?
+            <div style={{textAlign:'center',padding:'48px 0',color:'var(--tf-text-sub)'}}>
+              <div style={{fontSize:28,marginBottom:8}}>★</div>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>No templates yet</div>
+              <div style={{fontSize:12,marginTop:4}}>Build a question set in any request, then click "★ Save as template".</div>
+            </div>:
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+              {formTemplates.map(function(t){
+                return<div key={t.id} style={{border:'1px solid var(--tf-border)',borderRadius:10,padding:14,background:'var(--tf-surface)'}}>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8}}>
+                    <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{t.name}</div>
+                    {t.created_by===cu.id&&<button onClick={function(){deleteTemplate(t.id);}} title="Delete" style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:14,lineHeight:1}}>×</button>}
+                  </div>
+                  {t.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:3}}>{t.description}</div>}
+                  <div style={{fontSize:11,color:'var(--tf-text-sub)',margin:'8px 0'}}>📝 {(t.questions||[]).length} question{(t.questions||[]).length!==1?'s':''}</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:4,marginBottom:10}}>
+                    {(t.questions||[]).slice(0,5).map(function(q,i){return<span key={i} style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 6px'}}>{q.label||q.type}</span>;})}
+                  </div>
+                  <button onClick={function(){setCreateMode('single');applyTemplate(t);setShowCreate(true);}} style={{width:'100%',padding:'7px 0',background:'rgba(14,42,71,0.08)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#0e2a47',fontFamily:'inherit'}}>Use this template →</button>
+                </div>;
+              })}
+            </div>}
+        </div>:
+      ccSection==='public'?
+        (function(){var pubReqs=requests.filter(function(r){return r.is_public;});return
+        <div style={{flex:1,overflowY:'auto',padding:20}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap'}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>🌐 Public Forms</div>
+              <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Open intake forms — anyone with the link can submit, no client account needed.</div>
+            </div>
+            <button onClick={function(){setCreateMode('public');setNewQuestions([]);setNewTitle('');setNewDesc('');setShowCreate(true);}} style={{padding:'8px 14px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>+ New Public Form</button>
+          </div>
+          {pubReqs.length===0?
+            <div style={{textAlign:'center',padding:'48px 0',color:'var(--tf-text-sub)'}}>
+              <div style={{fontSize:28,marginBottom:8}}>🌐</div>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>No public forms yet</div>
+              <div style={{fontSize:12,marginTop:4}}>Create a lead-capture or onboarding form anyone can fill from a link.</div>
+            </div>:
+            pubReqs.map(function(req){
+              var link=getShareLink(req.token);var rCount=reqResponseCount(req.id);var questions=req.questions||[];
+              return<div key={req.id} style={{border:'1px solid var(--tf-border)',borderRadius:10,padding:14,marginBottom:10,background:'var(--tf-surface)'}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:6}}>
+                  <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{req.title}</div>
+                  {rCount>0&&<span style={{flexShrink:0,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700,background:'#22c55e20',color:'#22c55e'}}>{rCount} response{rCount!==1?'s':''}</span>}
+                </div>
+                {req.description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8}}>{req.description}</div>}
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>📝 {questions.length} question{questions.length!==1?'s':''}</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <input readOnly value={link} style={{flex:1,minWidth:0,padding:'6px 10px',border:'1px solid var(--tf-border)',borderRadius:7,background:'var(--tf-bg)',color:'var(--tf-text-sub)',fontSize:11,fontFamily:'monospace'}}/>
+                  <button onClick={function(){copyLink(req.token);}} style={{padding:'6px 12px',background:'#0e2a47',border:'none',borderRadius:7,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit',flexShrink:0}}>Copy Link</button>
+                  {rCount>0&&<button onClick={function(){setShowResponses(req);}} style={{padding:'6px 12px',background:'#22c55e20',border:'1px solid #22c55e40',borderRadius:7,cursor:'pointer',fontSize:11,fontWeight:700,color:'#22c55e',fontFamily:'inherit',flexShrink:0}}>View Responses</button>}
+                </div>
+              </div>;
+            })}
+        </div>;})():
+      !selClient?
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:12,color:'var(--tf-text-sub)',textAlign:'center',padding:24}}>
           <div style={{fontSize:40}}>📋</div>
           <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Client Connect</div>
           <div style={{fontSize:13,maxWidth:340}}>Send Q&A questionnaires and data requests to clients via a simple shareable link — no login required. Files go to your own cloud storage.</div>
-          <button onClick={function(){setShowStorage(true);}} style={{marginTop:8,padding:'8px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
-            ⚙ Storage Settings {(function(){var a=getActiveStorage();return a?'('+PROVIDER_LABELS[a.provider]+')':'(TaskFlow Storage)';})()}
-          </button>
-          <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>← Select a client to start</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'center',marginTop:8}}>
+            <button onClick={function(){setCreateMode('bulk');setNewQuestions([]);setNewTitle('');setNewDesc('');setBulkClientIds([]);setShowCreate(true);}} style={{padding:'8px 16px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>👥 Bulk Send</button>
+            <button onClick={function(){setCreateMode('public');setNewQuestions([]);setNewTitle('');setNewDesc('');setShowCreate(true);}} style={{padding:'8px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'var(--tf-text)',fontFamily:'inherit'}}>🌐 Public Form</button>
+            <button onClick={function(){setShowStorage(true);}} style={{padding:'8px 16px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
+              ⚙ Storage {(function(){var a=getActiveStorage();return a?'('+PROVIDER_LABELS[a.provider]+')':'(TaskFlow)';})()}
+            </button>
+          </div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)'}}>← Select a client, or use Bulk / Public above</div>
         </div>:
         <>
           <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
@@ -15277,7 +15432,7 @@ function ClientConnectModule({org,supabase,cu}){
               <button onClick={function(){setShowStorage(true);}} style={{padding:'6px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
                 ⚙ Storage
               </button>
-              <button onClick={function(){setShowCreate(true);}} style={{padding:'6px 14px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>
+              <button onClick={function(){setCreateMode('single');setLinkRowId('');setShowCreate(true);}} style={{padding:'6px 14px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>
                 + New Request
               </button>
             </div>
@@ -15350,10 +15505,47 @@ function ClientConnectModule({org,supabase,cu}){
     {/* Create Request Modal */}
     {showCreate&&<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
       <div style={{background:'var(--tf-bg)',borderRadius:14,padding:24,width:560,maxWidth:'95vw',maxHeight:'90vh',overflowY:'auto'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-          <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>New Client Request</div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>{createMode==='public'?'New Public Form':createMode==='bulk'?'Send to Multiple Clients':'New Client Request'}</div>
           <button onClick={function(){setShowCreate(false);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--tf-text-sub)',lineHeight:1}}>×</button>
         </div>
+
+        {/* Mode selector */}
+        <div style={{display:'flex',gap:6,marginBottom:14}}>
+          {[{id:'single',label:'One Client',icon:'👤'},{id:'bulk',label:'Many Clients',icon:'👥'},{id:'public',label:'Public Form',icon:'🌐'}].map(function(m){
+            var act=createMode===m.id;
+            return<button key={m.id} onClick={function(){setCreateMode(m.id);}} style={{flex:1,padding:'7px 8px',border:'1px solid',borderColor:act?'#0e2a47':'var(--tf-border)',background:act?'#0e2a47':'var(--tf-surface)',color:act?'#fff':'var(--tf-text-sub)',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>{m.icon} {m.label}</button>;
+          })}
+        </div>
+
+        {/* Template loader */}
+        {formTemplates.length>0&&<div style={{marginBottom:12,display:'flex',gap:8,alignItems:'center'}}>
+          <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',flexShrink:0}}>★ Start from template</span>
+          <select value="" onChange={function(e){var t=formTemplates.find(function(x){return x.id===e.target.value;});if(t)applyTemplate(t);e.target.value='';}} style={{flex:1,padding:'7px 10px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',cursor:'pointer',outline:'none'}}>
+            <option value="">Choose a saved template…</option>
+            {formTemplates.map(function(t){return<option key={t.id} value={t.id}>{t.name} ({(t.questions||[]).length} Q)</option>;})}
+          </select>
+        </div>}
+
+        {/* Bulk client multi-select */}
+        {createMode==='bulk'&&<div style={{marginBottom:12,border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden'}}>
+          <div style={{padding:'8px 10px',background:'var(--tf-surface)',display:'flex',alignItems:'center',gap:8}}>
+            <input value={bulkSearch} onChange={function(e){setBulkSearch(e.target.value);}} placeholder="Search clients…" style={{flex:1,padding:'6px 9px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+            <span style={{fontSize:11,fontWeight:700,color:bulkClientIds.length?'#0e2a47':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{bulkClientIds.length} selected</span>
+          </div>
+          <div style={{maxHeight:160,overflowY:'auto'}}>
+            {clients.filter(function(c){var q=bulkSearch.toLowerCase();return !q||(c.display_name||c.name||'').toLowerCase().indexOf(q)>=0;}).map(function(c){
+              var on=bulkClientIds.indexOf(c.id)>=0;
+              return<div key={c.id} onClick={function(){setBulkClientIds(function(p){return on?p.filter(function(x){return x!==c.id;}):p.concat([c.id]);});}} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',borderTop:'1px solid var(--tf-border)',background:on?'rgba(14,42,71,0.06)':'transparent'}}>
+                <div style={{width:15,height:15,borderRadius:4,border:'2px solid',borderColor:on?'#0e2a47':'var(--tf-border)',background:on?'#0e2a47':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{on&&<span style={{color:'#fff',fontSize:9,fontWeight:900}}>✓</span>}</div>
+                <span style={{fontSize:12,color:'var(--tf-text)'}}>{c.display_name||c.name}</span>
+              </div>;
+            })}
+          </div>
+        </div>}
+
+        {createMode==='public'&&<div style={{marginBottom:12,padding:'9px 12px',background:'rgba(59,130,246,0.07)',border:'1px solid rgba(59,130,246,0.25)',borderRadius:8,fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.5}}>🌐 A public intake form — anyone with the link can fill it (no client account needed). Great for lead capture or new-client onboarding. Responses appear under "Public Forms".</div>}
+
         <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Title *</label>
         <input value={newTitle} onChange={function(e){setNewTitle(e.target.value);}} placeholder="e.g. Documents needed for ITR filing" style={Object.assign({},INP2,{marginBottom:12})}/>
         <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Description</label>
@@ -15361,9 +15553,21 @@ function ClientConnectModule({org,supabase,cu}){
         <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>Due Date</label>
         <input type="date" value={newDue} onChange={function(e){setNewDue(e.target.value);}} style={{padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none',marginBottom:16}}/>
 
+        {/* Link to task — auto-fill on response (single client only) */}
+        {createMode==='single'&&selClientId&&linkRows.length>0&&<div style={{marginBottom:16}}>
+          <label style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4}}>🔗 Link to a task <span style={{fontWeight:500}}>(optional — when the client responds, the task is marked In Progress and files noted)</span></label>
+          <select value={linkRowId} onChange={function(e){setLinkRowId(e.target.value);}} style={{width:'100%',boxSizing:'border-box',padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',cursor:'pointer',outline:'none'}}>
+            <option value="">No task link</option>
+            {linkRows.map(function(r){var d=r.data||{};var label=(d.__title||'Task')+(r.due_date?' · due '+r.due_date:'');return<option key={r.id} value={r.id}>{label}</option>;})}
+          </select>
+        </div>}
+
         <div style={{marginBottom:14}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-            <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Questions</div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,gap:8,flexWrap:'wrap'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Questions</div>
+              {newQuestions.length>0&&<button onClick={saveAsTemplate} title="Save these questions as a reusable template" style={{padding:'3px 9px',background:'rgba(14,42,71,0.08)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,color:'#0e2a47',fontFamily:'inherit'}}>★ Save as template</button>}
+            </div>
             <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
               {[{t:'text',l:'Short Text'},{t:'textarea',l:'Long Text'},{t:'date',l:'Date'},{t:'yesno',l:'Yes/No'},{t:'file',l:'File Upload'}].map(function(qt){
                 return<button key={qt.t} onClick={function(){addQuestion(qt.t);}} style={{padding:'3px 8px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>+ {qt.l}</button>;
@@ -15514,9 +15718,12 @@ function ClientConnectModule({org,supabase,cu}){
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
           <div>
             <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)'}}>{showResponses.title}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{reqResponses.length} response{reqResponses.length!==1?'s':''}</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{reqResponses.length} response{reqResponses.length!==1?'s':''}{showResponses.link_row_id?(showResponses.applied_at?' · ✓ applied to task':' · 🔗 task linked'):''}</div>
           </div>
-          <button onClick={function(){setShowResponses(null);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--tf-text-sub)',lineHeight:1}}>×</button>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {showResponses.link_row_id&&reqResponses.length>0&&!showResponses.applied_at&&<button onClick={function(){applyResponseToTask(showResponses,reqResponses[0]);}} title="Mark the linked task In Progress and note uploaded files" style={{padding:'6px 12px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>🔗 Apply to task</button>}
+            <button onClick={function(){setShowResponses(null);}} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--tf-text-sub)',lineHeight:1}}>×</button>
+          </div>
         </div>
         {reqResponses.length===0?<div style={{textAlign:'center',padding:'32px 0',color:'var(--tf-text-sub)',fontSize:13}}>No responses yet</div>:
         reqResponses.map(function(res){
