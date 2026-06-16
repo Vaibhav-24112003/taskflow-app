@@ -11416,6 +11416,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           var cells=[];for(var i=0;i<42;i++){var dd=new Date(firstCell);dd.setDate(dd.getDate()+i);cells.push(dd);}
           var monthLabel=today.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
           var monthRows={};railFiltered.forEach(function(r){if(!r.due_date)return;(monthRows[r.due_date]=monthRows[r.due_date]||[]).push(r);});
+          var deadlineMap={};upcomingDeadlines.forEach(function(dl){var ds=dl.date.getFullYear()+'-'+String(dl.date.getMonth()+1).padStart(2,'0')+'-'+String(dl.date.getDate()).padStart(2,'0');if(!deadlineMap[ds])deadlineMap[ds]=[];deadlineMap[ds].push(dl);});
           var noDate=railFiltered.filter(function(r){return !r.due_date;});
           return<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
@@ -11428,8 +11429,15 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 var dStr=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
                 var inMonth=dd.getMonth()===today.getMonth();var isT=dStr===todayStr;
                 var dayRows=monthRows[dStr]||[];
-                return<div key={i} style={{minHeight:88,background:isT?'rgba(14,42,71,0.08)':'var(--tf-panel)',border:'1px solid '+(isT?'#0e2a47':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
+                var dayDeadlines=deadlineMap[dStr]||[];
+                return<div key={i} style={{minHeight:88,background:isT?'rgba(14,42,71,0.08)':'var(--tf-panel)',border:'1px solid '+(isT?'#0e2a47':dayDeadlines.length?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
                   <div style={{fontSize:11,fontWeight:isT?800:600,color:isT?'#0e2a47':'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{dd.getDate()}</div>
+                  {dayDeadlines.map(function(dl,di){
+                    var dlc=dl.daysLeft<=3?'#ef4444':dl.daysLeft<=7?'#f59e0b':'#8b5cf6';
+                    return<div key={'dl'+di} title={'Statutory deadline: '+dl.name} style={{fontSize:9,fontWeight:700,padding:'2px 5px',background:dlc+'18',color:dlc,borderRadius:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',borderLeft:'2px solid '+dlc}}>
+                      ⚖ {dl.name}
+                    </div>;
+                  })}
                   {dayRows.slice(0,3).map(function(r){
                     var rd=r.data||{};var c=clientMap[r.client_id]||{};
                     var isOver=r.due_date<todayStr;
