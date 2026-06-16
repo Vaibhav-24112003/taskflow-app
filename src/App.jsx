@@ -11696,7 +11696,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           {/* Client + Work Type row */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <div>
-              <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Client *</label>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+                <label style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Client *</label>
+                {onGoModule&&<button onClick={function(){resetCreateForm();onGoModule('masterdata','clients');}}
+                  style={{background:'none',border:'none',color:'#3b82f6',fontSize:10,fontWeight:800,cursor:'pointer',padding:0,fontFamily:'inherit'}}>+ New client</button>}
+              </div>
               <select value={ctClientId} onChange={function(e){setCtClientId(e.target.value);}}
                 style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none'}}>
                 <option value="">— Select a client —</option>
@@ -11704,7 +11708,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               </select>
             </div>
             <div>
-              <label style={{display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>Work Type</label>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+                <label style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Work Type</label>
+                {onGoModule&&<button onClick={function(){resetCreateForm();onGoModule('setup');}}
+                  style={{background:'none',border:'none',color:'#3b82f6',fontSize:10,fontWeight:800,cursor:'pointer',padding:0,fontFamily:'inherit'}}>+ New type</button>}
+              </div>
               <select value={ctWorkType} onChange={function(e){setCtWorkType(e.target.value);}}
                 style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none'}}>
                 <option value="">— Unclassified (classify later) —</option>
