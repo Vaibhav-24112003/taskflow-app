@@ -4456,6 +4456,54 @@ function computeStatutoryDeadlines(configs, today, daysAhead) {
   return results.filter(function(r){var k=r.name+r.date.toISOString().slice(0,10);if(seen.has(k))return false;seen.add(k);return true;}).slice(0,10);
 }
 
+// Finds ALL statutory deadlines that fall within a specific calendar month.
+// Unlike computeStatutoryDeadlines (next upcoming per work type), this checks
+// all periods whose filing date lands inside the target month — handles FY maps
+// where filing month ≠ period month (e.g. May-period TDS due July 7).
+function computeDeadlinesForMonth(configs, calYear, calMonth) {
+  var results=[];
+  var realToday=new Date();realToday.setHours(0,0,0,0);
+  (configs||[]).filter(function(c){return c.is_active&&(c.due_day||(c.due_dates&&c.due_dates.length));}).forEach(function(cfg){
+    var freq=cfg.frequency,dueDay=cfg.due_day,dueMonth=cfg.due_month;
+    var firstDue=(cfg.due_dates||[])[0];
+    function tryPush(dl){
+      if(dl.getFullYear()===calYear&&dl.getMonth()===calMonth-1){
+        var daysLeft=Math.round((dl-realToday)/86400000);
+        results.push({date:dl,name:cfg.name,daysLeft:daysLeft});
+      }
+    }
+    if(freq==='monthly'){
+      var hasMap=firstDue&&firstDue.monthly_map;
+      // Scan periods from 3 months back to 3 forward to catch "filing month ≠ period month"
+      for(var offset=-3;offset<=3;offset++){
+        var refDate=new Date(calYear,calMonth-1+offset,1);
+        var pm=refDate.getMonth()+1;var refYear=refDate.getFullYear();
+        var day=dueDay,dlMonth=pm,dlYear=refYear;
+        if(hasMap&&firstDue.monthly_map[pm]){
+          var e=firstDue.monthly_map[pm];day=e.day||day;
+          if(e.due_month){dlMonth=e.due_month;if(e.due_month<pm)dlYear=refYear+1;}
+        }
+        if(!day)continue;
+        tryPush(new Date(dlYear,dlMonth-1,day));
+      }
+    }else if(freq==='yearly'){
+      var m=dueMonth||7,d=dueDay||31;
+      tryPush(new Date(calYear,m-1,d));
+      tryPush(new Date(calYear-1,m-1,d));
+    }else if(freq==='quarterly'){
+      var hasQMap=firstDue&&firstDue.quarterly_map;
+      var qDates=hasQMap?[1,2,3,4].map(function(q){var e=firstDue.quarterly_map[q]||firstDue.quarterly_map[String(q)];return(e&&e.day)?{day:e.day,month:e.due_month}:null;}).filter(Boolean)
+        :[{day:dueDay||31,month:7},{day:dueDay||31,month:10},{day:dueDay||31,month:1},{day:dueDay||31,month:5}];
+      qDates.forEach(function(qd){
+        [calYear-1,calYear,calYear+1].forEach(function(y){tryPush(new Date(y,qd.month-1,qd.day));});
+      });
+    }
+  });
+  results.sort(function(a,b){return a.date-b.date;});
+  var seen=new Set();
+  return results.filter(function(r){var k=r.name+r.date.toISOString().slice(0,10);if(seen.has(k))return false;seen.add(k);return true;});
+}
+
 function getPeriodLabel(freq, year, month, quarter){
   if(freq==='once')     return 'One-time';
   if(freq==='monthly'){
@@ -10429,6 +10477,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('board'); // 'list' | 'board' | 'calendar' | 'grid' | 'urgency'
   var [calMonthOffset,setCalMonthOffset]=useState(0); // 0=current month, -1=prev, +1=next …
+  var [editingDueDateId,setEditingDueDateId]=useState(null); // row.id whose due date is being edited inline
   var [planOpen,setPlanOpen]=useState(false); // Plan My Day side panel — collapsed by default to give the board full width
   var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
   // Create Task modal state
@@ -10645,6 +10694,13 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     }else{
       setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,updates):r;});});
     }
+  }
+
+  async function updateDueDate(rowId,newDate){
+    var val=newDate||null;
+    await supabase.from('worksheet_rows').update({due_date:val}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{due_date:val}):r;});});
+    setEditingDueDateId(null);
   }
 
   var SC={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
@@ -10959,7 +11015,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       {/* Scrollable body */}
       <div style={{flex:1,overflowY:'auto',padding:'14px 18px'}}>
         {/* Statutory Deadlines strip */}
-        {upcomingDeadlines.length>0&&<div style={{marginBottom:14,padding:'10px 14px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10}}>
+        {dashView!=='calendar'&&upcomingDeadlines.length>0&&<div style={{marginBottom:14,padding:'10px 14px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10}}>
           <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:7}}>⚖ Statutory Deadlines</div>
           <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:2}}>
             {upcomingDeadlines.map(function(d,i){
@@ -11113,6 +11169,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                       {!isEditing?<div>
                         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}>
                           <span style={{fontSize:10,fontWeight:800,color:PC[priority],background:priority==='urgent'?'rgba(239,68,68,0.1)':priority==='high'?'rgba(245,158,11,0.1)':priority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{priority}</span>
+                          {editingDueDateId===row.id
+                            ?<input type="date" autoFocus defaultValue={row.due_date||''} onChange={function(e){updateDueDate(row.id,e.target.value);}} onBlur={function(){setEditingDueDateId(null);}}
+                              style={{fontSize:11,background:'var(--tf-surface)',border:'1px solid #0e2a47',borderRadius:8,padding:'2px 8px',color:'var(--tf-text)',outline:'none',fontFamily:'inherit'}}/>
+                            :<button onClick={function(){setEditingDueDateId(row.id);}} title="Click to change due date"
+                              style={{fontSize:10,fontWeight:700,color:row.due_date&&row.due_date<todayStr?'#ef4444':'var(--tf-text-sub)',background:row.due_date&&row.due_date<todayStr?'rgba(239,68,68,0.1)':'rgba(148,163,184,0.1)',border:'1px solid var(--tf-border)',padding:'2px 10px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>📅 {row.due_date?(new Date(row.due_date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})):'Set due date'}</button>}
                           {rd.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📞 {rd.__contact}</span>}
                           <button onClick={function(){startEditing(row);}}
                             style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit</button>
@@ -11417,7 +11478,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
           var firstCell=new Date(cd);firstCell.setDate(firstCell.getDate()-startOffset);
           var cells=[];for(var i=0;i<42;i++){var dd=new Date(firstCell);dd.setDate(dd.getDate()+i);cells.push(dd);}
           var monthLabel=calBase.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
-          var calDeadlines=computeStatutoryDeadlines(workTypeConfigs,calBase,45);
+          var calDeadlines=computeDeadlinesForMonth(workTypeConfigs,calBase.getFullYear(),calBase.getMonth()+1);
           var monthRows={};railFiltered.forEach(function(r){if(!r.due_date)return;(monthRows[r.due_date]=monthRows[r.due_date]||[]).push(r);});
           var deadlineMap={};calDeadlines.forEach(function(dl){var ds=dl.date.getFullYear()+'-'+String(dl.date.getMonth()+1).padStart(2,'0')+'-'+String(dl.date.getDate()).padStart(2,'0');if(!deadlineMap[ds])deadlineMap[ds]=[];deadlineMap[ds].push(dl);});
           var noDate=railFiltered.filter(function(r){return !r.due_date;});
