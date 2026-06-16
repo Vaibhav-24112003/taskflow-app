@@ -11683,10 +11683,10 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <span style={{fontSize:20}}>🗂️</span>
             <div style={{flex:1}}>
               <div style={{fontSize:12,fontWeight:800,color:'#1e40af',marginBottom:2}}>No work types set up</div>
-              <div style={{fontSize:11,color:'#1d4ed8'}}>Tasks will be saved as Unclassified. Set up work types in Set-up to organise by filing type.</div>
+              <div style={{fontSize:11,color:'#1d4ed8'}}>Tasks will be saved as Unclassified. Add work types in Master Data → Work Types to organise by filing type.</div>
             </div>
-            <button onClick={function(){resetCreateForm();if(onGoModule)onGoModule('setup');}}
-              style={{background:'#3b82f6',border:'none',borderRadius:8,padding:'7px 14px',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>Go to Set-up →</button>
+            <button onClick={function(){resetCreateForm();if(onGoModule)onGoModule('masterdata','worktypes');}}
+              style={{background:'#3b82f6',border:'none',borderRadius:8,padding:'7px 14px',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>Go to Work Types →</button>
           </div>}
           {/* Client + Work Type row */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
@@ -11705,7 +11705,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
                 <label style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Work Type</label>
-                {onGoModule&&<button onClick={function(){resetCreateForm();onGoModule('setup');}}
+                {onGoModule&&<button onClick={function(){resetCreateForm();onGoModule('masterdata','worktypes');}}
                   style={{background:'none',border:'none',color:'#3b82f6',fontSize:10,fontWeight:800,cursor:'pointer',padding:0,fontFamily:'inherit'}}>+ New type</button>}
               </div>
               <select value={ctWorkType} onChange={function(e){setCtWorkType(e.target.value);}}
