@@ -10909,11 +10909,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap'}}>
               {isSelf?greet+', '+firstName:viewingName+"'s Work"}
             </span>
-            <span style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:8,fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>
-              {stats.total} tasks
-              {stats.overdue>0&&<span style={{color:'#ef4444'}}> · {stats.overdue} overdue</span>}
-              {stats.today>0&&<span style={{color:'#f59e0b'}}> · {stats.today} due today</span>}
-            </span>
           </div>
           {/* Divider */}
           <div style={{width:1,height:16,background:'var(--tf-border)',flexShrink:0}}/>
