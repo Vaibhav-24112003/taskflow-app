@@ -10461,7 +10461,7 @@ var _blkBtn={background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'
 var _miniBtn={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'3px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700};
 var _addBtn={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'};
 
-function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan,allWorkspaces}){
+function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,onOpenWorkType,orgGroups,orgGroupMemberships,onGoToPlan,allWorkspaces,onGoModule}){
   var _dc=_dashCache[org.id]||null;
   var [rows,setRows]=useState(_dc?_dc.rows:[]);
   var [clients,setClients]=useState(_dc?_dc.clients:[]);
@@ -10498,6 +10498,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [boardSearch,setBoardSearch]=useState('');
   var [colOrder,setColOrder]=useState({}); // {colId: [rowId, ...]} — manual sort order within column
   var [dragSrc,setDragSrc]=useState(null); // {rowId, colId, idx} for intra-column reorder
+  var [dragOverCardId,setDragOverCardId]=useState(null); // card being hovered during drag (shows insert line)
   var wfHierarchy=workflowHierarchy||[];
   var activeConfigs=(workTypeConfigs||[]).filter(function(c){return c.is_active;});
   var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):[{key:'__assignee',label:'Assignee'}];
@@ -11014,23 +11015,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
       {/* Scrollable body */}
       <div style={{flex:1,overflowY:'auto',padding:'14px 18px'}}>
-        {/* Statutory Deadlines strip */}
-        {dashView!=='calendar'&&upcomingDeadlines.length>0&&<div style={{marginBottom:14,padding:'10px 14px',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10}}>
-          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:7}}>⚖ Statutory Deadlines</div>
-          <div style={{display:'flex',gap:6,overflowX:'auto',paddingBottom:2}}>
-            {upcomingDeadlines.map(function(d,i){
-              var c=d.daysLeft<=3?'#ef4444':d.daysLeft<=7?'#f59e0b':d.daysLeft<=14?'#8b5cf6':'#64748b';
-              var bg=d.daysLeft<=3?'rgba(239,68,68,0.07)':d.daysLeft<=7?'rgba(245,158,11,0.07)':d.daysLeft<=14?'rgba(139,92,246,0.07)':'var(--tf-surface)';
-              var ds=d.date.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
-              var badge=d.daysLeft===0?'Today':d.daysLeft===1?'Tmrw':d.daysLeft+'d';
-              return<div key={i} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:bg,border:'1px solid '+c+'44',borderRadius:20,flexShrink:0,cursor:'default'}}>
-                <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{d.name}</span>
-                <span style={{fontSize:9,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{ds}</span>
-                <span style={{fontSize:9,fontWeight:800,color:c,background:c+'18',padding:'1px 5px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{badge}</span>
-              </div>;
-            })}
-          </div>
-        </div>}
         {/* Quick-add bar */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'var(--tf-panel)',border:'1px dashed var(--tf-border)',borderRadius:10,marginBottom:14}}>
           <span style={{fontSize:14,color:'var(--tf-text-sub)',fontWeight:700}}>+</span>
@@ -11279,6 +11263,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='move';}}
               onDrop={function(e){
                 e.preventDefault();
+                setDragOverCardId(null);
                 var id=e.dataTransfer.getData('text/plain');
                 if(!id)return;
                 if(dragSrc&&dragSrc.colId===col.id){
@@ -11292,6 +11277,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   setDragSrc(null);
                 }else{
                   updateStatus(id,col.id);
+                  setDragSrc(null);
                 }
               }}
               style={{flex:'0 0 300px',background:col.bg,border:'1px solid var(--tf-border)',borderTop:'3px solid '+col.color,borderRadius:10,display:'flex',flexDirection:'column',minHeight:120}}>
@@ -11324,14 +11310,19 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   if(!matchesFilter)return null;
                   return<div key={r.id}
                     onDragOver={function(e){
-                      if(dragSrc&&dragSrc.colId===col.id&&dragSrc.rowId!==r.id){
+                      if(dragSrc&&dragSrc.rowId!==r.id){
                         e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect='move';
+                        setDragOverCardId(r.id);
                       }
                     }}
+                    onDragLeave={function(){setDragOverCardId(null);}}
                     onDrop={function(e){
-                      if(dragSrc&&dragSrc.colId===col.id&&dragSrc.rowId!==r.id){
-                        e.preventDefault();e.stopPropagation();
-                        var srcId=dragSrc.rowId;
+                      setDragOverCardId(null);
+                      if(!dragSrc||dragSrc.rowId===r.id)return;
+                      e.preventDefault();e.stopPropagation();
+                      var srcId=dragSrc.rowId;
+                      if(dragSrc.colId===col.id){
+                        // intra-column reorder
                         setColOrder(function(prev){
                           var cur=colRows.map(function(x){return x.id;});
                           var filtered=cur.filter(function(x){return x!==srcId;});
@@ -11339,13 +11330,24 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                           filtered.splice(tgtIdx,0,srcId);
                           return Object.assign({},prev,{[col.id]:filtered});
                         });
-                        setDragSrc(null);
+                      }else{
+                        // cross-column: change status + place before this card
+                        updateStatus(srcId,col.id);
+                        setColOrder(function(prev){
+                          var cur=(prev[col.id]||colRows.map(function(x){return x.id;})).filter(function(x){return x!==srcId;});
+                          var tgtIdx=cur.indexOf(r.id);
+                          cur.splice(tgtIdx>=0?tgtIdx:cur.length,0,srcId);
+                          return Object.assign({},prev,{[col.id]:cur});
+                        });
                       }
+                      setDragSrc(null);
                     }}>
+                    {/* Drop insert line */}
+                    {dragOverCardId===r.id&&dragSrc&&<div style={{height:3,background:'#3b82f6',borderRadius:2,margin:'0 0 4px 0'}}/>}
                     {/* Card */}
                     <div draggable={!isExpanded}
                       onDragStart={function(e){if(isExpanded){e.preventDefault();return;}e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';setDragSrc({rowId:r.id,colId:col.id,idx:rIdx});}}
-                      onDragEnd={function(){setDragSrc(null);}}
+                      onDragEnd={function(){setDragSrc(null);setDragOverCardId(null);}}
                       onClick={function(){toggleExpand(r.id);}}
                       style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(isOver?'#ef4444':col.color),borderRadius:8,padding:'10px 12px',cursor:'pointer',transition:'box-shadow 0.15s',boxShadow:isExpanded?'0 4px 16px rgba(14,42,71,0.12)':'none'}}
                       onMouseEnter={function(e){if(!isExpanded)e.currentTarget.style.boxShadow='0 2px 8px rgba(14,42,71,0.1)';}}
@@ -11381,6 +11383,11 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                       {!isEditing?<div>
                         <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
                           <span style={{fontSize:10,fontWeight:800,color:PC[priority],background:priority==='urgent'?'rgba(239,68,68,0.1)':priority==='high'?'rgba(245,158,11,0.1)':priority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 8px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{priority}</span>
+                          {editingDueDateId===r.id
+                            ?<input type="date" autoFocus defaultValue={r.due_date||''} onClick={function(e){e.stopPropagation();}} onChange={function(e){updateDueDate(r.id,e.target.value);}} onBlur={function(){setEditingDueDateId(null);}}
+                              style={{fontSize:11,background:'var(--tf-surface)',border:'1px solid #0e2a47',borderRadius:8,padding:'2px 8px',color:'var(--tf-text)',outline:'none',fontFamily:'inherit'}}/>
+                            :<button onClick={function(e){e.stopPropagation();setEditingDueDateId(r.id);}} title="Click to change due date"
+                              style={{fontSize:10,fontWeight:700,color:isOver?'#ef4444':'var(--tf-text-sub)',background:isOver?'rgba(239,68,68,0.1)':'rgba(148,163,184,0.1)',border:'1px solid var(--tf-border)',padding:'2px 8px',borderRadius:10,cursor:'pointer',fontFamily:'inherit'}}>📅 {r.due_date?r.due_date.slice(5):'Set date'}</button>}
                           {rd.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>📞 {rd.__contact}</span>}
                           <div style={{marginLeft:'auto',display:'flex',gap:6}}>
                             <select value={r.status||'pending'} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updateStatus(r.id,e.target.value);}}
@@ -11667,6 +11674,25 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
         {/* Body */}
         <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:14}}>
+          {/* Empty-state banners for new orgs */}
+          {allClients.length===0&&<div style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:20}}>👥</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:800,color:'#92400e',marginBottom:2}}>No clients yet</div>
+              <div style={{fontSize:11,color:'#78350f'}}>Add your clients first so you can assign tasks to them.</div>
+            </div>
+            <button onClick={function(){resetCreateForm();if(onGoModule)onGoModule('masterdata','clients');}}
+              style={{background:'#f59e0b',border:'none',borderRadius:8,padding:'7px 14px',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>Go to Clients →</button>
+          </div>}
+          {allClients.length>0&&activeConfigs.length===0&&<div style={{background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.25)',borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',gap:12}}>
+            <span style={{fontSize:20}}>🗂️</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:800,color:'#1e40af',marginBottom:2}}>No work types set up</div>
+              <div style={{fontSize:11,color:'#1d4ed8'}}>Tasks will be saved as Unclassified. Set up work types in Set-up to organise by filing type.</div>
+            </div>
+            <button onClick={function(){resetCreateForm();if(onGoModule)onGoModule('setup');}}
+              style={{background:'#3b82f6',border:'none',borderRadius:8,padding:'7px 14px',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>Go to Set-up →</button>
+          </div>}
           {/* Client + Work Type row */}
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
             <div>
@@ -16397,7 +16423,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var sidebarW=sidebarOpen?236:52;
   var moduleContent=<>
       {/* Your Diary */}
-      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces}/>}
+      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces} onGoModule={function(m,t){setOrgModule(m);if(t)setTab(t);}}/>}
       {orgModule==='diary'&&tab==='notes'&&<NotesModule org={org} cu={cu} mode="full"/>}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
