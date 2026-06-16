@@ -4714,6 +4714,10 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [dragRowId,setDragRowId]=useState(null);
   var [newCommentText,setNewCommentText]=useState({});
   var [pipelineDetailRow,setPipelineDetailRow]=useState(null);
+  // Saved Views — named filter+column combos, shared per org
+  var [savedViews,setSavedViews]=useState([]);
+  var [showViewsMenu,setShowViewsMenu]=useState(false);
+  var [activeViewId,setActiveViewId]=useState(null);
 
   // Column show/hide
   var [hiddenCols,setHiddenCols]=useState([]);
@@ -5009,8 +5013,58 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     if(activeType)saveColPref(activeType,newHidden);
   }
 
-  function setFilter(key,val){setFilters(function(p){var n=Object.assign({},p);if(!val||val==='all')delete n[key];else n[key]=val;return n;});}
-  function clearFilters(){setFilters({});setFilterClient('');setMineOnly(false);setShowExportMenu(false);}
+  function setFilter(key,val){setFilters(function(p){var n=Object.assign({},p);if(!val||val==='all')delete n[key];else n[key]=val;return n;});setActiveViewId(null);}
+  function clearFilters(){setFilters({});setFilterClient('');setMineOnly(false);setShowExportMenu(false);setActiveViewId(null);}
+
+  // ── Saved Views ──────────────────────────────────────────────
+  async function loadSavedViews(){
+    if(!org||!org.id)return;
+    var r=await supabase.from('worksheet_saved_views').select('*').eq('org_id',org.id).order('created_at',{ascending:true});
+    if(r.data)setSavedViews(r.data);
+  }
+  useEffect(function(){loadSavedViews();/* eslint-disable-next-line */},[org&&org.id]);
+
+  async function saveCurrentView(){
+    var name=window.prompt('Name this view (e.g. "Overdue GST", "My pending reviews"):','');
+    if(!name||!name.trim())return;
+    var config={filters:filters,filterClient:filterClient,mineOnly:mineOnly,hiddenCols:hiddenCols,sortCol:sortCol,sortDir:sortDir,wsView:wsView};
+    var payload={org_id:org.id,created_by:cu.id,name:name.trim(),work_type:activeType||null,config:config,is_shared:true};
+    var r=await supabase.from('worksheet_saved_views').insert(payload).select().single();
+    if(r.error){showToast('Could not save view','err');return;}
+    setSavedViews(function(p){return p.concat([r.data]);});
+    setActiveViewId(r.data.id);
+    setShowViewsMenu(false);
+    showToast('View "'+name.trim()+'" saved');
+  }
+
+  function applyView(v){
+    var c=v.config||{};
+    // Switch work type if the view was saved for a specific one
+    if(v.work_type&&v.work_type!==activeType&&allTypes.indexOf(v.work_type)>=0){
+      setActiveGroup(null);setActiveType(v.work_type);
+      var cfg2=WS_TYPE_CONFIGS[v.work_type]||{};
+      var p2=getDefaultPeriod(cfg2.frequency||'monthly',cfg2);
+      setPeriodYear(p2.year);if(p2.month)setPeriodMonth(p2.month);if(p2.quarter)setPeriodQuarter(p2.quarter);
+    }
+    setFilters(c.filters||{});
+    setFilterClient(c.filterClient||'');
+    setMineOnly(!!c.mineOnly);
+    setHiddenCols(c.hiddenCols||[]);
+    setSortCol(c.sortCol||null);
+    setSortDir(c.sortDir||'asc');
+    if(c.wsView)setWsView(c.wsView);
+    setActiveViewId(v.id);
+    setShowViewsMenu(false);
+  }
+
+  async function deleteView(id,e){
+    if(e)e.stopPropagation();
+    if(!window.confirm('Delete this saved view?'))return;
+    var r=await supabase.from('worksheet_saved_views').delete().eq('id',id);
+    if(r.error){showToast('Could not delete (only the creator can)','err');return;}
+    setSavedViews(function(p){return p.filter(function(v){return v.id!==id;});});
+    if(activeViewId===id)setActiveViewId(null);
+  }
 
   async function loadClients(){
     if(loadingRef.current)return;
@@ -5962,7 +6016,39 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </div>
 
         {/* Mine Only toggle */}
-        <button onClick={function(){setMineOnly(!mineOnly);}} title="Show only tasks where I'm assigned or reviewing" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>
+        <button onClick={function(){setMineOnly(!mineOnly);setActiveViewId(null);}} title="Show only tasks where I'm assigned or reviewing" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>
+
+        {/* Saved Views */}
+        <div style={{position:'relative'}}>
+          <button onClick={function(){setShowViewsMenu(!showViewsMenu);}} title="Saved views — named filter + column combos, shared with your team" style={{background:showViewsMenu||activeViewId?'rgba(14,42,71,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:activeViewId?'#0e2a47':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:activeViewId?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>
+            ★ {activeViewId?(savedViews.find(function(v){return v.id===activeViewId;})||{}).name||'Views':'Views'}{savedViews.length>0&&!activeViewId&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>({savedViews.length})</span>} ▾
+          </button>
+          {showViewsMenu&&<>
+            <div onClick={function(){setShowViewsMenu(false);}} style={{position:'fixed',inset:0,zIndex:99}}/>
+            <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,minWidth:240,maxWidth:300,boxShadow:'0 8px 24px rgba(0,0,0,0.25)',zIndex:100,overflow:'hidden'}}>
+              <div style={{padding:'8px 12px 6px',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',borderBottom:'1px solid var(--tf-border)'}}>Saved Views</div>
+              {savedViews.length===0&&<div style={{padding:'12px 14px',fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No saved views yet. Set your filters &amp; columns, then save this view.</div>}
+              <div style={{maxHeight:260,overflowY:'auto'}}>
+                {savedViews.map(function(v){
+                  var isActive=activeViewId===v.id;var isMine=v.created_by===cu.id;
+                  return<div key={v.id} onClick={function(){applyView(v);}} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',cursor:'pointer',borderBottom:'1px solid var(--tf-border)',background:isActive?'rgba(14,42,71,0.06)':'transparent'}}
+                    onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='var(--tf-surface-hov)';}}
+                    onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
+                    <span style={{fontSize:12,color:isActive?'#0e2a47':'var(--tf-text-sub)'}}>★</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v.name}</div>
+                      {v.work_type&&<div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{v.work_type}</div>}
+                    </div>
+                    {isMine&&<button onClick={function(e){deleteView(v.id,e);}} title="Delete view" style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:13,padding:'2px 4px',lineHeight:1,opacity:0.7}}>×</button>}
+                  </div>;
+                })}
+              </div>
+              <button onClick={saveCurrentView} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'10px 14px',background:'none',border:'none',borderTop:'1px solid var(--tf-border)',cursor:'pointer',textAlign:'left',color:'#0e2a47',fontSize:13,fontWeight:700}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){e.currentTarget.style.background='none';}}>
+                + Save current view
+              </button>
+            </div>
+          </>}
+        </div>
       </div>
 
       {/* Add one-time task modal */}
