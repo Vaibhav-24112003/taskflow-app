@@ -3886,6 +3886,8 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
   var [toast,setToast]=useState(null);
   var [seeding,setSeeding]=useState(false);
   var [depts,setDepts]=useState([]);
+  var [showTemplateGallery,setShowTemplateGallery]=useState(false);
+  var [loadingTemplate,setLoadingTemplate]=useState(false);
 
   useEffect(function(){setConfigs(workTypeConfigs||[]);},[workTypeConfigs]);
   useEffect(function(){
@@ -3927,6 +3929,17 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
     if(onReload)onReload();
   }
 
+  async function loadTemplate(key){
+    var t=INDUSTRY_TEMPLATES[key];if(!t)return;
+    if(!window.confirm('Load "'+t.label+'" template? This will add '+t.workTypes.length+' work type'+(t.workTypes.length!==1?'s':'')+'.'))return;
+    setLoadingTemplate(true);
+    var batch=t.workTypes.map(function(wt,i){return{org_id:org.id,name:wt.name,frequency:wt.frequency||'monthly',columns:wt.columns||[],due_day:wt.due_day||null,due_month:wt.due_month||null,stages:wt.stages||[],is_active:true,is_itr_worktype:!!wt.is_itr_worktype,sort_order:configs.length+i};});
+    await supabase.from('work_type_configs').insert(batch);
+    setLoadingTemplate(false);setShowTemplateGallery(false);
+    showToast(t.label+' template loaded!');
+    if(onReload)onReload();
+  }
+
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
   var FREQ_LABELS={monthly:'Monthly',quarterly:'Quarterly',yearly:'Yearly',once:'One-time'};
@@ -3935,22 +3948,51 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:10}}>
       <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Work Type Configuration</h2>
         <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>{configs.length} work types configured</div></div>
-      <div style={{display:'flex',gap:8}}>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         {configs.length===0&&<button onClick={seedDefaults} disabled={seeding} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600,opacity:seeding?.5:1}}>
-          {seeding?'Creating...':'Load Defaults'}
+          {seeding?'Creating...':'Load CA Defaults'}
         </button>}
         {configs.length>0&&<button onClick={clearAll} disabled={seeding} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'7px 14px',color:'#ef4444',cursor:'pointer',fontSize:13,fontWeight:600,opacity:seeding?.5:1}}>
           {seeding?'Clearing...':'Clear All'}
         </button>}
+        <button onClick={function(){setShowTemplateGallery(function(p){return!p;});}} style={{background:showTemplateGallery?'#0e2a47':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:showTemplateGallery?'#fff':'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>🏭 Templates</button>
         <button onClick={function(){setEditConfig(null);setShowForm(true);}} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 16px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>+ New Work Type</button>
       </div>
     </div>
 
-    {configs.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
-      <div style={{fontSize:32,marginBottom:12}}>⚙️</div>
-      <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No work types configured</div>
-      <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Click "Load Defaults" to start with standard CA work types, or add your own.</div>
-    </div>:
+    {/* Template gallery — shown when empty or when toggled */}
+    {(configs.length===0||showTemplateGallery)&&<div style={{marginBottom:configs.length>0?20:0}}>
+      {configs.length===0&&<div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:4}}>Choose a template to get started</div>}
+      {configs.length===0&&<div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Pick the template closest to your industry — you can always add, edit, or remove work types after.</div>}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+        {Object.entries(INDUSTRY_TEMPLATES).map(function(entry){
+          var key=entry[0],t=entry[1];
+          return<div key={key} style={{background:'var(--tf-surface)',border:'2px solid var(--tf-border)',borderRadius:12,padding:'16px',cursor:'pointer',transition:'border-color 0.15s,box-shadow 0.15s'}}
+            onMouseEnter={function(e){e.currentTarget.style.borderColor=t.color;e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)';}}
+            onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}
+            onClick={function(){loadTemplate(key);}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+              <div style={{fontSize:26,lineHeight:1}}>{t.icon}</div>
+              <div>
+                <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{t.label}</div>
+                <div style={{fontSize:10,fontWeight:600,color:t.color,background:t.color+'18',border:'1px solid '+t.color+'30',borderRadius:4,padding:'1px 6px',display:'inline-block',marginTop:2}}>{t.workTypes.length} work types</div>
+              </div>
+            </div>
+            <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.5,marginBottom:10}}>{t.desc}</div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {t.workTypes.slice(0,4).map(function(wt){return<span key={wt.name} style={{fontSize:10,color:'var(--tf-text-sub)',background:'rgba(14,42,71,0.06)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 6px'}}>{wt.name}</span>;})}
+              {t.workTypes.length>4&&<span style={{fontSize:10,color:'var(--tf-text-sub)',padding:'1px 4px'}}>+{t.workTypes.length-4} more</span>}
+            </div>
+            <button onClick={function(e){e.stopPropagation();loadTemplate(key);}} disabled={loadingTemplate}
+              style={{marginTop:12,width:'100%',background:t.color,border:'none',borderRadius:8,padding:'7px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,opacity:loadingTemplate?.6:1}}>
+              {loadingTemplate?'Loading…':'Load Template'}
+            </button>
+          </div>;
+        })}
+      </div>
+    </div>}
+
+    {configs.length===0?null:
     <div style={{display:'flex',flexDirection:'column',gap:8}}>
       {configs.map(function(c){
         var colCount=(c.columns||[]).length;
@@ -4404,6 +4446,67 @@ var DEFAULT_WS_TYPE_CONFIGS = {
   'Payroll':      {frequency:'monthly',  due_day:7,  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Processed'}]},
   'Scrutiny':     {frequency:'yearly',   cols:[{key:'notice_recv',label:'Notice Rcvd'},{key:'reply_done',label:'Reply Filed'}]},
   'Other':        {frequency:'monthly',  cols:[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]},
+};
+
+// Industry templates — pre-built work type packs for different practice types
+var INDUSTRY_TEMPLATES = {
+  ca_firm: {
+    label:'CA / Tax Firm', icon:'🏛️', color:'#0e2a47',
+    desc:'GST, ITR, TDS, Audit, Payroll — standard Indian CA practice',
+    workTypes:[
+      {name:'GST Returns',frequency:'monthly',due_day:11,columns:[{key:'gstr1_recv',label:'GSTR1 Rcvd',type:'checkbox'},{key:'gstr1_done',label:'GSTR1 Filed',type:'checkbox'},{key:'gstr3b_recv',label:'GSTR3B Rcvd',type:'checkbox'},{key:'gstr3b_done',label:'GSTR3B Filed',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Return Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      {name:'ITR',frequency:'yearly',due_day:31,due_month:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],stages:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'working',label:'Working',color:'#8b5cf6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}],is_itr_worktype:true},
+      {name:'TDS Returns',frequency:'quarterly',due_day:31,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      {name:'TDS Payments',frequency:'monthly',due_day:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Paid',type:'checkbox'}],stages:[]},
+      {name:'Audit',frequency:'yearly',due_day:30,due_month:9,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Completed',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'draft_accounts',label:'Draft Accounts',color:'#3b82f6'},{key:'internal_review',label:'Internal Review',color:'#8b5cf6'},{key:'client_review',label:'Client Review',color:'#f59e0b'},{key:'signing',label:'Signing',color:'#ec4899'},{key:'filing',label:'Filing',color:'#22c55e'}]},
+      {name:'Payroll',frequency:'monthly',due_day:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Processed',type:'checkbox'}],stages:[]},
+      {name:'MIS',frequency:'monthly',columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Completed',type:'checkbox'}],stages:[]},
+    ]
+  },
+  law_firm: {
+    label:'Law Firm', icon:'⚖️', color:'#7c3aed',
+    desc:'Client matters, court filings, litigation, contracts',
+    workTypes:[
+      {name:'Client Matter',frequency:'once',columns:[{key:'retainer',label:'Retainer',type:'checkbox'},{key:'kyc_done',label:'KYC Done',type:'checkbox'}],stages:[{key:'instruction',label:'Instructions Received',color:'#94a3b8'},{key:'research',label:'Research',color:'#3b82f6'},{key:'drafting',label:'Drafting',color:'#8b5cf6'},{key:'review',label:'Partner Review',color:'#f59e0b'},{key:'filed',label:'Filed / Executed',color:'#22c55e'},{key:'closed',label:'Closed',color:'#64748b'}]},
+      {name:'Court Filing',frequency:'once',columns:[{key:'drafted',label:'Drafted',type:'checkbox'},{key:'filed',label:'Filed',type:'checkbox'},{key:'hearing_done',label:'Hearing Done',type:'checkbox'}],stages:[{key:'doc_prep',label:'Document Prep',color:'#94a3b8'},{key:'filed',label:'Filed',color:'#3b82f6'},{key:'hearing',label:'Hearing',color:'#f59e0b'},{key:'order_received',label:'Order Received',color:'#22c55e'}]},
+      {name:'Legal Notice',frequency:'once',columns:[{key:'drafted',label:'Drafted',type:'checkbox'},{key:'approved',label:'Client Approved',type:'checkbox'},{key:'dispatched',label:'Dispatched',type:'checkbox'}],stages:[{key:'draft',label:'Draft',color:'#94a3b8'},{key:'approval',label:'Client Approval',color:'#f59e0b'},{key:'dispatch',label:'Dispatch',color:'#3b82f6'},{key:'response',label:'Response Received',color:'#22c55e'}]},
+      {name:'Contract / Agreement',frequency:'once',columns:[{key:'drafted',label:'Drafted',type:'checkbox'},{key:'negotiated',label:'Negotiated',type:'checkbox'},{key:'executed',label:'Executed',type:'checkbox'}],stages:[{key:'draft',label:'Draft',color:'#94a3b8'},{key:'negotiation',label:'Negotiation',color:'#3b82f6'},{key:'execution',label:'Execution',color:'#f59e0b'},{key:'archived',label:'Archived',color:'#22c55e'}]},
+      {name:'Litigation',frequency:'once',columns:[{key:'complaint',label:'Complaint Filed',type:'checkbox'},{key:'pleadings',label:'Pleadings',type:'checkbox'}],stages:[{key:'complaint',label:'Complaint',color:'#94a3b8'},{key:'pleadings',label:'Pleadings',color:'#3b82f6'},{key:'discovery',label:'Discovery',color:'#8b5cf6'},{key:'trial',label:'Trial',color:'#f59e0b'},{key:'judgment',label:'Judgment',color:'#22c55e'}]},
+    ]
+  },
+  agency: {
+    label:'Design / Marketing Agency', icon:'🎨', color:'#db2777',
+    desc:'Brand projects, campaigns, social media, digital delivery',
+    workTypes:[
+      {name:'Brand Project',frequency:'once',columns:[{key:'brief_recv',label:'Brief Rcvd',type:'checkbox'},{key:'approved',label:'Approved',type:'checkbox'},{key:'delivered',label:'Delivered',type:'checkbox'}],stages:[{key:'brief',label:'Brief',color:'#94a3b8'},{key:'strategy',label:'Strategy',color:'#3b82f6'},{key:'design',label:'Design',color:'#8b5cf6'},{key:'revisions',label:'Revisions',color:'#f59e0b'},{key:'approved',label:'Approved',color:'#22c55e'},{key:'delivered',label:'Delivered',color:'#10b981'}]},
+      {name:'Campaign',frequency:'monthly',columns:[{key:'brief_recv',label:'Brief Rcvd',type:'checkbox'},{key:'live',label:'Live',type:'checkbox'},{key:'reported',label:'Reported',type:'checkbox'}],stages:[{key:'planning',label:'Planning',color:'#94a3b8'},{key:'content',label:'Content Creation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'published',label:'Published',color:'#22c55e'},{key:'reporting',label:'Reporting',color:'#10b981'}]},
+      {name:'Social Media',frequency:'monthly',columns:[{key:'calendar',label:'Calendar Done',type:'checkbox'},{key:'scheduled',label:'Scheduled',type:'checkbox'}],stages:[{key:'calendar',label:'Content Calendar',color:'#94a3b8'},{key:'creation',label:'Creation',color:'#3b82f6'},{key:'approval',label:'Approval',color:'#f59e0b'},{key:'scheduled',label:'Scheduled',color:'#22c55e'}]},
+      {name:'Website / Digital',frequency:'once',columns:[{key:'discovery',label:'Discovery',type:'checkbox'},{key:'design',label:'Design',type:'checkbox'},{key:'launched',label:'Launched',type:'checkbox'}],stages:[{key:'discovery',label:'Discovery',color:'#94a3b8'},{key:'design',label:'Design',color:'#3b82f6'},{key:'development',label:'Development',color:'#8b5cf6'},{key:'qa',label:'QA',color:'#f59e0b'},{key:'launch',label:'Launch',color:'#22c55e'}]},
+      {name:'Content Writing',frequency:'once',columns:[{key:'brief',label:'Brief',type:'checkbox'},{key:'draft',label:'Draft',type:'checkbox'},{key:'published',label:'Published',type:'checkbox'}],stages:[{key:'brief',label:'Brief',color:'#94a3b8'},{key:'draft',label:'Draft',color:'#3b82f6'},{key:'edit',label:'Edit',color:'#f59e0b'},{key:'published',label:'Published',color:'#22c55e'}]},
+    ]
+  },
+  consultancy: {
+    label:'Management Consultancy', icon:'📊', color:'#0369a1',
+    desc:'Client engagements, project phases, research, deliverables',
+    workTypes:[
+      {name:'Client Engagement',frequency:'once',columns:[{key:'sow_signed',label:'SOW Signed',type:'checkbox'},{key:'kickoff',label:'Kick-off Done',type:'checkbox'},{key:'delivered',label:'Delivered',type:'checkbox'}],stages:[{key:'scope',label:'Scope',color:'#94a3b8'},{key:'proposal',label:'Proposal',color:'#3b82f6'},{key:'kickoff',label:'Kick-off',color:'#8b5cf6'},{key:'delivery',label:'In Delivery',color:'#f59e0b'},{key:'review',label:'Client Review',color:'#ec4899'},{key:'closed',label:'Closed',color:'#22c55e'}]},
+      {name:'Research Project',frequency:'once',columns:[{key:'brief',label:'Brief',type:'checkbox'},{key:'data_collected',label:'Data Collected',type:'checkbox'},{key:'presented',label:'Presented',type:'checkbox'}],stages:[{key:'brief',label:'Brief',color:'#94a3b8'},{key:'research',label:'Research',color:'#3b82f6'},{key:'synthesis',label:'Synthesis',color:'#8b5cf6'},{key:'draft',label:'Draft Report',color:'#f59e0b'},{key:'presentation',label:'Presentation',color:'#22c55e'}]},
+      {name:'Report / Deliverable',frequency:'once',columns:[{key:'data_done',label:'Data Done',type:'checkbox'},{key:'draft',label:'Draft',type:'checkbox'},{key:'final',label:'Final',type:'checkbox'}],stages:[{key:'data',label:'Data Collection',color:'#94a3b8'},{key:'analysis',label:'Analysis',color:'#3b82f6'},{key:'draft',label:'Draft',color:'#f59e0b'},{key:'review',label:'Review',color:'#8b5cf6'},{key:'final',label:'Final',color:'#22c55e'}]},
+      {name:'Workshop',frequency:'once',columns:[{key:'designed',label:'Designed',type:'checkbox'},{key:'prepped',label:'Prepped',type:'checkbox'},{key:'delivered',label:'Delivered',type:'checkbox'}],stages:[{key:'design',label:'Design',color:'#94a3b8'},{key:'prep',label:'Preparation',color:'#3b82f6'},{key:'delivery',label:'Delivery',color:'#f59e0b'},{key:'followup',label:'Follow-up',color:'#22c55e'}]},
+      {name:'Monthly Retainer',frequency:'monthly',columns:[{key:'report',label:'Report Sent',type:'checkbox'},{key:'invoice',label:'Invoiced',type:'checkbox'}],stages:[]},
+    ]
+  },
+  bookkeeper: {
+    label:'Bookkeeper / Accountant', icon:'📒', color:'#059669',
+    desc:'Monthly books, reconciliation, payroll, tax returns',
+    workTypes:[
+      {name:'Monthly Bookkeeping',frequency:'monthly',columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'entries',label:'Entries Done',type:'checkbox'},{key:'reconciled',label:'Reconciled',type:'checkbox'},{key:'delivered',label:'Delivered',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'entry',label:'Data Entry',color:'#3b82f6'},{key:'reconciliation',label:'Reconciliation',color:'#8b5cf6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'delivered',label:'Delivered',color:'#22c55e'}]},
+      {name:'Payroll',frequency:'monthly',due_day:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'processed',label:'Processed',type:'checkbox'},{key:'disbursed',label:'Disbursed',type:'checkbox'}],stages:[{key:'data',label:'Data',color:'#94a3b8'},{key:'processing',label:'Processing',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'disbursed',label:'Disbursed',color:'#22c55e'}]},
+      {name:'Tax Return',frequency:'yearly',columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'prepared',label:'Prepared',type:'checkbox'},{key:'filed',label:'Filed',type:'checkbox'}],stages:[{key:'data_gather',label:'Data Gathering',color:'#94a3b8'},{key:'preparation',label:'Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      {name:'Bank Reconciliation',frequency:'monthly',columns:[{key:'statement',label:'Statement Rcvd',type:'checkbox'},{key:'matched',label:'Matched',type:'checkbox'}],stages:[{key:'statement',label:'Statement',color:'#94a3b8'},{key:'matching',label:'Matching',color:'#3b82f6'},{key:'exceptions',label:'Exceptions',color:'#f59e0b'},{key:'done',label:'Done',color:'#22c55e'}]},
+      {name:'Annual Accounts',frequency:'yearly',columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'draft',label:'Draft',type:'checkbox'},{key:'finalised',label:'Finalised',type:'checkbox'}],stages:[{key:'data',label:'Data',color:'#94a3b8'},{key:'draft',label:'Draft Accounts',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'final',label:'Final',color:'#22c55e'}]},
+    ]
+  },
 };
 
 var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -6699,35 +6802,103 @@ function OrgInviteBanner({cu,supabase,onAccepted}){
 
 // ── Org Create Modal ───────────────────────────────────────────────
 function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
+  var [step,setStep]=useState(1); // 1=name, 2=industry pick
   var [name,setName]=useState('');
+  var [selectedTemplate,setSelectedTemplate]=useState(null); // null = 'manual'
+  var [teamSize,setTeamSize]=useState('');
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
   if(!open)return null;
-  var save=async function(){
+
+  async function finish(){
     if(!name.trim()){setErr('Name required');return;}
     setSaving(true);
     var slug='org'+Date.now();
     var res=await supabase.from('organizations').insert({name:name.trim(),slug:slug,created_by:cu.id}).select().single();
-    setSaving(false);
-    if(res.error){setErr(res.error.message);return;}
-    setName('');setErr('');
-    onCreated(res.data);
-  };
-  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-    <div style={{background:'var(--tf-bg)',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 18px',borderBottom:'1px solid var(--tf-border)'}}>
-        <h3 style={{margin:0,fontSize:15,fontWeight:700,color:'var(--tf-text)'}}>New Organisation</h3>
+    if(res.error){setSaving(false);setErr(res.error.message);return;}
+    var newOrg=res.data;
+    // Load template if selected
+    if(selectedTemplate&&INDUSTRY_TEMPLATES[selectedTemplate]){
+      var t=INDUSTRY_TEMPLATES[selectedTemplate];
+      var batch=t.workTypes.map(function(wt,i){return{org_id:newOrg.id,name:wt.name,frequency:wt.frequency||'monthly',columns:wt.columns||[],due_day:wt.due_day||null,due_month:wt.due_month||null,stages:wt.stages||[],is_active:true,is_itr_worktype:!!wt.is_itr_worktype,sort_order:i};});
+      await supabase.from('work_type_configs').insert(batch);
+    }
+    setSaving(false);setName('');setErr('');setStep(1);setSelectedTemplate(null);setTeamSize('');
+    onCreated(newOrg);
+  }
+
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:step===2?680:420,boxShadow:'0 24px 80px rgba(0,0,0,0.4)',maxHeight:'90vh',overflow:'auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 20px',borderBottom:'1px solid var(--tf-border)'}}>
+        <div>
+          <h3 style={{margin:0,fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{step===1?'Create Your Practice':'Set Up Your Workspace'}</h3>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>Step {step} of 2</div>
+        </div>
         <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
       </div>
-      <div style={{padding:'16px 18px'}}>
-        <label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:5,display:'block'}}>Organisation Name *</label>
-        <input value={name} onChange={function(e){setName(e.target.value);}} autoFocus placeholder='e.g. ABC & Associates' style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}} onKeyDown={function(e){if(e.key==='Enter')save();}}/>
-        {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:6,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
-      </div>
-      <div style={{display:'flex',justifyContent:'flex-end',gap:8,padding:'11px 18px',borderTop:'1px solid var(--tf-border)'}}>
-        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
-        <button onClick={save} disabled={saving} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 18px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?0.6:1}}>{saving?'Saving...':'Create'}</button>
-      </div>
+
+      {step===1&&<div style={{padding:'20px'}}>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6,display:'block'}}>Practice / Firm Name *</label>
+          <input value={name} onChange={function(e){setName(e.target.value);}} autoFocus placeholder='e.g. ABC & Associates' style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 12px',color:'var(--tf-text)',fontSize:14,width:'100%',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}} onKeyDown={function(e){if(e.key==='Enter'&&name.trim())setStep(2);}}/>
+        </div>
+        <div>
+          <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6,display:'block'}}>Team Size</label>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {['Just me','2–5','6–15','16–50','50+'].map(function(s){return<button key={s} onClick={function(){setTeamSize(s);}} style={{background:teamSize===s?'#0e2a47':'var(--tf-surface)',border:'1px solid',borderColor:teamSize===s?'#0e2a47':'var(--tf-border)',borderRadius:8,padding:'6px 14px',color:teamSize===s?'#fff':'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>{s}</button>;})}
+          </div>
+        </div>
+        {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:10,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}>
+          <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+          <button onClick={function(){if(!name.trim()){setErr('Name required');return;}setErr('');setStep(2);}} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Next →</button>
+        </div>
+      </div>}
+
+      {step===2&&<div style={{padding:'20px'}}>
+        <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',marginBottom:4}}>What best describes your practice?</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>We'll pre-load work types and stages tailored for your industry. You can customise everything after.</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))',gap:10,marginBottom:16}}>
+          {Object.entries(INDUSTRY_TEMPLATES).map(function(entry){
+            var key=entry[0],t=entry[1];var sel=selectedTemplate===key;
+            return<div key={key}
+              onClick={function(){setSelectedTemplate(sel?null:key);}}
+              style={{border:'2px solid',borderColor:sel?t.color:'var(--tf-border)',borderRadius:10,padding:'12px',cursor:'pointer',transition:'border-color 0.15s,box-shadow 0.15s',background:sel?t.color+'0d':'var(--tf-surface)',boxShadow:sel?'0 0 0 3px '+t.color+'20':'none'}}
+              onMouseEnter={function(e){if(!sel){e.currentTarget.style.borderColor=t.color;e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,0.07)';}}}
+              onMouseLeave={function(e){if(!sel){e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                <span style={{fontSize:22}}>{t.icon}</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:800,color:sel?t.color:'var(--tf-text)'}}>{t.label}</div>
+                  <div style={{fontSize:10,color:t.color,fontWeight:600}}>{t.workTypes.length} work types</div>
+                </div>
+                {sel&&<div style={{marginLeft:'auto',width:18,height:18,borderRadius:9,background:t.color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span></div>}
+              </div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.4}}>{t.desc}</div>
+            </div>;
+          })}
+          <div onClick={function(){setSelectedTemplate(null);}}
+            style={{border:'2px solid',borderColor:selectedTemplate===null?'#94a3b8':'var(--tf-border)',borderRadius:10,padding:'12px',cursor:'pointer',background:selectedTemplate===null?'rgba(148,163,184,0.05)':'var(--tf-surface)',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',gap:6,minHeight:100}}
+            onMouseEnter={function(e){if(selectedTemplate!==null){e.currentTarget.style.borderColor='#94a3b8';}}}
+            onMouseLeave={function(e){if(selectedTemplate!==null){e.currentTarget.style.borderColor='var(--tf-border)';}}} >
+            <span style={{fontSize:22}}>⚙️</span>
+            <div style={{fontSize:12,fontWeight:700,color:selectedTemplate===null?'#64748b':'var(--tf-text)',textAlign:'center'}}>Set up manually</div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',textAlign:'center'}}>I'll configure work types myself</div>
+            {selectedTemplate===null&&<div style={{width:18,height:18,borderRadius:9,background:'#94a3b8',display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span></div>}
+          </div>
+        </div>
+        {selectedTemplate&&INDUSTRY_TEMPLATES[selectedTemplate]&&<div style={{background:'rgba(14,42,71,0.05)',border:'1px solid rgba(14,42,71,0.12)',borderRadius:8,padding:'10px 14px',marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:6}}>Will be created:</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+            {INDUSTRY_TEMPLATES[selectedTemplate].workTypes.map(function(wt){return<span key={wt.name} style={{fontSize:11,color:'var(--tf-text)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 8px'}}>{wt.name}</span>;})}
+          </div>
+        </div>}
+        {err&&<div style={{color:'#ef4444',fontSize:12,marginBottom:10,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
+        <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
+          <button onClick={function(){setStep(1);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>
+          <button onClick={finish} disabled={saving} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 22px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?.6:1}}>{saving?'Creating…':'Create Practice'}</button>
+        </div>
+      </div>}
     </div>
   </div>;
 }
@@ -10713,7 +10884,19 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [expandedGroups,setExpandedGroups]=useState({});
   var [editData,setEditData]=useState({});
 
+  var [dashCommentText,setDashCommentText]=useState({});
+
   function toggleExpand(rowId){setExpandedRow(function(p){return p===rowId?null:rowId;});setEditingRow(null);}
+
+  async function addDashComment(rowId,text){
+    if(!(text||'').trim())return;
+    var row=rows.find(function(r){return r.id===rowId;});if(!row)return;
+    var newC={id:'c_'+Date.now(),author_id:cu.id,author_name:cu.name||cu.email||'User',text:text.trim(),created_at:new Date().toISOString()};
+    var thread=(row.comments_thread||[]).concat([newC]);
+    await supabase.from('worksheet_rows').update({comments_thread:thread}).eq('id',rowId);
+    setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{comments_thread:thread}):r;});});
+    setDashCommentText(function(p){return Object.assign({},p,{[rowId]:''});});
+  }
 
   function startEditing(row){
     var d=row.data||{};
@@ -11170,6 +11353,36 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                           })}
                         </div>}
                         {!rd.__description&&clTotal===0&&!rd.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No additional details. Click Edit to add.</div>}
+                        {/* Comments */}
+                        <div style={{marginTop:12,borderTop:'1px solid var(--tf-border)',paddingTop:10}}>
+                          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>Discussion {(row.comments_thread||[]).length>0&&<span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>({row.comments_thread.length})</span>}</div>
+                          {(row.comments_thread||[]).map(function(c){
+                            var initial=(c.author_name||'?')[0].toUpperCase();
+                            var ts=new Date(c.created_at);
+                            var tsStr=ts.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+                            return<div key={c.id} style={{display:'flex',gap:8,marginBottom:10}}>
+                              <div style={{width:24,height:24,borderRadius:12,background:'rgba(14,42,71,0.15)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#0e2a47'}}>{initial}</div>
+                              <div style={{flex:1}}>
+                                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
+                                  <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{c.author_name||'User'}</span>
+                                  <span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{tsStr}</span>
+                                </div>
+                                <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.55,whiteSpace:'pre-wrap'}}>{c.text}</div>
+                              </div>
+                            </div>;
+                          })}
+                          <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                            <div style={{width:24,height:24,borderRadius:12,background:'rgba(14,42,71,0.15)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#0e2a47'}}>{(cu.name||cu.email||'?')[0].toUpperCase()}</div>
+                            <div style={{flex:1}}>
+                              <textarea value={dashCommentText[row.id]||''} onChange={function(e){var v=e.target.value;setDashCommentText(function(p){return Object.assign({},p,{[row.id]:v});});}}
+                                onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addDashComment(row.id,dashCommentText[row.id]||'');}}}
+                                placeholder="Add a comment… (Enter to post)"
+                                style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'none',minHeight:34,boxSizing:'border-box'}}/>
+                              {(dashCommentText[row.id]||'').trim()&&<button onClick={function(){addDashComment(row.id,dashCommentText[row.id]||'');}}
+                                style={{marginTop:4,background:'#0e2a47',border:'none',borderRadius:6,padding:'3px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Post</button>}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       :<div>
                         <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -11406,6 +11619,36 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                           })}
                         </div>}
                         {!rd.__description&&clTotal===0&&!rd.__contact&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontStyle:'italic',marginBottom:4}}>No details. Click Edit to add.</div>}
+                        {/* Comments */}
+                        <div style={{marginTop:10,borderTop:'1px solid var(--tf-border)',paddingTop:8}} onClick={function(e){e.stopPropagation();}}>
+                          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>Discussion {(r.comments_thread||[]).length>0&&<span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>({r.comments_thread.length})</span>}</div>
+                          {(r.comments_thread||[]).map(function(c){
+                            var initial=(c.author_name||'?')[0].toUpperCase();
+                            var ts=new Date(c.created_at);
+                            var tsStr=ts.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+                            return<div key={c.id} style={{display:'flex',gap:7,marginBottom:8}}>
+                              <div style={{width:22,height:22,borderRadius:11,background:'rgba(14,42,71,0.15)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:'#0e2a47'}}>{initial}</div>
+                              <div style={{flex:1}}>
+                                <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:1}}>
+                                  <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text)'}}>{c.author_name||'User'}</span>
+                                  <span style={{fontSize:9,color:'var(--tf-text-sub)'}}>{tsStr}</span>
+                                </div>
+                                <div style={{fontSize:11,color:'var(--tf-text)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>{c.text}</div>
+                              </div>
+                            </div>;
+                          })}
+                          <div style={{display:'flex',gap:7,alignItems:'flex-start'}}>
+                            <div style={{width:22,height:22,borderRadius:11,background:'rgba(14,42,71,0.15)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:'#0e2a47'}}>{(cu.name||cu.email||'?')[0].toUpperCase()}</div>
+                            <div style={{flex:1}}>
+                              <textarea value={dashCommentText[r.id]||''} onChange={function(e){var v=e.target.value;setDashCommentText(function(p){return Object.assign({},p,{[r.id]:v});});}}
+                                onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();addDashComment(r.id,dashCommentText[r.id]||'');}}}
+                                placeholder="Comment… (Enter to post)"
+                                style={{width:'100%',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',resize:'none',minHeight:30,boxSizing:'border-box'}}/>
+                              {(dashCommentText[r.id]||'').trim()&&<button onClick={function(e){e.stopPropagation();addDashComment(r.id,dashCommentText[r.id]||'');}}
+                                style={{marginTop:3,background:'#0e2a47',border:'none',borderRadius:6,padding:'3px 10px',color:'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>Post</button>}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       :<div onClick={function(e){e.stopPropagation();}}>
                         <div style={{display:'flex',flexDirection:'column',gap:8}}>
