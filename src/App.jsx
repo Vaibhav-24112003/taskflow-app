@@ -22,7 +22,7 @@ const SupportAdminView   = lazyWithReload(() => import('./SupportAdminView.jsx')
 const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
 import { isAdminEmail } from './lib/supabase'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -15780,6 +15780,185 @@ function ClientConnectModule({org,supabase,cu}){
   </div>;
 }
 
+// ── Team Chat Module ─────────────────────────────────────────────────
+function TeamChatModule({org,supabase,cu}){
+  var [channels,setChannels]=useState([]);
+  var [activeCh,setActiveCh]=useState(null);
+  var [messages,setMessages]=useState([]);
+  var [msgText,setMsgText]=useState('');
+  var [loading,setLoading]=useState(true);
+  var [sending,setSending]=useState(false);
+  var [showNewCh,setShowNewCh]=useState(false);
+  var [newChName,setNewChName]=useState('');
+  var [newChDesc,setNewChDesc]=useState('');
+  var [savingCh,setSavingCh]=useState(false);
+  var [myRole,setMyRole]=useState('member');
+  var bottomRef=useRef(null);
+  var inputRef=useRef(null);
+  var subRef=useRef(null);
+
+  useEffect(function(){
+    loadChannels();
+    var mr=(org.members||[]).find(function(m){return m.user_id===cu.id;});
+    if(mr)setMyRole(mr.role||'member');
+  },[org.id]);
+
+  async function loadChannels(){
+    setLoading(true);
+    var r=await supabase.from('team_chat_channels').select('*').eq('org_id',org.id).order('sort_order',{ascending:true}).order('created_at',{ascending:true});
+    var chs=r.data||[];
+    if(chs.length===0){
+      // seed #general
+      var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:'general',description:'General discussion',created_by:cu.id,sort_order:0}).select().single();
+      if(ins.data)chs=[ins.data];
+    }
+    setChannels(chs);
+    setActiveCh(chs[0]||null);
+    setLoading(false);
+  }
+
+  useEffect(function(){
+    if(!activeCh)return;
+    loadMessages(activeCh.id);
+    // subscribe realtime
+    if(subRef.current)subRef.current.unsubscribe();
+    subRef.current=supabase.channel('tcm_'+activeCh.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'team_chat_messages',filter:'channel_id=eq.'+activeCh.id},function(payload){
+        setMessages(function(prev){
+          if(prev.some(function(m){return m.id===payload.new.id;}))return prev;
+          return prev.concat([payload.new]);
+        });
+      })
+      .subscribe();
+    return function(){if(subRef.current)subRef.current.unsubscribe();};
+  },[activeCh?.id]);
+
+  useEffect(function(){
+    if(bottomRef.current)bottomRef.current.scrollIntoView({behavior:'smooth'});
+  },[messages]);
+
+  async function loadMessages(chId){
+    var r=await supabase.from('team_chat_messages').select('*').eq('channel_id',chId).order('created_at',{ascending:true}).limit(200);
+    setMessages(r.data||[]);
+  }
+
+  async function send(){
+    var text=(msgText||'').trim();
+    if(!text||!activeCh||sending)return;
+    setSending(true);
+    var senderName=cu.name||cu.email||'User';
+    var optimistic={id:'opt_'+Date.now(),org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text,created_at:new Date().toISOString()};
+    setMessages(function(prev){return prev.concat([optimistic]);});
+    setMsgText('');
+    await supabase.from('team_chat_messages').insert({org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text});
+    setSending(false);
+    if(inputRef.current)inputRef.current.focus();
+  }
+
+  async function createChannel(){
+    var name=(newChName||'').trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
+    if(!name)return;
+    setSavingCh(true);
+    var r=await supabase.from('team_chat_channels').insert({org_id:org.id,name,description:newChDesc.trim()||null,created_by:cu.id,sort_order:channels.length}).select().single();
+    if(r.data){setChannels(function(p){return p.concat([r.data]);});setActiveCh(r.data);}
+    setShowNewCh(false);setNewChName('');setNewChDesc('');setSavingCh(false);
+  }
+
+  function fmtTime(ts){
+    var d=new Date(ts);var now=new Date();
+    var sameDay=d.toDateString()===now.toDateString();
+    if(sameDay)return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return d.toLocaleDateString([],{month:'short',day:'numeric'})+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  }
+
+  function avatarColor(name){var h=0;for(var i=0;i<(name||'').length;i++)h=(h*31+name.charCodeAt(i))&0xffff;var hue=(h%360);return'hsl('+hue+',45%,45%)';}
+
+  var canAdmin=myRole==='owner'||myRole==='admin';
+
+  if(loading)return<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh',color:'var(--tf-text-sub)',fontSize:14}}>Loading chat…</div>;
+
+  return<div style={{display:'flex',height:'calc(100vh - 140px)',minHeight:400,overflow:'hidden',borderRadius:12,border:'1px solid var(--tf-border)',background:'var(--tf-surface)'}}>
+    {/* Channel sidebar */}
+    <div style={{width:200,flexShrink:0,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)'}}>
+      <div style={{padding:'12px 14px 8px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid var(--tf-border)'}}>
+        <span style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',letterSpacing:'0.07em',textTransform:'uppercase'}}>Channels</span>
+        {canAdmin&&<button onClick={function(){setShowNewCh(true);}} title="New channel" style={{background:'none',border:'none',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:18,lineHeight:1,padding:'0 2px'}} onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>+</button>}
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'6px 6px'}}>
+        {channels.map(function(ch){
+          var isActive=activeCh&&activeCh.id===ch.id;
+          return<button key={ch.id} onClick={function(){setActiveCh(ch);}}
+            style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.15)':'none',border:'none',borderRadius:7,padding:'7px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:isActive?'var(--tf-text)':'var(--tf-text-sub)',fontWeight:isActive?700:500,fontSize:13,fontFamily:'inherit',marginBottom:1}}
+            onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.07)';}}
+            onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='none';}}>
+            <span style={{color:'var(--tf-text-sub)',fontSize:14,flexShrink:0}}>#</span>
+            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ch.name}</span>
+          </button>;
+        })}
+      </div>
+      {showNewCh&&<div style={{padding:12,borderTop:'1px solid var(--tf-border)'}}>
+        <input value={newChName} onChange={function(e){setNewChName(e.target.value);}} placeholder="channel-name" autoFocus
+          style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:6,boxSizing:'border-box'}}
+          onKeyDown={function(e){if(e.key==='Enter')createChannel();if(e.key==='Escape'){setShowNewCh(false);setNewChName('');setNewChDesc('');};}}/>
+        <input value={newChDesc} onChange={function(e){setNewChDesc(e.target.value);}} placeholder="Description (optional)"
+          style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:8,boxSizing:'border-box'}}/>
+        <div style={{display:'flex',gap:6}}>
+          <button onClick={createChannel} disabled={savingCh||!newChName.trim()} style={{flex:1,padding:'5px 0',background:'#6b8cad',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingCh||!newChName.trim()?0.6:1}}>Create</button>
+          <button onClick={function(){setShowNewCh(false);setNewChName('');setNewChDesc('');}} style={{flex:1,padding:'5px 0',background:'var(--tf-surface)',color:'var(--tf-text-sub)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+        </div>
+      </div>}
+    </div>
+    {/* Messages area */}
+    <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0}}>
+      {/* Channel header */}
+      {activeCh&&<div style={{padding:'10px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+        <span style={{fontSize:16,color:'var(--tf-text-sub)'}}>#</span>
+        <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{activeCh.name}</span>
+        {activeCh.description&&<span style={{fontSize:12,color:'var(--tf-text-sub)',marginLeft:4}}>{activeCh.description}</span>}
+      </div>}
+      {/* Message list */}
+      <div style={{flex:1,overflowY:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:2}}>
+        {messages.length===0&&<div style={{color:'var(--tf-text-sub)',fontSize:13,textAlign:'center',marginTop:40}}>No messages yet — say hello 👋</div>}
+        {(function(){
+          var out=[];var prevSender=null;var prevTs=null;
+          messages.forEach(function(msg){
+            var sameGroup=prevSender===msg.sender_id&&prevTs&&(new Date(msg.created_at)-new Date(prevTs))<300000;
+            var initials=(msg.sender_name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+            out.push(<div key={msg.id} style={{display:'flex',gap:10,alignItems:'flex-start',padding:sameGroup?'1px 0':'8px 0 1px',marginTop:sameGroup?0:2}}>
+              <div style={{width:34,flexShrink:0,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:sameGroup?0:2}}>
+                {!sameGroup&&<div style={{width:34,height:34,borderRadius:'50%',background:avatarColor(msg.sender_name),display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#fff',flexShrink:0}}>{initials}</div>}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                {!sameGroup&&<div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:2}}>
+                  <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{msg.sender_name}</span>
+                  <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{fmtTime(msg.created_at)}</span>
+                </div>}
+                <div style={{fontSize:14,color:'var(--tf-text)',lineHeight:1.55,wordBreak:'break-word',whiteSpace:'pre-wrap'}}>{msg.text}</div>
+              </div>
+            </div>);
+            prevSender=msg.sender_id;prevTs=msg.created_at;
+          });
+          return out;
+        })()}
+        <div ref={bottomRef}/>
+      </div>
+      {/* Input */}
+      <div style={{padding:'10px 18px 14px',borderTop:'1px solid var(--tf-border)',flexShrink:0}}>
+        <div style={{display:'flex',gap:8,alignItems:'flex-end',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'8px 12px',transition:'border-color 0.15s'}} onFocusCapture={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onBlurCapture={function(e){e.currentTarget.style.borderColor='var(--tf-border)';}}>
+          <textarea ref={inputRef} value={msgText} onChange={function(e){setMsgText(e.target.value);}} placeholder={'Message #'+(activeCh?activeCh.name:'...')}
+            rows={1} style={{flex:1,background:'none',border:'none',outline:'none',resize:'none',fontSize:14,color:'var(--tf-text)',fontFamily:'inherit',lineHeight:1.5,maxHeight:120,overflowY:'auto'}}
+            onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/>
+          <button onClick={send} disabled={!msgText.trim()||sending}
+            style={{background:'#6b8cad',border:'none',borderRadius:7,padding:'6px 14px',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:!msgText.trim()||sending?0.5:1,flexShrink:0,transition:'opacity 0.15s'}}>
+            Send
+          </button>
+        </div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:4,paddingLeft:2}}>Enter to send · Shift+Enter for new line</div>
+      </div>
+    </div>
+  </div>;
+}
+
 // ── Placeholder (Library sub-tabs not yet built) ──────────────────
 function PlaceholderModule({title,desc,icon}){
   return<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:16,color:'var(--tf-text-sub)'}}>
@@ -16851,6 +17030,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   ];
   if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]});
   if(ffOn('team'))MODULES.push({id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]});
+  MODULES.push({id:'chat',label:'Team Chat',icon:MessageSquare,desc:'Real-time group messaging for your team — channels, threads and instant updates.',gradient:'linear-gradient(135deg,#7c3aed,#6d28d9)',tabs:[]});
   if(canSeeAnalytics&&ffOn('analytics')){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
@@ -16858,7 +17038,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(ffOn('billing'))MODULES.push({id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]});
   MODULES.push({id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:masterdataTabs});
   MODULES.push({id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:setupTabs});
-  var DEFAULT_MEMBER_MODULES=['diary','workzone','library'];
+  var DEFAULT_MEMBER_MODULES=['diary','workzone','library','chat'];
   if(myRole!=='owner'&&myRole!=='admin'&&org.created_by!==cu.id&&myModuleAccess!==null){
     MODULES=MODULES.filter(function(m){
       if(myModuleAccess[m.id]!==undefined)return myModuleAccess[m.id];
@@ -16878,6 +17058,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     analytics:{icon:'📊',title:'Analytics — The Big Picture',body:'Organisation-wide performance: workload, completion rates and the ITR summary — for owners and admins.'},
     comms:{icon:'✉️',title:'Communication — Reach Clients',body:'Send Q&A forms, data requests and emails through shareable links. Files land straight in your own cloud.'},
     billing:{icon:'🧾',title:'Billing — Get Paid',body:'Invoices, proposals, payments and statements, with one-click exports for Tally and Zoho.'},
+    chat:{icon:'💬',title:'Team Chat — Stay in Sync',body:'Real-time group messaging across channels. Create topic-based channels and keep the whole team aligned without switching apps.'},
   };
   var tourSteps=[];
   if(MODULES.some(function(m){return m.id==='diary';})){
@@ -16979,6 +17160,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='team'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='team'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='team'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
+      {/* Team Chat */}
+      {orgModule==='chat'&&<TeamChatModule org={org} supabase={supabase} cu={cu}/>}
       {/* Analytics */}
       {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} orgDepts={orgDepts}/>}
       {/* Communication — paid module */}
