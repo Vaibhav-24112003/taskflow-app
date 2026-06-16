@@ -10428,6 +10428,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [filter,setFilter]=useState('all');
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('board'); // 'list' | 'board' | 'calendar' | 'grid' | 'urgency'
+  var [calMonthOffset,setCalMonthOffset]=useState(0); // 0=current month, -1=prev, +1=next …
   var [planOpen,setPlanOpen]=useState(false); // Plan My Day side panel — collapsed by default to give the board full width
   var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
   // Create Task modal state
@@ -11410,24 +11411,31 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
         {/* CALENDAR VIEW — month grid with tasks on due dates */}
         {dashView==='calendar'&&(function(){
-          var cd=new Date(today.getFullYear(),today.getMonth(),1);
+          var calBase=new Date(today.getFullYear(),today.getMonth()+calMonthOffset,1);
+          var cd=calBase;
           var startDow=cd.getDay();var startOffset=startDow===0?6:startDow-1; // Monday first
           var firstCell=new Date(cd);firstCell.setDate(firstCell.getDate()-startOffset);
           var cells=[];for(var i=0;i<42;i++){var dd=new Date(firstCell);dd.setDate(dd.getDate()+i);cells.push(dd);}
-          var monthLabel=today.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+          var monthLabel=calBase.toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+          var calDeadlines=computeStatutoryDeadlines(workTypeConfigs,calBase,45);
           var monthRows={};railFiltered.forEach(function(r){if(!r.due_date)return;(monthRows[r.due_date]=monthRows[r.due_date]||[]).push(r);});
-          var deadlineMap={};upcomingDeadlines.forEach(function(dl){var ds=dl.date.getFullYear()+'-'+String(dl.date.getMonth()+1).padStart(2,'0')+'-'+String(dl.date.getDate()).padStart(2,'0');if(!deadlineMap[ds])deadlineMap[ds]=[];deadlineMap[ds].push(dl);});
+          var deadlineMap={};calDeadlines.forEach(function(dl){var ds=dl.date.getFullYear()+'-'+String(dl.date.getMonth()+1).padStart(2,'0')+'-'+String(dl.date.getDate()).padStart(2,'0');if(!deadlineMap[ds])deadlineMap[ds]=[];deadlineMap[ds].push(dl);});
           var noDate=railFiltered.filter(function(r){return !r.due_date;});
           return<div>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-              <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)'}}>{monthLabel}</div>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <button onClick={function(){setCalMonthOffset(function(p){return p-1;});}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,cursor:'pointer',color:'var(--tf-text)',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>‹</button>
+                <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text)',minWidth:140,textAlign:'center'}}>{monthLabel}</div>
+                <button onClick={function(){setCalMonthOffset(function(p){return p+1;});}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,cursor:'pointer',color:'var(--tf-text)',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>›</button>
+                {calMonthOffset!==0&&<button onClick={function(){setCalMonthOffset(0);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'2px 8px',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Today</button>}
+              </div>
               <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{railFiltered.filter(function(r){return r.due_date;}).length} dated · {noDate.length} no date</div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
               {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){return<div key={d} style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',padding:'4px 6px'}}>{d}</div>;})}
               {cells.map(function(dd,i){
                 var dStr=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
-                var inMonth=dd.getMonth()===today.getMonth();var isT=dStr===todayStr;
+                var inMonth=dd.getMonth()===calBase.getMonth()&&dd.getFullYear()===calBase.getFullYear();var isT=dStr===todayStr;
                 var dayRows=monthRows[dStr]||[];
                 var dayDeadlines=deadlineMap[dStr]||[];
                 return<div key={i} style={{minHeight:88,background:isT?'rgba(14,42,71,0.08)':'var(--tf-panel)',border:'1px solid '+(isT?'#0e2a47':dayDeadlines.length?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
