@@ -15811,6 +15811,7 @@ function TeamChatModule({org,supabase,cu}){
   var [newChDesc,setNewChDesc]=useState('');
   var [savingCh,setSavingCh]=useState(false);
   var [myRole,setMyRole]=useState('member');
+  var [myName,setMyName]=useState(null);
   var bottomRef=useRef(null);
   var inputRef=useRef(null);
   var subRef=useRef(null);
@@ -15819,6 +15820,9 @@ function TeamChatModule({org,supabase,cu}){
     loadChannels();
     var mr=(org.members||[]).find(function(m){return m.user_id===cu.id;});
     if(mr)setMyRole(mr.role||'member');
+    supabase.from('profiles').select('name').eq('id',cu.id).single().then(function(r){
+      if(r.data&&r.data.name)setMyName(r.data.name);
+    });
   },[org.id]);
 
   async function loadChannels(){
@@ -15842,6 +15846,8 @@ function TeamChatModule({org,supabase,cu}){
     if(subRef.current)subRef.current.unsubscribe();
     subRef.current=supabase.channel('tcm_'+activeCh.id)
       .on('postgres_changes',{event:'INSERT',schema:'public',table:'team_chat_messages',filter:'channel_id=eq.'+activeCh.id},function(payload){
+        // Own messages are already added (optimistically, then reconciled) in send() — skip to avoid double rendering.
+        if(payload.new.sender_id===cu.id)return;
         setMessages(function(prev){
           if(prev.some(function(m){return m.id===payload.new.id;}))return prev;
           return prev.concat([payload.new]);
@@ -15864,11 +15870,15 @@ function TeamChatModule({org,supabase,cu}){
     var text=(msgText||'').trim();
     if(!text||!activeCh||sending)return;
     setSending(true);
-    var senderName=cu.name||cu.email||'User';
-    var optimistic={id:'opt_'+Date.now(),org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text,created_at:new Date().toISOString()};
+    var senderName=myName||cu.user_metadata?.full_name||(cu.email?cu.email.split('@')[0]:'')||'User';
+    var optId='opt_'+Date.now();
+    var optimistic={id:optId,org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text,created_at:new Date().toISOString()};
     setMessages(function(prev){return prev.concat([optimistic]);});
     setMsgText('');
-    await supabase.from('team_chat_messages').insert({org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text});
+    var r=await supabase.from('team_chat_messages').insert({org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text}).select().single();
+    if(r.data){
+      setMessages(function(prev){return prev.map(function(m){return m.id===optId?r.data:m;});});
+    }
     setSending(false);
     if(inputRef.current)inputRef.current.focus();
   }
@@ -15940,19 +15950,22 @@ function TeamChatModule({org,supabase,cu}){
         {(function(){
           var out=[];var prevSender=null;var prevTs=null;
           messages.forEach(function(msg){
+            var isMine=msg.sender_id===cu.id;
             var sameGroup=prevSender===msg.sender_id&&prevTs&&(new Date(msg.created_at)-new Date(prevTs))<300000;
             var initials=(msg.sender_name||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
-            out.push(<div key={msg.id} style={{display:'flex',gap:10,alignItems:'flex-start',padding:sameGroup?'1px 0':'8px 0 1px',marginTop:sameGroup?0:2}}>
+            var avatar=!sameGroup&&<div style={{width:34,height:34,borderRadius:'50%',background:avatarColor(msg.sender_name),display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#fff',flexShrink:0}}>{initials}</div>;
+            var bubble=<div style={{flex:1,minWidth:0,display:'flex',flexDirection:'column',alignItems:isMine?'flex-end':'flex-start'}}>
+              {!sameGroup&&<div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:2,flexDirection:isMine?'row-reverse':'row'}}>
+                <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{isMine?'You':msg.sender_name}</span>
+                <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{fmtTime(msg.created_at)}</span>
+              </div>}
+              <div style={{fontSize:14,color:isMine?'#fff':'var(--tf-text)',lineHeight:1.55,wordBreak:'break-word',whiteSpace:'pre-wrap',background:isMine?'#6b8cad':'var(--tf-surface-hov)',borderRadius:12,padding:'7px 12px',maxWidth:'70%',display:'inline-block'}}>{msg.text}</div>
+            </div>;
+            out.push(<div key={msg.id} style={{display:'flex',gap:10,alignItems:'flex-start',padding:sameGroup?'1px 0':'8px 0 1px',marginTop:sameGroup?0:2,flexDirection:isMine?'row-reverse':'row'}}>
               <div style={{width:34,flexShrink:0,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:sameGroup?0:2}}>
-                {!sameGroup&&<div style={{width:34,height:34,borderRadius:'50%',background:avatarColor(msg.sender_name),display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,color:'#fff',flexShrink:0}}>{initials}</div>}
+                {avatar}
               </div>
-              <div style={{flex:1,minWidth:0}}>
-                {!sameGroup&&<div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:2}}>
-                  <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{msg.sender_name}</span>
-                  <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{fmtTime(msg.created_at)}</span>
-                </div>}
-                <div style={{fontSize:14,color:'var(--tf-text)',lineHeight:1.55,wordBreak:'break-word',whiteSpace:'pre-wrap'}}>{msg.text}</div>
-              </div>
+              {bubble}
             </div>);
             prevSender=msg.sender_id;prevTs=msg.created_at;
           });
