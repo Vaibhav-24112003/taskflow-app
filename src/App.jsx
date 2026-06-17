@@ -22,7 +22,7 @@ const SupportAdminView   = lazyWithReload(() => import('./SupportAdminView.jsx')
 const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
 import { isAdminEmail } from './lib/supabase'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare, Search } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -4695,6 +4695,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [periodMonth,setPeriodMonth]=useState(_initP.month||1);
   var [periodQuarter,setPeriodQuarter]=useState(_initQ.quarter||1);
   var [showCreateTask,setShowCreateTask]=useState(null); // {row, client}
+  var [editingCell,setEditingCell]=useState(null); // 'rowId:colKey' — which custom-column cell is open for editing
   var [saving,setSaving]=useState(false);
   // One-time task form
   var [showAddOnce,setShowAddOnce]=useState(false);
@@ -6415,45 +6416,62 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                 </td>;})}
                 {visibleCols.map(function(col){
                   var colType=col.type||'checkbox';
+                  // Checkbox stays an always-on toggle — it already reads as a clean badge.
                   if(colType==='checkbox'){
                     var val=!!(d[col.key]);
                     return<td key={col.key} style={{padding:'10px 10px',textAlign:'center'}}>
-                      <div onClick={function(){toggleCell(row.id,col.key,val);}} style={{width:22,height:22,borderRadius:5,border:'2px solid',borderColor:val?'#22c55e':'var(--tf-border)',background:val?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'all 0.15s'}}>
+                      <div onClick={function(e){e.stopPropagation();toggleCell(row.id,col.key,val);}} style={{width:22,height:22,borderRadius:5,border:'2px solid',borderColor:val?'#22c55e':'var(--tf-border)',background:val?'#22c55e':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto',transition:'all 0.15s'}}>
                         {val&&<span style={{color:'#fff',fontSize:13,fontWeight:900,lineHeight:1}}>✓</span>}
                       </div>
                     </td>;
                   }
-                  if(colType==='text'){
-                    return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
-                      <input defaultValue={d[col.key]||''} onBlur={function(e){if(e.target.value!==(d[col.key]||''))updateCellData(row.id,col.key,e.target.value);}}
-                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:12,width:'100%',minWidth:60,outline:'none',fontFamily:'inherit',padding:'4px 6px',textAlign:'center'}}/>
+                  // Spreadsheet pattern: quiet text/badge by default; editable control appears only on click.
+                  var cellKey=row.id+':'+col.key;
+                  var isEditing=editingCell===cellKey;
+                  var raw=d[col.key]||'';
+                  function closeCell(){setEditingCell(null);}
+                  function openCell(e){e.stopPropagation();setEditingCell(cellKey);}
+                  var displayWrap=function(content,empty){
+                    return<td key={col.key} onClick={openCell} style={{padding:'4px 6px',textAlign:'center',cursor:'pointer'}}
+                      onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}}
+                      onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                      {empty
+                        ?<span style={{fontSize:11,color:'var(--tf-text-mut)',fontWeight:500,opacity:0.7}}>+ Add</span>
+                        :content}
                     </td>;
-                  }
+                  };
                   if(colType==='date'){
+                    if(!isEditing)return displayWrap(<span style={{fontSize:11,color:'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{raw?new Date(raw+'T00:00:00').toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</span>,!raw);
                     return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
-                      <input type="date" defaultValue={d[col.key]||''} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}}
-                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer'}}/>
+                      <input type="date" autoFocus defaultValue={raw} onClick={function(e){e.stopPropagation();}} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}} onBlur={closeCell}
+                        style={{background:'var(--tf-surface)',border:'1px solid #3b82f6',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer'}}/>
                     </td>;
                   }
                   if(colType==='time'){
+                    if(!isEditing)return displayWrap(<span style={{fontSize:11,color:'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{raw}</span>,!raw);
                     return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
-                      <input type="time" defaultValue={d[col.key]||''} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}}
-                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer'}}/>
+                      <input type="time" autoFocus defaultValue={raw} onClick={function(e){e.stopPropagation();}} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}} onBlur={closeCell}
+                        style={{background:'var(--tf-surface)',border:'1px solid #3b82f6',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer'}}/>
                     </td>;
                   }
                   if(colType==='select'){
                     var opts=(col.options||'').split(',').map(function(o){return o.trim();}).filter(Boolean);
+                    if(!isEditing)return displayWrap(<span style={{fontSize:11,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.08)',border:'1px solid rgba(14,42,71,0.18)',borderRadius:20,padding:'2px 9px',display:'inline-block',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{raw}</span>,!raw);
                     return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
-                      <select value={d[col.key]||''} onChange={function(e){updateCellData(row.id,col.key,e.target.value);}}
-                        style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer',maxWidth:120}}>
+                      <select autoFocus value={raw} onClick={function(e){e.stopPropagation();}} onChange={function(e){updateCellData(row.id,col.key,e.target.value);closeCell();}} onBlur={closeCell}
+                        style={{background:'var(--tf-surface)',border:'1px solid #3b82f6',borderRadius:5,color:'var(--tf-text)',fontSize:11,outline:'none',fontFamily:'inherit',padding:'3px 4px',cursor:'pointer',maxWidth:120}}>
                         <option value="">—</option>
                         {opts.map(function(o){return<option key={o} value={o}>{o}</option>;})}
                       </select>
                     </td>;
                   }
-                  return<td key={col.key} style={{padding:'6px 6px',textAlign:'center'}}>
-                    <input defaultValue={d[col.key]||''} onBlur={function(e){if(e.target.value!==(d[col.key]||''))updateCellData(row.id,col.key,e.target.value);}}
-                      style={{background:'transparent',border:'1px solid var(--tf-border)',borderRadius:5,color:'var(--tf-text)',fontSize:12,width:'100%',minWidth:60,outline:'none',fontFamily:'inherit',padding:'4px 6px',textAlign:'center'}}/>
+                  // text / default
+                  if(!isEditing)return displayWrap(<span style={{fontSize:12,color:'var(--tf-text)',display:'inline-block',maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{raw}</span>,!raw);
+                  return<td key={col.key} style={{padding:'4px 6px',textAlign:'center'}}>
+                    <input autoFocus defaultValue={raw} onClick={function(e){e.stopPropagation();}}
+                      onBlur={function(e){if(e.target.value!==raw)updateCellData(row.id,col.key,e.target.value);closeCell();}}
+                      onKeyDown={function(e){if(e.key==='Enter')e.target.blur();}}
+                      style={{background:'var(--tf-surface)',border:'1px solid #3b82f6',borderRadius:5,color:'var(--tf-text)',fontSize:12,width:'100%',minWidth:60,outline:'none',fontFamily:'inherit',padding:'4px 6px',textAlign:'center'}}/>
                   </td>;
                 })}
                 {showStartDate&&<td style={{padding:'6px 8px',textAlign:'center'}}>
@@ -11091,6 +11109,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   // New 3-column layout state
   var [wsRailFilter,setWsRailFilter]=useState('all'); // 'all' | 'today' | work_type_name
   var [quickAdd,setQuickAdd]=useState('');
+  var [dashSearch,setDashSearch]=useState('');
 
   async function toggleMyDay(rowId){
     if(planTodayIds.includes(rowId)){
@@ -11128,11 +11147,17 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var isSelf=viewMemberId===cu.id;
 
   // Rail-filtered rows for middle column
+  var dashQ=dashSearch.trim().toLowerCase();
   var railFiltered=filteredRows.filter(function(r){
-    if(wsRailFilter==='all')return true;
-    if(wsRailFilter==='today')return r.due_date===todayStr;
-    var ws=wsMap[r.worksheet_id];
-    return ws&&ws.work_type===wsRailFilter;
+    if(wsRailFilter==='today'){if(r.due_date!==todayStr)return false;}
+    else if(wsRailFilter!=='all'){var wsf=wsMap[r.worksheet_id];if(!(wsf&&wsf.work_type===wsRailFilter))return false;}
+    if(dashQ){
+      var ws2=wsMap[r.worksheet_id];
+      var cl2=clientMap[r.client_id];
+      var hay=((r.data&&r.data.__title)||'')+' '+((cl2&&(cl2.display_name||cl2.name))||'')+' '+((ws2&&ws2.work_type)||'');
+      if(hay.toLowerCase().indexOf(dashQ)<0)return false;
+    }
+    return true;
   });
   var railGrouped={};
   railFiltered.forEach(function(r){
@@ -11171,16 +11196,33 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
       {/* Sticky header — 2 rows */}
       <div style={{flexShrink:0,background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'10px 18px 8px'}}>
-        {/* Row 1: compact greeting left · filter pills centre · controls right */}
-        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-          {/* Greeting (compact) */}
-          <div style={{marginRight:6,minWidth:0}}>
-            <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap'}}>
-              {isSelf?greet+', '+firstName:viewingName+"'s Work"}
-            </span>
-          </div>
-          {/* Divider */}
-          <div style={{width:1,height:16,background:'var(--tf-border)',flexShrink:0}}/>
+        {/* Row 1: identity + counts · primary actions */}
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:7,flexWrap:'wrap'}}>
+          <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap'}}>
+            {isSelf?greet+', '+firstName:viewingName+"'s Work"}
+          </span>
+          <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:100,padding:'2px 9px',fontFamily:"'JetBrains Mono',monospace"}}>{stats.total} task{stats.total===1?'':'s'}</span>
+          {stats.overdue>0&&<span style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:100,padding:'2px 9px'}}>{stats.overdue} overdue</span>}
+          <div style={{flex:1}}/>
+          <button onClick={function(){load();}} disabled={loading} title="Reload"
+            style={{background:'transparent',border:'none',borderRadius:6,padding:'4px 6px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:14,opacity:loading?0.5:1,lineHeight:1,flexShrink:0}}
+            onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}}
+            onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>
+            <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.5s'}}>↻</span>
+          </button>
+          {isSelf&&<button data-tour="tour-createtask" onClick={function(){setShowCreate(true);}}
+            style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'6px 13px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:4,boxShadow:'0 2px 8px rgba(14,42,71,0.3)',flexShrink:0,whiteSpace:'nowrap'}}>
+            + Create Task
+          </button>}
+          <button data-tour="tour-plantoday" onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
+            style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'6px 11px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
+            <Calendar size={13} strokeWidth={2}/>
+            Plan Today
+            {myDayTasks.length>0&&<span style={{fontSize:9,fontWeight:800,background:planOpen?'rgba(255,255,255,0.2)':'rgba(14,42,71,0.12)',color:planOpen?'#fff':'#0e2a47',padding:'1px 5px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{myDayTasks.length}</span>}
+          </button>
+        </div>
+        {/* Row 2: status pills · search · work-type dropdown · date · member · view toggles */}
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
           {/* Status filter pills */}
           {[
             {id:'all',label:'All',count:stats.total},
@@ -11202,19 +11244,23 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             </button>;
           })}
           <div style={{flex:1}}/>
-          {/* View toggles */}
-          <div data-tour="tour-views" style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3,flexShrink:0}}>
-            {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'},{id:'urgency',Icon:Zap,label:'Urgency'}].map(function(v){
-              var active=dashView===v.id;
-              var Ico=v.Icon;
-              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label} aria-label={v.label}
-                style={{display:'flex',alignItems:'center',justifyContent:'center',width:26,height:24,borderRadius:5,border:'none',background:active?'#fff':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit',boxShadow:active?'0 1px 3px rgba(14,42,71,0.18),0 0 0 1px rgba(14,42,71,0.12)':'none',transition:'background .15s, color .15s, box-shadow .15s'}}
-                onMouseEnter={function(e){if(!active)e.currentTarget.style.color='#0e2a47';}}
-                onMouseLeave={function(e){if(!active)e.currentTarget.style.color='var(--tf-text-sub)';}}>
-                <Ico size={14} strokeWidth={active?2.2:1.8}/>
-              </button>;
-            })}
+          {/* Combined search */}
+          <div style={{display:'flex',alignItems:'center',gap:5,background:'var(--tf-surface)',border:'1px solid',borderColor:dashSearch?'#3b82f6':'var(--tf-border)',borderRadius:7,padding:'3px 8px',flexShrink:0}}>
+            <Search size={12} color={dashSearch?'#3b82f6':'var(--tf-text-sub)'}/>
+            <input value={dashSearch} onChange={function(e){setDashSearch(e.target.value);}} placeholder="Search task, client…"
+              style={{background:'transparent',border:'none',outline:'none',fontSize:11,color:'var(--tf-text)',fontFamily:'inherit',width:130}}/>
+            {dashSearch&&<button onClick={function(){setDashSearch('');}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,lineHeight:1,padding:0}}>×</button>}
           </div>
+          {/* Work-type dropdown (replaces pill strip) */}
+          <select data-tour="tour-worktypestrip" value={wsRailFilter} onChange={function(e){setWsRailFilter(e.target.value);}}
+            style={{background:wsRailFilter!=='all'?'rgba(14,42,71,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:wsRailFilter!=='all'?'#0e2a47':'var(--tf-border)',borderRadius:7,padding:'4px 8px',color:wsRailFilter!=='all'?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit',flexShrink:0,maxWidth:200}}>
+            <option value="all">All Work Types ({stats.total})</option>
+            <option value="today">Due Today ({stats.today})</option>
+            {Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
+              var ov=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
+              return<option key={wt} value={wt}>{wt} ({(grouped[wt]||[]).length}){ov>0?' · '+ov+' overdue':''}</option>;
+            })}
+          </select>
           {/* Date filter */}
           <select value={dateFilter} onChange={function(e){setDateFilter(e.target.value);}}
             style={{background:dateFilter!=='all'?'rgba(59,130,246,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:dateFilter!=='all'?'#3b82f6':'var(--tf-border)',borderRadius:7,padding:'4px 8px',color:dateFilter!=='all'?'#3b82f6':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit',flexShrink:0}}>
@@ -11233,47 +11279,19 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <option value={cu.id}>My Work</option>
             {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
           </select>}
-          {/* Divider */}
-          <div style={{width:1,height:16,background:'var(--tf-border)',flexShrink:0}}/>
-          {/* Action buttons */}
-          <button onClick={function(){load();}} disabled={loading} title="Reload"
-            style={{background:'transparent',border:'none',borderRadius:6,padding:'4px 6px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:13,opacity:loading?0.5:1,lineHeight:1,flexShrink:0}}
-            onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}}
-            onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>
-            <span style={{display:'inline-block',transform:loading?'rotate(180deg)':'none',transition:'transform 0.5s'}}>↻</span>
-          </button>
-          {isSelf&&<button data-tour="tour-createtask" onClick={function(){setShowCreate(true);}}
-            style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'5px 11px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:4,boxShadow:'0 2px 8px rgba(14,42,71,0.3)',flexShrink:0,whiteSpace:'nowrap'}}>
-            + Task
-          </button>}
-          <button data-tour="tour-plantoday" onClick={function(){setPlanOpen(function(v){return !v;});}} title={planOpen?'Hide Plan Today':'Show Plan Today'}
-            style={{background:planOpen?'#0f172a':'var(--tf-surface)',border:'1px solid '+(planOpen?'#0f172a':'var(--tf-border)'),borderRadius:7,padding:'5px 10px',color:planOpen?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5,flexShrink:0,whiteSpace:'nowrap'}}>
-            <Calendar size={13} strokeWidth={2}/>
-            Plan Today
-            {myDayTasks.length>0&&<span style={{fontSize:9,fontWeight:800,background:planOpen?'rgba(255,255,255,0.2)':'rgba(14,42,71,0.12)',color:planOpen?'#fff':'#0e2a47',padding:'1px 5px',borderRadius:8,fontFamily:"'JetBrains Mono',monospace"}}>{myDayTasks.length}</span>}
-          </button>
-        </div>
-        {/* Row 2: Work-type filter strip */}
-        <div data-tour="tour-worktypestrip" style={{display:'flex',gap:4,overflowX:'auto',paddingBottom:2}}>
-          {[{id:'all',label:'All Work Types',count:stats.total},{id:'today',label:'Due Today',count:stats.today}]
-            .concat(Object.keys(grouped).sort(function(a,b){if(a==='Unclassified')return 1;if(b==='Unclassified')return -1;return a<b?-1:1;}).map(function(wt){
-              var ov=rows.filter(function(r){var ws=wsMap[r.worksheet_id];return r.due_date&&r.due_date<todayStr&&ws&&ws.work_type===wt;}).length;
-              return{id:wt,label:wt,count:(grouped[wt]||[]).length,overdue:ov};
-            }))
-            .map(function(item){
-              var active=wsRailFilter===item.id;
-              return<button key={item.id} onClick={function(){setWsRailFilter(item.id);}}
-                style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:100,border:'1px solid',flexShrink:0,
-                  borderColor:active?'#0e2a47':'var(--tf-border)',
-                  background:active?'rgba(14,42,71,0.12)':'transparent',
-                  color:active?'#0e2a47':'var(--tf-text-sub)',
-                  cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit'}}>
-                {item.label==='Unclassified'&&<span style={{fontSize:10,color:'#f59e0b'}}>🏷</span>}
-                <span>{item.label}</span>
-                {item.overdue>0&&<span style={{width:5,height:5,borderRadius:'50%',background:'#ef4444',display:'inline-block'}} title={item.overdue+' overdue'}/>}
-                <span style={{fontSize:9,fontWeight:700,opacity:0.7,fontFamily:"'JetBrains Mono',monospace"}}>{item.count}</span>
+          {/* View toggles */}
+          <div data-tour="tour-views" style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3,flexShrink:0}}>
+            {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'},{id:'urgency',Icon:Zap,label:'Urgency'}].map(function(v){
+              var active=dashView===v.id;
+              var Ico=v.Icon;
+              return<button key={v.id} onClick={function(){setDashView(v.id);}} title={v.label} aria-label={v.label}
+                style={{display:'flex',alignItems:'center',justifyContent:'center',width:26,height:24,borderRadius:5,border:'none',background:active?'#fff':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit',boxShadow:active?'0 1px 3px rgba(14,42,71,0.18),0 0 0 1px rgba(14,42,71,0.12)':'none',transition:'background .15s, color .15s, box-shadow .15s'}}
+                onMouseEnter={function(e){if(!active)e.currentTarget.style.color='#0e2a47';}}
+                onMouseLeave={function(e){if(!active)e.currentTarget.style.color='var(--tf-text-sub)';}}>
+                <Ico size={14} strokeWidth={active?2.2:1.8}/>
               </button>;
             })}
+          </div>
         </div>
       </div>
 
