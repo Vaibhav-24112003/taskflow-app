@@ -15801,6 +15801,8 @@ function ClientConnectModule({org,supabase,cu}){
 // ── Team Chat Module ─────────────────────────────────────────────────
 function TeamChatModule({org,supabase,cu}){
   var [channels,setChannels]=useState([]);
+  var [chanMembers,setChanMembers]=useState({}); // channelId -> [user_id]
+  var [members,setMembers]=useState([]);          // org members [{id,name,email}]
   var [activeCh,setActiveCh]=useState(null);
   var [messages,setMessages]=useState([]);
   var [msgText,setMsgText]=useState('');
@@ -15812,49 +15814,78 @@ function TeamChatModule({org,supabase,cu}){
   var [savingCh,setSavingCh]=useState(false);
   var [myRole,setMyRole]=useState('member');
   var [myName,setMyName]=useState(null);
+  var [dmPickerOpen,setDmPickerOpen]=useState(false);
+  var [showNewGroup,setShowNewGroup]=useState(false);
+  var [groupName,setGroupName]=useState('');
+  var [groupSel,setGroupSel]=useState([]);        // selected member ids for a new group
+  var [savingGroup,setSavingGroup]=useState(false);
+  var [memberFilter,setMemberFilter]=useState('');
+  var [unread,setUnread]=useState({});            // channelId -> true (per-conversation dot)
   var bottomRef=useRef(null);
   var inputRef=useRef(null);
-  var subRef=useRef(null);
+  var channelsRef=useRef(channels);channelsRef.current=channels;
+  var activeRef=useRef(null);activeRef.current=activeCh?activeCh.id:null;
+
+  function selfName(){return myName||cu.user_metadata?.full_name||(cu.email?cu.email.split('@')[0]:'')||'User';}
 
   useEffect(function(){
-    loadChannels();
+    loadAll();
     var mr=(org.members||[]).find(function(m){return m.user_id===cu.id;});
     if(mr)setMyRole(mr.role||'member');
-    supabase.from('profiles').select('name').eq('id',cu.id).single().then(function(r){
-      if(r.data&&r.data.name)setMyName(r.data.name);
-    });
   },[org.id]);
 
-  async function loadChannels(){
+  async function loadMembersList(){
+    var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(500);
+    var ids=(rm.data||[]).map(function(x){return x.user_id;});
+    var mp={};
+    if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(500);(rp.data||[]).forEach(function(p){mp[p.id]=p;});}
+    setMembers(ids.map(function(id){var p=mp[id]||{};return {id:id,name:p.name||null,email:p.email||null};}));
+    if(mp[cu.id]&&mp[cu.id].name)setMyName(mp[cu.id].name);
+  }
+
+  async function loadAll(){
     setLoading(true);
-    var r=await supabase.from('team_chat_channels').select('*').eq('org_id',org.id).order('sort_order',{ascending:true}).order('created_at',{ascending:true});
+    await loadMembersList();
+    var r=await supabase.from('team_chat_channels').select('*').eq('org_id',org.id).order('created_at',{ascending:true});
     var chs=r.data||[];
-    if(chs.length===0){
-      // seed #general
-      var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:'general',description:'General discussion',created_by:cu.id,sort_order:0}).select().single();
-      if(ins.data)chs=[ins.data];
+    if(!chs.some(function(c){return c.kind==='channel';})){
+      var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:'general',description:'General discussion',created_by:cu.id,sort_order:0,kind:'channel'}).select().single();
+      if(ins.data)chs=chs.concat([ins.data]);
     }
+    var privIds=chs.filter(function(c){return c.kind!=='channel';}).map(function(c){return c.id;});
+    var cm={};
+    if(privIds.length){
+      var rcm=await supabase.from('team_chat_channel_members').select('channel_id,user_id').in('channel_id',privIds);
+      (rcm.data||[]).forEach(function(x){(cm[x.channel_id]=cm[x.channel_id]||[]).push(x.user_id);});
+    }
+    setChanMembers(cm);
     setChannels(chs);
-    setActiveCh(chs[0]||null);
+    setActiveCh(function(prev){return prev?(chs.find(function(c){return c.id===prev.id;})||prev):(chs.find(function(c){return c.kind==='channel';})||chs[0]||null);});
     setLoading(false);
   }
 
+  // Single org-wide realtime subscription (RLS limits delivery to visible channels incl. our DMs).
   useEffect(function(){
-    if(!activeCh)return;
-    loadMessages(activeCh.id);
-    // subscribe realtime
-    if(subRef.current)subRef.current.unsubscribe();
-    subRef.current=supabase.channel('tcm_'+activeCh.id)
-      .on('postgres_changes',{event:'INSERT',schema:'public',table:'team_chat_messages',filter:'channel_id=eq.'+activeCh.id},function(payload){
-        // Own messages are already added (optimistically, then reconciled) in send() — skip to avoid double rendering.
-        if(payload.new.sender_id===cu.id)return;
-        setMessages(function(prev){
-          if(prev.some(function(m){return m.id===payload.new.id;}))return prev;
-          return prev.concat([payload.new]);
-        });
+    if(!org||!org.id)return;
+    var sub=supabase.channel('tcm_org_'+org.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'team_chat_messages',filter:'org_id=eq.'+org.id},function(payload){
+        var msg=payload.new;
+        if(msg.sender_id===cu.id)return; // own messages handled optimistically in send()
+        if(!(channelsRef.current||[]).some(function(c){return c.id===msg.channel_id;})){loadAll();} // new DM/group started with us
+        if(activeRef.current&&msg.channel_id===activeRef.current){
+          setMessages(function(prev){if(prev.some(function(m){return m.id===msg.id;}))return prev;return prev.concat([msg]);});
+        }else{
+          setUnread(function(u){if(u[msg.channel_id])return u;var n=Object.assign({},u);n[msg.channel_id]=true;return n;});
+        }
       })
       .subscribe();
-    return function(){if(subRef.current)subRef.current.unsubscribe();};
+    return function(){supabase.removeChannel(sub);};
+  },[org&&org.id]);
+
+  useEffect(function(){
+    if(!activeCh){setMessages([]);return;}
+    loadMessages(activeCh.id);
+    setUnread(function(u){if(!u[activeCh.id])return u;var n=Object.assign({},u);delete n[activeCh.id];return n;});
   },[activeCh?.id]);
 
   useEffect(function(){
@@ -15870,7 +15901,7 @@ function TeamChatModule({org,supabase,cu}){
     var text=(msgText||'').trim();
     if(!text||!activeCh||sending)return;
     setSending(true);
-    var senderName=myName||cu.user_metadata?.full_name||(cu.email?cu.email.split('@')[0]:'')||'User';
+    var senderName=selfName();
     var optId='opt_'+Date.now();
     var optimistic={id:optId,org_id:org.id,channel_id:activeCh.id,sender_id:cu.id,sender_name:senderName,text:text,created_at:new Date().toISOString()};
     setMessages(function(prev){return prev.concat([optimistic]);});
@@ -15887,9 +15918,55 @@ function TeamChatModule({org,supabase,cu}){
     var name=(newChName||'').trim().toLowerCase().replace(/\s+/g,'-').replace(/[^a-z0-9-]/g,'');
     if(!name)return;
     setSavingCh(true);
-    var r=await supabase.from('team_chat_channels').insert({org_id:org.id,name,description:newChDesc.trim()||null,created_by:cu.id,sort_order:channels.length}).select().single();
+    var r=await supabase.from('team_chat_channels').insert({org_id:org.id,name:name,description:newChDesc.trim()||null,created_by:cu.id,sort_order:channels.length,kind:'channel'}).select().single();
     if(r.data){setChannels(function(p){return p.concat([r.data]);});setActiveCh(r.data);}
     setShowNewCh(false);setNewChName('');setNewChDesc('');setSavingCh(false);
+  }
+
+  // Open (or lazily create) a 1:1 DM with a member.
+  async function openOrCreateDm(memberId){
+    setDmPickerOpen(false);setMemberFilter('');
+    var key=[cu.id,memberId].sort().join(':');
+    var existing=channels.find(function(c){return c.kind==='dm'&&c.dm_key===key;});
+    if(existing){setActiveCh(existing);return;}
+    var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:'dm',kind:'dm',dm_key:key,created_by:cu.id,sort_order:0}).select().single();
+    if(ins.error){ // unique-violation race — fetch the existing one
+      var rr=await supabase.from('team_chat_channels').select('*').eq('org_id',org.id).eq('dm_key',key).maybeSingle();
+      if(rr.data){setChannels(function(p){return p.some(function(c){return c.id===rr.data.id;})?p:p.concat([rr.data]);});setActiveCh(rr.data);}
+      return;
+    }
+    var chan=ins.data;
+    await supabase.from('team_chat_channel_members').insert([
+      {channel_id:chan.id,user_id:cu.id,org_id:org.id},
+      {channel_id:chan.id,user_id:memberId,org_id:org.id}
+    ]);
+    setChannels(function(p){return p.concat([chan]);});
+    setChanMembers(function(p){var n=Object.assign({},p);n[chan.id]=[cu.id,memberId];return n;});
+    setActiveCh(chan);
+  }
+
+  async function createGroup(){
+    var name=(groupName||'').trim();
+    if(!name||savingGroup)return;
+    setSavingGroup(true);
+    var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:name,kind:'group',created_by:cu.id,sort_order:0}).select().single();
+    if(ins.data){
+      var chan=ins.data;
+      var ids=groupSel.slice();if(ids.indexOf(cu.id)<0)ids.push(cu.id);
+      await supabase.from('team_chat_channel_members').insert(ids.map(function(uid){return {channel_id:chan.id,user_id:uid,org_id:org.id};}));
+      setChannels(function(p){return p.concat([chan]);});
+      setChanMembers(function(p){var n=Object.assign({},p);n[chan.id]=ids;return n;});
+      setActiveCh(chan);
+    }
+    setShowNewGroup(false);setGroupName('');setGroupSel([]);setSavingGroup(false);
+  }
+
+  function memberName(id){var m=members.find(function(x){return x.id===id;});return m?(m.name||(m.email?m.email.split('@')[0]:'Member')):'Member';}
+  function dmOtherId(ch){var ids=chanMembers[ch.id]||[];return ids.find(function(i){return i!==cu.id;});}
+  function channelLabel(ch){
+    if(!ch)return '';
+    if(ch.kind==='dm'){var o=dmOtherId(ch);return o?memberName(o):'Direct message';}
+    return ch.name;
   }
 
   function fmtTime(ts){
@@ -15907,42 +15984,114 @@ function TeamChatModule({org,supabase,cu}){
 
   return<div style={{display:'flex',height:'calc(100vh - 140px)',minHeight:400,overflow:'hidden',borderRadius:12,border:'1px solid var(--tf-border)',background:'var(--tf-surface)'}}>
     {/* Channel sidebar */}
-    <div style={{width:200,flexShrink:0,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)'}}>
-      <div style={{padding:'12px 14px 8px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid var(--tf-border)'}}>
-        <span style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',letterSpacing:'0.07em',textTransform:'uppercase'}}>Channels</span>
-        {canAdmin&&<button onClick={function(){setShowNewCh(true);}} title="New channel" style={{background:'none',border:'none',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:18,lineHeight:1,padding:'0 2px'}} onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>+</button>}
-      </div>
-      <div style={{flex:1,overflowY:'auto',padding:'6px 6px'}}>
-        {channels.map(function(ch){
-          var isActive=activeCh&&activeCh.id===ch.id;
+    <div style={{width:220,flexShrink:0,borderRight:'1px solid var(--tf-border)',display:'flex',flexDirection:'column',background:'var(--tf-bg)'}}>
+      <div style={{flex:1,overflowY:'auto',padding:'8px 6px'}}>
+        {/* ── Channels ── */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 8px 4px'}}>
+          <span style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',letterSpacing:'0.07em',textTransform:'uppercase'}}>Channels</span>
+          {canAdmin&&<button onClick={function(){setShowNewCh(true);setDmPickerOpen(false);}} title="New channel" style={{background:'none',border:'none',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:17,lineHeight:1,padding:'0 2px'}} onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>+</button>}
+        </div>
+        {channels.filter(function(c){return c.kind==='channel';}).map(function(ch){
+          var isActive=activeCh&&activeCh.id===ch.id;var ur=unread[ch.id];
           return<button key={ch.id} onClick={function(){setActiveCh(ch);}}
-            style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.15)':'none',border:'none',borderRadius:7,padding:'7px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:isActive?'var(--tf-text)':'var(--tf-text-sub)',fontWeight:isActive?700:500,fontSize:13,fontFamily:'inherit',marginBottom:1}}
+            style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.15)':'none',border:'none',borderRadius:7,padding:'7px 10px',cursor:'pointer',display:'flex',alignItems:'center',gap:6,color:isActive?'var(--tf-text)':'var(--tf-text-sub)',fontWeight:isActive||ur?700:500,fontSize:13,fontFamily:'inherit',marginBottom:1}}
             onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.07)';}}
             onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='none';}}>
             <span style={{color:'var(--tf-text-sub)',fontSize:14,flexShrink:0}}>#</span>
-            <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ch.name}</span>
+            <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ch.name}</span>
+            {ur&&<span style={{width:7,height:7,borderRadius:7,background:'#ef4444',flexShrink:0}}/>}
           </button>;
         })}
-      </div>
-      {showNewCh&&<div style={{padding:12,borderTop:'1px solid var(--tf-border)'}}>
-        <input value={newChName} onChange={function(e){setNewChName(e.target.value);}} placeholder="channel-name" autoFocus
-          style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:6,boxSizing:'border-box'}}
-          onKeyDown={function(e){if(e.key==='Enter')createChannel();if(e.key==='Escape'){setShowNewCh(false);setNewChName('');setNewChDesc('');};}}/>
-        <input value={newChDesc} onChange={function(e){setNewChDesc(e.target.value);}} placeholder="Description (optional)"
-          style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:8,boxSizing:'border-box'}}/>
-        <div style={{display:'flex',gap:6}}>
-          <button onClick={createChannel} disabled={savingCh||!newChName.trim()} style={{flex:1,padding:'5px 0',background:'#6b8cad',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingCh||!newChName.trim()?0.6:1}}>Create</button>
-          <button onClick={function(){setShowNewCh(false);setNewChName('');setNewChDesc('');}} style={{flex:1,padding:'5px 0',background:'var(--tf-surface)',color:'var(--tf-text-sub)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+        {showNewCh&&<div style={{padding:'8px 8px 4px'}}>
+          <input value={newChName} onChange={function(e){setNewChName(e.target.value);}} placeholder="channel-name" autoFocus
+            style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:6,boxSizing:'border-box'}}
+            onKeyDown={function(e){if(e.key==='Enter')createChannel();if(e.key==='Escape'){setShowNewCh(false);setNewChName('');setNewChDesc('');};}}/>
+          <input value={newChDesc} onChange={function(e){setNewChDesc(e.target.value);}} placeholder="Description (optional)"
+            style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:8,boxSizing:'border-box'}}/>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={createChannel} disabled={savingCh||!newChName.trim()} style={{flex:1,padding:'5px 0',background:'#6b8cad',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingCh||!newChName.trim()?0.6:1}}>Create</button>
+            <button onClick={function(){setShowNewCh(false);setNewChName('');setNewChDesc('');}} style={{flex:1,padding:'5px 0',background:'var(--tf-surface)',color:'var(--tf-text-sub)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+          </div>
+        </div>}
+
+        {/* ── Direct Messages & private groups ── */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 8px 4px'}}>
+          <span style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',letterSpacing:'0.07em',textTransform:'uppercase'}}>Direct Messages</span>
+          <button onClick={function(){setDmPickerOpen(function(v){return !v;});setShowNewCh(false);setShowNewGroup(false);}} title="New message" style={{background:'none',border:'none',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:17,lineHeight:1,padding:'0 2px'}} onMouseEnter={function(e){e.currentTarget.style.color='var(--tf-text)';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>+</button>
         </div>
-      </div>}
+        {channels.filter(function(c){return c.kind==='dm'||c.kind==='group';}).map(function(ch){
+          var isActive=activeCh&&activeCh.id===ch.id;var ur=unread[ch.id];
+          var isGroup=ch.kind==='group';
+          var label=channelLabel(ch);
+          var initials=isGroup?'':(label||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();
+          return<button key={ch.id} onClick={function(){setActiveCh(ch);}}
+            style={{width:'100%',textAlign:'left',background:isActive?'rgba(107,140,173,0.15)':'none',border:'none',borderRadius:7,padding:'6px 8px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,color:isActive?'var(--tf-text)':'var(--tf-text-sub)',fontWeight:isActive||ur?700:500,fontSize:13,fontFamily:'inherit',marginBottom:1}}
+            onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(107,140,173,0.07)';}}
+            onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='none';}}>
+            {isGroup
+              ?<span style={{width:22,height:22,borderRadius:6,background:'rgba(107,140,173,0.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0}}>👥</span>
+              :<span style={{width:22,height:22,borderRadius:'50%',background:avatarColor(label),display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff',flexShrink:0}}>{initials}</span>}
+            <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{label}{isGroup&&<span style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:500}}> · {(chanMembers[ch.id]||[]).length}</span>}</span>
+            {ur&&<span style={{width:7,height:7,borderRadius:7,background:'#ef4444',flexShrink:0}}/>}
+          </button>;
+        })}
+
+        {/* DM picker */}
+        {dmPickerOpen&&<div style={{padding:'8px 8px 4px'}}>
+          <input value={memberFilter} onChange={function(e){setMemberFilter(e.target.value);}} placeholder="Find a person…" autoFocus
+            style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:6,boxSizing:'border-box'}}/>
+          <div style={{maxHeight:180,overflowY:'auto',marginBottom:6}}>
+            {members.filter(function(m){return m.id!==cu.id;}).filter(function(m){var q=memberFilter.trim().toLowerCase();if(!q)return true;return ((m.name||'')+' '+(m.email||'')).toLowerCase().indexOf(q)>=0;}).map(function(m){
+              var nm=m.name||(m.email?m.email.split('@')[0]:'Member');
+              return<button key={m.id} onClick={function(){openOrCreateDm(m.id);}}
+                style={{width:'100%',textAlign:'left',background:'none',border:'none',borderRadius:6,padding:'5px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:7,color:'var(--tf-text)',fontSize:12.5,fontFamily:'inherit'}}
+                onMouseEnter={function(e){e.currentTarget.style.background='rgba(107,140,173,0.1)';}} onMouseLeave={function(e){e.currentTarget.style.background='none';}}>
+                <span style={{width:20,height:20,borderRadius:'50%',background:avatarColor(nm),display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:'#fff',flexShrink:0}}>{nm.split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase()}</span>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm}</span>
+              </button>;
+            })}
+            {members.filter(function(m){return m.id!==cu.id;}).length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',padding:'6px 6px'}}>No other members yet.</div>}
+          </div>
+          <button onClick={function(){setShowNewGroup(true);setDmPickerOpen(false);setMemberFilter('');}} style={{width:'100%',padding:'6px 0',background:'var(--tf-surface)',color:'var(--tf-text)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>👥 New group…</button>
+        </div>}
+
+        {/* New group panel */}
+        {showNewGroup&&<div style={{padding:'8px 8px 4px'}}>
+          <input value={groupName} onChange={function(e){setGroupName(e.target.value);}} placeholder="Group name" autoFocus
+            style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:6,boxSizing:'border-box'}}/>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',margin:'2px 2px 4px'}}>Members</div>
+          <div style={{maxHeight:150,overflowY:'auto',marginBottom:6}}>
+            {members.filter(function(m){return m.id!==cu.id;}).map(function(m){
+              var nm=m.name||(m.email?m.email.split('@')[0]:'Member');var sel=groupSel.indexOf(m.id)>=0;
+              return<button key={m.id} onClick={function(){setGroupSel(function(p){return sel?p.filter(function(x){return x!==m.id;}):p.concat([m.id]);});}}
+                style={{width:'100%',textAlign:'left',background:sel?'rgba(107,140,173,0.12)':'none',border:'none',borderRadius:6,padding:'5px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:7,color:'var(--tf-text)',fontSize:12.5,fontFamily:'inherit'}}>
+                <span style={{width:16,height:16,borderRadius:4,border:'1.5px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'#6b8cad':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'#fff',fontSize:10,fontWeight:900}}>{sel?'✓':''}</span>
+                <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm}</span>
+              </button>;
+            })}
+          </div>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={createGroup} disabled={savingGroup||!groupName.trim()||groupSel.length===0} style={{flex:1,padding:'5px 0',background:'#6b8cad',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingGroup||!groupName.trim()||groupSel.length===0?0.6:1}}>Create</button>
+            <button onClick={function(){setShowNewGroup(false);setGroupName('');setGroupSel([]);}} style={{flex:1,padding:'5px 0',background:'var(--tf-surface)',color:'var(--tf-text-sub)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
+          </div>
+        </div>}
+      </div>
     </div>
     {/* Messages area */}
     <div style={{flex:1,display:'flex',flexDirection:'column',minWidth:0}}>
       {/* Channel header */}
       {activeCh&&<div style={{padding:'10px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-        <span style={{fontSize:16,color:'var(--tf-text-sub)'}}>#</span>
-        <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{activeCh.name}</span>
-        {activeCh.description&&<span style={{fontSize:12,color:'var(--tf-text-sub)',marginLeft:4}}>{activeCh.description}</span>}
+        {activeCh.kind==='dm'
+          ?<span style={{width:24,height:24,borderRadius:'50%',background:avatarColor(channelLabel(activeCh)),display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,color:'#fff',flexShrink:0}}>{(channelLabel(activeCh)||'?').split(' ').map(function(w){return w[0];}).slice(0,2).join('').toUpperCase()}</span>
+          :activeCh.kind==='group'
+          ?<span style={{fontSize:16}}>👥</span>
+          :<span style={{fontSize:16,color:'var(--tf-text-sub)'}}>#</span>}
+        <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{channelLabel(activeCh)}</span>
+        {activeCh.kind==='group'
+          ?<span style={{fontSize:12,color:'var(--tf-text-sub)',marginLeft:4}}>{(chanMembers[activeCh.id]||[]).map(function(id){return id===cu.id?'You':memberName(id);}).join(', ')}</span>
+          :activeCh.kind==='dm'
+          ?<span style={{fontSize:12,color:'var(--tf-text-sub)',marginLeft:4}}>Direct message</span>
+          :activeCh.description&&<span style={{fontSize:12,color:'var(--tf-text-sub)',marginLeft:4}}>{activeCh.description}</span>}
       </div>}
       {/* Message list */}
       <div style={{flex:1,overflowY:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:2}}>
@@ -15976,7 +16125,7 @@ function TeamChatModule({org,supabase,cu}){
       {/* Input */}
       <div style={{padding:'10px 18px 14px',borderTop:'1px solid var(--tf-border)',flexShrink:0}}>
         <div style={{display:'flex',gap:8,alignItems:'flex-end',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'8px 12px',transition:'border-color 0.15s'}} onFocusCapture={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onBlurCapture={function(e){e.currentTarget.style.borderColor='var(--tf-border)';}}>
-          <textarea ref={inputRef} value={msgText} onChange={function(e){setMsgText(e.target.value);}} placeholder={'Message #'+(activeCh?activeCh.name:'...')}
+          <textarea ref={inputRef} value={msgText} onChange={function(e){setMsgText(e.target.value);}} placeholder={activeCh?('Message '+(activeCh.kind==='channel'?'#':'')+channelLabel(activeCh)):'Message…'}
             rows={1} style={{flex:1,background:'none',border:'none',outline:'none',resize:'none',fontSize:14,color:'var(--tf-text)',fontFamily:'inherit',lineHeight:1.5,maxHeight:120,overflowY:'auto'}}
             onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/>
           <button onClick={send} disabled={!msgText.trim()||sending}
@@ -16953,6 +17102,22 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var [orgMemberPerms,setOrgMemberPerms]=useState([]);
   var [orgAllMembers,setOrgAllMembers]=useState([]);
   var [myModuleAccess,setMyModuleAccess]=useState(null);
+  var [chatUnread,setChatUnread]=useState(0); // unread team-chat messages while not viewing chat
+  // Realtime: badge the Team Chat nav item when messages arrive in another module.
+  // RLS on team_chat_messages ensures only messages the user can see (incl. their DMs) trigger this.
+  var orgModuleRef=useRef(orgModule);orgModuleRef.current=orgModule;
+  useEffect(function(){
+    if(!org||!org.id)return;
+    var ch=supabase.channel('tc_unread_'+org.id)
+      .on('postgres_changes',{event:'INSERT',schema:'public',table:'team_chat_messages',filter:'org_id=eq.'+org.id},function(payload){
+        if(payload.new.sender_id===cu.id)return;
+        if(orgModuleRef.current==='chat')return;
+        setChatUnread(function(n){return n+1;});
+      })
+      .subscribe();
+    return function(){supabase.removeChannel(ch);};
+  },[org&&org.id]);
+  useEffect(function(){ if(orgModule==='chat')setChatUnread(0); },[orgModule]);
   // Respond to CommandBar navigation
   useEffect(function(){
     if(!navTarget||!navTarget.module)return;
@@ -17238,8 +17403,12 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
                 style={{width:'100%',textAlign:'left',background:isActive?'rgba(255,255,255,0.08)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
                 onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.04)';}}
                 onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
-                <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{flexShrink:0,color:isActive?'#7fa3c7':'#8696b3'}}/>
-                {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#ffffff':'#c7d2e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.label}</span>}
+                <span style={{position:'relative',display:'flex',flexShrink:0}}>
+                  <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{color:isActive?'#7fa3c7':'#8696b3'}}/>
+                  {m.id==='chat'&&chatUnread>0&&!sidebarOpen&&<span style={{position:'absolute',top:-4,right:-5,minWidth:8,height:8,borderRadius:8,background:'#ef4444',border:'1.5px solid #0e1929',boxShadow:'0 0 0 1px rgba(239,68,68,0.4)'}}/>}
+                </span>
+                {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#ffffff':'#c7d2e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{m.label}</span>}
+                {m.id==='chat'&&chatUnread>0&&sidebarOpen&&<span style={{flexShrink:0,minWidth:18,height:18,padding:'0 5px',borderRadius:9,background:'#ef4444',color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'JetBrains Mono',monospace"}}>{chatUnread>99?'99+':chatUnread}</span>}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:32,marginBottom:6}}>
                 {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
