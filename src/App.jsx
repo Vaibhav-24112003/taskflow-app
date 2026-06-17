@@ -15838,7 +15838,10 @@ function TeamChatModule({org,supabase,cu}){
     var rm=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(500);
     var ids=(rm.data||[]).map(function(x){return x.user_id;});
     var mp={};
-    if(ids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',ids).limit(500);(rp.data||[]).forEach(function(p){mp[p.id]=p;});}
+    if(ids.length){
+      var rp=await supabase.rpc('tc_org_member_profiles',{_org_id:org.id});
+      (rp.data||[]).forEach(function(p){mp[p.id]=p;});
+    }
     setMembers(ids.map(function(id){var p=mp[id]||{};return {id:id,name:p.name||null,email:p.email||null};}));
     if(mp[cu.id]&&mp[cu.id].name)setMyName(mp[cu.id].name);
   }
@@ -15930,16 +15933,21 @@ function TeamChatModule({org,supabase,cu}){
     var existing=channels.find(function(c){return c.kind==='dm'&&c.dm_key===key;});
     if(existing){setActiveCh(existing);return;}
     var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:'dm',kind:'dm',dm_key:key,created_by:cu.id,sort_order:0}).select().single();
-    if(ins.error){ // unique-violation race — fetch the existing one
-      var rr=await supabase.from('team_chat_channels').select('*').eq('org_id',org.id).eq('dm_key',key).maybeSingle();
-      if(rr.data){setChannels(function(p){return p.some(function(c){return c.id===rr.data.id;})?p:p.concat([rr.data]);});setActiveCh(rr.data);}
+    if(ins.error){
+      if(ins.error.code==='23505'){ // unique-violation race — fetch the existing one
+        var rr=await supabase.from('team_chat_channels').select('*').eq('org_id',org.id).eq('dm_key',key).maybeSingle();
+        if(rr.data){setChannels(function(p){return p.some(function(c){return c.id===rr.data.id;})?p:p.concat([rr.data]);});setActiveCh(rr.data);}
+        return;
+      }
+      alert('Could not start the conversation: '+ins.error.message);
       return;
     }
     var chan=ins.data;
-    await supabase.from('team_chat_channel_members').insert([
+    var mIns=await supabase.from('team_chat_channel_members').insert([
       {channel_id:chan.id,user_id:cu.id,org_id:org.id},
       {channel_id:chan.id,user_id:memberId,org_id:org.id}
     ]);
+    if(mIns.error){alert('Could not add participants: '+mIns.error.message);return;}
     setChannels(function(p){return p.concat([chan]);});
     setChanMembers(function(p){var n=Object.assign({},p);n[chan.id]=[cu.id,memberId];return n;});
     setActiveCh(chan);
@@ -15950,14 +15958,14 @@ function TeamChatModule({org,supabase,cu}){
     if(!name||savingGroup)return;
     setSavingGroup(true);
     var ins=await supabase.from('team_chat_channels').insert({org_id:org.id,name:name,kind:'group',created_by:cu.id,sort_order:0}).select().single();
-    if(ins.data){
-      var chan=ins.data;
-      var ids=groupSel.slice();if(ids.indexOf(cu.id)<0)ids.push(cu.id);
-      await supabase.from('team_chat_channel_members').insert(ids.map(function(uid){return {channel_id:chan.id,user_id:uid,org_id:org.id};}));
-      setChannels(function(p){return p.concat([chan]);});
-      setChanMembers(function(p){var n=Object.assign({},p);n[chan.id]=ids;return n;});
-      setActiveCh(chan);
-    }
+    if(ins.error){alert('Could not create group: '+ins.error.message);setSavingGroup(false);return;}
+    var chan=ins.data;
+    var ids=groupSel.slice();if(ids.indexOf(cu.id)<0)ids.push(cu.id);
+    var mIns=await supabase.from('team_chat_channel_members').insert(ids.map(function(uid){return {channel_id:chan.id,user_id:uid,org_id:org.id};}));
+    if(mIns.error){alert('Could not add group members: '+mIns.error.message);setSavingGroup(false);return;}
+    setChannels(function(p){return p.concat([chan]);});
+    setChanMembers(function(p){var n=Object.assign({},p);n[chan.id]=ids;return n;});
+    setActiveCh(chan);
     setShowNewGroup(false);setGroupName('');setGroupSel([]);setSavingGroup(false);
   }
 
