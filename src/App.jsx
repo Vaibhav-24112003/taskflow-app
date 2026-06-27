@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
-import LandingPage from './LandingPage.jsx'
+// LandingPage is shown only to logged-out visitors — lazy so it isn't bundled
+// into the main chunk that every signed-in user has to download + parse.
 // AnnouncementsBell is in the always-visible top nav, so it stays eager.
 // SupportContactForm is also used eagerly on the landing page, so keep it static.
 // Heavy / interaction-gated admin views are lazy so they don't bloat the initial bundle.
@@ -21,6 +22,7 @@ function lazyWithReload(importer) {
 const SupportAdminView   = lazyWithReload(() => import('./SupportAdminView.jsx'))
 const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
+const LandingPage        = lazyWithReload(() => import('./LandingPage.jsx'))
 import { isAdminEmail } from './lib/supabase'
 import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare, Search } from 'lucide-react'
 import {
@@ -18921,6 +18923,6 @@ export default function App(){
 
   const handleSignIn=async()=>{setSignInLoading(true);try{await signInWithGoogle()}catch(e){console.error(e);setSignInLoading(false)}}
   if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
-  if(!session)return<LandingPage onSignIn={handleSignIn} loading={signInLoading}/>
+  if(!session)return<Suspense fallback={<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>}><LandingPage onSignIn={handleSignIn} loading={signInLoading}/></Suspense>
   return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
 }
