@@ -51,6 +51,9 @@ var _worksheetsCache = {}; // orgId → { clients }
 var _billingCache = {};    // orgId → { clients, invoices, payments, proposals }
 var _ccCache = {};         // orgId → { clients, requests, responses, ccMessages, cloudStorages }
 var _commsCache = {};      // orgId → { clients, portalUsers, templates, commLogs }
+var _erpBoardCache = {};   // orgId → { rows, worksheets, clients, members }
+var _analyticsCache = {};  // orgId → { rows, worksheets, clients, members, logs }
+var _clientsModCache = {}; // orgId → { clients }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const DEFAULT_STATUSES = ['Todo','In Progress','Review','Done']
@@ -2201,9 +2204,10 @@ var WORK_TYPES_DEFAULT=['ITR','GST/GSTR','TDS','Accounts','Audit','MIS','Payroll
 var DEF_CF=[{key:'file_no',label:'File No.',type:'text'},{key:'engagement_type',label:'Engagement Type',type:'text'}];
 
 function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeConfigs}){
-  var [clients,setClients]=useState([]);
-  var [wtEnrollment,setWtEnrollment]=useState({}); // {client_id: [work_type,...]}
-  var [loading,setLoading]=useState(true);
+  var _cmc=_clientsModCache[orgId]||{};
+  var [clients,setClients]=useState(_cmc.clients||[]);
+  var [wtEnrollment,setWtEnrollment]=useState(_cmc.wtEnrollment||{}); // {client_id: [work_type,...]}
+  var [loading,setLoading]=useState(!_clientsModCache[orgId]);
   var [search,setSearch]=useState('');
   var [filterStatus,setFilterStatus]=useState('all');
   var [filterWT,setFilterWT]=useState('');
@@ -2212,7 +2216,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
   var [showImport,setShowImport]=useState(false);
   var [toastMsg,setToastMsg]=useState(null);
   useEffect(function(){load();},[orgId]);
-  async function load(){setLoading(true);try{if(!orgId){setClients([]);return;}var [rc,rw]=await Promise.all([supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500),supabase.from('worksheet_rows').select('client_id,worksheets!inner(work_type,org_id)').eq('worksheets.org_id',orgId).limit(5000)]);if(!rc.error)setClients(rc.data||[]);var enroll={};(rw.data||[]).forEach(function(row){var wt=row.worksheets&&row.worksheets.work_type;if(!wt)return;if(!enroll[row.client_id])enroll[row.client_id]=new Set();enroll[row.client_id].add(wt);});var enrollArr={};Object.keys(enroll).forEach(function(k){enrollArr[k]=Array.from(enroll[k]).sort();});setWtEnrollment(enrollArr);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function load(){if(!_clientsModCache[orgId])setLoading(true);try{if(!orgId){setClients([]);return;}var [rc,rw]=await Promise.all([supabase.from('clients').select('*').eq('org_id',orgId).order('name').limit(500),supabase.from('worksheet_rows').select('client_id,worksheets!inner(work_type,org_id)').eq('worksheets.org_id',orgId).limit(5000)]);var clientsData=_cmc.clients||[];if(!rc.error){clientsData=rc.data||[];setClients(clientsData);}var enroll={};(rw.data||[]).forEach(function(row){var wt=row.worksheets&&row.worksheets.work_type;if(!wt)return;if(!enroll[row.client_id])enroll[row.client_id]=new Set();enroll[row.client_id].add(wt);});var enrollArr={};Object.keys(enroll).forEach(function(k){enrollArr[k]=Array.from(enroll[k]).sort();});setWtEnrollment(enrollArr);_clientsModCache[orgId]={clients:clientsData,wtEnrollment:enrollArr};}catch(e){console.error(e);}finally{setLoading(false);}}
   function toast(msg,type){setToastMsg({msg,type:type||'ok'});setTimeout(function(){setToastMsg(null);},3000);}
   async function del(id){
     if(!window.confirm('Delete this client?'))return;
@@ -8234,16 +8238,18 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
 // ══════════════════════════════════════════════════════════════════
 
 function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
-  var [loading,setLoading]=useState(true);
+  var _initYear=(function(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;})();
+  var _adc=_analyticsCache[org.id+'_'+_initYear]||{};
+  var [loading,setLoading]=useState(!_analyticsCache[org.id+'_'+_initYear]);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
   var loadingRef=useRef(false);
   var loadGenRef=useRef(0);
-  var [clients,setClients]=useState([]);
-  var [worksheets,setWorksheets]=useState([]);
-  var [allRows,setAllRows]=useState([]);
-  var [itrRecords,setItrRecords]=useState([]);
-  var [selectedYear,setSelectedYear]=useState(function(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;});
+  var [clients,setClients]=useState(_adc.clients||[]);
+  var [worksheets,setWorksheets]=useState(_adc.worksheets||[]);
+  var [allRows,setAllRows]=useState(_adc.allRows||[]);
+  var [itrRecords,setItrRecords]=useState(_adc.itrRecords||[]);
+  var [selectedYear,setSelectedYear]=useState(_initYear);
   var [activeTab,setActiveTab]=useState('overview');
   var [filterMonth,setFilterMonth]=useState(0);
   var [drillType,setDrillType]=useState(null);
@@ -8268,10 +8274,11 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     if(loadingRef.current)return;
     loadingRef.current=true;
     var gen=++loadGenRef.current;
-    setLoading(true);setLoadError(null);
+    if(!_analyticsCache[org.id+'_'+selectedYear])setLoading(true);setLoadError(null);
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
     loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
+    var itrData=[];
     var rc=await supabase.from('clients').select('id,name,display_name,pan,custom_fields').eq('org_id',org.id).order('name').limit(500);
     // Fetch worksheets for the selected FY year, also include year+1 to catch old calendar-year monthly data (Jan-Mar)
     var rw=await supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,period_quarter,frequency').eq('org_id',org.id).in('period_year',[selectedYear,selectedYear+1]).limit(1000);
@@ -8286,9 +8293,10 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     });
     // Fetch ITR compilation records for the AY matching selectedYear (e.g. FY 2026-27 → AY 2027-28)
     var itrAY=(selectedYear+1)+'-'+String(selectedYear+2).slice(2);
-    try{var ri=await supabase.from('itr_compilation').select('client_id,status,completeness').eq('org_id',org.id).eq('assessment_year',itrAY).limit(2000);if(!ri.error)setItrRecords(ri.data||[]);}catch(_){setItrRecords([]);}
+    try{var ri=await supabase.from('itr_compilation').select('client_id,status,completeness').eq('org_id',org.id).eq('assessment_year',itrAY).limit(2000);if(!ri.error){itrData=ri.data||[];setItrRecords(itrData);}}catch(_){setItrRecords([]);}
     setClients(clientData);
     setWorksheets(wsData);
+    var allRowsData=[];
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
       var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage,start_date').in('worksheet_id',wsIds).limit(2000);
@@ -8319,8 +8327,10 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           return Object.assign({},r,{status:'completed',completed_at:r.completed_at||now});
         });
       }
+      allRowsData=rowData;
       setAllRows(rowData);
     }else{setAllRows([]);}
+    _analyticsCache[org.id+'_'+selectedYear]={clients:clientData,worksheets:wsData,allRows:allRowsData,itrRecords:itrData};
     }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
@@ -10185,15 +10195,16 @@ return<div key={r.id} style={{background:'var(--tf-surface)',border:'1px solid v
 
 // ── ERP Board — Kanban view of worksheet_rows across all work types ──
 function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDepts,orgDeptMembers}){
-  var [loading,setLoading]=useState(true);
+  var _ebc=_erpBoardCache[org.id]||{};
+  var [loading,setLoading]=useState(!_erpBoardCache[org.id]);
   var [loadError,setLoadError]=useState(null);
   var loadTimerRef=useRef(null);
   var loadingRef=useRef(false);
   var loadGenRef=useRef(0);
-  var [rows,setRows]=useState([]);
-  var [worksheets,setWorksheets]=useState([]);
-  var [clients,setClients]=useState([]);
-  var [members,setMembers]=useState([]);
+  var [rows,setRows]=useState(_ebc.rows||[]);
+  var [worksheets,setWorksheets]=useState(_ebc.worksheets||[]);
+  var [clients,setClients]=useState(_ebc.clients||[]);
+  var [members,setMembers]=useState(_ebc.members||[]);
   var [groupBy,setGroupBy]=useState('status'); // 'status' | 'worktype'
   var [assigneeFilter,setAssigneeFilter]=useState('all'); // 'all' | 'mine' | userId
   var [clientQuery,setClientQuery]=useState('');
@@ -10213,16 +10224,18 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
     if(loadingRef.current)return;
     loadingRef.current=true;
     var gen=++loadGenRef.current;
-    setLoading(true);setLoadError(null);
+    if(!_erpBoardCache[org.id])setLoading(true);setLoadError(null);
     if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
     loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);setLoadError('timeout');loadingRef.current=false;}},12000);
     try{
+      var membersData=_ebc.members||[];
       var rm=await supabase.from('organization_members').select('user_id,role').eq('org_id',org.id).limit(200);
       var mlist=rm.data||[];
       if(mlist.length>0){
         var ids=mlist.map(function(m){return m.user_id;});
         var rp=await supabase.from('profiles').select('id,name,email,avatar_url').in('id',ids).limit(200);
-        setMembers(rp.data||[]);
+        membersData=rp.data||[];
+        setMembers(membersData);
       }
       var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date').eq('org_id',org.id).limit(5000);
       if(rr.error){showToast('Failed to load board: '+rr.error.message,'err');return;}
@@ -10231,6 +10244,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
       setWorksheets(rw.data||[]);
       var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
       setClients(rc.data||[]);
+      _erpBoardCache[org.id]={rows:rr.data||[],worksheets:rw.data||[],clients:rc.data||[],members:membersData};
     }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
@@ -18917,7 +18931,7 @@ export default function App(){
   },[])
 
   const onSignOut=async()=>{
-    _dashCache={};_worksheetsCache={};_billingCache={};_ccCache={};_commsCache={};_itrCache={};
+    _dashCache={};_worksheetsCache={};_billingCache={};_ccCache={};_commsCache={};_itrCache={};_erpBoardCache={};_analyticsCache={};_clientsModCache={};
     await signOut();setSession(null);authIdRef.current=null;setPendingInvites([]);
   }
 
