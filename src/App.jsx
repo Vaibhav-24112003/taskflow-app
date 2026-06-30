@@ -1155,7 +1155,7 @@ var CMD_MODULES=[
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
-  {id:'comms',label:'Communication',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'connect',label:'Client Connect'},{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
   {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
   {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
@@ -13913,7 +13913,7 @@ function RichEditor({id,value,onChange,placeholder,minHeight}){
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
-function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
+function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onConsumeInit}){
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
   var [portalUsers,setPortalUsers]=useState([]);
@@ -14324,6 +14324,15 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs}){
   }
 
   useEffect(function(){loadData();},[org.id]);
+  // Cross-link from Client Connect: preselect a client in the single-email composer.
+  useEffect(function(){
+    if(!initClientId||!clients.length)return;
+    var c=clients.find(function(x){return x.id===initClientId;});
+    setActiveTab('single');
+    setSingleClientId(initClientId);
+    if(c&&c.email)setSingleTo(c.email);
+    if(onConsumeInit)onConsumeInit();
+  },[initClientId,clients.length]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
@@ -15123,7 +15132,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 // ── Client Connect Module — Q&A forms, data requests & BYO storage ──
 var PROVIDER_LABELS={taskflow:'TaskFlow Storage',google_drive:'Google Drive',dropbox:'Dropbox',onedrive:'OneDrive'};
 
-function ClientConnectModule({org,supabase,cu}){
+function ClientConnectModule({org,supabase,cu,onEmailClient,onGoTab}){
   var _ccc=_ccCache[org.id]||null;
   var [clients,setClients]=useState(_ccc?_ccc.clients:[]);
   var [requests,setRequests]=useState(_ccc?_ccc.requests:[]);
@@ -15466,6 +15475,9 @@ function ClientConnectModule({org,supabase,cu}){
               <button onClick={function(){setShowStorage(true);}} style={{padding:'6px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
                 ⚙ Storage
               </button>
+              {onEmailClient&&<button onClick={function(){onEmailClient(selClientId);}} title="Compose an email to this client" style={{padding:'6px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',fontFamily:'inherit'}}>
+                ✉ Email
+              </button>}
               <button onClick={function(){setCreateMode('single');setLinkRowId('');setShowCreate(true);}} style={{padding:'6px 14px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>
                 + New Request
               </button>
@@ -17111,6 +17123,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const hasModule=(m)=>trialGate?.hasModule?.(m)??false;
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
+  const [commsClientId,setCommsClientId]=useState(null); // cross-link: Client Connect → Mailing preselect
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const [myRole,setMyRole]=useState('member');
   const [orgGroups,setOrgGroups]=useState([]);       // [{id,name,color,position}]
@@ -17254,7 +17267,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(canSeeAnalytics&&ffOn('analytics')){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
-  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Send Q&A forms, data requests and messages to clients via shareable links — files stored in your own cloud.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'portal',label:'Client Connect'},{id:'mailing',label:'Mailing'}]});
+  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Everything client-facing in one place — Client Connect link forms, the login-based Client Portal, and email to clients.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'connect',label:'Client Connect'},{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]});
   if(ffOn('billing'))MODULES.push({id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]});
   MODULES.push({id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:masterdataTabs});
   MODULES.push({id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:setupTabs});
@@ -17387,8 +17400,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
-            {tab==='portal'&&<ClientConnectModule org={org} supabase={supabase} cu={cu}/>}
-            {tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+            {tab!=='portal'&&tab!=='mailing'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
+            {tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+            {tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
           </>
         : <ModuleLock module="comms" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Comms for '+(org?.name||''),'_blank')}/>)}
       {/* Billing — paid module */}
