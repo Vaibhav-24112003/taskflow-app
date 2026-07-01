@@ -44,7 +44,7 @@ const CSS = `
   .lp-root a { color: inherit; text-decoration: none; }
   .lp-grain::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.025) 1px, transparent 1px); background-size: 3px 3px; pointer-events: none; opacity: .6; }
   .lp-btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; transition: all .18s ease; white-space: nowrap; font-family: inherit; }
-  .lp-btn-primary { background: #0e2a47; color: #fff; box-shadow: 0 6px 18px rgba(14,42,71,.32); }
+  .lp-btn-primary { background: linear-gradient(135deg,#2F6BFF,#14C7C0); color: #fff; box-shadow: 0 12px 26px -10px rgba(47,107,255,.7); }
   .lp-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(14,42,71,.4); }
   .lp-btn-ghost { background: var(--lp-surface); border: 1px solid var(--lp-border); color: var(--lp-text); }
   .lp-btn-ghost:hover { background: var(--lp-alt); border-color: var(--lp-border-hov); }
