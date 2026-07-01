@@ -40,6 +40,7 @@ import { useTrialGate } from './lib/useTrialGate.js'
 import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
 import TaskflowLogo from './components/TaskflowLogo.jsx'
 import { BrandLoader } from './components/Loaders.jsx'
+import AppTour from './components/AppTour.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 const AdminShell = lazyWithReload(() => import('./admin/AdminShell.jsx'))
@@ -17145,6 +17146,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [commsClientId,setCommsClientId]=useState(null); // cross-link: Client Connect → Mailing preselect
+  const [showAppTour,setShowAppTour]=useState(false); // in-app spotlight tour
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const [myRole,setMyRole]=useState('member');
   const [orgGroups,setOrgGroups]=useState([]);       // [{id,name,color,position}]
@@ -17478,11 +17480,17 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             </div>;
           })}
         </div>
+        {sidebarOpen&&<div style={{padding:'8px 10px',borderTop:'1px solid rgba(255,255,255,0.06)'}}>
+          <button onClick={function(){setShowAppTour(true);}} style={{width:'100%',display:'flex',alignItems:'center',gap:8,background:'transparent',border:'1px solid rgba(255,255,255,0.09)',borderRadius:8,padding:'8px 10px',color:'#9FB6D4',cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:600}}>
+            <span style={{color:'#14C7C0'}}>✨</span> Take a quick tour
+          </button>
+        </div>}
       </div>
       {/* Main content */}
       <div data-tour={orgModule?'tour-view-'+orgModule:undefined} style={{flex:1,overflow:'auto',padding:'22px 24px 60px',minWidth:0}}>
         {moduleContent}
       </div>
+      {showAppTour&&<AppTour onClose={function(){setShowAppTour(false);}}/>}
   </div>;
 }
 
