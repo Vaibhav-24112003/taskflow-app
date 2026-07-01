@@ -404,7 +404,15 @@ function HeroKanban() {
   )
 }
 
-function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpenDemo }) {
+function Hero({ dark, onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpenDemo }) {
+  // Per-theme hero copy, matching the Claude Design "Daylight" (light) and
+  // "Midnight" (dark) hero directions exactly.
+  const headline = dark
+    ? (<>Run your entire practice with <span style={{ background: 'linear-gradient(90deg,#2F6BFF,#14C7C0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>total clarity.</span></>)
+    : (<>Every filing, deadline &amp; client — in one calm workspace.</>)
+  const subhead = dark
+    ? 'Worksheets, returns, reminders and team workload — one source of truth that never lets a deadline slip.'
+    : 'Track worksheets, returns and reminders across your whole team. No more spreadsheets, no missed due dates.'
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)', width: 1200, height: 640, background: 'radial-gradient(900px 460px at 78% 0%, rgba(20,199,192,.20), transparent 60%), radial-gradient(760px 420px at 12% 100%, rgba(47,107,255,.20), transparent 60%)', pointerEvents: 'none' }} />
@@ -416,8 +424,8 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2F6BFF', boxShadow: '0 0 12px #2F6BFF' }} />
               Built for CA · CS · CMA & tax firms
             </div>
-            <h1 className="lp-h1" style={{ marginBottom: 14 }}>Run your entire practice with <span style={{ background: 'linear-gradient(90deg,#2F6BFF,#14C7C0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>total clarity.</span></h1>
-            <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 18px' }}>Every filing, deadline & client — in one calm workspace.</p>
+            <h1 className="lp-h1" style={{ marginBottom: 14 }}>{headline}</h1>
+            <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 18px' }}>{subhead}</p>
             <p className="lp-lede" style={{ margin: '0 0 28px' }}>GST worksheets, recurring compliance, client portal, billing and team workload — all in one place. Built for CA, CS, CMA, tax consultants and advisory firms. Stop juggling Excel, WhatsApp and email.</p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
@@ -1327,7 +1335,7 @@ export default function LandingPage({ onSignIn, loading }) {
         </Suspense>
       )}
       <Nav onOpenAuth={openAuth} loading={loading} dark={dark} onToggleTheme={() => setDark(d => !d)} onOpenDemo={openDemo} />
-      <Hero onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} onOpenITR={() => setItrOpen(true)} onOpenDemo={openDemo} />
+      <Hero dark={dark} onOpenAuth={openAuth} loading={loading} onOpenTour={() => setTourOpen(true)} onOpenLaunch={() => setLaunchOpen(true)} onOpenITR={() => setItrOpen(true)} onOpenDemo={openDemo} />
       <Stats />
       <Problem />
       <HowItWorks />
