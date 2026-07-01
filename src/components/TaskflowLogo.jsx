@@ -27,8 +27,10 @@ function ensureLogoKeyframes() {
   document.head.appendChild(el);
 }
 
-// Self-drawing checkmark that forms the "w" right leg.
-function CheckMark({ size = 30, dark = false, animate = false, drawOnce = false, gradId }) {
+// Self-drawing checkmark that forms the stretched right leg of the "w".
+// Sized by its parent's height (1.15em) so it scales with the wordmark and
+// overlays the "v" exactly as in the Claude Design mockup (viewBox 72x92).
+function CheckMark({ dark = false, animate = false, drawOnce = false, gradId }) {
   ensureLogoKeyframes();
   var from = dark ? "#5B9BFF" : "#2F6BFF";
   var to = "#14C7C0";
@@ -44,10 +46,8 @@ function CheckMark({ size = 30, dark = false, animate = false, drawOnce = false,
   };
   return (
     <svg
-      width={size}
-      height={size * (84 / 72)}
-      viewBox="0 0 72 84"
-      style={{ display: "inline-block", verticalAlign: "baseline", overflow: "visible", flexShrink: 0 }}
+      viewBox="0 0 72 92"
+      style={{ height: "100%", width: "auto", display: "block", overflow: "visible" }}
       aria-hidden="true"
     >
       <defs>
@@ -85,8 +85,6 @@ export default function TaskflowLogo({
 }) {
   // Stable-ish unique gradient id per instance so multiple logos don't collide.
   var gradId = "tfCheck" + (++_tfGradSeq);
-  var checkSize = size * 0.92;
-
   return (
     <span
       style={{
@@ -102,14 +100,26 @@ export default function TaskflowLogo({
         ...style,
       }}
     >
+      {/* "Taskflo" + a full-size "v" whose right leg is completed by the tick,
+          so the pair reads as the "w" in Taskflow — matching the design mockup. */}
       <span>Taskflo</span>
-      <span style={{ position: "relative", display: "inline-block", width: checkSize * 0.66, height: "1em" }}>
-        <span style={{ fontSize: size * 0.9 + "px", fontWeight: 800 }}>v</span>
-        <span style={{ position: "absolute", left: checkSize * 0.16, bottom: 0 }}>
-          <CheckMark size={checkSize} dark={dark} animate={animate} drawOnce={drawOnce} gradId={gradId} />
+      <span style={{ position: "relative", display: "inline-block" }}>
+        v
+        <span
+          style={{
+            position: "absolute",
+            left: "0.34em",
+            bottom: "0.02em",
+            height: "1.12em",
+            width: "auto",
+            display: "inline-flex",
+            pointerEvents: "none",
+          }}
+        >
+          <CheckMark dark={dark} animate={animate} drawOnce={drawOnce} gradId={gradId} />
         </span>
       </span>
-      {showCo && <span style={{ marginLeft: checkSize * 0.12 }}>co</span>}
+      {showCo && <span style={{ marginLeft: "0.62em" }}>co</span>}
     </span>
   );
 }

@@ -33,7 +33,7 @@ function AppChrome({ module, topContent, children, noContentPad }) {
   return (
     <div style={{ display: 'flex', height: '100%', background: '#080b18', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,.08)' }}>
       <div style={{ width: 44, background: '#0a0d1a', borderRight: '1px solid rgba(255,255,255,.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 10, gap: 3, flexShrink: 0 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#0e2a47,#1d4670)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: '#fff', marginBottom: 10 }}>✦</div>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: 'linear-gradient(135deg,#2F6BFF,#14C7C0)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 10 18 20 6.5" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         {SIDEBAR_NAV.map(n => {
           const active = n.label === module
           return (
