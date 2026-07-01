@@ -17458,11 +17458,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             var hasTabs=m.tabs&&m.tabs.length>1;
             return<div key={m.id} data-tour={'tour-nav-'+m.id}>
               <button onClick={function(){openModule(m);if(!sidebarOpen)setSidebarOpen(true);}} title={sidebarOpen?'':m.label}
-                style={{width:'100%',textAlign:'left',background:isActive?'rgba(255,255,255,0.08)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center'}}
+                style={{width:'100%',textAlign:'left',background:isActive?'rgba(255,255,255,0.08)':'transparent',border:'none',borderRadius:8,padding:sidebarOpen?'9px 12px':'9px 0',cursor:'pointer',display:'flex',alignItems:'center',gap:10,marginBottom:2,transition:'background 0.12s',fontFamily:'inherit',justifyContent:sidebarOpen?'flex-start':'center',boxShadow:isActive?'inset 3px 0 0 #14C7C0':'none'}}
                 onMouseEnter={function(e){if(!isActive)e.currentTarget.style.background='rgba(255,255,255,0.04)';}}
                 onMouseLeave={function(e){if(!isActive)e.currentTarget.style.background='transparent';}}>
                 <span style={{position:'relative',display:'flex',flexShrink:0}}>
-                  <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{color:isActive?'#7fa3c7':'#8696b3'}}/>
+                  <m.icon size={18} strokeWidth={isActive?2.2:1.8} style={{color:isActive?'#14C7C0':'#8696b3'}}/>
                   {m.id==='chat'&&chatUnread>0&&!sidebarOpen&&<span style={{position:'absolute',top:-4,right:-5,minWidth:8,height:8,borderRadius:8,background:'#ef4444',border:'1.5px solid #0e1929',boxShadow:'0 0 0 1px rgba(239,68,68,0.4)'}}/>}
                 </span>
                 {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#ffffff':'#c7d2e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{m.label}</span>}
@@ -17470,7 +17470,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:32,marginBottom:6}}>
                 {m.tabs.map(function(t){return<button key={t.id} onClick={function(){setTab(t.id);localStorage.setItem('tf_lastOrgTab',t.id);}}
-                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'6px 10px',cursor:'pointer',fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?'#ffffff':'#8696b3',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #7fa3c7':'2px solid transparent',marginBottom:1}}>
+                  style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',padding:'6px 10px',cursor:'pointer',fontSize:13,fontWeight:tab===t.id?700:500,color:tab===t.id?'#ffffff':'#8696b3',fontFamily:'inherit',borderLeft:tab===t.id?'2px solid #14C7C0':'2px solid transparent',marginBottom:1}}>
                   {t.label}
                 </button>;})}
               </div>}
