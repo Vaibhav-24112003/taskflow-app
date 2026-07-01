@@ -22,7 +22,7 @@ const CSS = `
     --lp-border: rgba(255,255,255,.07); --lp-border-hov: rgba(255,255,255,.14);
     --lp-nav-bg: rgba(10,14,24,0.75); --lp-alt: rgba(255,255,255,.015);
     --lp-track: rgba(255,255,255,.05);
-    font-family: 'Inter','Helvetica Neue',system-ui,sans-serif;
+    font-family: 'Plus Jakarta Sans','Inter',system-ui,sans-serif;
     -webkit-font-smoothing: antialiased; background: var(--lp-bg); color: var(--lp-text);
   }
   .lp-root[data-theme="light"] {
@@ -36,7 +36,7 @@ const CSS = `
   .lp-root ::selection { background: rgba(14,42,71,.35); color: #fff; }
   .lp-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: "tnum"; }
   .lp-container { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
-  .lp-eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; color: #6b8cad; text-transform: uppercase; letter-spacing: .16em; }
+  .lp-eyebrow { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; color: #2F6BFF; text-transform: uppercase; letter-spacing: .16em; }
   .lp-h1 { font-size: clamp(40px,5.4vw,72px); font-weight: 800; letter-spacing: -.035em; line-height: 1.04; margin: 0; }
   .lp-h2 { font-size: clamp(28px,3.4vw,44px); font-weight: 800; letter-spacing: -.025em; line-height: 1.1; margin: 0; }
   .lp-lede { font-size: 18px; color: var(--lp-text-sub); line-height: 1.6; max-width: 640px; }
@@ -92,8 +92,8 @@ const CSS = `
   .lp-tour-nav-btn { background: var(--lp-surface); border: 1px solid var(--lp-border); border-radius: 8px; color: var(--lp-text); cursor: pointer; padding: 9px 18px; font-size: 13px; font-weight: 600; transition: all .15s ease; font-family: inherit; }
   .lp-tour-nav-btn:hover:not(:disabled) { background: var(--lp-alt); border-color: var(--lp-border-hov); }
   .lp-tour-nav-btn:disabled { opacity: .35; cursor: not-allowed; }
-  .lp-tour-nav-btn.primary { background: #6366f1; border-color: #6366f1; color: #fff; }
-  .lp-tour-nav-btn.primary:hover:not(:disabled) { background: #4f46e5; border-color: #4f46e5; }
+  .lp-tour-nav-btn.primary { background: #2F6BFF; border-color: #2F6BFF; color: #fff; }
+  .lp-tour-nav-btn.primary:hover:not(:disabled) { background: #2454D6; border-color: #2454D6; }
 `
 
 // ── Book Demo Modal ───────────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ function HeroMosaic() {
           {[
             ['Acme Pvt Ltd', 'Filed', '#10b981', 100, 'PM'],
             ['Singh & Co', 'Review', '#f59e0b', 80, 'PM'],
-            ['Mehta Industries', 'Data req', '#6b8cad', 40, 'RS'],
+            ['Mehta Industries', 'Data req', '#2F6BFF', 40, 'RS'],
             ['Patel Trading', 'Overdue', '#ef4444', 10, 'RS'],
             ['Reliance Holdings', 'Filed', '#10b981', 100, 'PM'],
           ].map(([c, s, col, p, a]) => (
@@ -300,7 +300,7 @@ function HeroMosaic() {
       {/* Left float: recurring */}
       <div style={{ position: 'absolute', left: 0, top: 140, width: 280, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(-2deg)', zIndex: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(99,102,241,.16)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>↻</span>
+          <span style={{ width: 24, height: 24, borderRadius: 6, background: 'rgba(99,102,241,.16)', color: '#2F6BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>↻</span>
           <span style={{ fontSize: 12, fontWeight: 700 }}>Recurring</span>
           <span className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', marginLeft: 'auto' }}>auto</span>
         </div>
@@ -308,7 +308,7 @@ function HeroMosaic() {
         <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginBottom: 10 }}>Monthly · 7th of every month</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'].map((m, i) => (
-            <span key={m} className="lp-mono" style={{ flex: 1, padding: '5px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6b8cad' : 'rgba(255,255,255,.04)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 4, fontWeight: i === 1 ? 700 : 500 }}>{m}</span>
+            <span key={m} className="lp-mono" style={{ flex: 1, padding: '5px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#2F6BFF' : 'rgba(255,255,255,.04)', color: i === 1 ? '#fff' : '#8693b0', borderRadius: 4, fontWeight: i === 1 ? 700 : 500 }}>{m}</span>
           ))}
         </div>
       </div>
@@ -341,7 +341,7 @@ function HeroMosaic() {
       <div style={{ position: 'absolute', left: 30, bottom: 60, width: 230, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, padding: '14px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.55)', transform: 'rotate(-1deg)', zIndex: 4 }}>
         <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Today · 09:41</div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', marginTop: 6, flexShrink: 0, boxShadow: '0 0 10px #6366f1' }} />
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2F6BFF', marginTop: 6, flexShrink: 0, boxShadow: '0 0 10px #2F6BFF' }} />
           <div><div style={{ fontSize: 12, fontWeight: 600 }}>GSTR-3B · Acme</div><div style={{ fontSize: 10.5, color: 'var(--lp-text-sub)' }}>Up next · 09:00</div></div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -368,7 +368,7 @@ function HeroSingle() {
             <div className="lp-mono" style={{ fontSize: 10, color: '#a5b4fc', textTransform: 'uppercase', letterSpacing: '.12em', fontWeight: 700 }}>Up first · 09:00</div>
             <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4 }}>Acme Pvt Ltd — GSTR-3B filing</div>
           </div>
-          {[['11:30', 'TDS review · Singh', '#f59e0b'], ['14:00', 'ITR data · Mehta', '#6b8cad'], ['16:30', 'Team standup', '#64748b']].map(([t, l, c]) => (
+          {[['11:30', 'TDS review · Singh', '#f59e0b'], ['14:00', 'ITR data · Mehta', '#2F6BFF'], ['16:30', 'Team standup', '#64748b']].map(([t, l, c]) => (
             <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 0', borderTop: '1px solid var(--lp-border)' }}>
               <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-sub)', width: 42 }}>{t}</span>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: c }} />
@@ -382,7 +382,7 @@ function HeroSingle() {
 }
 
 function HeroKanban() {
-  const cols = [['Today', '#6366f1', ['GSTR-3B · Acme', 'Bank reco · Singh', 'TDS · Mehta']], ['Doing', '#f59e0b', ['ITR · Patel', 'Audit · Tata']], ['Review', '#10b981', ['GSTR · Reliance', 'TDS · HDFC', 'Audit · Wipro']], ['Done', '#5c6b87', ['GSTR · Bajaj', 'GSTR · Adani']]]
+  const cols = [['Today', '#2F6BFF', ['GSTR-3B · Acme', 'Bank reco · Singh', 'TDS · Mehta']], ['Doing', '#f59e0b', ['ITR · Patel', 'Audit · Tata']], ['Review', '#10b981', ['GSTR · Reliance', 'TDS · HDFC', 'Audit · Wipro']], ['Done', '#5c6b87', ['GSTR · Bajaj', 'GSTR · Adani']]]
   return (
     <div style={{ position: 'relative', maxWidth: 1080, margin: '0 auto', background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 14, boxShadow: '0 40px 100px rgba(0,0,0,.7)', padding: 20, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
       {cols.map(([title, col, items]) => (
@@ -508,14 +508,14 @@ function HowItWorks() {
       title: 'Add clients & work types',
       desc: 'Import your client list from CSV or add manually. Pick the compliance work types your practice handles — GST, ITR, TDS, Audit, Payroll — and configure your team roles.',
       aside: '~10 min to first client',
-      color: '#6b8cad',
+      color: '#2F6BFF',
     },
     {
       num: '02',
       title: 'WorkZone generates your worksheets',
       desc: 'One worksheet per work type, per period. All your clients in rows, statuses visible at a glance. Recurring tasks auto-generate on the right date — zero copy-pasting.',
       aside: 'Auto-generated, every period',
-      color: '#6366f1',
+      color: '#2F6BFF',
     },
     {
       num: '03',
@@ -557,9 +557,9 @@ function HowItWorks() {
 // ── Social proof ──────────────────────────────────────────────────────────────
 function SocialProof() {
   const outcomes = [
-    { stat: '100+', label: 'clients tracked per work type', sub: 'One worksheet replaces 100 Excel files', icon: '⊞', color: '#6b8cad' },
+    { stat: '100+', label: 'clients tracked per work type', sub: 'One worksheet replaces 100 Excel files', icon: '⊞', color: '#2F6BFF' },
     { stat: '0', label: 'deadlines missed with recurring tasks', sub: 'GST, TDS, ITR — auto-generated every period', icon: '↻', color: '#10b981' },
-    { stat: '1', label: 'screen for your entire team\'s workload', sub: 'See who\'s busy, who has capacity, what\'s overdue', icon: '◔', color: '#6366f1' },
+    { stat: '1', label: 'screen for your entire team\'s workload', sub: 'See who\'s busy, who has capacity, what\'s overdue', icon: '◔', color: '#2F6BFF' },
     { stat: '<2h', label: 'to migrate from Excel', sub: 'CSV import for clients, work types in 10 min', icon: '↑', color: '#f59e0b' },
   ]
   return (
@@ -589,8 +589,8 @@ function SocialProof() {
 // ── Modules ───────────────────────────────────────────────────────────────────
 function Modules() {
   const mods = [
-    { id: 'diary', label: 'Your Diary', desc: 'Personal worklist, calendar, plan-my-day.', color: '#6366f1', glyph: '◐' },
-    { id: 'workzone', label: 'WorkZone', desc: 'Worksheets per work type. ITR · GST · TDS · Audit.', color: '#6b8cad', glyph: '◧' },
+    { id: 'diary', label: 'Your Diary', desc: 'Personal worklist, calendar, plan-my-day.', color: '#2F6BFF', glyph: '◐' },
+    { id: 'workzone', label: 'WorkZone', desc: 'Worksheets per work type. ITR · GST · TDS · Audit.', color: '#2F6BFF', glyph: '◧' },
     { id: 'team', label: 'Team', desc: 'Attendance, leaves, daily logs, workload heatmap.', color: '#f59e0b', glyph: '◔' },
     { id: 'masterdata', label: 'Master Data', desc: 'Clients, work types, groups, custom fields.', color: '#8b5cf6', glyph: '◓' },
     { id: 'comms', label: 'Communication', desc: 'Branded client portal · bulk Gmail · templates.', color: '#06b6d4', glyph: '◑' },
@@ -632,8 +632,8 @@ function Modules() {
 // ── Features ──────────────────────────────────────────────────────────────────
 function Features() {
   const feats = [
-    { t: 'Recurring tasks', d: 'Daily · weekly · biweekly · monthly · quarterly · yearly · custom. Set the rule once, the next instance auto-generates.', icon: '↻', c: '#6366f1', span: 2 },
-    { t: 'Kanban boards', d: 'Drag tasks across statuses. Per-work-type columns.', icon: '⊞', c: '#6b8cad' },
+    { t: 'Recurring tasks', d: 'Daily · weekly · biweekly · monthly · quarterly · yearly · custom. Set the rule once, the next instance auto-generates.', icon: '↻', c: '#2F6BFF', span: 2 },
+    { t: 'Kanban boards', d: 'Drag tasks across statuses. Per-work-type columns.', icon: '⊞', c: '#2F6BFF' },
     { t: '⌘K command bar', d: 'Jump to any client, work, or action in one keystroke.', icon: '⌘', c: '#10b981' },
     { t: 'Client portal', d: 'Branded portal where clients upload docs and respond to requests.', icon: '◑', c: '#06b6d4' },
     { t: 'Gmail integration', d: 'OAuth-based. Bulk-mail clients and template common replies.', icon: '@', c: '#ec4899' },
@@ -739,14 +739,14 @@ function ScCapture() {
       <div style={{ width: '90%', maxWidth: 480, background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 12, boxShadow: '0 20px 60px rgba(0,0,0,.25)', overflow: 'hidden', animation: 'lp-fadeUp .4s ease' }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--lp-border)', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="lp-mono" style={{ color: 'var(--lp-text-sub)' }}>›</span>
-          <span style={{ fontSize: 14, flex: 1 }}>GSTR Acme<span style={{ color: '#6b8cad', animation: 'lp-blink 1s steps(2) infinite' }}>|</span></span>
+          <span style={{ fontSize: 14, flex: 1 }}>GSTR Acme<span style={{ color: '#2F6BFF', animation: 'lp-blink 1s steps(2) infinite' }}>|</span></span>
           <span className="lp-kbd">esc</span>
         </div>
-        {[['CL', 'Acme Pvt Ltd · GSTIN 27AABCA1234A1Z5', '#6b8cad', true], ['WK', 'GSTR-3B · Apr 26 · Acme Pvt Ltd', '#f59e0b', false], ['⚡', 'Create new GSTR-3B for Acme', '#10b981', false]].map(([k, t, c, a]) => (
+        {[['CL', 'Acme Pvt Ltd · GSTIN 27AABCA1234A1Z5', '#2F6BFF', true], ['WK', 'GSTR-3B · Apr 26 · Acme Pvt Ltd', '#f59e0b', false], ['⚡', 'Create new GSTR-3B for Acme', '#10b981', false]].map(([k, t, c, a]) => (
           <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 18px', background: a ? 'rgba(107,140,173,.12)' : 'transparent' }}>
             <span className="lp-mono" style={{ width: 26, height: 26, borderRadius: 6, background: 'rgba(107,140,173,.14)', color: c, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{k}</span>
             <span style={{ fontSize: 13, fontWeight: a ? 700 : 500, flex: 1 }}>{t}</span>
-            {a && <span className="lp-mono" style={{ fontSize: 10, color: '#6b8cad', padding: '2px 6px', background: 'rgba(107,140,173,.16)', border: '1px solid rgba(107,140,173,.3)', borderRadius: 4 }}>↵</span>}
+            {a && <span className="lp-mono" style={{ fontSize: 10, color: '#2F6BFF', padding: '2px 6px', background: 'rgba(107,140,173,.16)', border: '1px solid rgba(107,140,173,.3)', borderRadius: 4 }}>↵</span>}
           </div>
         ))}
       </div>
@@ -764,7 +764,7 @@ function ScSheet() {
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /><span style={{ color: 'var(--lp-text-sub)' }}>Filed</span><span className="lp-mono" style={{ fontWeight: 700 }}>32</span>
         </span>
       </div>
-      {[['Acme Pvt Ltd', 'Filed', '#10b981', 100], ['Singh & Co', 'Review', '#f59e0b', 80], ['Mehta Industries', 'Data req', '#6b8cad', 40], ['Patel Trading', 'Overdue', '#ef4444', 10], ['Reliance Holdings', 'Filed', '#10b981', 100], ['Tata Components', 'Filed', '#10b981', 100]].map(([c, s, col, p]) => (
+      {[['Acme Pvt Ltd', 'Filed', '#10b981', 100], ['Singh & Co', 'Review', '#f59e0b', 80], ['Mehta Industries', 'Data req', '#2F6BFF', 40], ['Patel Trading', 'Overdue', '#ef4444', 10], ['Reliance Holdings', 'Filed', '#10b981', 100], ['Tata Components', 'Filed', '#10b981', 100]].map(([c, s, col, p]) => (
         <div key={c} style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 12, alignItems: 'center', padding: '10px 0', borderTop: '1px solid var(--lp-border)' }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>{c}</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 9px', background: `rgba(${hex2rgb(col)},.14)`, border: `1px solid rgba(${hex2rgb(col)},.28)`, borderRadius: 100, fontSize: 11, color: col, fontWeight: 600, width: 'fit-content' }}>
@@ -788,7 +788,7 @@ function ScRecurring() {
       <div style={{ width: '80%', maxWidth: 460 }}>
         <div style={{ padding: '18px 20px', background: 'linear-gradient(135deg,rgba(99,102,241,.16),rgba(99,102,241,.04))', border: '1px solid rgba(99,102,241,.32)', borderRadius: 12, marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <span style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(99,102,241,.2)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>↻</span>
+            <span style={{ width: 30, height: 30, borderRadius: 7, background: 'rgba(99,102,241,.2)', color: '#2F6BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700 }}>↻</span>
             <span style={{ fontSize: 14, fontWeight: 700 }}>TDS payment · Acme Pvt Ltd</span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', marginLeft: 40 }}>Monthly · 7th of every month · until Mar 2027</div>
@@ -796,7 +796,7 @@ function ScRecurring() {
         <div className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)', textTransform: 'uppercase', letterSpacing: '.12em', marginBottom: 8 }}>Auto-generates</div>
         <div style={{ display: 'flex', gap: 6 }}>
           {['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map((m, i) => (
-            <span key={m} className="lp-mono" style={{ flex: 1, padding: '8px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#6366f1' : 'rgba(99,102,241,.08)', color: i === 1 ? '#fff' : 'var(--lp-text-sub)', borderRadius: 5, fontWeight: 700, border: i === 1 ? 'none' : '1px solid rgba(99,102,241,.18)' }}>{m}</span>
+            <span key={m} className="lp-mono" style={{ flex: 1, padding: '8px 0', textAlign: 'center', fontSize: 10, background: i === 1 ? '#2F6BFF' : 'rgba(99,102,241,.08)', color: i === 1 ? '#fff' : 'var(--lp-text-sub)', borderRadius: 5, fontWeight: 700, border: i === 1 ? 'none' : '1px solid rgba(99,102,241,.18)' }}>{m}</span>
           ))}
         </div>
       </div>
@@ -853,13 +853,13 @@ function TourVideo() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {steps.map((s, i) => (
               <div key={i} onClick={() => setStep(i)} style={{ cursor: 'pointer', padding: '14px 16px', background: i === step ? 'var(--lp-panel)' : 'transparent', border: `1px solid ${i === step ? 'rgba(107,140,173,.3)' : 'var(--lp-border)'}`, borderRadius: 10, position: 'relative', overflow: 'hidden' }}>
-                {i === step && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#6b8cad' }} />}
+                {i === step && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#2F6BFF' }} />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#6b8cad' : 'var(--lp-text-mut)', fontWeight: 700 }}>0{i + 1}</span>
+                  <span className="lp-mono" style={{ fontSize: 10, color: i === step ? '#2F6BFF' : 'var(--lp-text-mut)', fontWeight: 700 }}>0{i + 1}</span>
                   <span style={{ fontSize: 14, fontWeight: 700, color: i === step ? 'var(--lp-text)' : 'var(--lp-text-sub)' }}>{s.t}</span>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', paddingLeft: 24 }}>{s.d}</div>
-                {i === step && <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: '#6b8cad', animation: 'lp-fillBar 3s linear' }} />}
+                {i === step && <div style={{ position: 'absolute', bottom: 0, left: 0, height: 2, background: '#2F6BFF', animation: 'lp-fillBar 3s linear' }} />}
               </div>
             ))}
           </div>
@@ -897,18 +897,18 @@ function Compliance() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center' }}>
           <div>
             <div className="lp-eyebrow">Built for Indian compliance</div>
-            <h2 className="lp-h2" style={{ marginTop: 8 }}>Speaks fluent <span style={{ color: '#6b8cad' }}>GSTR</span>, <span style={{ color: '#6366f1' }}>TDS</span>, <span style={{ color: '#10b981' }}>ITR</span>.</h2>
+            <h2 className="lp-h2" style={{ marginTop: 8 }}>Speaks fluent <span style={{ color: '#2F6BFF' }}>GSTR</span>, <span style={{ color: '#2F6BFF' }}>TDS</span>, <span style={{ color: '#10b981' }}>ITR</span>.</h2>
             <p className="lp-lede" style={{ marginTop: 18 }}>Every recurring rule, every status, every report is shaped to the Indian compliance calendar — perfect for CA, CS and CMA practices. Define custom work types for advisory, legal or consulting work too.</p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 24 }}>
               {['ICAI-friendly', 'GSTN periodicity', 'Indian FY Apr–Mar', '₹ INR-first', 'Multi-GSTIN clients'].map(t => (
-                <span key={t} className="lp-mono" style={{ fontSize: 11, padding: '5px 10px', background: 'rgba(107,140,173,.08)', border: '1px solid rgba(107,140,173,.22)', borderRadius: 6, color: '#6b8cad', fontWeight: 600 }}>{t}</span>
+                <span key={t} className="lp-mono" style={{ fontSize: 11, padding: '5px 10px', background: 'rgba(107,140,173,.08)', border: '1px solid rgba(107,140,173,.22)', borderRadius: 6, color: '#2F6BFF', fontWeight: 600 }}>{t}</span>
               ))}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {items.map(([t, d], i) => (
               <div key={t} style={{ padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
-                <div className="lp-mono" style={{ fontSize: 10, color: '#6b8cad', fontWeight: 700, marginBottom: 6 }}>0{i + 1}</div>
+                <div className="lp-mono" style={{ fontSize: 10, color: '#2F6BFF', fontWeight: 700, marginBottom: 6 }}>0{i + 1}</div>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{t}</div>
                 <div style={{ fontSize: 11.5, color: 'var(--lp-text-sub)', lineHeight: 1.45 }}>{d}</div>
               </div>
@@ -940,7 +940,7 @@ function Security() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
           {items.map(([t, d, ic]) => (
             <div key={t} style={{ padding: '22px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 12 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(107,140,173,.12)', color: '#6b8cad', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{ic}</div>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(107,140,173,.12)', color: '#2F6BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, marginBottom: 12 }}>{ic}</div>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{t}</div>
               <div style={{ fontSize: 12, color: 'var(--lp-text-sub)', lineHeight: 1.55 }}>{d}</div>
             </div>
@@ -1016,7 +1016,7 @@ function Support() {
                 </div>
               </a>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px', background: 'var(--lp-panel)', border: '1px solid var(--lp-border)', borderRadius: 11 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(99,102,241,.14)', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>?</div>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(99,102,241,.14)', color: '#2F6BFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>?</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text)' }}>Check the FAQ first</div>
                   <div style={{ fontSize: 11, color: 'var(--lp-text-sub)', marginTop: 2 }}>Many common questions are already answered above</div>

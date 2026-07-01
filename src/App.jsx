@@ -174,6 +174,8 @@ function GlobalStyle({ lightMode }) {
   --tf-text:#eaecf5;--tf-text-sub:#5c6b87;--tf-text-mut:#26324a;
   --tf-shadow:rgba(0,0,0,0.55);--tf-shadow-lg:rgba(0,0,0,0.75);
   --tf-table-header:#1a2538;
+  --tf-accent:#5B9BFF;--tf-accent-2:#14C7C0;--tf-accent-ink:#08243f;
+  --tf-grad:linear-gradient(135deg,#2F6BFF,#14C7C0);
 }
 [data-theme="light"]{
   --tf-bg:#f5f7fa;--tf-panel:rgba(255,255,255,0.97);--tf-overlay:rgba(15,20,40,0.55);
@@ -183,9 +185,11 @@ function GlobalStyle({ lightMode }) {
   --tf-text:#0a1929;--tf-text-sub:#475569;--tf-text-mut:#c0c9dd;
   --tf-table-header:#e3e8ef;
   --tf-shadow:rgba(0,0,0,0.08);--tf-shadow-lg:rgba(0,0,0,0.15);
+  --tf-accent:#2F6BFF;--tf-accent-2:#14C7C0;--tf-accent-ink:#ffffff;
+  --tf-grad:linear-gradient(135deg,#2F6BFF,#14C7C0);
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+html,body{margin:0;padding:0;font-family:'Plus Jakarta Sans','DM Sans','Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
 input,textarea,select,button{font-family:inherit;-webkit-font-smoothing:antialiased}
 .tf-board::-webkit-scrollbar{height:4px}.tf-board::-webkit-scrollbar-track{background:transparent}.tf-board::-webkit-scrollbar-thumb{background:var(--tf-border-hov);border-radius:2px}.tf-board{scrollbar-width:thin;scrollbar-color:var(--tf-border-hov) transparent}
 .tf-col::-webkit-scrollbar{width:3px}.tf-col::-webkit-scrollbar-thumb{background:var(--tf-border);border-radius:2px}.tf-col{scrollbar-width:thin;scrollbar-color:var(--tf-border) transparent}
@@ -1813,7 +1817,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAdminShell(true)}/>
       {/* Quick Notes — floating, available on every screen */}
-      <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotesDrawer?'rgba(99,102,241,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'rgba(99,102,241,0.4)':'var(--tf-border)'),color:showNotesDrawer?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#6366f1'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
+      <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotesDrawer?'rgba(99,102,241,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'rgba(99,102,241,0.4)':'var(--tf-border)'),color:showNotesDrawer?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
       {/* Support / help icon */}
       <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#0e2a47'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
         <LifeBuoy size={14}/>
@@ -2730,7 +2734,7 @@ function DemoRequestsPanel({supabase}){
     _demoReqsCache.rows=(_demoReqsCache.rows||[]).map(function(r){return r.id===id?{...r,status}:r;});
   }
 
-  var STATUS_COLORS={'new':'#6366f1','contacted':'#f59e0b','converted':'#10b981','declined':'#94a3b8'};
+  var STATUS_COLORS={'new':'#2F6BFF','contacted':'#f59e0b','converted':'#10b981','declined':'#94a3b8'};
 
   return<div style={{padding:'20px 24px',maxWidth:1000}}>
     <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
@@ -2757,7 +2761,7 @@ function DemoRequestsPanel({supabase}){
             var col=STATUS_COLORS[r.status]||'#94a3b8';
             return<tr key={r.id} style={{borderBottom:'1px solid var(--tf-border)'}}>
               <td style={{padding:'10px 10px',fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap'}}>{r.name}</td>
-              <td style={{padding:'10px 10px'}}><a href={'mailto:'+r.email} style={{color:'#6b8cad',textDecoration:'none'}}>{r.email}</a></td>
+              <td style={{padding:'10px 10px'}}><a href={'mailto:'+r.email} style={{color:'#2F6BFF',textDecoration:'none'}}>{r.email}</a></td>
               <td style={{padding:'10px 10px',color:'var(--tf-text-sub)'}}>{r.phone||'—'}</td>
               <td style={{padding:'10px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.firm_name||'—'}</td>
               <td style={{padding:'10px 10px',color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{r.team_size||'—'}</td>
@@ -3031,7 +3035,7 @@ function DepartmentsPanel({org,cu,supabase}){
   var [orgMembers,setOrgMembers]=useState([]);
   var [loading,setLoading]=useState(true);
   var [newName,setNewName]=useState('');
-  var [newColor,setNewColor]=useState('#6b8cad');
+  var [newColor,setNewColor]=useState('#2F6BFF');
   var [adding,setAdding]=useState(false);
   var [err,setErr]=useState('');
   var [toast,setToast]=useState(null);
@@ -3102,7 +3106,7 @@ function DepartmentsPanel({org,cu,supabase}){
   }
 
   var profMap2={};orgMembers.forEach(function(m){if(m.profile)profMap2[m.user_id]=m.profile;});
-  var DEPT_COLORS=['#6b8cad','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b'];
+  var DEPT_COLORS=['#2F6BFF','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b'];
 
   return<div style={{maxWidth:760,margin:'0 auto'}}>
     <div style={{marginBottom:20}}>
@@ -3204,7 +3208,7 @@ function RolesPermissionsPanel({org,cu,supabase}){
   var [selectedRole,setSelectedRole]=useState(null);
   var [newRoleName,setNewRoleName]=useState('');
   var [newRoleLevel,setNewRoleLevel]=useState(3);
-  var [newRoleColor,setNewRoleColor]=useState('#6b8cad');
+  var [newRoleColor,setNewRoleColor]=useState('#2F6BFF');
   var [adding,setAdding]=useState(false);
   var [toast,setToast]=useState(null);
 
@@ -3261,7 +3265,7 @@ function RolesPermissionsPanel({org,cu,supabase}){
     });
   }
 
-  var ROLE_COLORS=['#6b8cad','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b'];
+  var ROLE_COLORS=['#2F6BFF','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#64748b'];
   var ACCESS_OPTS=['none','view','edit','manage'];
   var SCOPE_OPTS=['own','dept','all'];
   var LEVEL_OPTS=[{v:1,l:'Level 1 — Owner'},{v:2,l:'Level 2 — Admin'},{v:3,l:'Level 3 — Manager'},{v:4,l:'Level 4 — Staff'}];
@@ -3311,7 +3315,7 @@ function RolesPermissionsPanel({org,cu,supabase}){
             var isActive=selectedRole===r.id;
             var mc=memberCount(r.id);
             return<button key={r.id} onClick={function(){setSelectedRole(r.id);}}
-              style={{textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(isActive?'#6b8cad':'var(--tf-border)'),borderRadius:10,padding:'10px 12px',cursor:'pointer',fontFamily:'inherit',transition:'all 0.12s'}}>
+              style={{textAlign:'left',background:isActive?'rgba(107,140,173,0.12)':'var(--tf-surface)',border:'1px solid '+(isActive?'#2F6BFF':'var(--tf-border)'),borderRadius:10,padding:'10px 12px',cursor:'pointer',fontFamily:'inherit',transition:'all 0.12s'}}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                 <div style={{width:10,height:10,borderRadius:'50%',background:r.color,flexShrink:0}}/>
                 <div style={{flex:1,fontSize:13,fontWeight:700,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.name}</div>
@@ -3477,14 +3481,14 @@ function MemberAccessPanel({org,cu,supabase,member,profiles,roles,rolePerms,onCl
                 <div style={{textAlign:'center',fontSize:12,color:'var(--tf-text-sub)',padding:'3px 0'}}>{getRoleDefault(mod.id,'scope')}</div>
                 <div style={{textAlign:'center'}}>
                   <select value={getMemberOverride(mod.id,'access')||''} onChange={function(e){setOverride(mod.id,'access',e.target.value||null);}}
-                    style={{background:getMemberOverride(mod.id,'access')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(mod.id,'access')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:110}}>
+                    style={{background:getMemberOverride(mod.id,'access')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(mod.id,'access')?'#2F6BFF':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:110}}>
                     <option value=''>— Inherit</option>
                     {ACCESS_OPTS.map(function(a){return<option key={a} value={a}>{a.charAt(0).toUpperCase()+a.slice(1)}</option>;})}
                   </select>
                 </div>
                 <div style={{textAlign:'center'}}>
                   <select value={getMemberOverride(mod.id,'scope')||''} onChange={function(e){setOverride(mod.id,'scope',e.target.value||null);}}
-                    style={{background:getMemberOverride(mod.id,'scope')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(mod.id,'scope')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90}}>
+                    style={{background:getMemberOverride(mod.id,'scope')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(mod.id,'scope')?'#2F6BFF':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90}}>
                     <option value=''>— Inherit</option>
                     {SCOPE_OPTS.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
                   </select>
@@ -3498,14 +3502,14 @@ function MemberAccessPanel({org,cu,supabase,member,profiles,roles,rolePerms,onCl
                   <div style={{textAlign:'center',fontSize:11,color:'var(--tf-text-sub)',padding:'3px 0'}}>{getRoleDefault(child.id,'scope')}</div>
                   <div style={{textAlign:'center'}}>
                     <select value={getMemberOverride(child.id,'access')||''} onChange={function(e){setOverride(child.id,'access',e.target.value||null);}}
-                      style={{background:getMemberOverride(child.id,'access')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(child.id,'access')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:110}}>
+                      style={{background:getMemberOverride(child.id,'access')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(child.id,'access')?'#2F6BFF':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:110}}>
                       <option value=''>— Inherit</option>
                       {ACCESS_OPTS.map(function(a){return<option key={a} value={a}>{a.charAt(0).toUpperCase()+a.slice(1)}</option>;})}
                     </select>
                   </div>
                   <div style={{textAlign:'center'}}>
                     <select value={getMemberOverride(child.id,'scope')||''} onChange={function(e){setOverride(child.id,'scope',e.target.value||null);}}
-                      style={{background:getMemberOverride(child.id,'scope')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(child.id,'scope')?'#6b8cad':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90}}>
+                      style={{background:getMemberOverride(child.id,'scope')?'rgba(107,140,173,0.15)':'var(--tf-surface)',border:'1px solid '+(getMemberOverride(child.id,'scope')?'#2F6BFF':'var(--tf-border)'),borderRadius:6,padding:'3px 6px',color:'var(--tf-text)',fontSize:12,outline:'none',cursor:'pointer',width:90}}>
                       <option value=''>— Inherit</option>
                       {SCOPE_OPTS.map(function(s){return<option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>;})}
                     </select>
@@ -3631,10 +3635,10 @@ function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
               {ALL_MODULES.map(function(m){
                 var enabled=getModuleEnabled(m.id);
                 return<button key={m.id} onClick={function(){toggleModule(m.id,enabled);}}
-                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:enabled?'rgba(107,140,173,0.1)':'var(--tf-surface)',border:'1px solid '+(enabled?'#6b8cad':'var(--tf-border)'),borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'all 0.12s'}}>
+                  style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:enabled?'rgba(107,140,173,0.1)':'var(--tf-surface)',border:'1px solid '+(enabled?'#2F6BFF':'var(--tf-border)'),borderRadius:10,cursor:'pointer',textAlign:'left',fontFamily:'inherit',transition:'all 0.12s'}}>
                   <span style={{fontSize:18,flexShrink:0}}>{m.icon}</span>
                   <span style={{flex:1,fontSize:13,fontWeight:600,color:enabled?'var(--tf-text)':'var(--tf-text-sub)'}}>{m.label}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:enabled?'#6b8cad':'var(--tf-text-sub)',background:enabled?'rgba(107,140,173,0.15)':'var(--tf-bg)',borderRadius:20,padding:'2px 8px'}}>{enabled?'On':'Off'}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:enabled?'#2F6BFF':'var(--tf-text-sub)',background:enabled?'rgba(107,140,173,0.15)':'var(--tf-bg)',borderRadius:20,padding:'2px 8px'}}>{enabled?'On':'Off'}</span>
                 </button>;
               })}
             </div>
@@ -3653,7 +3657,7 @@ function MemberPermissionsPanel({org,cu,supabase,member,profile,depts,onClose}){
                     {DEPT_ACCESS_OPTS.map(function(o){
                       var isActive=level===o.v;
                       return<button key={o.v} onClick={function(){setDeptAccessLevel(d.id,o.v);}}
-                        style={{padding:'4px 10px',borderRadius:20,border:'1px solid '+(isActive?'#6b8cad':'var(--tf-border)'),background:isActive?'rgba(107,140,173,0.15)':'var(--tf-bg)',color:isActive?'#6b8cad':'var(--tf-text-sub)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
+                        style={{padding:'4px 10px',borderRadius:20,border:'1px solid '+(isActive?'#2F6BFF':'var(--tf-border)'),background:isActive?'rgba(107,140,173,0.15)':'var(--tf-bg)',color:isActive?'#2F6BFF':'var(--tf-text-sub)',fontSize:11,fontWeight:600,cursor:'pointer'}}>
                         {o.l}
                       </button>;
                     })}
@@ -3795,7 +3799,7 @@ function OrgMembersPanel({org,cu,supabase,orgDepts,orgDeptMembers}){
                 <option value="member">Member</option>
               </select>
               <button onClick={function(){setPermsMember(m);}}
-                style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',cursor:'pointer',fontSize:11,fontWeight:600}}>Permissions</button>
+                style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 9px',color:'#2F6BFF',cursor:'pointer',fontSize:11,fontWeight:600}}>Permissions</button>
               <button onClick={function(){removeMember(m.user_id);}}
                 style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>
             </div>}
@@ -4102,7 +4106,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   function moveStage(idx,dir){setStages(function(p){var a=[...p];var ni=idx+dir;if(ni<0||ni>=a.length)return a;var t=a[idx];a[idx]=a[ni];a[ni]=t;return a;});}
   function applyStagePreset(preset){
     var PRESETS={
-      itr:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'temp_working',label:'Temp Working',color:'#8b5cf6'},{key:'data_recheck',label:'Data Recheck',color:'#f59e0b'},{key:'full_working',label:'Full Working',color:'#f97316'},{key:'review',label:'Review',color:'#ec4899'},{key:'partner_approval',label:'Partner Approval',color:'#6366f1'},{key:'filed',label:'Filed',color:'#22c55e'},{key:'ack_received',label:'Ack Received',color:'#10b981'}],
+      itr:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'temp_working',label:'Temp Working',color:'#8b5cf6'},{key:'data_recheck',label:'Data Recheck',color:'#f59e0b'},{key:'full_working',label:'Full Working',color:'#f97316'},{key:'review',label:'Review',color:'#ec4899'},{key:'partner_approval',label:'Partner Approval',color:'#2F6BFF'},{key:'filed',label:'Filed',color:'#22c55e'},{key:'ack_received',label:'Ack Received',color:'#10b981'}],
       audit:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'draft_accounts',label:'Draft Accounts',color:'#3b82f6'},{key:'internal_review',label:'Internal Review',color:'#8b5cf6'},{key:'client_review',label:'Client Review',color:'#f59e0b'},{key:'final_audit',label:'Final Audit',color:'#f97316'},{key:'signing',label:'Signing',color:'#ec4899'},{key:'filing',label:'Filing',color:'#22c55e'}],
       gst:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Return Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]
     };
@@ -4407,7 +4411,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
           <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>Define the stages clients move through for this work type. Team can drag/move clients between stages in Pipeline view.</div>
           <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',alignSelf:'center'}}>Presets:</span>
-            {[{id:'itr',label:'ITR (9 stages)'},{id:'audit',label:'Audit (7 stages)'},{id:'gst',label:'GST (4 stages)'}].map(function(p){return<button key={p.id} onClick={function(){applyStagePreset(p.id);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'3px 9px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:600}}>{p.label}</button>;})}
+            {[{id:'itr',label:'ITR (9 stages)'},{id:'audit',label:'Audit (7 stages)'},{id:'gst',label:'GST (4 stages)'}].map(function(p){return<button key={p.id} onClick={function(){applyStagePreset(p.id);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'3px 9px',color:'#2F6BFF',cursor:'pointer',fontSize:11,fontWeight:600}}>{p.label}</button>;})}
           </div>
           {stages.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',fontStyle:'italic',padding:'8px 0'}}>No stages defined. Add stages or choose a preset above.</div>:
           <div style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -6024,7 +6028,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </div>
 
         {/* Mine Only toggle */}
-        <button onClick={function(){setMineOnly(!mineOnly);setActiveViewId(null);}} title="Show only tasks where I'm assigned or reviewing" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>
+        <button onClick={function(){setMineOnly(!mineOnly);setActiveViewId(null);}} title="Show only tasks where I'm assigned or reviewing" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#2F6BFF':'var(--tf-border)',borderRadius:7,padding:'5px 10px',color:mineOnly?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>
 
         {/* Saved Views */}
         <div style={{position:'relative'}}>
@@ -6260,7 +6264,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       <>
       {/* Bulk-actions toolbar */}
       {selectedIds.size>0&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',marginBottom:8,background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.3)',borderRadius:10,flexWrap:'wrap'}}>
-        <span style={{fontSize:13,fontWeight:700,color:'#6366f1'}}>✓ {selectedIds.size} selected</span>
+        <span style={{fontSize:13,fontWeight:700,color:'#2F6BFF'}}>✓ {selectedIds.size} selected</span>
         <div style={{width:1,height:18,background:'rgba(99,102,241,0.3)'}}/>
         <select onChange={function(e){if(e.target.value){bulkUpdateStatus(e.target.value);e.target.value='';}}} defaultValue="" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none',fontFamily:'inherit'}}>
           <option value="">Set Status →</option><option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
@@ -6284,7 +6288,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
             <option value="">— Unassign —</option>
             {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
           </select>
-          <button onClick={bulkUpdateAssignee} disabled={!bulkAssigneeKey} style={{background:bulkAssigneeKey?'#6366f1':'var(--tf-surface)',border:'none',borderRadius:7,padding:'5px 10px',color:bulkAssigneeKey?'#fff':'var(--tf-text-sub)',cursor:bulkAssigneeKey?'pointer':'not-allowed',fontSize:11,fontWeight:700,opacity:bulkAssigneeKey?1:0.6}}>Assign</button>
+          <button onClick={bulkUpdateAssignee} disabled={!bulkAssigneeKey} style={{background:bulkAssigneeKey?'#2F6BFF':'var(--tf-surface)',border:'none',borderRadius:7,padding:'5px 10px',color:bulkAssigneeKey?'#fff':'var(--tf-text-sub)',cursor:bulkAssigneeKey?'pointer':'not-allowed',fontSize:11,fontWeight:700,opacity:bulkAssigneeKey?1:0.6}}>Assign</button>
         </div>}
         {!showArchived&&<button onClick={bulkArchive} style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:7,padding:'5px 10px',color:'#f59e0b',cursor:'pointer',fontSize:11,fontWeight:700}}>🗄 Archive</button>}
         <button onClick={bulkDelete} style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:7,padding:'5px 10px',color:'#ef4444',cursor:'pointer',fontSize:11,fontWeight:700}}>🗑 Delete</button>
@@ -7104,7 +7108,7 @@ var ITR_CHECKS=[
 ];
 
 var ITR_STATUS=[
-  ['compiling','Compiling','#6b8cad'],
+  ['compiling','Compiling','#2F6BFF'],
   ['pending_data','Pending Data','#f59e0b'],
   ['ready','Ready for Software','#22c55e'],
   ['in_software','In Software','#3b82f6'],
@@ -7259,7 +7263,7 @@ function ITRCompilationPanel({org,supabase,cu,client,ay,existing,template,onClos
       {/* Completeness bar */}
       <div style={{padding:'10px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
         <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text-sub)'}}>Completeness</span>
-        <div style={{flex:1,height:8,borderRadius:5,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:completeness+'%',height:'100%',background:completeness>=80?'#22c55e':completeness>=40?'#f59e0b':'#6b8cad',transition:'width 0.3s'}}/></div>
+        <div style={{flex:1,height:8,borderRadius:5,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:completeness+'%',height:'100%',background:completeness>=80?'#22c55e':completeness>=40?'#f59e0b':'#2F6BFF',transition:'width 0.3s'}}/></div>
         <span style={{fontSize:13,fontWeight:800,color:completeness>=80?'#22c55e':'var(--tf-text)'}}>{completeness}%</span>
       </div>
       <div style={{display:'flex',flex:1,minHeight:0}}>
@@ -7637,7 +7641,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
 
       {/* Status summary pills */}
       <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}>
-        {[['all','All',baseClients.length,'#6b8cad'],['none','Not Started',baseNotStarted,'#94a3b8']].concat(ITR_STATUS.map(function(s){return [s[0],s[1],baseCounts[s[0]],s[2]];})).map(function(p){
+        {[['all','All',baseClients.length,'#2F6BFF'],['none','Not Started',baseNotStarted,'#94a3b8']].concat(ITR_STATUS.map(function(s){return [s[0],s[1],baseCounts[s[0]],s[2]];})).map(function(p){
           var active=statusFilter===p[0];
           return<button key={p[0]} onClick={function(){setStatusFilter(p[0]);}} style={{padding:'6px 13px',borderRadius:20,border:'1px solid',borderColor:active?p[3]:'var(--tf-border)',background:active?p[3]+'1f':'transparent',color:active?p[3]:'var(--tf-text-sub)',fontSize:12,fontWeight:active?700:500,cursor:'pointer'}}>{p[1]} <b>{p[2]}</b></button>;
         })}
@@ -7713,13 +7717,13 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
                     <div style={{fontWeight:600,fontSize:12,color:'var(--tf-text)',marginBottom:3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.display_name||c.name}</div>
                     {c.pan&&<div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:4}}>{c.pan}</div>}
                     {types.length>0&&<div style={{display:'flex',gap:3,flexWrap:'wrap',marginBottom:4}}>
-                      {types.slice(0,3).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:9,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:4,padding:'1px 5px'}}>{lbl}</span>;})}
+                      {types.slice(0,3).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:9,fontWeight:600,color:'#2F6BFF',background:'rgba(107,140,173,0.12)',borderRadius:4,padding:'1px 5px'}}>{lbl}</span>;})}
                     </div>}
                     <button onClick={function(e){e.stopPropagation();var ai=assignFor&&assignFor.clientId===c.id;if(ai){setAssignFor(null);return;}var r=e.currentTarget.getBoundingClientRect();setAssignFor({clientId:c.id,left:Math.max(8,r.right-240),top:r.bottom+4});}} title="Assign assignee / reviewer" style={{display:'flex',alignItems:'center',gap:3,background:'none',border:'none',padding:'0 0 4px',cursor:'pointer'}}>
                       {(function(){var as=clientAssignees(c.id);if(as.length===0)return<span style={{fontSize:9.5,color:'#0e2a47',fontWeight:600}}>+ Assign</span>;return as.map(function(a,ai){return<span key={ai} title={a.label+': '+(memberName(a.uid)||'—')} style={{width:18,height:18,borderRadius:'50%',background:'#0e2a47',color:'#fff',fontSize:8,fontWeight:700,display:'inline-flex',alignItems:'center',justifyContent:'center',marginLeft:ai?-4:0,border:'1.5px solid var(--tf-bg)',flexShrink:0}}>{memberInitials(a.uid)}</span>;});})()}
                     </button>
                     {rec&&<div style={{display:'flex',alignItems:'center',gap:5,marginTop:2}}>
-                      <div style={{flex:1,height:4,borderRadius:2,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
+                      <div style={{flex:1,height:4,borderRadius:2,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#2F6BFF'}}/></div>
                       <span style={{fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',minWidth:24,textAlign:'right'}}>{comp}%</span>
                     </div>}
                   </div>;
@@ -7763,7 +7767,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
               {c.pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.pan}</div>}
             </div>
             <div style={{flex:'1 1 140px',display:'flex',gap:4,flexWrap:'wrap',cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
-              {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#6b8cad',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
+              {types.slice(0,4).map(function(t){var lbl=(ITR_INCOME_TYPES.find(function(x){return x[0]===t;})||[t,t])[1];return<span key={t} style={{fontSize:10,fontWeight:600,color:'#2F6BFF',background:'rgba(107,140,173,0.12)',borderRadius:5,padding:'2px 7px'}}>{lbl}</span>;})}
             </div>
             {/* Work allocation — click to assign, opens fixed popover (no overflow clipping) */}
             <div style={{flex:'0 0 120px'}}>
@@ -7773,7 +7777,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
               </button>
             </div>
             <div style={{flex:'0 0 120px',display:rec?'flex':'none',alignItems:'center',gap:7,cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
-              <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#6b8cad'}}/></div>
+              <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#2F6BFF'}}/></div>
               <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',minWidth:30,textAlign:'right'}}>{comp}%</span>
             </div>
             <div style={{flex:'0 0 130px',textAlign:'right',cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
@@ -8091,7 +8095,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
         {KPI('Tasks Done',clientRows.filter(function(r){return r.status==='completed';}).length,'#22c55e')}
         {KPI('Pending',clientRows.filter(function(r){return r.status!=='completed'&&(!r.due_date||new Date(r.due_date)>=new Date());}).length,'#94a3b8')}
         {KPI('Overdue',clientRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<new Date();}).length,'#ef4444')}
-        {KPI('Hours Logged',fmtMins(totalMins),'#6b8cad',timeLogs.length+' entries')}
+        {KPI('Hours Logged',fmtMins(totalMins),'#2F6BFF',timeLogs.length+' entries')}
         {KPI('Invoiced','₹'+totalInvoiced.toLocaleString('en-IN'),'var(--tf-text)',invoices.length+' invoices')}
         {KPI('Received','₹'+totalReceived.toLocaleString('en-IN'),'#22c55e')}
         {KPI('Outstanding','₹'+Math.max(0,outstanding).toLocaleString('en-IN'),outstanding>0?'#ef4444':'#22c55e')}
@@ -8143,7 +8147,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
             var latest=entries[0];
             return<tr key={t.name} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
               <td style={{padding:'9px 16px',fontWeight:600,color:'var(--tf-text)'}}>{t.name}</td>
-              <td style={{padding:'9px 10px',textAlign:'center',fontWeight:700,color:'#6b8cad'}}>{fmtMins(t.mins)}</td>
+              <td style={{padding:'9px 10px',textAlign:'center',fontWeight:700,color:'#2F6BFF'}}>{fmtMins(t.mins)}</td>
               <td style={{padding:'9px 10px',textAlign:'center',color:'var(--tf-text-sub)'}}>{entries.length}</td>
               <td style={{padding:'9px 16px',color:'var(--tf-text-sub)',fontSize:11}}>{latest?latest.date+(latest.notes?' — '+latest.notes.slice(0,40):''):'—'}</td>
             </tr>;
@@ -8175,7 +8179,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
             var bal=tot-paid;
             var stColor=inv.status==='paid'?'#22c55e':inv.status==='partial'?'#f59e0b':'#ef4444';
             return<tr key={inv.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
-              <td style={{padding:'9px 16px',fontWeight:700,color:'#6b8cad'}}>{inv.invoice_no||'—'}</td>
+              <td style={{padding:'9px 16px',fontWeight:700,color:'#2F6BFF'}}>{inv.invoice_no||'—'}</td>
               <td style={{padding:'9px 10px',textAlign:'center',color:'var(--tf-text-sub)'}}>{inv.invoice_date||inv.created_at?.slice(0,10)||'—'}</td>
               <td style={{padding:'9px 10px',textAlign:'right',fontWeight:600}}>₹{tot.toLocaleString('en-IN')}</td>
               <td style={{padding:'9px 10px',textAlign:'right',color:'#22c55e'}}>₹{paid.toLocaleString('en-IN')}</td>
@@ -8569,7 +8573,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           });
           Object.keys(byDept).forEach(function(dId){
             var dept=deptMap[dId];
-            groups.push({label:dept?dept.name:dId,color:dept?dept.color:'#6b8cad',stats:byDept[dId]});
+            groups.push({label:dept?dept.name:dId,color:dept?dept.color:'#2F6BFF',stats:byDept[dId]});
           });
         }else{
           var byWsg={};
@@ -8579,13 +8583,13 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
             if(wsg){if(!byWsg[wsg])byWsg[wsg]=[];byWsg[wsg].push(s);}
             else ungroupedStats.push(s);
           });
-          Object.keys(byWsg).forEach(function(g){groups.push({label:g,color:'#6b8cad',stats:byWsg[g]});});
+          Object.keys(byWsg).forEach(function(g){groups.push({label:g,color:'#2F6BFF',stats:byWsg[g]});});
         }
         if(ungroupedStats.length>0)groups.push({label:'Other',color:'#94a3b8',stats:ungroupedStats,isOther:true});
 
         // ── LEVEL 2: inside a group ──
         if(overviewDrillGroup){
-          var activeGroup=groups.find(function(g){return g.label===overviewDrillGroup;})||{label:overviewDrillGroup,stats:[],color:'#6b8cad'};
+          var activeGroup=groups.find(function(g){return g.label===overviewDrillGroup;})||{label:overviewDrillGroup,stats:[],color:'#2F6BFF'};
           var gDone=activeGroup.stats.reduce(function(s,x){return s+x.completed;},0);
           var gTot=activeGroup.stats.reduce(function(s,x){return s+x.total;},0);
           var gOvd=activeGroup.stats.reduce(function(s,x){return s+x.overdue;},0);
@@ -8813,7 +8817,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
                 <div style={{fontSize:9,color:'var(--tf-text-sub)'}}>{cl.done}/{cl.total}</div>
               </td>
               <td style={{padding:'9px 10px',textAlign:'center'}}>
-                <button onClick={function(){setLedgerInitClient(cl.id);setActiveTab('ledger');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 9px',color:'#6b8cad',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Ledger →</button>
+                <button onClick={function(){setLedgerInitClient(cl.id);setActiveTab('ledger');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 9px',color:'#2F6BFF',fontSize:11,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>Ledger →</button>
               </td>
             </tr>;
           })}
@@ -9788,7 +9792,7 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
       </div>
       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
         {(function(){var upcoming=reminders.filter(function(r){return!r.fired;});return upcoming.length>0&&<div title={upcoming.length+' upcoming reminder'+(upcoming.length!==1?'s':'')} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:7,fontSize:12,fontWeight:700,color:'#f59e0b'}}>🔔 {upcoming.length}</div>;})()}
-        {showMineToggle&&<button onClick={function(){setMineOnly(!mineOnly);setSelectedDay(null);}} title="Show only tasks assigned to you" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#6366f1':'var(--tf-border)',borderRadius:7,padding:'5px 12px',color:mineOnly?'#6366f1':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>}
+        {showMineToggle&&<button onClick={function(){setMineOnly(!mineOnly);setSelectedDay(null);}} title="Show only tasks assigned to you" style={{background:mineOnly?'rgba(99,102,241,0.12)':'var(--tf-surface)',border:'1px solid',borderColor:mineOnly?'#2F6BFF':'var(--tf-border)',borderRadius:7,padding:'5px 12px',color:mineOnly?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700}}>{mineOnly?'✓ Mine Only':'Mine Only'}</button>}
         <button onClick={prevMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>‹</button>
         <div style={{fontSize:15,fontWeight:700,color:'var(--tf-text)',minWidth:160,textAlign:'center'}}>{MONTH_NAMES[calMonth]} {calYear}</div>
         <button onClick={nextMonth} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:14,fontWeight:700}}>›</button>
@@ -10636,7 +10640,7 @@ function NotesModule({org,cu,mode}){
         <input value={n.title||''} readOnly={!editable} onChange={function(e){patchNote(n.id,{title:e.target.value});}}
           placeholder="Untitled note"
           style={{flex:1,minWidth:120,background:'transparent',border:'none',outline:'none',fontSize:compact?15:18,fontWeight:800,color:'var(--tf-text)',fontFamily:'inherit'}}/>
-        {sharedToMe&&<span style={{fontSize:10,fontWeight:700,color:'#6366f1',background:'rgba(99,102,241,0.12)',padding:'2px 8px',borderRadius:10}}>{editable?'Shared · can edit':'Shared · view only'}</span>}
+        {sharedToMe&&<span style={{fontSize:10,fontWeight:700,color:'#2F6BFF',background:'rgba(99,102,241,0.12)',padding:'2px 8px',borderRadius:10}}>{editable?'Shared · can edit':'Shared · view only'}</span>}
         {isOwner(n)&&<button onClick={function(){patchNote(n.id,{pinned:!n.pinned},true);}} title={n.pinned?'Unpin':'Pin'} style={{background:'none',border:'none',cursor:'pointer',fontSize:15,opacity:n.pinned?1:0.4}}>📌</button>}
         {isOwner(n)&&<button onClick={function(){setShareNoteId(n.id);refreshShares(n.id);}} title="Share" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 9px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>👥 Share{(shareMap[n.id]||[]).length>0?' ('+(shareMap[n.id]||[]).length+')':''}</button>}
         {isOwner(n)&&<button onClick={function(){deleteNote(n.id);}} title="Delete note" style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,color:'#ef4444',cursor:'pointer',fontSize:13}}>🗑</button>}
@@ -10664,11 +10668,11 @@ function NotesModule({org,cu,mode}){
   function renderListItem(n){
     var active=n.id===activeId;
     return<button key={n.id} onClick={function(){setActiveId(n.id);}}
-      style={{display:'block',width:'100%',textAlign:'left',background:active?'var(--tf-surface-hov)':(n.color||'var(--tf-panel)'),border:'1px solid '+(active?'#6366f1':'var(--tf-border)'),borderLeft:'3px solid '+(n.color?'#6366f1':(active?'#6366f1':'var(--tf-border)')),borderRadius:8,padding:'9px 11px',cursor:'pointer',marginBottom:7}}>
+      style={{display:'block',width:'100%',textAlign:'left',background:active?'var(--tf-surface-hov)':(n.color||'var(--tf-panel)'),border:'1px solid '+(active?'#2F6BFF':'var(--tf-border)'),borderLeft:'3px solid '+(n.color?'#2F6BFF':(active?'#2F6BFF':'var(--tf-border)')),borderRadius:8,padding:'9px 11px',cursor:'pointer',marginBottom:7}}>
       <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:3}}>
         {n.pinned&&<span style={{fontSize:10}}>📌</span>}
         <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.title||'Untitled'}</span>
-        {n.owner_id!==cu.id&&<span style={{fontSize:9,fontWeight:700,color:'#6366f1'}}>shared</span>}
+        {n.owner_id!==cu.id&&<span style={{fontSize:9,fontWeight:700,color:'#2F6BFF'}}>shared</span>}
         {n.owner_id===cu.id&&(shareMap[n.id]||[]).length>0&&<span style={{fontSize:9,color:'var(--tf-text-sub)'}}>👥{(shareMap[n.id]||[]).length}</span>}
       </div>
       <div style={{fontSize:11,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{notePreview(n)}</div>
@@ -10697,7 +10701,7 @@ function NotesModule({org,cu,mode}){
                 <input type="checkbox" checked={!!sh.can_edit} onChange={function(e){setShareEdit(shareNoteId,m.id,e.target.checked);}}/>can edit
               </label>}
               <button onClick={function(){toggleShare(shareNoteId,m.id,!sh);}}
-                style={{background:sh?'rgba(239,68,68,0.1)':'#6366f1',border:sh?'1px solid rgba(239,68,68,0.3)':'none',borderRadius:6,padding:'5px 11px',color:sh?'#ef4444':'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>{sh?'Remove':'Share'}</button>
+                style={{background:sh?'rgba(239,68,68,0.1)':'#2F6BFF',border:sh?'1px solid rgba(239,68,68,0.3)':'none',borderRadius:6,padding:'5px 11px',color:sh?'#ef4444':'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>{sh?'Remove':'Share'}</button>
             </div>;
           })}
         </div>
@@ -12237,10 +12241,10 @@ function MiniCalendar({rows,clientMap,wsMap}){
           var dRows=dayRows[day]||[];
           var cnt=dRows.length;
           var hasOverdue=dRows.some(function(r){return r.due_date&&r.due_date<(today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0'))&&r.status!=='completed';});
-          var dotColor=hasOverdue?'#ef4444':cnt>0?'#6366f1':'transparent';
+          var dotColor=hasOverdue?'#ef4444':cnt>0?'#2F6BFF':'transparent';
           return<button key={wi+'-'+di} onClick={function(){setSelDay(isSel?null:day);}}
-            style={{aspectRatio:'1',background:isSel?'rgba(99,102,241,0.15)':'transparent',border:isSel?'1px solid #6366f1':isToday?'1px solid rgba(99,102,241,0.4)':'1px solid transparent',borderRadius:6,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:2,fontFamily:'inherit',position:'relative'}}>
-            <div style={{fontSize:11,fontWeight:isToday?800:600,color:isToday?'#6366f1':'var(--tf-text)'}}>{day}</div>
+            style={{aspectRatio:'1',background:isSel?'rgba(99,102,241,0.15)':'transparent',border:isSel?'1px solid #2F6BFF':isToday?'1px solid rgba(99,102,241,0.4)':'1px solid transparent',borderRadius:6,cursor:'pointer',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:2,fontFamily:'inherit',position:'relative'}}>
+            <div style={{fontSize:11,fontWeight:isToday?800:600,color:isToday?'#2F6BFF':'var(--tf-text)'}}>{day}</div>
             {cnt>0&&<div style={{position:'absolute',bottom:2,left:0,right:0,display:'flex',justifyContent:'center',gap:2}}>
               <div style={{width:4,height:4,borderRadius:'50%',background:dotColor}}/>
               {cnt>1&&<div style={{width:4,height:4,borderRadius:'50%',background:dotColor}}/>}
@@ -14563,7 +14567,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
         /* Templates list in left panel */
         <>
           <div style={{padding:'0 12px 8px'}}>
-            <button onClick={function(){setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{width:'100%',background:'rgba(99,102,241,0.08)',border:'1px dashed rgba(99,102,241,0.3)',borderRadius:8,padding:'8px 10px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ New Template</button>
+            <button onClick={function(){setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{width:'100%',background:'rgba(99,102,241,0.08)',border:'1px dashed rgba(99,102,241,0.3)',borderRadius:8,padding:'8px 10px',color:'#2F6BFF',cursor:'pointer',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>+ New Template</button>
           </div>
           {templates.map(function(t){var active=editTplId===t.id;return<button key={t.id} onClick={function(){editTemplate(t);}} style={{width:'100%',textAlign:'left',padding:'10px 14px',border:'none',background:active?'rgba(14,42,71,0.1)':'transparent',cursor:'pointer',fontFamily:'inherit',borderLeft:active?'3px solid #0e2a47':'3px solid transparent'}}>
             <div style={{fontSize:12,fontWeight:active?700:600,color:'var(--tf-text)'}}>{t.name}</div>
@@ -14779,7 +14783,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             </span>;})}
           </div>}
         </div>
-        <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0} style={{background:Object.keys(bulkSelIds).length>0?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
+        <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0} style={{background:Object.keys(bulkSelIds).length>0?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0?'#2454D6':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
       </>:
       /* Templates tab — editor on right */
       <>
@@ -14799,7 +14803,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
           <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
             {editTplId&&<button onClick={function(){setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button>}
             {editTplId&&<button onClick={function(){deleteTemplate(editTplId);setTplName('');setTplSubject('');setTplBody('');setEditTplId(null);}} style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'9px 16px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Delete</button>}
-            <button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:tplName.trim()&&tplSubject.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 20px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>{editTplId?'Update Template':'Save Template'}</button>
+            <button onClick={saveTemplate} disabled={!tplName.trim()||!tplSubject.trim()} style={{background:tplName.trim()&&tplSubject.trim()?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid',borderColor:tplName.trim()&&tplSubject.trim()?'#2454D6':'var(--tf-border)',borderRadius:8,padding:'9px 20px',color:tplName.trim()&&tplSubject.trim()?'#fff':'var(--tf-text-sub)',cursor:tplName.trim()&&tplSubject.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>{editTplId?'Update Template':'Save Template'}</button>
           </div>
         </div>
       </>}
@@ -14942,7 +14946,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
   var REQ_TYPES=[{id:'data_collection',label:'Data Collection',icon:'📂'},{id:'invoice',label:'Invoice',icon:'🧾'},{id:'question',label:'Question',icon:'❓'},{id:'statement',label:'Statement',icon:'📄'},{id:'communication',label:'Communication',icon:'💬'}];
-  var REQ_STATUS_COLORS={pending:'#f59e0b',responded:'#6366f1',closed:'#22c55e'};
+  var REQ_STATUS_COLORS={pending:'#f59e0b',responded:'#2F6BFF',closed:'#22c55e'};
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'};
 
   if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadAll} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
@@ -14995,7 +14999,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
         </div>}
         {selReq.files&&selReq.files.length>0&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
           <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:10}}>Uploaded Files ({selReq.files.length})</div>
-          {selReq.files.map(function(f,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:i>0?'1px solid var(--tf-border)':'none'}}><span style={{fontSize:16}}>📎</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{f.name}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{f.size?Math.round(f.size/1024)+'KB':''}{f.uploaded_at?' · '+new Date(f.uploaded_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div></div>{f.url&&<a href={f.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontWeight:700,color:'#6366f1',textDecoration:'none'}}>Download</a>}</div>;})}
+          {selReq.files.map(function(f,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:i>0?'1px solid var(--tf-border)':'none'}}><span style={{fontSize:16}}>📎</span><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{f.name}</div><div style={{fontSize:10,color:'var(--tf-text-sub)'}}>{f.size?Math.round(f.size/1024)+'KB':''}{f.uploaded_at?' · '+new Date(f.uploaded_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'}):''}</div></div>{f.url&&<a href={f.url} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontWeight:700,color:'#2F6BFF',textDecoration:'none'}}>Download</a>}</div>;})}
         </div>}
         <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Conversation</div>
         <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
@@ -15004,7 +15008,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
         </div>
         <div style={{display:'flex',gap:8}}>
           <input value={msgText} onChange={function(e){setMsgText(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}} placeholder="Type a message..." style={Object.assign({},INP,{flex:1})}/>
-          <button onClick={sendMessage} disabled={!msgText.trim()} style={{background:msgText.trim()?'linear-gradient(135deg,#6366f1,#4f46e5)':'var(--tf-surface)',border:'1px solid',borderColor:msgText.trim()?'#4f46e5':'var(--tf-border)',borderRadius:8,padding:'9px 18px',color:msgText.trim()?'#fff':'var(--tf-text-sub)',cursor:msgText.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700,flexShrink:0}}>Send</button>
+          <button onClick={sendMessage} disabled={!msgText.trim()} style={{background:msgText.trim()?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid',borderColor:msgText.trim()?'#2454D6':'var(--tf-border)',borderRadius:8,padding:'9px 18px',color:msgText.trim()?'#fff':'var(--tf-text-sub)',cursor:msgText.trim()?'pointer':'not-allowed',fontSize:12,fontWeight:700,flexShrink:0}}>Send</button>
         </div>
       </div>
     </div>;
@@ -15063,7 +15067,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
         <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Select a client from the left panel to view their requests.</div>
         {/* Summary cards */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))',gap:10,marginBottom:24}}>
-          {[{label:'Portal Users',value:users.filter(function(u){return u.is_active;}).length,color:'#22c55e'},{label:'Total Requests',value:requests.length,color:'#6366f1'},{label:'Pending',value:requests.filter(function(r){return r.status==='pending';}).length,color:'#f59e0b'},{label:'Responded',value:requests.filter(function(r){return r.status==='responded';}).length,color:'#6366f1'},{label:'Closed',value:requests.filter(function(r){return r.status==='closed';}).length,color:'#22c55e'}].map(function(k){return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.label}</div></div>;})}
+          {[{label:'Portal Users',value:users.filter(function(u){return u.is_active;}).length,color:'#22c55e'},{label:'Total Requests',value:requests.length,color:'#2F6BFF'},{label:'Pending',value:requests.filter(function(r){return r.status==='pending';}).length,color:'#f59e0b'},{label:'Responded',value:requests.filter(function(r){return r.status==='responded';}).length,color:'#2F6BFF'},{label:'Closed',value:requests.filter(function(r){return r.status==='closed';}).length,color:'#22c55e'}].map(function(k){return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}><div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.label}</div></div>;})}
         </div>
         {/* Recent requests */}
         <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:10}}>Recent Requests</div>
@@ -15085,7 +15089,7 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
               {selClientUsers.length>0&&selClientUsers[0].last_login&&<span> · Last login: {new Date(selClientUsers[0].last_login).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
             </div>
           </div>
-          <button onClick={function(){setShowReqForm(!showReqForm);setReqClientId(selClientId);}} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Request</button>
+          <button onClick={function(){setShowReqForm(!showReqForm);setReqClientId(selClientId);}} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Request</button>
         </div>
 
         {/* New request form */}
@@ -15099,8 +15103,8 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
           <div style={{marginBottom:10}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Description</label><textarea value={reqDesc} onChange={function(e){setReqDesc(e.target.value);}} rows={3} placeholder="Details..." style={Object.assign({},INP,{resize:'vertical'})}/></div>
           {reqType==='invoice'&&<div style={{marginBottom:10}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Amount (₹)</label><input type="number" value={reqAmount} onChange={function(e){setReqAmount(e.target.value);}} placeholder="0" style={INP}/></div>}
           {reqType==='question'&&<div style={{marginBottom:12}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:6}}>Form Fields</label>{reqFields.map(function(f,idx){return<div key={f.id} style={{display:'flex',gap:6,alignItems:'center',marginBottom:6}}><input value={f.label} onChange={function(e){updateField(idx,'label',e.target.value);}} placeholder="Question label" style={Object.assign({},INP,{flex:1})}/><select value={f.type} onChange={function(e){updateField(idx,'type',e.target.value);}} style={Object.assign({},INP,{width:100,flex:'none'})}><option value="text">Text</option><option value="textarea">Long Text</option><option value="number">Number</option><option value="date">Date</option><option value="select">Dropdown</option><option value="yes_no">Yes/No</option></select>{f.type==='select'&&<input value={f.options||''} onChange={function(e){updateField(idx,'options',e.target.value);}} placeholder="Opt1,Opt2,..." style={Object.assign({},INP,{flex:1})}/>}<button onClick={function(){removeField(idx);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:28,height:28,color:'#ef4444',cursor:'pointer',fontSize:14,flexShrink:0}}>×</button></div>;})}<button onClick={addField} style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700}}>+ Add field</button></div>}
-          {templates.length>0&&<div style={{marginBottom:12}}><button onClick={function(){setShowTemplates(!showTemplates);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>📧 Use Template</button>{showTemplates&&<div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}>{templates.map(function(t){return<button key={t.id} onClick={function(){useTemplate(t);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'4px 10px',color:'#6366f1',cursor:'pointer',fontSize:11,fontWeight:600}}>{t.name}</button>;})}</div>}</div>}
-          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={function(){setShowReqForm(false);setReqFields([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button><button onClick={createRequest} disabled={reqSaving} style={{background:'linear-gradient(135deg,#6366f1,#4f46e5)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:reqSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{reqSaving?'Creating...':'Create & Notify'}</button></div>
+          {templates.length>0&&<div style={{marginBottom:12}}><button onClick={function(){setShowTemplates(!showTemplates);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'6px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:600}}>📧 Use Template</button>{showTemplates&&<div style={{marginTop:6,display:'flex',gap:6,flexWrap:'wrap'}}>{templates.map(function(t){return<button key={t.id} onClick={function(){useTemplate(t);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'4px 10px',color:'#2F6BFF',cursor:'pointer',fontSize:11,fontWeight:600}}>{t.name}</button>;})}</div>}</div>}
+          <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}><button onClick={function(){setShowReqForm(false);setReqFields([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>Cancel</button><button onClick={createRequest} disabled={reqSaving} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:reqSaving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>{reqSaving?'Creating...':'Create & Notify'}</button></div>
         </div>}
 
         {/* Request summary cards by type */}
@@ -16046,7 +16050,7 @@ function TeamChatModule({org,supabase,cu}){
           <input value={newChDesc} onChange={function(e){setNewChDesc(e.target.value);}} placeholder="Description (optional)"
             style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid var(--tf-border)',background:'var(--tf-bg)',color:'var(--tf-text)',fontSize:12,fontFamily:'inherit',marginBottom:8,boxSizing:'border-box'}}/>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={createChannel} disabled={savingCh||!newChName.trim()} style={{flex:1,padding:'5px 0',background:'#6b8cad',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingCh||!newChName.trim()?0.6:1}}>Create</button>
+            <button onClick={createChannel} disabled={savingCh||!newChName.trim()} style={{flex:1,padding:'5px 0',background:'#2F6BFF',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingCh||!newChName.trim()?0.6:1}}>Create</button>
             <button onClick={function(){setShowNewCh(false);setNewChName('');setNewChDesc('');}} style={{flex:1,padding:'5px 0',background:'var(--tf-surface)',color:'var(--tf-text-sub)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
           </div>
         </div>}
@@ -16102,13 +16106,13 @@ function TeamChatModule({org,supabase,cu}){
               var nm=m.name||(m.email?m.email.split('@')[0]:'Member');var sel=groupSel.indexOf(m.id)>=0;
               return<button key={m.id} onClick={function(){setGroupSel(function(p){return sel?p.filter(function(x){return x!==m.id;}):p.concat([m.id]);});}}
                 style={{width:'100%',textAlign:'left',background:sel?'rgba(107,140,173,0.12)':'none',border:'none',borderRadius:6,padding:'5px 6px',cursor:'pointer',display:'flex',alignItems:'center',gap:7,color:'var(--tf-text)',fontSize:12.5,fontFamily:'inherit'}}>
-                <span style={{width:16,height:16,borderRadius:4,border:'1.5px solid',borderColor:sel?'#6b8cad':'var(--tf-border)',background:sel?'#6b8cad':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'#fff',fontSize:10,fontWeight:900}}>{sel?'✓':''}</span>
+                <span style={{width:16,height:16,borderRadius:4,border:'1.5px solid',borderColor:sel?'#2F6BFF':'var(--tf-border)',background:sel?'#2F6BFF':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,color:'#fff',fontSize:10,fontWeight:900}}>{sel?'✓':''}</span>
                 <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{nm}</span>
               </button>;
             })}
           </div>
           <div style={{display:'flex',gap:6}}>
-            <button onClick={createGroup} disabled={savingGroup||!groupName.trim()||groupSel.length===0} style={{flex:1,padding:'5px 0',background:'#6b8cad',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingGroup||!groupName.trim()||groupSel.length===0?0.6:1}}>Create</button>
+            <button onClick={createGroup} disabled={savingGroup||!groupName.trim()||groupSel.length===0} style={{flex:1,padding:'5px 0',background:'#2F6BFF',color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:savingGroup||!groupName.trim()||groupSel.length===0?0.6:1}}>Create</button>
             <button onClick={function(){setShowNewGroup(false);setGroupName('');setGroupSel([]);}} style={{flex:1,padding:'5px 0',background:'var(--tf-surface)',color:'var(--tf-text-sub)',border:'1px solid var(--tf-border)',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Cancel</button>
           </div>
         </div>}
@@ -16145,7 +16149,7 @@ function TeamChatModule({org,supabase,cu}){
                 <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{isMine?'You':msg.sender_name}</span>
                 <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>{fmtTime(msg.created_at)}</span>
               </div>}
-              <div style={{fontSize:14,color:isMine?'#fff':'var(--tf-text)',lineHeight:1.55,wordBreak:'break-word',whiteSpace:'pre-wrap',background:isMine?'#6b8cad':'var(--tf-surface-hov)',borderRadius:12,padding:'7px 12px',maxWidth:'70%',display:'inline-block'}}>{msg.text}</div>
+              <div style={{fontSize:14,color:isMine?'#fff':'var(--tf-text)',lineHeight:1.55,wordBreak:'break-word',whiteSpace:'pre-wrap',background:isMine?'#2F6BFF':'var(--tf-surface-hov)',borderRadius:12,padding:'7px 12px',maxWidth:'70%',display:'inline-block'}}>{msg.text}</div>
             </div>;
             out.push(<div key={msg.id} style={{display:'flex',gap:10,alignItems:'flex-start',padding:sameGroup?'1px 0':'8px 0 1px',marginTop:sameGroup?0:2,flexDirection:isMine?'row-reverse':'row'}}>
               <div style={{width:34,flexShrink:0,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:sameGroup?0:2}}>
@@ -16161,12 +16165,12 @@ function TeamChatModule({org,supabase,cu}){
       </div>
       {/* Input */}
       <div style={{padding:'10px 18px 14px',borderTop:'1px solid var(--tf-border)',flexShrink:0}}>
-        <div style={{display:'flex',gap:8,alignItems:'flex-end',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'8px 12px',transition:'border-color 0.15s'}} onFocusCapture={function(e){e.currentTarget.style.borderColor='#6b8cad';}} onBlurCapture={function(e){e.currentTarget.style.borderColor='var(--tf-border)';}}>
+        <div style={{display:'flex',gap:8,alignItems:'flex-end',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'8px 12px',transition:'border-color 0.15s'}} onFocusCapture={function(e){e.currentTarget.style.borderColor='#2F6BFF';}} onBlurCapture={function(e){e.currentTarget.style.borderColor='var(--tf-border)';}}>
           <textarea ref={inputRef} value={msgText} onChange={function(e){setMsgText(e.target.value);}} placeholder={activeCh?('Message '+(activeCh.kind==='channel'?'#':'')+channelLabel(activeCh)):'Message…'}
             rows={1} style={{flex:1,background:'none',border:'none',outline:'none',resize:'none',fontSize:14,color:'var(--tf-text)',fontFamily:'inherit',lineHeight:1.5,maxHeight:120,overflowY:'auto'}}
             onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}/>
           <button onClick={send} disabled={!msgText.trim()||sending}
-            style={{background:'#6b8cad',border:'none',borderRadius:7,padding:'6px 14px',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:!msgText.trim()||sending?0.5:1,flexShrink:0,transition:'opacity 0.15s'}}>
+            style={{background:'#2F6BFF',border:'none',borderRadius:7,padding:'6px 14px',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit',opacity:!msgText.trim()||sending?0.5:1,flexShrink:0,transition:'opacity 0.15s'}}>
             Send
           </button>
         </div>
@@ -16736,7 +16740,7 @@ function CoachmarkTour({step,setStep,onDone,navigate,steps}){
 // Shown to the org owner/admin when the org has no work types and no clients.
 var WIZARD_PRESETS=[
   {name:'GST Returns',desc:'GSTR-1 & GSTR-3B monthly filing',icon:'🧾',freq:'Monthly',color:'#0e2a47'},
-  {name:'ITR',desc:'Income tax returns — yearly',icon:'📋',freq:'Yearly',color:'#4f46e5'},
+  {name:'ITR',desc:'Income tax returns — yearly',icon:'📋',freq:'Yearly',color:'#2454D6'},
   {name:'TDS Returns',desc:'Quarterly TDS return filing',icon:'📄',freq:'Quarterly',color:'#0891b2'},
   {name:'TDS Payments',desc:'Monthly TDS challan payments',icon:'💸',freq:'Monthly',color:'#059669'},
   {name:'Accounts',desc:'Monthly book-keeping',icon:'📚',freq:'Monthly',color:'#d97706'},
@@ -17092,7 +17096,7 @@ function SetupWizard({org,cu,supabase,onClose}){
         {/* Module highlight cards */}
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:24,textAlign:'left'}}>
           {[
-            {icon:'📖',title:'My Work',desc:'Your daily task list, calendar and time log.',color:'#6366f1'},
+            {icon:'📖',title:'My Work',desc:'Your daily task list, calendar and time log.',color:'#2F6BFF'},
             {icon:'💼',title:'WorkZone',desc:'Worksheets & board for all client work.',color:'#0e2a47'},
             {icon:'🗄️',title:'Master Data',desc:'Manage clients and work type settings.',color:'#7c3aed'},
             {icon:'⚙️',title:'Set-up',desc:'Invite members and configure your org.',color:'#475569'},
@@ -17259,7 +17263,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   setupTabs.push({id:'settings',label:'Org Settings'});
 
   var MODULES=[
-    {id:'diary',label:'My Work',icon:BookOpen,desc:'Your work, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#6366f1,#4f46e5)',tabs:[{id:'home',label:'Work'},{id:'notes',label:'Notes'}]},
+    {id:'diary',label:'My Work',icon:BookOpen,desc:'Your work, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#2F6BFF,#14C7C0)',tabs:[{id:'home',label:'Work'},{id:'notes',label:'Notes'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:workzoneTabs},
   ];
   if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]});
@@ -17573,11 +17577,11 @@ function ClientPortal({supabase}){
 
   var siteName=(org&&org.portal_settings&&org.portal_settings.site_name)?org.portal_settings.site_name:(org?org.name:'Client Portal');
   var REQ_TYPES={data_collection:{label:'Data Collection',icon:'📂'},invoice:{label:'Invoice',icon:'🧾'},question:{label:'Question',icon:'❓'},statement:{label:'Statement',icon:'📄'},communication:{label:'Communication',icon:'💬'}};
-  var STATUS_COLORS={pending:'#f59e0b',responded:'#6366f1',closed:'#22c55e'};
+  var STATUS_COLORS={pending:'#f59e0b',responded:'#2F6BFF',closed:'#22c55e'};
 
   // Login screen
   if(!portalUser){
-    return<div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0b0f1a,#131825)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'DM Sans',system-ui,sans-serif",padding:16}}>
+    return<div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0b0f1a,#131825)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif",padding:16}}>
       <div style={{width:'100%',maxWidth:400}}>
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{width:52,height:52,borderRadius:14,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 14px',boxShadow:'0 8px 32px rgba(6,182,212,0.3)',color:'#fff'}}>🔗</div>
@@ -17604,7 +17608,7 @@ function ClientPortal({supabase}){
   // Request detail view
   if(selReq){
     var rt=REQ_TYPES[selReq.type]||{label:selReq.type,icon:'📋'};
-    return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+    return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif"}}>
       <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <button onClick={function(){setSelReq(null);setMessages([]);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 12px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:600}}>← Back</button>
@@ -17707,7 +17711,7 @@ function ClientPortal({supabase}){
   var pendingReqs=requests.filter(function(r){return r.status==='pending';});
   var otherReqs=requests.filter(function(r){return r.status!=='pending';});
 
-  return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:"'DM Sans',system-ui,sans-serif"}}>
+  return<div style={{minHeight:'100vh',background:'var(--tf-bg)',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif"}}>
     <div style={{background:'var(--tf-panel)',borderBottom:'1px solid var(--tf-border)',padding:'12px 20px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:'#fff',fontWeight:700}}>{siteName.charAt(0)}</div>
@@ -17867,7 +17871,7 @@ function ClientFormPublic({supabase,token}){
     setSubmitted(true);setSubmitting(false);
   }
 
-  var baseStyle={minHeight:'100vh',background:'#f8fafc',fontFamily:"'DM Sans',system-ui,sans-serif"};
+  var baseStyle={minHeight:'100vh',background:'#f8fafc',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif"};
   var centerStyle=Object.assign({},baseStyle,{display:'flex',alignItems:'center',justifyContent:'center'});
 
   if(loading)return<div style={centerStyle}><div style={{color:'#475569',fontSize:14}}>Loading…</div></div>;
@@ -18952,6 +18956,6 @@ export default function App(){
 
   const handleSignIn=async()=>{setSignInLoading(true);try{await signInWithGoogle()}catch(e){console.error(e);setSignInLoading(false)}}
   if(loading)return<BrandLoader dark fullscreen label="Loading…"/>
-  if(!session)return<Suspense fallback={<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>}><LandingPage onSignIn={handleSignIn} loading={signInLoading}/></Suspense>
+  if(!session)return<Suspense fallback={<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>}><LandingPage onSignIn={handleSignIn} loading={signInLoading}/></Suspense>
   return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
 }
