@@ -404,24 +404,24 @@ function HeroKanban() {
 function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpenDemo }) {
   return (
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -100, left: '50%', transform: 'translateX(-50%)', width: 1100, height: 600, background: 'radial-gradient(ellipse,rgba(14,42,71,.18),transparent 60%)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)', width: 1200, height: 640, background: 'radial-gradient(900px 460px at 78% 0%, rgba(20,199,192,.20), transparent 60%), radial-gradient(760px 420px at 12% 100%, rgba(47,107,255,.20), transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ position: 'relative' }}>
         <div style={{ textAlign: 'center', maxWidth: 880, margin: '0 auto 56px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(14,42,71,.1)', border: '1px solid rgba(14,42,71,.25)', fontSize: 12, fontWeight: 600, color: '#0e2a47', marginBottom: 24 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#0e2a47', boxShadow: '0 0 12px #0e2a47' }} />
-            TaskFlowCo — Built for CA · CS · CMA · Tax & Legal Consultants
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(47,107,255,.1)', border: '1px solid rgba(47,107,255,.25)', fontSize: 12, fontWeight: 600, color: '#2F6BFF', marginBottom: 24 }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2F6BFF', boxShadow: '0 0 12px #2F6BFF' }} />
+            Built for CA · CS · CMA & tax firms
           </div>
-          <h1 className="lp-h1" style={{ marginBottom: 12 }}>Stop juggling. <span style={{ background: 'linear-gradient(90deg,#0e2a47,#5b8cb8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Start flowing.</span></h1>
-          <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>The practice management platform by TaskFlowCo.</p>
+          <h1 className="lp-h1" style={{ marginBottom: 12 }}>Run your entire practice with <span style={{ background: 'linear-gradient(90deg,#2F6BFF,#14C7C0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>total clarity.</span></h1>
+          <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>Every filing, deadline & client — in one calm workspace.</p>
           <p className="lp-lede" style={{ margin: '24px auto 0' }}>GST worksheets, recurring compliance, client portal, billing and team workload — all in one place. TaskFlowCo is built for service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
-            <button className="lp-btn lp-btn-primary" onClick={onOpenDemo}>Book a demo</button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenAuth} disabled={loading}>
-              {loading ? 'Signing in…' : 'Start free →'}
+            <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
+              {loading ? 'Signing in…' : 'Start free trial'}
             </button>
+            <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Watch demo</button>
           </div>
           <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 18, fontSize: 12, color: 'var(--lp-text-mut)', flexWrap: 'wrap', alignItems: 'center' }} className="lp-mono">
-            <button onClick={onOpenLaunch} style={{ background: 'none', border: 'none', color: 'var(--lp-text-sub)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>▶ Watch 2-min tour</button>
+            <button onClick={onOpenDemo} style={{ background: 'none', border: 'none', color: 'var(--lp-text-sub)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>Book a demo</button>
             <span>✓ No credit card</span><span>✓ Setup in 10 minutes</span>
           </div>
         </div>
