@@ -39,6 +39,7 @@ import { handleAuthEvent, bootBlockedCheck } from './lib/authStateListener.js'
 import { useTrialGate } from './lib/useTrialGate.js'
 import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
 import TaskflowLogo from './components/TaskflowLogo.jsx'
+import { BrandLoader } from './components/Loaders.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 const AdminShell = lazyWithReload(() => import('./admin/AdminShell.jsx'))
@@ -18950,7 +18951,7 @@ export default function App(){
   }
 
   const handleSignIn=async()=>{setSignInLoading(true);try{await signInWithGoogle()}catch(e){console.error(e);setSignInLoading(false)}}
-  if(loading)return<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>
+  if(loading)return<BrandLoader dark fullscreen label="Loading…"/>
   if(!session)return<Suspense fallback={<div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(14,42,71,0.4)'}}>✦</div><div style={{fontSize:13}}>Loading…</div></div></div>}><LandingPage onSignIn={handleSignIn} loading={signInLoading}/></Suspense>
   return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
 }
