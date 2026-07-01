@@ -19,6 +19,20 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
 
+    <!-- Design refresh: honor prefers-reduced-motion globally. The app already
+         guards its loaders/logo/board cards; this covers the landing hero and
+         tour overlays too (incl. their inline-style animations, via !important). -->
+    <style>
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+
     <!-- SEO -->
     <title>TaskFlowCo — Practice Management Software for CA, CS, CMA & Tax Consultants in India</title>
     <meta name="description" content="TaskFlowCo: GST worksheets, ITR tracking, client management and team workload — all in one place. Built for CA, CS, CMA, tax consultants and advisory firms in India. One platform to run your entire practice." />
