@@ -240,8 +240,22 @@ function Nav({ onOpenAuth, loading, dark, onToggleTheme, onOpenDemo }) {
                onClick={e => { e.preventDefault(); scrollTo(href) }}>{label}</a>
           ))}
         </div>
-        <button className="lp-theme-toggle" onClick={onToggleTheme} title={dark ? 'Switch to light mode' : 'Switch to dark mode'}>
-          {dark ? '☀︎' : '☾'}
+        <button onClick={onToggleTheme} title="Switch theme" aria-label="Switch theme"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer', padding: 4, borderRadius: 999,
+                   background: dark ? 'rgba(255,255,255,.08)' : '#EEF2F7', border: `1px solid ${dark ? 'rgba(255,255,255,.14)' : '#E2E9F1'}` }}>
+          <span style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         background: dark ? 'transparent' : '#fff', boxShadow: dark ? 'none' : '0 1px 3px rgba(14,42,71,.15)' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="4.2" stroke={dark ? '#7E93AD' : '#F4A52A'} strokeWidth="1.9" />
+              <path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18" stroke={dark ? '#7E93AD' : '#F4A52A'} strokeWidth="1.9" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         background: dark ? 'linear-gradient(135deg,#2F6BFF,#14C7C0)' : 'transparent' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" stroke={dark ? '#fff' : '#94A3B8'} strokeWidth="1.9" strokeLinejoin="round" />
+            </svg>
+          </span>
         </button>
         <button className="lp-btn lp-btn-link" onClick={onOpenAuth}>Sign in</button>
         <button className="lp-btn lp-btn-ghost" onClick={onOpenDemo} style={{ padding: '9px 16px', fontSize: 13 }}>Book demo</button>
@@ -420,11 +434,11 @@ function Hero({ dark, onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, 
         <div className="lp-hero-grid">
           {/* LEFT — copy */}
           <div style={{ maxWidth: 540 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(47,107,255,.1)', border: '1px solid rgba(47,107,255,.25)', fontSize: 12, fontWeight: 600, color: '#2F6BFF', marginBottom: 22 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2F6BFF', boxShadow: '0 0 12px #2F6BFF' }} />
-              Built for CA · CS · CMA & tax firms
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: dark ? 'rgba(20,199,192,.16)' : 'rgba(20,199,192,.14)', border: `1px solid rgba(20,199,192,${dark ? '.3' : '.28'})`, fontSize: 12, fontWeight: 700, color: dark ? '#7FF0EA' : '#0E7A74', marginBottom: 22 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#14C7C0', boxShadow: '0 0 12px #14C7C0' }} />
+              Built for CA · CS · CMA &amp; tax firms
             </div>
-            <h1 className="lp-h1" style={{ marginBottom: 14 }}>{headline}</h1>
+            <h1 className="lp-h1" style={{ marginBottom: 14, fontSize: 'clamp(32px,3.8vw,46px)', letterSpacing: '-.03em' }}>{headline}</h1>
             <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 18px' }}>{subhead}</p>
             <p className="lp-lede" style={{ margin: '0 0 28px' }}>GST worksheets, recurring compliance, client portal, billing and team workload — all in one place. Built for CA, CS, CMA, tax consultants and advisory firms. Stop juggling Excel, WhatsApp and email.</p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
