@@ -49,7 +49,7 @@ export default function SupportAdminView({ onClose }) {
       {/* Header */}
       <div style={{padding:'14px 24px',borderBottom:'1px solid var(--tf-border, #e2e8f0)',display:'flex',alignItems:'center',gap:14,flexShrink:0,background:'var(--tf-panel, #fff)'}}>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#0e2a47,#1d4670)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:800}}>✦</div>
+          <div style={{width:30,height:30,borderRadius:8,background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 10 18 20 6.5" stroke="#fff" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
           <div>
             <div style={{fontSize:14,fontWeight:800,color:'var(--tf-text, #111827)',letterSpacing:'-.01em'}}>Support Tickets</div>
             <div style={{fontSize:11,color:'var(--tf-text-sub, #6b7280)'}}>Admin view · TaskFlowCo</div>
