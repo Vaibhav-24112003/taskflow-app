@@ -1,5 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
-import { supabase } from './lib/supabase'
+import { supabase, signInWithEmailLink } from './lib/supabase'
 
 // "Watch demo" tour is loaded on demand.
 const LaunchTour = lazy(() => import('./LaunchTour.jsx'))
@@ -258,6 +258,66 @@ const FEATURES = [
 ]
 const fico = paths => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
 
+// ── Sign-in modal: Google + email magic link. The email link is how domain /
+// admin mailboxes (e.g. name@taskflowco.in) that aren't Google accounts sign in.
+function AuthModal({ open, onClose, onGoogle, googleBusy }) {
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState(null)
+  useEffect(() => { if (!open) { setEmail(''); setSent(false); setError(null); setBusy(false) } }, [open])
+  if (!open) return null
+  const submit = async (e) => {
+    e?.preventDefault?.()
+    const v = email.trim()
+    if (!/^\S+@\S+\.\S+$/.test(v)) { setError('Please enter a valid email address.'); return }
+    setBusy(true); setError(null)
+    try { const { error: err } = await signInWithEmailLink(v); if (err) throw err; setSent(true) }
+    catch (err) { setError(err?.message || 'Could not send the link. Try again in a moment.') }
+    finally { setBusy(false) }
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(7,20,36,.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--card-border)', borderRadius: 16, width: '100%', maxWidth: 420, padding: '26px 28px', boxShadow: 'var(--shadow-panel)', fontFamily: 'inherit' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.01em' }}>Sign in to TaskFlowCo</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginTop: 4 }}>{sent ? 'Check your inbox to finish signing in.' : 'Pick how you want to continue.'}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 20, padding: '0 4px', fontFamily: 'inherit' }}>×</button>
+        </div>
+        {sent ? (
+          <div style={{ padding: '10px 0 6px', textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--success)' }}>✓</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Check your inbox</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>We sent a sign-in link to <b style={{ color: 'var(--text)' }}>{email}</b>.<br />Click it from any device to finish signing in.</div>
+            <button onClick={onClose} className="btn btn-ghost" style={{ marginTop: 18, justifyContent: 'center' }}>Done</button>
+          </div>
+        ) : (
+          <>
+            <button type="button" onClick={onGoogle} disabled={googleBusy || busy} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '11px 14px', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', background: '#fff', color: '#1f2937', border: '1px solid #d1d5db', borderRadius: 10, cursor: (googleBusy || busy) ? 'not-allowed' : 'pointer' }}>
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" /><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6 29.3 4 24 4 16.3 4 9.6 8.3 6.3 14.7z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.5-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.3 2.4-5.3 0-9.7-3.4-11.3-8.1l-6.5 5C9.5 39.6 16.2 44 24 44z" /><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.6l6.2 5.2c-.4.4 6.8-5 6.8-14.8 0-1.3-.1-2.4-.4-3.5z" /></svg>
+              {googleBusy ? 'Signing in…' : 'Continue with Google'}
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 14px' }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              <span style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '.06em', textTransform: 'uppercase' }}>or</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            </div>
+            <form onSubmit={submit}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, letterSpacing: '.02em' }}>Sign in with email link</label>
+              <input className="field" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@yourdomain.com" disabled={busy || googleBusy} style={{ width: '100%' }} />
+              {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
+              <button type="submit" disabled={busy || googleBusy} className="btn btn-ghost" style={{ width: '100%', marginTop: 12, justifyContent: 'center' }}>{busy ? 'Sending…' : 'Send sign-in link →'}</button>
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>Works with any email — no password required.<br />New here? Your account is created automatically.</div>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function LandingPage({ onSignIn, loading }) {
   const [dark, setDark] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -271,12 +331,16 @@ export default function LandingPage({ onSignIn, loading }) {
   })
   useEffect(() => { try { localStorage.setItem('tfc-theme', dark ? 'dark' : 'light') } catch (_) {} }, [dark])
   const [launchOpen, setLaunchOpen] = useState(false)
-  const start = () => { if (onSignIn) onSignIn() }
+  const [authOpen, setAuthOpen] = useState(false)
+  // Trial / sign-in CTAs open the auth modal (Google + email link, incl. admin
+  // / domain mailboxes) rather than jumping straight into Google.
+  const start = () => setAuthOpen(true)
 
   return (
     <div className="lp2" data-theme={dark ? 'dark' : 'light'}>
       <style>{CSS}</style>
 
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onGoogle={onSignIn} googleBusy={loading} />
       {launchOpen && (
         <Suspense fallback={null}>
           <LaunchTour open={launchOpen} onClose={() => setLaunchOpen(false)} />
@@ -296,6 +360,7 @@ export default function LandingPage({ onSignIn, loading }) {
               <span className="sun"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.2" stroke="#F4A52A" strokeWidth="1.9" /><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18" stroke="#F4A52A" strokeWidth="1.9" strokeLinecap="round" /></svg></span>
               <span className="moon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" stroke="#94A3B8" strokeWidth="1.9" strokeLinejoin="round" /></svg></span>
             </button>
+            <a href="#" className="keep" onClick={e => { e.preventDefault(); start() }} style={{ color: 'var(--nav)', fontWeight: 600 }}>Sign in</a>
             <a href="#demo" className="btn btn-primary btn-sm keep" onClick={e => { e.preventDefault(); scrollToId('demo') }}>Book a demo</a>
           </nav>
         </div>
@@ -314,7 +379,7 @@ export default function LandingPage({ onSignIn, loading }) {
             </div>
             <div className="trust">
               <span className="avatars"><span style={{ background: '#2F6BFF' }} /><span style={{ background: '#14C7C0' }} /><span style={{ background: '#0E2A47' }} /></span>
-              Trusted by 1,200+ practising firms
+              Trusted by firms and their teams
             </div>
           </div>
           <div className="preview" aria-hidden="true">
@@ -484,8 +549,8 @@ export default function LandingPage({ onSignIn, loading }) {
       {/* TESTIMONIAL */}
       <section className="section wrap">
         <div className="quote">
-          <p>"We closed three filing seasons without a single missed deadline. TaskFlowCo replaced four spreadsheets and a WhatsApp group."</p>
-          <div className="who">Vaibhav B. — Partner, VB &amp; Associates</div>
+          <p>"We streamlined our tasks and closed work and filing seasons without miscommunication or missed updates. TaskFlowCo replaced many worksheets and WhatsApp groups."</p>
+          <div className="who">Vaibhav Bhoite — Founder, TaskFlowCo</div>
         </div>
       </section>
 
@@ -525,7 +590,7 @@ export default function LandingPage({ onSignIn, loading }) {
       <section className="section wrap">
         <div className="cta-band">
           <h2>Give every deadline a home.</h2>
-          <p>Join 1,200+ practising firms who run their compliance work on TaskFlowCo. Free to start, no card required.</p>
+          <p>Join firms and their teams who run their compliance work on TaskFlowCo. Free to start, no card required.</p>
           <button className="btn btn-primary" onClick={start} style={{ fontSize: 15.5, padding: '15px 30px' }}>Start free trial</button>
         </div>
       </section>
