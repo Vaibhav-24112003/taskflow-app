@@ -150,6 +150,14 @@ const isMirrored   = (t,uid)=>getAssignees(t).includes(uid)&&t.created_by!==uid
 const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
 const rrLabel=(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
+// Hex → rgba() helper for status tints.
+function hex2rgba(h, a) {
+  h = (h || '').replace('#', '');
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  var n = parseInt(h, 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+
 // ── Global styles — CSS variable theming, crisp DM Sans font ──────────────────
 function GlobalStyle({ lightMode }) {
   useEffect(() => {
@@ -195,6 +203,10 @@ input,textarea,select,button{font-family:inherit;-webkit-font-smoothing:antialia
 .tf-col::-webkit-scrollbar{width:3px}.tf-col::-webkit-scrollbar-thumb{background:var(--tf-border);border-radius:2px}.tf-col{scrollbar-width:thin;scrollbar-color:var(--tf-border) transparent}
 input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:pointer}
 [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator{filter:none;opacity:0.5}
+@keyframes tf-cardIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.tf-kcard{animation:tf-cardIn .5s ease both}
+.tf-kcard:hover{transform:translateY(-2px);box-shadow:0 12px 24px -14px rgba(14,42,71,.45)}
+@media (prefers-reduced-motion: reduce){.tf-kcard{animation:none!important}}
 `
     document.head.appendChild(s)
   },[])
@@ -10302,10 +10314,10 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   });
 
   var STATUS_COLS=[
-    {key:'pending',label:'Pending',color:'#94a3b8'},
-    {key:'in_progress',label:'In Progress',color:'#3b82f6'},
-    {key:'under_review',label:'Under Review',color:'#f59e0b'},
-    {key:'completed',label:'Completed',color:'#22c55e'}
+    {key:'pending',label:'Pending',color:'#94A3B8'},
+    {key:'in_progress',label:'In Progress',color:'#2F6BFF'},
+    {key:'under_review',label:'Under Review',color:'#F4A52A'},
+    {key:'completed',label:'Completed',color:'#1FA971'}
   ];
 
   var columns;
@@ -10334,7 +10346,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   var today=new Date().toISOString().slice(0,10);
   var pillStyle={fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:4,letterSpacing:'0.04em'};
 
-  function Card(r){
+  function Card(r,i){
     var c=clientMap[r.client_id]||{};
     var ws=wsMap[r.worksheet_id]||{};
     var aId=getAssignee(r);
@@ -10342,11 +10354,14 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
     var overdue=r.due_date&&r.due_date<today&&r.status!=='completed';
     var title=(r.data&&r.data.__title)||c.display_name||c.name||'Untitled';
     var isDragging=dragId===r.id;
-    return<div key={r.id}
+    var eff=getEffectiveStatus(r);
+    var statusColor=(STATUS_COLS.find(function(x){return x.key===eff;})||{}).color||'#94A3B8';
+    var isDone=eff==='completed';
+    return<div key={r.id} className="tf-kcard"
       draggable={groupBy==='status'}
       onDragStart={groupBy==='status'?function(e){setDragId(r.id);e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',r.id);}catch(_){}}:undefined}
       onDragEnd={groupBy==='status'?function(){setDragId(null);setDragOverCol(null);}:undefined}
-      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#ef4444':'#0e2a47'),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:groupBy==='status'?'grab':'default',opacity:isDragging?0.5:1,transition:'opacity 0.12s'}}>
+      style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(overdue?'#EF4444':statusColor),borderRadius:8,padding:10,marginBottom:8,fontSize:12,cursor:groupBy==='status'?'grab':'default',opacity:isDragging?0.5:(isDone?0.72:1),transition:'opacity 0.12s, transform 0.12s',animationDelay:Math.min(i||0,14)*0.04+'s'}}>
       <div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{title}</div>
       <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:6}}>
         {(function(){var wtc=ws.work_type&&(workTypeConfigs||[]).find(function(c){return c.name===ws.work_type;});var dept=wtc&&wtc.department_id&&(orgDepts||[]).find(function(d){return d.id===wtc.department_id;});return dept?<span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:dept.color,flexShrink:0}} title={dept.name}/>:null;})()}
@@ -10355,7 +10370,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{assignee?assignee.name||assignee.email:'Unassigned'}</div>
-        {r.due_date&&<div style={{fontSize:10,fontWeight:600,color:overdue?'#ef4444':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{overdue?'⚠ ':''}{r.due_date}</div>}
+        {r.due_date&&<div style={{fontSize:10,fontWeight:600,fontFamily:"'JetBrains Mono',monospace",color:overdue?'#EF4444':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{overdue?'⚠ ':''}{r.due_date}</div>}
       </div>
       <div style={{marginTop:6,display:'flex',gap:4}}>
         <select value={r.status||'pending'} onChange={function(e){updateRowStatus(r.id,e.target.value);}} style={{flex:1,fontSize:10,padding:'2px 4px',background:'var(--tf-bg)',color:'var(--tf-text)',border:'1px solid var(--tf-border)',borderRadius:4}}>
@@ -10411,11 +10426,11 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
               <span style={{width:8,height:8,borderRadius:'50%',background:col.color}}/>
               <span style={{fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{col.label}</span>
             </div>
-            <span style={{fontSize:11,color:'var(--tf-text-sub)',background:'var(--tf-surface)',padding:'2px 7px',borderRadius:10}}>{col.rows.length}</span>
+            <span style={{fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:col.color,background:hex2rgba(col.color,0.14),padding:'2px 8px',borderRadius:999}}>{col.rows.length}</span>
           </div>
           <div style={{flex:1,overflowY:'auto',padding:10}}>
             {col.rows.length===0&&<div style={{fontSize:11,color:'var(--tf-text-sub)',textAlign:'center',padding:'20px 0'}}>—</div>}
-            {col.rows.map(Card)}
+            {col.rows.map(function(r,idx){return Card(r,idx);})}
           </div>
         </div>;
       })}
