@@ -64,6 +64,9 @@ const CSS = `
   @keyframes lp-fadeUp { from { opacity: 0; transform: translateY(8px) } }
   @keyframes lp-blink { 50% { opacity: 0 } }
   @keyframes lp-modal-in { from { opacity:0; transform:scale(.97) translateY(10px) } }
+  @keyframes lp-heroFloat { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
+  .lp-hero-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,440px); gap: 48px; align-items: center; }
+  @media (max-width: 900px) { .lp-hero-grid { grid-template-columns: 1fr; gap: 40px; } .lp-hero-card { display: none; } }
   .lp-modal-overlay { position:fixed; inset:0; background:rgba(3,5,14,.93); backdrop-filter:blur(18px); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; animation:lp-fadeUp .16s ease; }
   .lp-root[data-theme="light"] .lp-modal-overlay { background:rgba(200,212,228,.78); }
   .lp-modal-box { width:100%; max-width:1020px; border-radius:16px; overflow:hidden; background:#080b18; border:1px solid rgba(255,255,255,.1); box-shadow:0 40px 120px rgba(0,0,0,.9); display:flex; flex-direction:column; animation:lp-modal-in .2s ease; max-height:92vh; }
@@ -406,26 +409,65 @@ function Hero({ onOpenAuth, loading, onOpenTour, onOpenLaunch, onOpenITR, onOpen
     <section id="product" className="lp-sec lp-grain" style={{ paddingTop: 80, overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: -120, left: '50%', transform: 'translateX(-50%)', width: 1200, height: 640, background: 'radial-gradient(900px 460px at 78% 0%, rgba(20,199,192,.20), transparent 60%), radial-gradient(760px 420px at 12% 100%, rgba(47,107,255,.20), transparent 60%)', pointerEvents: 'none' }} />
       <div className="lp-container" style={{ position: 'relative' }}>
-        <div style={{ textAlign: 'center', maxWidth: 880, margin: '0 auto 56px' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(47,107,255,.1)', border: '1px solid rgba(47,107,255,.25)', fontSize: 12, fontWeight: 600, color: '#2F6BFF', marginBottom: 24 }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2F6BFF', boxShadow: '0 0 12px #2F6BFF' }} />
-            Built for CA · CS · CMA & tax firms
+        <div className="lp-hero-grid">
+          {/* LEFT — copy */}
+          <div style={{ maxWidth: 540 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '6px 14px', borderRadius: 100, background: 'rgba(47,107,255,.1)', border: '1px solid rgba(47,107,255,.25)', fontSize: 12, fontWeight: 600, color: '#2F6BFF', marginBottom: 22 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2F6BFF', boxShadow: '0 0 12px #2F6BFF' }} />
+              Built for CA · CS · CMA & tax firms
+            </div>
+            <h1 className="lp-h1" style={{ marginBottom: 14 }}>Run your entire practice with <span style={{ background: 'linear-gradient(90deg,#2F6BFF,#14C7C0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>total clarity.</span></h1>
+            <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 18px' }}>Every filing, deadline & client — in one calm workspace.</p>
+            <p className="lp-lede" style={{ margin: '0 0 28px' }}>GST worksheets, recurring compliance, client portal, billing and team workload — all in one place. Built for CA, CS, CMA, tax consultants and advisory firms. Stop juggling Excel, WhatsApp and email.</p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
+                {loading ? 'Signing in…' : 'Start free trial'}
+              </button>
+              <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Watch demo</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 26 }}>
+              <div style={{ display: 'flex' }}>
+                {['#2F6BFF', '#14C7C0', '#0E2A47'].map((c, i) => (
+                  <span key={c} style={{ width: 30, height: 30, borderRadius: '50%', background: c, border: '2px solid var(--lp-bg)', marginLeft: i ? -9 : 0 }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 13, color: 'var(--lp-text-sub)', fontWeight: 500 }}>Trusted by 1,200+ practising firms</span>
+            </div>
+            <div style={{ display: 'flex', gap: 18, marginTop: 16, fontSize: 12, color: 'var(--lp-text-mut)', flexWrap: 'wrap', alignItems: 'center' }} className="lp-mono">
+              <button onClick={onOpenDemo} style={{ background: 'none', border: 'none', color: 'var(--lp-text-sub)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>Book a demo</button>
+              <span>✓ No credit card</span><span>✓ Setup in 10 minutes</span>
+            </div>
           </div>
-          <h1 className="lp-h1" style={{ marginBottom: 12 }}>Run your entire practice with <span style={{ background: 'linear-gradient(90deg,#2F6BFF,#14C7C0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>total clarity.</span></h1>
-          <p style={{ fontSize: 'clamp(15px,1.6vw,18px)', fontWeight: 500, color: 'var(--lp-text-sub)', letterSpacing: '-0.01em', margin: '0 0 20px' }}>Every filing, deadline & client — in one calm workspace.</p>
-          <p className="lp-lede" style={{ margin: '24px auto 0' }}>GST worksheets, recurring compliance, client portal, billing and team workload — all in one place. TaskFlowCo is built for service-first practices: CA, CS, CMA, tax consultants, advisory firms, advocates and consultants. Stop juggling Excel, WhatsApp and email.</p>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 32, flexWrap: 'wrap' }}>
-            <button className="lp-btn lp-btn-primary" onClick={onOpenAuth} disabled={loading}>
-              {loading ? 'Signing in…' : 'Start free trial'}
-            </button>
-            <button className="lp-btn lp-btn-ghost" onClick={onOpenLaunch}>▶ Watch demo</button>
-          </div>
-          <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginTop: 18, fontSize: 12, color: 'var(--lp-text-mut)', flexWrap: 'wrap', alignItems: 'center' }} className="lp-mono">
-            <button onClick={onOpenDemo} style={{ background: 'none', border: 'none', color: 'var(--lp-text-sub)', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0, textDecoration: 'underline', textUnderlineOffset: 3 }}>Book a demo</button>
-            <span>✓ No credit card</span><span>✓ Setup in 10 minutes</span>
+
+          {/* RIGHT — floating WorkZone board card (Claude Design mockup) */}
+          <div className="lp-hero-card" style={{ position: 'relative' }}>
+            <div style={{ background: 'var(--lp-panel)', border: '1px solid var(--lp-border-hov)', borderRadius: 18, padding: 16, boxShadow: '0 30px 70px -20px rgba(0,0,0,.5)', animation: 'lp-heroFloat 6s ease-in-out infinite' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--lp-text)' }}>WorkZone · Board</span>
+                <span className="lp-mono" style={{ fontSize: 11, color: 'var(--lp-text-mut)' }}>FY 2025-26</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <span style={{ padding: '4px 9px', borderRadius: 7, background: 'rgba(148,163,184,.16)', color: 'var(--lp-text-sub)', fontSize: 10, fontWeight: 700 }}>Pending 24</span>
+                <span style={{ padding: '4px 9px', borderRadius: 7, background: 'rgba(47,107,255,.16)', color: '#2F6BFF', fontSize: 10, fontWeight: 700 }}>In Progress 1</span>
+              </div>
+              <div style={{ background: 'var(--lp-surface)', border: '1px solid var(--lp-border)', borderLeft: '3px solid #ef4444', borderRadius: 10, padding: '11px 12px', marginBottom: 9 }}>
+                <div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--lp-text)' }}>Milind Rathod</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, background: 'var(--lp-alt)', color: 'var(--lp-text-sub)', padding: '2px 7px', borderRadius: 6 }}>GSTR Returns</span>
+                  <span className="lp-mono" style={{ fontSize: 10, color: 'var(--lp-text-mut)' }}>Jan 2026</span>
+                </div>
+                <div className="lp-mono" style={{ marginTop: 7, fontSize: 10.5, color: '#ef4444', fontWeight: 600 }}>⚠ Due 2026-02-11</div>
+              </div>
+              <div style={{ background: 'var(--lp-surface)', border: '1px solid var(--lp-border)', borderLeft: '3px solid #14C7C0', borderRadius: 10, padding: '11px 12px' }}>
+                <div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--lp-text)' }}>Omkar Mane</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(20,199,192,.18)', color: '#0E9A94', padding: '2px 7px', borderRadius: 6 }}>Income Tax Return</span>
+                </div>
+                <div className="lp-mono" style={{ marginTop: 7, fontSize: 10.5, color: '#10b981', fontWeight: 600 }}>On track · 2026-07-31</div>
+              </div>
+            </div>
           </div>
         </div>
-        <HeroMosaic />
       </div>
     </section>
   )
