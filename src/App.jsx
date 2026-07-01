@@ -6963,6 +6963,7 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
         </div>
         <button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20,lineHeight:1}}>×</button>
       </div>
+      <div style={{height:4,background:'var(--tf-border)'}}><div style={{height:'100%',width:(step/2*100)+'%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',transition:'width 0.4s ease'}}/></div>
 
       {step===1&&<div style={{padding:'20px'}}>
         <div style={{marginBottom:16}}>
@@ -6972,13 +6973,13 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
         <div>
           <label style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:6,display:'block'}}>Team Size</label>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {['Just me','2–5','6–15','16–50','50+'].map(function(s){return<button key={s} onClick={function(){setTeamSize(s);}} style={{background:teamSize===s?'#0e2a47':'var(--tf-surface)',border:'1px solid',borderColor:teamSize===s?'#0e2a47':'var(--tf-border)',borderRadius:8,padding:'6px 14px',color:teamSize===s?'#fff':'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>{s}</button>;})}
+            {['Just me','2–5','6–15','16–50','50+'].map(function(s){return<button key={s} onClick={function(){setTeamSize(s);}} style={{background:teamSize===s?'#2F6BFF':'var(--tf-surface)',border:'1px solid',borderColor:teamSize===s?'#2F6BFF':'var(--tf-border)',borderRadius:8,padding:'6px 14px',color:teamSize===s?'#fff':'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:600}}>{s}</button>;})}
           </div>
         </div>
         {err&&<div style={{color:'#ef4444',fontSize:12,marginTop:10,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
         <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:20}}>
           <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
-          <button onClick={function(){if(!name.trim()){setErr('Name required');return;}setErr('');setStep(2);}} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Next →</button>
+          <button onClick={function(){if(!name.trim()){setErr('Name required');return;}setErr('');setStep(2);}} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'7px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:'0 12px 26px -10px rgba(47,107,255,.7)'}}>Next →</button>
         </div>
       </div>}
 
@@ -7023,7 +7024,7 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
         {err&&<div style={{color:'#ef4444',fontSize:12,marginBottom:10,background:'rgba(239,68,68,0.08)',padding:'6px 10px',borderRadius:6}}>{err}</div>}
         <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
           <button onClick={function(){setStep(1);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 15px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>← Back</button>
-          <button onClick={finish} disabled={saving} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'7px 22px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?.6:1}}>{saving?'Creating…':'Create Practice'}</button>
+          <button onClick={finish} disabled={saving} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'7px 22px',color:'#fff',cursor:saving?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:saving?.6:1,boxShadow:'0 12px 26px -10px rgba(47,107,255,.7)'}}>{saving?'Creating…':'Create Practice'}</button>
         </div>
       </div>}
     </div>
