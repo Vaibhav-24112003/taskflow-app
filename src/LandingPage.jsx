@@ -188,11 +188,29 @@ function scrollToId(id) {
 }
 
 // ── Demo booking form (wired to demo_requests) ──
+// Build the next few upcoming weekday slots from today (skip weekends), so the
+// "preferred slot" chips are always real near-term options, not stale fixed times.
+function upcomingSlots() {
+  const times = ['11:00', '16:00']
+  const out = []
+  const d = new Date(); d.setHours(0, 0, 0, 0)
+  let i = 0
+  while (out.length < 3 && i < 14) {
+    d.setDate(d.getDate() + 1); i++
+    const dow = d.getDay()
+    if (dow === 0 || dow === 6) continue // skip Sun/Sat
+    const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' }) + ' · ' + times[out.length % 2]
+    out.push(label)
+  }
+  return out.length ? out : ['This week']
+}
+
 function DemoForm() {
+  const [slots] = useState(upcomingSlots)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [firm, setFirm] = useState('CA')
-  const [slot, setSlot] = useState('Thu · 16:00')
+  const [slot, setSlot] = useState(() => upcomingSlots()[0])
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
@@ -229,7 +247,7 @@ function DemoForm() {
         <div style={{ flex: 1, minWidth: 150 }}><label className="lbl">Work email</label><input className="field" style={{ width: '100%' }} type="email" placeholder="you@firm.in" value={email} onChange={e => setEmail(e.target.value)} required /></div>
       </div>
       <div><label className="lbl">Firm type</label>{single('firm', firm, setFirm, ['CA', 'CS', 'CMA', 'Tax / Advisory'])}</div>
-      <div><label className="lbl">Preferred slot</label>{single('slot', slot, setSlot, ['Thu · 11:00', 'Thu · 16:00', 'Fri · 10:30'])}</div>
+      <div><label className="lbl">Preferred slot</label>{single('slot', slot, setSlot, slots)}</div>
       {err && <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>{err}</div>}
       <button type="submit" className="btn btn-primary" disabled={busy} style={{ justifyContent: 'center', marginTop: 4 }}>{busy ? 'Sending…' : 'Book my demo'}</button>
     </form>
