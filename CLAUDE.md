@@ -284,6 +284,53 @@ borderRight: '1px solid rgba(255,255,255,0.06)'
 - Recurring task management per client
 - Frontend Design plugin (only available in Claude Code desktop app, not web)
 
+## SESSION HANDOFF — Design Refresh (brand blue/teal + Plus Jakarta Sans)
+A large multi-session design refresh is in progress off `design_handoff_taskflowco/`
+(Claude Design handoff: README.md + FEATURE-COVERAGE.md + landing-page.html).
+Golden rule from the handoff: **re-skin, not re-scope** — theme existing
+components, never delete a feature that's absent from a mock; flag undesigned
+ones. Brand: primary `#2F6BFF`, teal `#14C7C0`, gradient `linear-gradient(135deg,#2F6BFF,#14C7C0)`,
+navy ink `#0E2A47`; font Plus Jakarta Sans + JetBrains Mono (dates/nums).
+
+**Done & live on main:** app-wide colour/font rebrand; animated gradient-check
+logo (`components/TaskflowLogo.jsx`); loader family (`components/Loaders.jsx`);
+landing fully rebuilt to `landing-page.html` (`LandingPage.jsx`, scoped `.lp2`,
+light/dark via `data-theme`+localStorage `tfc-theme`, sign-in modal Google+email-link,
+demo form → `demo_requests` with free date+time picker, `.wrap` max-width 1400);
+WorkZone board (status colours, cardIn, count pills); Modules soft-tint tiles
+(`MODULE_TINT`); Practice Hub cards; My Work + Home calendars workload-heat;
+top-bar widgets themed; in-app dark mode = navy (`[data-theme=dark]` tokens);
+demo tour (`LaunchTour.jsx`) redesigned to new logo + navy screens.
+
+**Pending design items:**
+- Demo-tour VOICEOVER: scaffold built (`src/tourNarration.js` 11 timed lines,
+  `scripts/gen-narration.mjs` Sarvam TTS generator, LaunchTour audio-sync + mute
+  button, .mp3→.wav fallback). NOT generated yet — `api.sarvam.ai` is blocked by
+  this env's egress allowlist. To finish: add `api.sarvam.ai` to the environment's
+  network egress OR run the script on a machine with access:
+  `printf 'SARVAM_API_KEY=…\n' > .env.local && node scripts/gen-narration.mjs`
+  → produces `public/tour-vo/01..11.mp3`, commit them. (User must ROTATE the key.)
+- Workspaces "New Workspace" board-type picker (Kanban/Checklist/Blank) — designed, not built.
+- Undesigned modules kept+themed, flagged for a dedicated pass: Library, Team,
+  Analytics, Communication, Billing, Master Data, Set-up (+ WorkZone ITR Desk /
+  Big Clients / Team View; My Work Notes; Worksheets Stages/Summary).
+
+## SESSION OPS NOTES (important for continuity)
+- **Deploy = push to `main`** (Vercel auto-deploys). BUT Vercel sometimes builds
+  a near-simultaneous push only as a branch preview and SKIPS the production build
+  for main — verify via Vercel MCP `list_deployments` that a `target:production`
+  READY deploy exists for your commit; if not, push an empty commit to re-trigger.
+- **git push in this remote env is proxy-blocked (403).** Workaround used: a
+  user-provided GitHub PAT via `git push https://<PAT>@github.com/Vaibhav-24112003/taskflow-app.git <branch>`,
+  with `set +o history` and grep-filtering output. The PAT is short-lived — ask the
+  user for a fresh one; never commit it.
+- Stop-hook "Unverified commits" (GPG) warning is COSMETIC across whole history —
+  do NOT rewrite/force-push to fix it without explicit user say-so.
+- Local render/screenshot recipe: temp `.env.local` (public Supabase URL +
+  placeholder anon key) → `npm run build` → `python3 -m http.server` on dist →
+  screenshot with `playwright-core` (chromium at /opt/pw-browsers). Clean up
+  `.env.local` + revert package.json/package-lock after (don't commit playwright-core).
+
 ## Design References
 Design files (extracted from tar.gz at `/tmp/design_files/taskflow/`):
 - `Taskflow Diary - Worklist.html` — implemented as current Worklist layout
