@@ -151,6 +151,13 @@ const isMirrored   = (t,uid)=>getAssignees(t).includes(uid)&&t.created_by!==uid
 const nextDate=(due,type,n=1)=>{if(!due||type==='none')return null;const dt=new Date(`${due}T00:00:00`),v=Math.max(1,Number(n)||1);if(type==='daily'||type==='custom')dt.setDate(dt.getDate()+v);else if(type==='weekly')dt.setDate(dt.getDate()+7*v);else if(type==='monthly')dt.setMonth(dt.getMonth()+v);return dt.toISOString().slice(0,10)}
 const rrLabel=(type,n=1)=>{if(!type||type==='none')return null;const v=Number(n)||1;if(type==='daily')return v===1?'Daily':`${v}d`;if(type==='weekly')return v===1?'Weekly':`${v}w`;if(type==='monthly')return v===1?'Monthly':`${v}mo`;return`${v}d`}
 
+// Per-module accent colours for the soft-tint launcher tiles (design 1b).
+var MODULE_TINT = {
+  diary: '#2F6BFF', workzone: '#0E2A47', library: '#2F6BFF', team: '#F59E0B',
+  chat: '#7C3AED', analytics: '#16A34A', comms: '#14B8A6', billing: '#EC4899',
+  masterdata: '#8B5CF6', setup: '#64748B',
+};
+
 // Hex → rgba() helper for status tints.
 function hex2rgba(h, a) {
   h = (h || '').replace('#', '');
@@ -1908,13 +1915,17 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
                 <button onClick={createOrg} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Create Practice</button>
               </div>
               :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
-                {orgs.map(org=>{
+                {orgs.map((org,oi)=>{
                   const wsCount=workspaces.filter(w=>w.org_id===org.id).length;
-                  return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:G.radius,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(14,42,71,0.5)';e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
-                    <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'linear-gradient(90deg,#0e2a47,#1d4670)'}}/>
-                    <div style={{display:'flex',gap:12,alignItems:'center',marginTop:4}}>
-                      <div style={{width:42,height:42,borderRadius:'12px',background:'rgba(14,42,71,0.14)',border:'1px solid rgba(14,42,71,0.22)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:'#0e2a47'}}>{org.name.charAt(0).toUpperCase()}</div>
-                      <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||wsCount+' workspace'+(wsCount!==1?'s':'')}</div></div>
+                  const pc=['#2F6BFF','#7C3AED','#F59E0B','#14C7C0'][oi%4];
+                  return<div key={org.id} onClick={()=>{setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:16,padding:20,cursor:'pointer',transition:G.trans,position:'relative',overflow:'hidden',boxShadow:'0 10px 30px -18px rgba(14,42,71,0.35)'}} onMouseEnter={e=>{e.currentTarget.style.borderColor=hex2rgba(pc,0.5);e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.transform='translateY(-2px)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.transform='none'}}>
+                    <div style={{position:'absolute',top:0,left:0,right:0,height:4,background:pc}}/>
+                    <div style={{display:'flex',gap:12,alignItems:'center',marginTop:6}}>
+                      <div style={{width:42,height:42,borderRadius:'12px',background:hex2rgba(pc,0.14),border:'1px solid '+hex2rgba(pc,0.28),display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:700,color:pc}}>{org.name.charAt(0).toUpperCase()}</div>
+                      <div><div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{org.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{org.description||'Practice workspace'}</div></div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:14,marginTop:12,fontSize:11,color:'var(--tf-text-sub)'}}>
+                      <span><b style={{color:'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{wsCount}</b> Space{wsCount!==1?'s':''}</span>
                     </div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:12}}>
                       <span style={{fontSize:10,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:4,padding:'2px 7px'}}>Clients</span>
@@ -17374,11 +17385,12 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
           <div data-tour="tour-modules" style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:16}}>
             {MODULES.map(function(m){
               var tourAttr={'data-tour':'tour-'+m.id};
+              var mTint=MODULE_TINT[m.id]||'#2F6BFF';
               return<button key={m.id} onClick={function(){openModule(m);}} {...tourAttr}
                 style={{textAlign:'left',padding:20,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,cursor:'pointer',position:'relative',transition:'transform 0.16s, border-color 0.16s, box-shadow 0.16s',fontFamily:'inherit'}}
-                onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.boxShadow='0 10px 30px rgba(0,0,0,0.12)';}}
+                onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor=mTint;e.currentTarget.style.boxShadow='0 10px 30px -18px rgba(14,42,71,0.35)';}}
                 onMouseLeave={function(e){e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none';}}>
-                <div style={{width:46,height:46,borderRadius:12,background:m.gradient,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><m.icon size={22} strokeWidth={1.8} color="#fff"/></div>
+                <div style={{width:46,height:46,borderRadius:13,background:hex2rgba(mTint,0.13),display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><m.icon size={22} strokeWidth={1.8} color={mTint}/></div>
                 <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
                   {m.label}
                   {m.soon&&<span style={{fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:3,padding:'1px 5px',letterSpacing:'0.06em'}}>PREVIEW</span>}
