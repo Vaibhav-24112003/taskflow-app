@@ -1,6 +1,7 @@
 // LaunchTour.jsx — Taskflow animated product tour (design: Taskflow Launch.html)
 // Self-contained: animation engine + UI primitives + all 11 scenes.
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { TOUR_NARRATION, narrationSrc } from './tourNarration'
 
 // ── Easing ───────────────────────────────────────────────────────────────────
 const Easing = {
@@ -1057,11 +1058,47 @@ const DURATION = 80
 function Stage({ children }) {
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(true)
+  const [muted, setMuted] = useState(false)   // narration voiceover on by default
   const rafRef  = useRef(null)
   const lastRef = useRef(null)
   const trackRef= useRef(null)
   const [scale, setScale] = useState(1)
   const wrapRef = useRef(null)
+
+  // ── Narration audio: play each line's clip when the timeline enters its scene.
+  // Clips live at public/tour-vo/<id>.mp3 (generated once via scripts/gen-narration.mjs).
+  // Missing files just fail silently, so this is safe before the audio exists.
+  const audioRef = useRef({})   // id -> HTMLAudioElement
+  const prevSegRef = useRef(-1)
+  const getAudio = useCallback((seg) => {
+    if (typeof Audio === 'undefined') return null
+    if (!audioRef.current[seg.id]) {
+      const a = new Audio(narrationSrc(seg.id))
+      a.preload = 'auto'
+      audioRef.current[seg.id] = a
+    }
+    return audioRef.current[seg.id]
+  }, [])
+  // Current narration segment = last line whose start time has passed.
+  let curSeg = -1
+  for (let i = 0; i < TOUR_NARRATION.length; i++) { if (TOUR_NARRATION[i].at <= time) curSeg = i; else break }
+  useEffect(() => {
+    const seg = TOUR_NARRATION[curSeg]
+    // Pause every other clip.
+    TOUR_NARRATION.forEach(s => { if (!seg || s.id !== seg.id) { const a = audioRef.current[s.id]; if (a) a.pause() } })
+    const segChanged = prevSegRef.current !== curSeg
+    prevSegRef.current = curSeg
+    if (!seg) return
+    const a = getAudio(seg); if (!a) return
+    if (playing && !muted) {
+      if (segChanged) { try { a.currentTime = 0 } catch (_) {} }
+      a.play().catch(() => {})
+    } else {
+      a.pause()
+    }
+  }, [curSeg, playing, muted, getAudio])
+  // Stop all audio when the tour unmounts (closed).
+  useEffect(() => () => { Object.values(audioRef.current).forEach(a => { if (a) { a.pause(); a.src = '' } }) }, [])
 
   useEffect(() => {
     if (!wrapRef.current) return
@@ -1147,6 +1184,11 @@ function Stage({ children }) {
             marginLeft:-6, marginTop:-6, background:'#fff', borderRadius:6, boxShadow:'0 2px 4px rgba(0,0,0,0.4)' }}/>
         </div>
         <span style={{ fontFamily:FM, fontSize:12, color:TF.sub, width:52, flexShrink:0 }}>{fmt(DURATION)}</span>
+        <button onClick={() => setMuted(m=>!m)} style={barBtn} title={muted?'Unmute narration':'Mute narration'}>
+          {muted
+            ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#eef0f8"/><path d="M17 9l4 6M21 9l-4 6" stroke="#eef0f8" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#eef0f8"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="#5B9BFF" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+        </button>
       </div>
     </div>
   )
