@@ -11888,7 +11888,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 <button onClick={function(){setCalMonthOffset(function(p){return p+1;});}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,width:26,height:26,cursor:'pointer',color:'var(--tf-text)',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'inherit'}}>›</button>
                 {calMonthOffset!==0&&<button onClick={function(){setCalMonthOffset(0);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'2px 8px',cursor:'pointer',color:'var(--tf-text-sub)',fontSize:10,fontWeight:700,fontFamily:'inherit'}}>Today</button>}
               </div>
-              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{railFiltered.filter(function(r){return r.due_date;}).length} dated · {noDate.length} no date</div>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}} title="Workload heat — number of items due per day">
+                  <span>Light</span>
+                  {['rgba(47,107,255,0.08)','rgba(47,107,255,0.16)','rgba(47,107,255,0.20)','rgba(239,68,68,0.16)'].map(function(c,ci){return<span key={ci} style={{width:12,height:12,borderRadius:3,background:c,border:'1px solid var(--tf-border)'}}/>;})}
+                  <span>Heavy</span>
+                </div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{railFiltered.filter(function(r){return r.due_date;}).length} dated · {noDate.length} no date</div>
+              </div>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
               {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(function(d){return<div key={d} style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',padding:'4px 6px'}}>{d}</div>;})}
@@ -11897,8 +11904,13 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 var inMonth=dd.getMonth()===calBase.getMonth()&&dd.getFullYear()===calBase.getFullYear();var isT=dStr===todayStr;
                 var dayRows=monthRows[dStr]||[];
                 var dayDeadlines=deadlineMap[dStr]||[];
-                return<div key={i} style={{minHeight:88,background:isT?'rgba(14,42,71,0.08)':'var(--tf-panel)',border:'1px solid '+(isT?'#0e2a47':dayDeadlines.length?'rgba(245,158,11,0.4)':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
-                  <div style={{fontSize:11,fontWeight:isT?800:600,color:isT?'#0e2a47':'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{dd.getDate()}</div>
+                var load=dayRows.length+dayDeadlines.length; // workload-heat intensity (real due count)
+                var heatBg=load>=6?'rgba(239,68,68,0.13)':load>0?'rgba(47,107,255,'+Math.min(0.06+load*0.04,0.20)+')':'var(--tf-panel)';
+                return<div key={i} style={{minHeight:88,background:isT?'rgba(47,107,255,0.10)':heatBg,border:'1px solid '+(isT?'#2F6BFF':dayDeadlines.length?'rgba(244,165,42,0.45)':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <div style={{fontSize:11,fontWeight:isT?800:600,color:isT?'#2F6BFF':'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{dd.getDate()}</div>
+                    {load>0&&<span title={load+' due'} style={{fontSize:9,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:load>=6?'#EF4444':'#2F6BFF',background:load>=6?'rgba(239,68,68,0.14)':'rgba(47,107,255,0.14)',borderRadius:999,padding:'0 5px',minWidth:14,textAlign:'center'}}>{load}</span>}
+                  </div>
                   {dayDeadlines.map(function(dl,di){
                     var dlc=dl.daysLeft<=3?'#ef4444':dl.daysLeft<=7?'#f59e0b':'#8b5cf6';
                     return<div key={'dl'+di} title={'Statutory deadline: '+dl.name} style={{fontSize:9,fontWeight:700,padding:'2px 5px',background:dlc+'18',color:dlc,borderRadius:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',borderLeft:'2px solid '+dlc}}>
