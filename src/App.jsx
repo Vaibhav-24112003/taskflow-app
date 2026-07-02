@@ -1760,12 +1760,12 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         </div>}
       </div>}
       {/* ⌘K command bar button */}
-      <button onClick={()=>setShowCmdBar(true)} title="Search everything (⌘K)" style={{display:'flex',alignItems:'center',gap:8,height:32,padding:'0 12px 0 10px',borderRadius:8,background:'linear-gradient(135deg,rgba(14,42,71,0.12),rgba(99,102,241,0.08))',border:'1px solid rgba(14,42,71,0.35)',color:'#0e2a47',cursor:'pointer',fontSize:12,fontFamily:G.font,flexShrink:0,transition:G.trans,fontWeight:600,boxShadow:'0 1px 4px rgba(14,42,71,0.1)'}} onMouseEnter={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(14,42,71,0.22),rgba(99,102,241,0.15))';e.currentTarget.style.borderColor='rgba(14,42,71,0.6)';e.currentTarget.style.boxShadow='0 2px 8px rgba(14,42,71,0.2)'}} onMouseLeave={e=>{e.currentTarget.style.background='linear-gradient(135deg,rgba(14,42,71,0.12),rgba(99,102,241,0.08))';e.currentTarget.style.borderColor='rgba(14,42,71,0.35)';e.currentTarget.style.boxShadow='0 1px 4px rgba(14,42,71,0.1)'}}>
-        <span style={{fontSize:14,opacity:0.8}}>🔍</span>
-        <span style={{fontSize:12,color:'var(--tf-text-sub)',fontWeight:400}}>Search…</span>
+      <button onClick={()=>setShowCmdBar(true)} title="Search everything (⌘K)" style={{display:'flex',alignItems:'center',gap:8,height:32,padding:'0 12px 0 11px',borderRadius:9,background:'var(--tf-input)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontFamily:G.font,flexShrink:0,transition:G.trans,fontWeight:600}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2F6BFF';e.currentTarget.style.boxShadow='0 0 0 3px rgba(47,107,255,0.12)'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='var(--tf-border)';e.currentTarget.style.boxShadow='none'}}>
+        <Search size={14} strokeWidth={1.8} style={{color:'#2F6BFF',flexShrink:0}}/>
+        <span style={{fontSize:12,color:'var(--tf-text-sub)',fontWeight:500}}>Search…</span>
         <span style={{display:'flex',alignItems:'center',gap:2,marginLeft:4}}>
-          <kbd style={{fontSize:10,fontWeight:700,color:'#0e2a47',background:'rgba(14,42,71,0.15)',border:'1px solid rgba(14,42,71,0.3)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit'}}>⌘</kbd>
-          <kbd style={{fontSize:10,fontWeight:700,color:'#0e2a47',background:'rgba(14,42,71,0.15)',border:'1px solid rgba(14,42,71,0.3)',borderRadius:4,padding:'1px 5px',fontFamily:'inherit'}}>K</kbd>
+          <kbd style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 5px',fontFamily:"'JetBrains Mono',monospace"}}>⌘</kbd>
+          <kbd style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:4,padding:'1px 5px',fontFamily:"'JetBrains Mono',monospace"}}>K</kbd>
         </span>
       </button>
       {/* Notifications bell — reminders only */}
@@ -1788,7 +1788,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
           <button onClick={function(){dismissReminder(r.id);}} title="Dismiss" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,padding:'2px 6px',borderRadius:4,lineHeight:1}} onMouseEnter={function(e){e.currentTarget.style.color='#ef4444';}} onMouseLeave={function(e){e.currentTarget.style.color='var(--tf-text-sub)';}}>×</button>
         </div>;}
         return<div ref={notifRef} style={{position:'relative',flexShrink:0}}>
-          <button onClick={function(){setShowNotif(function(v){return !v;});if(!showNotif)loadReminders();}} title="Reminders" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotif?'rgba(14,42,71,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotif?'rgba(14,42,71,0.4)':'var(--tf-border)'),color:showNotif?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){if(!showNotif)e.currentTarget.style.background='var(--tf-surface)';}}>
+          <button onClick={function(){setShowNotif(function(v){return !v;});if(!showNotif)loadReminders();}} title="Reminders" style={{width:32,height:32,borderRadius:9,background:showNotif?'rgba(47,107,255,0.12)':'var(--tf-surface)',border:'1px solid '+(showNotif?'#2F6BFF':'var(--tf-border)'),color:showNotif?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,flexShrink:0,position:'relative'}} onMouseEnter={function(e){e.currentTarget.style.background='var(--tf-surface-hov)';}} onMouseLeave={function(e){if(!showNotif)e.currentTarget.style.background='var(--tf-surface)';}}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             {badge>0&&<div style={{position:'absolute',top:-3,right:-3,minWidth:16,height:16,borderRadius:8,background:'#ef4444',color:'#fff',fontSize:9,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid var(--tf-panel)'}}>{badge>99?'99+':badge}</div>}
           </button>
@@ -1837,18 +1837,18 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAdminShell(true)}/>
       {/* Quick Notes — floating, available on every screen */}
-      <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:28,height:28,borderRadius:G.radiusSm,background:showNotesDrawer?'rgba(99,102,241,0.15)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'rgba(99,102,241,0.4)':'var(--tf-border)'),color:showNotesDrawer?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
+      <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:32,height:32,borderRadius:9,background:showNotesDrawer?'rgba(47,107,255,0.12)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'#2F6BFF':'var(--tf-border)'),color:showNotesDrawer?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
       {/* Support / help icon */}
-      <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#0e2a47'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
+      <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
         <LifeBuoy size={14}/>
       </button>
       {/* Light/dark toggle */}
-      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:28,height:28,borderRadius:G.radiusSm,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
+      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
       {/* User menu */}
       <div ref={userMenuRef} style={{position:'relative',flexShrink:0}}>
-        <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'1.5px solid var(--tf-border)',position:'relative'}}>
-          <Avatar user={curUser} size={28}/>
-          {pendingInvites.length>0&&<div style={{position:'absolute',top:-2,right:-2,width:9,height:9,borderRadius:'50%',background:'#0e2a47',border:'2px solid var(--tf-bg)'}}/>}
+        <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'2px solid transparent',background:'linear-gradient(var(--tf-bg),var(--tf-bg)) padding-box, linear-gradient(135deg,#2F6BFF,#14C7C0) border-box',position:'relative'}}>
+          <Avatar user={curUser} size={30}/>
+          {pendingInvites.length>0&&<div style={{position:'absolute',top:-2,right:-2,width:9,height:9,borderRadius:'50%',background:'#2F6BFF',border:'2px solid var(--tf-bg)'}}/>}
         </div>
         {showUserMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:220,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
           <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:10,alignItems:'center'}}>
@@ -9829,17 +9829,24 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
     <div style={{display:'flex',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
       {/* Calendar Grid */}
       <div style={{flex:'1 1 500px',minWidth:320}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:1,background:'var(--tf-border)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+        {/* Workload legend (matches My Work calendar) */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:6,marginBottom:8}}>
+          <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',letterSpacing:'0.06em'}}>LIGHT</span>
+          {[0.06,0.11,0.16,0.20].map(function(a,i){return<span key={i} style={{width:14,height:14,borderRadius:4,background:'rgba(47,107,255,'+a+')',border:'1px solid var(--tf-border)'}}/>;})}
+          <span style={{width:14,height:14,borderRadius:4,background:'rgba(239,68,68,0.13)',border:'1px solid var(--tf-border)'}}/>
+          <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',letterSpacing:'0.06em'}}>HEAVY</span>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6}}>
           {/* Day headers */}
           {DAY_HEADERS.map(function(dh){
-            return<div key={dh} style={{padding:'8px 4px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',background:'var(--tf-surface)'}}>
+            return<div key={dh} style={{padding:'6px 4px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase'}}>
               {dh}
             </div>;
           })}
           {/* Day cells */}
           {weeks.map(function(week,wi){
             return week.map(function(day,di){
-              if(day===null)return<div key={wi+'-'+di} style={{background:'var(--tf-bg)',minHeight:80}}/>;
+              if(day===null)return<div key={wi+'-'+di} style={{minHeight:80}}/>;
               var isToday=isCurrentMonth&&day===today.getDate();
               var isSelected=selectedDay===day;
               var dRows=dayRows[day]||[];
@@ -9849,14 +9856,15 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
               var pendingCount=count-completedCount;
               // Workload-heat intensity (brand blue, escalating; overdue red, all-done green)
               var intensity=Math.min(count/10,1);
-              var bgColor='var(--tf-bg)';
+              var bgColor='var(--tf-surface)';
               if(count>0){
                 if(overdueCount>0)bgColor='rgba(239,68,68,'+(.05+intensity*.10)+')';
                 else if(completedCount===count)bgColor='rgba(31,169,113,'+(.05+intensity*.08)+')';
                 else bgColor='rgba(47,107,255,'+(.05+intensity*.15)+')';
               }
               return<div key={wi+'-'+di} onClick={function(){setSelectedDay(isSelected?null:day);}}
-                style={{background:bgColor,minHeight:80,padding:'4px 6px',cursor:'pointer',position:'relative',border:isSelected?'2px solid #2F6BFF':isToday?'2px solid #2F6BFF':'2px solid transparent',transition:'all 0.12s'}}>
+                style={{background:bgColor,minHeight:80,padding:'5px 7px',cursor:'pointer',position:'relative',borderRadius:10,border:isSelected||isToday?'2px solid #2F6BFF':'1px solid var(--tf-border)',transition:'all 0.12s'}}>
+                {count>0&&<span style={{position:'absolute',top:5,right:6,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'rgba(47,107,255,0.15)',color:'#2F6BFF',fontSize:10,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",display:'flex',alignItems:'center',justifyContent:'center'}}>{count}</span>}
                 <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?'#2F6BFF':'var(--tf-text)',marginBottom:2}}>
                   {day}
                 </div>

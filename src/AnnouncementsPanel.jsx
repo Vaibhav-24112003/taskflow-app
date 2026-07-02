@@ -60,13 +60,15 @@ export default function AnnouncementsBell({ cu, onManage }) {
         onClick={()=>setOpen(o=>!o)}
         title="Announcements"
         style={{
-          position:'relative', background:'transparent', border:'1px solid var(--tf-border)',
-          borderRadius:6, padding:'5px 8px', cursor:'pointer',
+          position:'relative', background:'var(--tf-surface)', border:'1px solid var(--tf-border)',
+          borderRadius:9, width:32, height:32, cursor:'pointer',
           color: 'var(--tf-text-sub)', fontFamily:'inherit',
-          display:'inline-flex', alignItems:'center',
+          display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0,
         }}
+        onMouseEnter={e=>{e.currentTarget.style.color='#2F6BFF'}}
+        onMouseLeave={e=>{e.currentTarget.style.color='var(--tf-text-sub)'}}
       >
-        <Megaphone size={14}/>
+        <Megaphone size={15} strokeWidth={1.8}/>
         {unread > 0 && (
           <span style={{
             position:'absolute', top:-3, right:-3,
