@@ -12048,7 +12048,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
       {/* Slim header — just title + close */}
       <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <Calendar size={16} strokeWidth={2.2} color="#0e2a47"/>
+          <span style={{width:26,height:26,borderRadius:8,background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Calendar size={15} strokeWidth={2.2} color="#fff"/></span>
           <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Plan Today</span>
         </div>
         <button onClick={function(){setPlanOpen(false);}} title="Collapse"
