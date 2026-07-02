@@ -9847,17 +9847,17 @@ function CalendarView({orgs,supabase,cu,showMineToggle}){
               var completedCount=dRows.filter(function(r){return r.status==='completed';}).length;
               var overdueCount=dRows.filter(function(r){return r.status!=='completed'&&r.due_date&&new Date(r.due_date)<today;}).length;
               var pendingCount=count-completedCount;
-              // Heatmap intensity
+              // Workload-heat intensity (brand blue, escalating; overdue red, all-done green)
               var intensity=Math.min(count/10,1);
               var bgColor='var(--tf-bg)';
               if(count>0){
-                if(overdueCount>0)bgColor='rgba(239,68,68,'+(.04+intensity*.08)+')';
-                else if(completedCount===count)bgColor='rgba(34,197,94,'+(.04+intensity*.06)+')';
-                else bgColor='rgba(14,42,71,'+(.03+intensity*.07)+')';
+                if(overdueCount>0)bgColor='rgba(239,68,68,'+(.05+intensity*.10)+')';
+                else if(completedCount===count)bgColor='rgba(31,169,113,'+(.05+intensity*.08)+')';
+                else bgColor='rgba(47,107,255,'+(.05+intensity*.15)+')';
               }
               return<div key={wi+'-'+di} onClick={function(){setSelectedDay(isSelected?null:day);}}
-                style={{background:bgColor,minHeight:80,padding:'4px 6px',cursor:'pointer',position:'relative',border:isSelected?'2px solid #0e2a47':isToday?'2px solid rgba(14,42,71,0.5)':'2px solid transparent',transition:'all 0.12s'}}>
-                <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?'#0e2a47':'var(--tf-text)',marginBottom:2}}>
+                style={{background:bgColor,minHeight:80,padding:'4px 6px',cursor:'pointer',position:'relative',border:isSelected?'2px solid #2F6BFF':isToday?'2px solid #2F6BFF':'2px solid transparent',transition:'all 0.12s'}}>
+                <div style={{fontSize:12,fontWeight:isToday?800:600,color:isToday?'#2F6BFF':'var(--tf-text)',marginBottom:2}}>
                   {day}
                 </div>
                 {count>0&&<div style={{display:'flex',flexDirection:'column',gap:2}}>
