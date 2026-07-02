@@ -47,8 +47,8 @@ const CSS = `
 .lp2 .logo{display:inline-flex;align-items:center;gap:9px;font-weight:800;font-size:17px;color:var(--text)}
 .lp2 .logo .tile{width:30px;height:30px;border-radius:9px;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .lp2 .mark{position:relative;display:inline-block;white-space:nowrap}
-.lp2 .mark .leg{position:absolute;left:.40em;bottom:.05em;height:1.15em;width:auto;overflow:visible}
-.lp2 .mark .co{margin-left:.66em}
+.lp2 .mark .leg{position:absolute;left:.30em;bottom:.05em;height:1.15em;width:auto;overflow:visible}
+.lp2 .mark .co{margin-left:.50em}
 .lp2 .btn{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:12px;cursor:pointer;border:0;white-space:nowrap;transition:transform .15s ease,box-shadow .2s ease;font-family:inherit}
 .lp2 .btn:hover{transform:translateY(-1px)}
 .lp2 .btn-primary{background:var(--grad);color:#fff;box-shadow:var(--shadow-cta)}
@@ -162,20 +162,20 @@ const CSS = `
 @media(prefers-reduced-motion:reduce){.lp2 *{animation:none!important;transition:none!important}}
 `
 
-// ── Reusable wordmark: gradient tile + "Tasklfo v[check] co" ──
+// ── Reusable wordmark: gradient tile + "Taskflo v[check] co" (reads "Taskflowco") ──
 function Logo({ footer }) {
   return (
     <span className="logo" style={footer ? { color: '#fff' } : undefined}>
       <span className="tile">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </span>
-      Tasklfo<span className="mark">v
+      <span>Taskflo<span className="mark">v
         <svg className="leg" viewBox="0 0 72 92">
           <defs><linearGradient id="lp2tk" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#2F6BFF" /><stop offset="1" stopColor="#14C7C0" /></linearGradient></defs>
           <path d="M4 56 24 78 68 8" fill="none" stroke="url(#lp2tk)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span className="co">co</span>
-      </span>
+      </span></span>
     </span>
   )
 }
