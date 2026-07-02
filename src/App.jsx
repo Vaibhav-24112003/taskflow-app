@@ -183,13 +183,13 @@ function GlobalStyle({ lightMode }) {
     const s=document.createElement('style');s.id=id
     s.textContent=`
 :root,[data-theme="dark"]{
-  --tf-bg:#0b0f1a;--tf-panel:rgba(11,15,28,0.94);--tf-overlay:rgba(5,7,18,0.82);
-  --tf-surface:#131825;--tf-surface-hov:#1a2133;
-  --tf-border:rgba(255,255,255,0.07);--tf-border-hov:rgba(255,255,255,0.14);
-  --tf-input:#0e1220;
-  --tf-text:#eaecf5;--tf-text-sub:#5c6b87;--tf-text-mut:#26324a;
-  --tf-shadow:rgba(0,0,0,0.55);--tf-shadow-lg:rgba(0,0,0,0.75);
-  --tf-table-header:#1a2538;
+  --tf-bg:#0B2237;--tf-panel:rgba(13,38,62,0.94);--tf-overlay:rgba(6,16,30,0.82);
+  --tf-surface:#0F2C49;--tf-surface-hov:#16385A;
+  --tf-border:rgba(255,255,255,0.09);--tf-border-hov:rgba(255,255,255,0.18);
+  --tf-input:#12314F;
+  --tf-text:#EAF1F8;--tf-text-sub:#9FB6D4;--tf-text-mut:#4A6485;
+  --tf-shadow:rgba(3,10,20,0.55);--tf-shadow-lg:rgba(3,10,20,0.75);
+  --tf-table-header:#143A5E;
   --tf-accent:#5B9BFF;--tf-accent-2:#14C7C0;--tf-accent-ink:#08243f;
   --tf-grad:linear-gradient(135deg,#2F6BFF,#14C7C0);
 }

@@ -18,9 +18,9 @@ const TF = {
   bg:'#0a0e18', bg2:'#0e1322', panel:'#131825', surface:'#171d2c',
   border:'rgba(255,255,255,0.07)', borderHov:'rgba(255,255,255,0.16)',
   text:'#eef0f8', sub:'#8693b0', mut:'#3a4663',
-  accent:'#6b8cad', accentBright:'#7fa3c7',
+  accent:'#2F6BFF', accentBright:'#5B9BFF',
   good:'#10b981', warn:'#f59e0b', bad:'#ef4444',
-  violet:'#6366f1', cyan:'#06b6d4', pink:'#ec4899', amber:'#f59e0b',
+  violet:'#2F6BFF', cyan:'#14C7C0', pink:'#ec4899', amber:'#f59e0b',
 }
 const FD = "'Geist','Inter',system-ui,sans-serif"
 const FS = "'Inter',system-ui,sans-serif"
@@ -1170,7 +1170,7 @@ export default function LaunchTour({ open, onClose }) {
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:16, padding:'12px 20px',
         borderBottom:'1px solid rgba(255,255,255,0.07)', flexShrink:0, background:'rgba(10,14,24,0.95)' }}>
-        <span style={{ fontFamily:FM, fontSize:11, color:'#7fa3c7', letterSpacing:'0.18em',
+        <span style={{ fontFamily:FM, fontSize:11, color:'#5B9BFF', letterSpacing:'0.18em',
           textTransform:'uppercase', fontWeight:700 }}>Launch tour · 80s</span>
         <span style={{ fontFamily:FM, fontSize:10, color:'rgba(134,147,176,0.6)', letterSpacing:'0.1em', textTransform:'uppercase' }}>
           space = play/pause · ← → seek · esc = close
