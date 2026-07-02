@@ -39,6 +39,8 @@
 ## Git / Push Flow — DIRECT TO MAIN
 **Always commit and push directly to `main`.** Vercel auto-deploys on every push, so this is instant promotion with no PR branch drift or merge conflicts.
 
+> **STANDING ORDER (user, 2026-07): auto-deploy every change to `main` without asking, until the user explicitly says to stop.** For each change: commit → push to `main` → verify a `target:production` deploy is queued/READY via Vercel MCP `list_deployments` → report. No confirmation prompts.
+
 ```bash
 # Commit and push directly to main (PAT — never hardcode):
 git add <files>
