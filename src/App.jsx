@@ -24,7 +24,7 @@ const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
 const LandingPage        = lazyWithReload(() => import('./LandingPage.jsx'))
 import { isAdminEmail } from './lib/supabase'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare, Search } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare, Search, ExternalLink, Download } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
@@ -1177,7 +1177,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 var CMD_MODULES=[
   {id:'diary',label:'My Work',tabs:[{id:'home',label:'Work'},{id:'plan',label:'Plan Today'}]},
   {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
-  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]},
+  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
   {id:'comms',label:'Communication',tabs:[{id:'connect',label:'Client Connect'},{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
@@ -16238,6 +16238,102 @@ function PlaceholderModule({title,desc,icon}){
   </div>;
 }
 
+// ── Tools & Connections (Library > Tools) ──────────────────────────
+// Curated directory of official govt portals + downloadable utilities for
+// Indian CA/tax practice. Static, read-only — pure resource/redirection hub.
+var TOOLS_GROUPS=[
+  {key:'gst',label:'GST',icon:'🧾',tint:'#2F6BFF',items:[
+    {name:'GST Portal',url:'https://www.gst.gov.in',note:'Registration, returns (GSTR-1/3B), payments, refunds'},
+    {name:'E-Way Bill Portal',url:'https://ewaybillgst.gov.in',note:'Generate & manage e-way bills'},
+    {name:'E-Invoice (IRP)',url:'https://einvoice1.gst.gov.in',note:'Generate IRN / e-invoices'},
+    {name:'GST Offline Tools',url:'https://www.gst.gov.in/download/returns',note:'GSTR-1 / 3B / 4 offline return utilities',dl:true},
+    {name:'CBIC-GST',url:'https://cbic-gst.gov.in',note:'Acts, rules, rates, notifications & circulars'},
+  ]},
+  {key:'incometax',label:'Income Tax / ITR',icon:'📊',tint:'#14C7C0',items:[
+    {name:'Income Tax e-Filing',url:'https://www.incometax.gov.in',note:'File ITR, e-proceedings, grievances, AIS/TIS'},
+    {name:'ITR Offline Utilities',url:'https://www.incometax.gov.in/iec/foportal/downloads/income-tax-returns',note:'JSON & Excel ITR preparation utilities',dl:true},
+    {name:'e-Pay Tax',url:'https://eportal.incometax.gov.in/iec/foservices/#/e-pay-tax-prelogin/user-balance',note:'Pay advance tax / self-assessment challans'},
+    {name:'Income Tax Dept (CBDT)',url:'https://incometaxindia.gov.in',note:'Acts, rules, circulars, forms & utilities'},
+  ]},
+  {key:'tds',label:'TDS / TRACES',icon:'💸',tint:'#7C3AED',items:[
+    {name:'TRACES',url:'https://www.tdscpc.gov.in',note:'TDS returns, Form 16/16A, Form 26AS, corrections'},
+    {name:'TDS RPU & FVU',url:'https://www.protean-tinpan.com/services/etds-etcs/etds-rpu.html',note:'Return Preparation & File Validation utilities',dl:true},
+    {name:'OLTAS Challan Status',url:'https://tin.tin.nsdl.com/oltas/',note:'Check challan status enquiry (TAN / CIN based)'},
+    {name:'PAN / TAN Services',url:'https://www.protean-tinpan.com',note:'Apply / correct PAN & TAN'},
+  ]},
+  {key:'mca',label:'MCA / ROC & Registration',icon:'🏛️',tint:'#F59E0B',items:[
+    {name:'MCA Portal (V3)',url:'https://www.mca.gov.in',note:'Company & LLP incorporation and ROC filings'},
+    {name:'Udyam (MSME) Registration',url:'https://udyamregistration.gov.in',note:'MSME / Udyam registration & print'},
+    {name:'DGFT (IEC)',url:'https://www.dgft.gov.in',note:'Import Export Code & foreign trade services'},
+    {name:'EPFO',url:'https://www.epfindia.gov.in',note:'PF registration, ECR & returns'},
+    {name:'ESIC',url:'https://www.esic.gov.in',note:'ESI registration & contributions'},
+  ]},
+  {key:'bookkeeping',label:'Book-Keeping & Accounting',icon:'📒',tint:'#0ea5e9',items:[
+    {name:'Tally Solutions',url:'https://tallysolutions.com',note:'TallyPrime accounting & inventory software'},
+    {name:'Zoho Books',url:'https://www.zoho.com/in/books/',note:'Cloud accounting & GST-ready invoicing'},
+    {name:'BUSY Accounting',url:'https://busy.in',note:'GST accounting software for SMEs'},
+    {name:'Marg ERP',url:'https://margerp.com',note:'Inventory & accounting ERP'},
+  ]},
+  {key:'reference',label:'Reference & Redirection',icon:'🔗',tint:'#64748b',items:[
+    {name:'ICAI',url:'https://www.icai.org',note:'Standards, announcements, member services'},
+    {name:'e-Filing Utility Downloads',url:'https://www.incometax.gov.in/iec/foportal/downloads',note:'All Income-tax forms & DSC utilities',dl:true},
+    {name:'GST Rate Finder',url:'https://cbic-gst.gov.in/gst-goods-services-rates.html',note:'Search HSN / SAC GST rates'},
+    {name:'RBI',url:'https://www.rbi.org.in',note:'Circulars, FEMA, forex reference rates'},
+  ]},
+];
+function ToolsResourcesModule(){
+  var [search,setSearch]=useState('');
+  var [cat,setCat]=useState('');
+  var q=search.trim().toLowerCase();
+  var groups=TOOLS_GROUPS
+    .filter(function(g){return !cat||g.key===cat;})
+    .map(function(g){
+      var items=!q?g.items:g.items.filter(function(it){return it.name.toLowerCase().includes(q)||(it.note||'').toLowerCase().includes(q);});
+      return Object.assign({},g,{items:items});
+    })
+    .filter(function(g){return g.items.length>0;});
+  var total=TOOLS_GROUPS.reduce(function(n,g){return n+g.items.length;},0);
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:9,padding:'9px 12px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
+  function pill(active,tint){return{fontSize:12,fontWeight:700,padding:'6px 12px',borderRadius:20,cursor:'pointer',border:'1px solid '+(active?(tint||'#2F6BFF'):'var(--tf-border)'),background:active?hex2rgba(tint||'#2F6BFF',0.12):'var(--tf-surface)',color:active?(tint||'#2F6BFF'):'var(--tf-text-sub)',whiteSpace:'nowrap'};}
+  return<div style={{padding:'0 0 48px',maxWidth:1060,margin:'0 auto'}}>
+    <div style={{marginBottom:8}}>
+      <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Tools &amp; Connections</h2>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Government portals, downloadable utilities and useful resources — {total} links</div>
+    </div>
+    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',margin:'16px 0 18px'}}>
+      <div style={{position:'relative',flex:'0 0 auto'}}>
+        <Search size={15} style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--tf-text-mut)'}}/>
+        <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search tools & links…" style={Object.assign({},INP,{paddingLeft:32,width:230})}/>
+      </div>
+      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+        <span onClick={function(){setCat('');}} style={pill(!cat,'#2F6BFF')}>All</span>
+        {TOOLS_GROUPS.map(function(g){return<span key={g.key} onClick={function(){setCat(cat===g.key?'':g.key);}} style={pill(cat===g.key,g.tint)}>{g.icon} {g.label}</span>;})}
+      </div>
+    </div>
+    {groups.length===0&&<div style={{textAlign:'center',color:'var(--tf-text-sub)',padding:'50px 0',fontSize:14}}>No tools match “{search}”.</div>}
+    {groups.map(function(g){return<div key={g.key} style={{marginBottom:26}}>
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:11}}>
+        <span style={{fontSize:16}}>{g.icon}</span>
+        <span style={{fontSize:13,fontWeight:800,color:'var(--tf-text)',letterSpacing:'0.01em'}}>{g.label}</span>
+        <span style={{flex:1,height:1,background:'var(--tf-border)'}}/>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+        {g.items.map(function(it){return<a key={it.url} href={it.url} target="_blank" rel="noopener noreferrer" style={{
+          display:'block',textDecoration:'none',background:'var(--tf-panel)',border:'1px solid var(--tf-border)',
+          borderLeft:'3px solid '+g.tint,borderRadius:11,padding:'13px 14px',transition:'transform .12s,box-shadow .12s'
+        }} onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 6px 18px rgba(14,42,71,0.10)';}} onMouseLeave={function(e){e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='';}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+            <span style={{fontSize:13.5,fontWeight:700,color:'var(--tf-text)'}}>{it.name}</span>
+            {it.dl?<Download size={14} style={{color:g.tint,flexShrink:0}}/>:<ExternalLink size={14} style={{color:'var(--tf-text-mut)',flexShrink:0}}/>}
+          </div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:5,lineHeight:1.5}}>{it.note}</div>
+          {it.dl&&<span style={{display:'inline-block',marginTop:8,fontSize:10,fontWeight:800,letterSpacing:'0.05em',color:g.tint,background:hex2rgba(g.tint,0.12),borderRadius:5,padding:'2px 7px'}}>DOWNLOAD</span>}
+        </a>;})}
+      </div>
+    </div>;})}
+  </div>;
+}
+
 // ── Credentials Module (Library > Credentials) ─────────────────────
 function CredentialsModule({org,supabase,cu}){
   var [clients,setClients]=useState([]);
@@ -17315,7 +17411,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'diary',label:'My Work',icon:BookOpen,desc:'Your work, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#2F6BFF,#14C7C0)',tabs:[{id:'home',label:'Work'},{id:'notes',label:'Notes'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:workzoneTabs},
   ];
-  if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools'},{id:'study',label:'Study Resources'}]});
+  if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]});
   if(ffOn('team'))MODULES.push({id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]});
   MODULES.push({id:'chat',label:'Team Chat',icon:MessageSquare,desc:'Real-time group messaging for your team — channels, threads and instant updates.',gradient:'linear-gradient(135deg,#7c3aed,#6d28d9)',tabs:[]});
   if(canSeeAnalytics&&ffOn('analytics')){
@@ -17442,7 +17538,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Library */}
       {orgModule==='library'&&tab==='credentials'&&<CredentialsModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='library'&&tab==='sops'&&<SOPsLibraryModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='library'&&tab==='tools'&&<PlaceholderModule title="Tools & Resources" desc="Store utilities, Excel templates, software links and other firm resources." icon="🔧"/>}
+      {orgModule==='library'&&tab==='tools'&&<ToolsResourcesModule/>}
       {orgModule==='library'&&tab==='study'&&<PlaceholderModule title="Study Resources" desc="Circulars, case laws, study material and reference documents." icon="📚"/>}
       {/* Team */}
       {orgModule==='team'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
