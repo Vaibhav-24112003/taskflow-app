@@ -39,7 +39,7 @@ const CSS = `
 }
 .lp2 *{box-sizing:border-box}
 .lp2 .mono{font-family:'JetBrains Mono',monospace}
-.lp2 .wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+.lp2 .wrap{max-width:1400px;margin:0 auto;padding:0 40px}
 .lp2 .section{padding:88px 0}
 .lp2 h1,.lp2 h2,.lp2 h3{margin:0;letter-spacing:-.02em;font-weight:800}
 .lp2 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
