@@ -15,12 +15,12 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
 // ── Brand ────────────────────────────────────────────────────────────────────
 const TF = {
-  bg:'#0a0e18', bg2:'#0e1322', panel:'#131825', surface:'#171d2c',
-  border:'rgba(255,255,255,0.07)', borderHov:'rgba(255,255,255,0.16)',
-  text:'#eef0f8', sub:'#8693b0', mut:'#3a4663',
+  bg:'#0B2237', bg2:'#0E2A47', panel:'#0F2C49', surface:'#143A5E',
+  border:'rgba(255,255,255,0.08)', borderHov:'rgba(255,255,255,0.18)',
+  text:'#EAF1F8', sub:'#9FB6D4', mut:'#4A6485',
   accent:'#2F6BFF', accentBright:'#5B9BFF',
-  good:'#10b981', warn:'#f59e0b', bad:'#ef4444',
-  violet:'#2F6BFF', cyan:'#14C7C0', pink:'#ec4899', amber:'#f59e0b',
+  good:'#1FA971', warn:'#F4A52A', bad:'#EF4444',
+  violet:'#2F6BFF', cyan:'#14C7C0', pink:'#ec4899', amber:'#F4A52A',
 }
 const FD = "'Geist','Inter',system-ui,sans-serif"
 const FS = "'Inter',system-ui,sans-serif"
@@ -39,39 +39,43 @@ function Sprite({ start, end, children }) {
 }
 
 // ── UI primitives ─────────────────────────────────────────────────────────────
-function PenV({ size=80, draw=1, color='#fff', weight=11, tilt=-4 }) {
-  const leftD  = 'M 18 38 Q 32 64 50 88'
-  const rightD = 'M 50 88 Q 70 50 96 6'
-  const lp = clamp(draw/0.55,0,1), rp = clamp((draw-0.45)/0.55,0,1)
+// Self-drawing gradient checkmark (the "w" leg) — matches the app/landing logo.
+var _tourGradSeq = 0
+function CheckLeg({ draw=1, gradId }) {
+  const off = 64 * (1 - clamp(draw, 0, 1))
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100"
-      style={{ overflow:'visible', transform:`rotate(${tilt}deg)`, transformOrigin:'center 70%', flexShrink:0 }}>
-      <path d={leftD}  fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round" pathLength={100} strokeDasharray={`${lp*100} 999`}/>
-      <path d={rightD} fill="none" stroke={color} strokeWidth={weight} strokeLinecap="round" pathLength={100} strokeDasharray={`${rp*100} 999`}/>
+    <svg viewBox="0 0 72 92" style={{ height:'100%', width:'auto', display:'block', overflow:'visible' }} aria-hidden="true">
+      <defs><linearGradient id={gradId} x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#5B9BFF"/><stop offset="1" stopColor="#14C7C0"/></linearGradient></defs>
+      <path d="M4 56 24 78 68 8" fill="none" stroke={`url(#${gradId})`} strokeWidth={12} strokeLinecap="round" strokeLinejoin="round"
+        pathLength={64} strokeDasharray={64} strokeDashoffset={off}/>
     </svg>
   )
 }
 
-function Wordmark({ size=64, draw=1, reveal=1, coColor, color=TF.text, vColor=TF.accentBright }) {
-  const tiny = size <= 22
+function Wordmark({ size=64, draw=1, reveal=1, coColor, color=TF.text }) {
+  const gid = 'twm' + (++_tourGradSeq)
   return (
     <span style={{ fontFamily:FD, fontSize:size, fontWeight:800, letterSpacing:'-0.04em',
       lineHeight:1, color, opacity:reveal, whiteSpace:'nowrap', display:'inline-flex', alignItems:'baseline' }}>
-      <span>taskflo</span>
-      {!tiny && <span style={{ fontSize:size*0.82, fontWeight:800, margin:`0 ${-size*0.012}px 0 0` }}>v</span>}
-      <PenV size={size*(tiny?0.95:1.05)} weight={Math.max(8,size*0.13)} draw={draw} color={vColor} tilt={-4}/>
-      <span style={{ color:coColor||color }}>co</span>
+      <span>Taskflo</span>
+      <span style={{ position:'relative', display:'inline-block' }}>v
+        <span style={{ position:'absolute', left:'0.30em', bottom:'0.02em', height:'1.12em', width:'auto', display:'inline-flex', pointerEvents:'none' }}>
+          <CheckLeg draw={draw} gradId={gid}/>
+        </span>
+      </span>
+      <span style={{ marginLeft:'0.5em', color:coColor||color }}>co</span>
     </span>
   )
 }
 
 function MarkTile({ size=32 }) {
   return (
-    <div style={{ width:size, height:size, borderRadius:size*0.22,
-      background:'linear-gradient(135deg,#131825,#0d1426)',
-      border:'1px solid rgba(255,255,255,0.08)',
+    <div style={{ width:size, height:size, borderRadius:size*0.28,
+      background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
       display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-      <PenV size={size*0.62} weight={Math.max(9,size*0.16)} draw={1} color="#fff" tilt={0}/>
+      <svg width={size*0.58} height={size*0.58} viewBox="0 0 24 24" fill="none">
+        <path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
     </div>
   )
 }
