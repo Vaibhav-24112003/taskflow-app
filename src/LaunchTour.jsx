@@ -1075,6 +1075,10 @@ function Stage({ children }) {
     if (!audioRef.current[seg.id]) {
       const a = new Audio(narrationSrc(seg.id))
       a.preload = 'auto'
+      // Fall back to .wav if the .mp3 isn't there (e.g. generated without ffmpeg).
+      a.addEventListener('error', function onerr() {
+        if (!a.dataset.triedWav) { a.dataset.triedWav = '1'; a.src = narrationSrc(seg.id).replace(/\.mp3$/, '.wav'); a.load() }
+      })
       audioRef.current[seg.id] = a
     }
     return audioRef.current[seg.id]
