@@ -131,6 +131,7 @@ const CSS = `
 .lp2 .chipbtn.on{background:var(--grad);color:#fff;border-color:transparent}
 .lp2 .field{border:1px solid var(--card-border);background:var(--field);border-radius:10px;padding:11px 13px;font-size:13.5px;color:var(--text);font-family:inherit;outline:none}
 .lp2 .field::placeholder{color:var(--muted)}
+.lp2[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.6)}
 .lp2 .lbl{display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:6px}
 .lp2 .two-col{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
 .lp2 .support-card{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:22px;flex:1}
@@ -188,29 +189,20 @@ function scrollToId(id) {
 }
 
 // ── Demo booking form (wired to demo_requests) ──
-// Build the next few upcoming weekday slots from today (skip weekends), so the
-// "preferred slot" chips are always real near-term options, not stale fixed times.
-function upcomingSlots() {
-  const times = ['11:00', '16:00']
+// Half-hourly time options across a working day (any day is bookable).
+const SLOT_TIMES = (() => {
   const out = []
-  const d = new Date(); d.setHours(0, 0, 0, 0)
-  let i = 0
-  while (out.length < 3 && i < 14) {
-    d.setDate(d.getDate() + 1); i++
-    const dow = d.getDay()
-    if (dow === 0 || dow === 6) continue // skip Sun/Sat
-    const label = d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' }) + ' · ' + times[out.length % 2]
-    out.push(label)
-  }
-  return out.length ? out : ['This week']
-}
+  for (let h = 9; h <= 19; h++) { out.push(String(h).padStart(2, '0') + ':00'); if (h < 19) out.push(String(h).padStart(2, '0') + ':30') }
+  return out
+})()
+function todayISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
 
 function DemoForm() {
-  const [slots] = useState(upcomingSlots)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [firm, setFirm] = useState('CA')
-  const [slot, setSlot] = useState(() => upcomingSlots()[0])
+  const [slotDate, setSlotDate] = useState(todayISO)
+  const [slotTime, setSlotTime] = useState('11:00')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
@@ -219,6 +211,7 @@ function DemoForm() {
     if (!name.trim() || !email.trim()) { setErr('Name and work email are required.'); return }
     setBusy(true); setErr('')
     try {
+      const slot = slotDate ? (slotDate + ' ' + slotTime) : slotTime
       const { error } = await supabase.from('demo_requests').insert({
         name: name.trim(), email: email.trim(), firm_name: firm,
         message: 'Firm type: ' + firm + ' · Preferred slot: ' + slot, status: 'new',
@@ -247,7 +240,15 @@ function DemoForm() {
         <div style={{ flex: 1, minWidth: 150 }}><label className="lbl">Work email</label><input className="field" style={{ width: '100%' }} type="email" placeholder="you@firm.in" value={email} onChange={e => setEmail(e.target.value)} required /></div>
       </div>
       <div><label className="lbl">Firm type</label>{single('firm', firm, setFirm, ['CA', 'CS', 'CMA', 'Tax / Advisory'])}</div>
-      <div><label className="lbl">Preferred slot</label>{single('slot', slot, setSlot, slots)}</div>
+      <div><label className="lbl">Preferred slot</label>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <input className="field mono" type="date" min={todayISO()} value={slotDate} onChange={e => setSlotDate(e.target.value)} style={{ flex: '1 1 150px', minWidth: 140 }} />
+          <select className="field mono" value={slotTime} onChange={e => setSlotTime(e.target.value)} style={{ flex: '1 1 110px', minWidth: 110, cursor: 'pointer' }}>
+            {SLOT_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Any day works — weekends included. We'll confirm by email.</div>
+      </div>
       {err && <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>{err}</div>}
       <button type="submit" className="btn btn-primary" disabled={busy} style={{ justifyContent: 'center', marginTop: 4 }}>{busy ? 'Sending…' : 'Book my demo'}</button>
     </form>
