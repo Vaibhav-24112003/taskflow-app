@@ -24,9 +24,12 @@ returns text language sql immutable as $$
     '&','&amp;'),'<','&lt;'),'>','&gt;'),'"','&quot;'),'''','&#39;')
 $$;
 
+-- p_only_email: restrict processing to one user (by profile email) — used to send a
+-- specific person's own digest as a test. Optional 4th arg keeps the cron call valid.
 create or replace function tf_jobs.send_work_reminders(p_mode text default 'dry',
                                                        p_test_email text default null,
-                                                       p_days int default 7)
+                                                       p_days int default 7,
+                                                       p_only_email text default null)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_today date := (now() at time zone 'utc' + interval '5.5 hours')::date;
@@ -77,6 +80,7 @@ begin
     from agg a
     join profiles p on p.id = a.owner_id::uuid
     where p.email is not null and coalesce(p.is_blocked,false) = false
+      and (p_only_email is null or p.email = p_only_email)
   loop
     v_recipients := v_recipients + 1;
     v_upcoming := r_user.total - r_user.overdue;
