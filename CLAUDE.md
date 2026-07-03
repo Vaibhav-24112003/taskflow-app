@@ -286,6 +286,34 @@ borderRight: '1px solid rgba(255,255,255,0.06)'
 - Recurring task management per client
 - Frontend Design plugin (only available in Claude Code desktop app, not web)
 
+## Work-Management Automations (`tf_jobs` schema, 2026-07) — LIVE on `vorxrjekbokqkigfabhr`
+Server-side jobs that turn the app from "shows work you go looking for" into "guarantees
+work exists + chases it". SQL lives in `supabase/migrations/20260703000001..4`. Edge deploy
+is approval-gated in this env — all implemented as **PL/pgSQL + pg_cron** (NOT edge functions;
+the `supabase/functions/generate-recurring-worksheets` TS file is reference-only, not deployed).
+
+- **① Recurrence generator** — `tf_jobs.generate_recurring_worksheets(dry bool)`. Faithful port
+  of client `loadWorksheet()` auto-create (period math, due_dates/monthly_map/quarterly_map/
+  month_offset, prep_days, enrollment via `clients.custom_fields.work_types`, dedupe). Creates
+  worksheets+rows for **prev+current+next** period. Idempotent. **Cron `generate-recurring-worksheets`
+  @ 18:30 UTC (00:00 IST)**. Test with `select tf_jobs.generate_recurring_worksheets(true)` (dry).
+- **② Work reminders** — `tf_jobs.send_work_reminders(mode,test_email,days,only_email)`. Daily
+  digest email (Resend via pg_net): ALL overdue + due-today + next-7-days, grouped sections,
+  **consolidated across all a user's orgs** (labelled by firm). Modes: `dry`/`test`/`live`.
+  Resend key in **Vault** (`RESEND_API_KEY`). **Cron `send-work-reminders` @ 03:30 UTC (09:00 IST)**.
+  Owner = `data.__assignee` + any `__h_*` role. To test one person: `send_work_reminders('test','x@y.com',7,'x@y.com')`.
+- **③ Stage history + aging** — `worksheet_row_stage_events` table + `trg_log_stage_event` trigger
+  (logs stage/status changes, forward-only) + `worksheet_row_aging` view. UI: **⏳Nd badge** on
+  ErpBoard cards (grey ≥3 / amber ≥7 / red ≥14), reads events, falls back to created_at.
+- **④ Time↔task + estimates** — cols `work_type_configs.estimated_hours`, `worksheet_rows.estimated_hours`,
+  `attendance_time_logs.worksheet_row_id`; view `worksheet_row_time` (actual vs estimate). UI:
+  "Estimated Hours" field in work-type editor; **⏱ Xh/Yh badge** on ErpBoard cards (red if over).
+  Time logged via Plan My Day "→ Log" now sets `worksheet_row_id` (sendToLog).
+- **⑤ Saved filters** — ErpBoard filters (groupBy/assignee/client/hideCompleted/dept) persist to
+  `localStorage tf_erpboard_filters_<org.id>`; survive navigation.
+
+Verify crons: `select jobname,schedule,active from cron.job;`. pg_cron + pg_net + supabase_vault all enabled.
+
 ## SESSION HANDOFF — Design Refresh (brand blue/teal + Plus Jakarta Sans)
 A large multi-session design refresh is in progress off `design_handoff_taskflowco/`
 (Claude Design handoff: README.md + FEATURE-COVERAGE.md + landing-page.html).
