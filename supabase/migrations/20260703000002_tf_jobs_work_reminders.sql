@@ -1,15 +1,19 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Automated work reminders (server-side "reminders that actually fire")
 --
--- Emails each staff member a daily digest of ALL their overdue tasks (nothing
--- forgotten) plus DUE TODAY and COMING UP (next 7 days), grouped into scannable
--- sections, via Resend (through pg_net). Owner of a row = data->>'__assignee' plus
--- any workflow-hierarchy role (data keys __h_*). Capped at 30 rows per email.
+-- Emails each staff member ONE consolidated daily digest of ALL their overdue tasks
+-- (nothing forgotten) plus DUE TODAY and COMING UP (next 7 days), grouped into
+-- scannable sections, via Resend (through pg_net). A user in multiple orgs gets a
+-- single email spanning every firm; each task is labelled with its firm. Owner of a
+-- row = data->>'__assignee' plus any workflow-hierarchy role (data keys __h_*).
+-- Capped at 30 rows per email.
 --
 -- Modes:
 --   'dry'  → compute recipients + counts, send NOTHING (returns JSON preview)
 --   'test' → send ONE real digest, but only to p_test_email (safe rendering check)
 --   'live' → send every recipient their own digest
+-- p_only_email restricts processing to one user (by profile email) — used to send a
+-- specific person's own digest as a test.
 --
 -- The Resend API key is read from Supabase Vault (secret name 'RESEND_API_KEY') and
 -- never hardcoded. Add it once with:
@@ -24,8 +28,6 @@ returns text language sql immutable as $$
     '&','&amp;'),'<','&lt;'),'>','&gt;'),'"','&quot;'),'''','&#39;')
 $$;
 
--- p_only_email: restrict processing to one user (by profile email) — used to send a
--- specific person's own digest as a test. Optional 4th arg keeps the cron call valid.
 create or replace function tf_jobs.send_work_reminders(p_mode text default 'dry',
                                                        p_test_email text default null,
                                                        p_days int default 7,
@@ -37,8 +39,8 @@ declare
   v_from text := 'TaskFlowCo <no-reply@taskflowco.in>';
   v_recipients int := 0; v_sent int := 0; v_preview jsonb := '[]'::jsonb;
   r_user record; v_rows_html text; v_item jsonb; v_shown int; v_more int;
-  v_subject text; v_html text; v_to text; v_upcoming int;
-  v_bucket text; v_last_bucket text;
+  v_subject text; v_html text; v_to text; v_upcoming int; v_multiorg boolean;
+  v_bucket text; v_last_bucket text; v_sub text;
 begin
   if p_mode <> 'dry' then
     select decrypted_secret into v_key from vault.decrypted_secrets where name='RESEND_API_KEY' limit 1;
@@ -50,12 +52,13 @@ begin
   for r_user in
     with owned as (
       select distinct on (o.owner_id, r.id)
-             r.org_id, r.id, r.due_date,
+             r.id, r.due_date,
              coalesce(nullif(r.data->>'__title',''), c.name, 'Task') as title,
-             w.work_type, o.owner_id
+             w.work_type, org2.name as org_name, o.owner_id
       from worksheet_rows r
       join worksheets w on w.id = r.worksheet_id
       left join clients c on c.id = r.client_id
+      left join organizations org2 on org2.id = r.org_id
       cross join lateral (
         select v as owner_id from (
           select r.data->>'__assignee' as v
@@ -68,15 +71,16 @@ begin
         and r.due_date <= v_today + p_days          -- overdue (any age) OR due within window
     ),
     agg as (
-      select owner_id, org_id,
+      select owner_id,
              count(*) as total,
              count(*) filter (where due_date < v_today) as overdue,
-             jsonb_agg(jsonb_build_object('title',title,'wt',work_type,
+             count(distinct org_name) as orgs,
+             jsonb_agg(jsonb_build_object('title',title,'wt',work_type,'org',org_name,
                        'due',to_char(due_date,'DD Mon YYYY'),'k',to_char(due_date,'YYYY-MM-DD'))
                        order by due_date) as items
-      from owned group by owner_id, org_id
+      from owned group by owner_id
     )
-    select p.email, p.name, a.total, a.overdue, a.items
+    select p.email, p.name, a.total, a.overdue, a.orgs, a.items
     from agg a
     join profiles p on p.id = a.owner_id::uuid
     where p.email is not null and coalesce(p.is_blocked,false) = false
@@ -84,6 +88,7 @@ begin
   loop
     v_recipients := v_recipients + 1;
     v_upcoming := r_user.total - r_user.overdue;
+    v_multiorg := r_user.orgs > 1;
 
     v_rows_html := ''; v_shown := 0; v_last_bucket := '';
     for v_item in select * from jsonb_array_elements(r_user.items) loop
@@ -98,9 +103,11 @@ begin
           case v_bucket when 'overdue' then 'color:#dc2626;' when 'today' then 'color:#2F6BFF;' else 'color:#7183a0;' end||'">'||
           case v_bucket when 'overdue' then 'OVERDUE' when 'today' then 'DUE TODAY' else 'COMING UP' end||'</td></tr>';
       end if;
+      v_sub := tf_jobs.esc(v_item->>'wt');
+      if v_item->>'org' is not null then v_sub := v_sub || ' · ' || tf_jobs.esc(v_item->>'org'); end if;
       v_rows_html := v_rows_html ||
         '<tr><td style="padding:7px 10px;border-bottom:1px solid #eef1f5;font-size:13px;color:#0E2A47;">'||tf_jobs.esc(v_item->>'title')||
-        '<div style="font-size:11px;color:#7183a0;margin-top:2px;">'||tf_jobs.esc(v_item->>'wt')||'</div></td>'||
+        '<div style="font-size:11px;color:#7183a0;margin-top:2px;">'||v_sub||'</div></td>'||
         '<td style="padding:7px 10px;border-bottom:1px solid #eef1f5;font-size:12px;white-space:nowrap;text-align:right;'||
         case when v_bucket='overdue' then 'color:#dc2626;font-weight:700;' else 'color:#0E2A47;' end||'">'||
         (v_item->>'due')||'</td></tr>';
@@ -115,7 +122,8 @@ begin
       '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;color:#0E2A47;">'||
       '<div style="padding:22px 26px;background:linear-gradient(135deg,#2F6BFF,#14C7C0);border-radius:12px 12px 0 0;">'||
       '<div style="color:#fff;font-size:17px;font-weight:800;letter-spacing:-.02em;">Hi '||tf_jobs.esc(coalesce(r_user.name,'there'))||',</div>'||
-      '<div style="color:rgba(255,255,255,.9);font-size:13px;margin-top:4px;">Here’s your work — '||
+      '<div style="color:rgba(255,255,255,.9);font-size:13px;margin-top:4px;">Here’s your work'||
+      case when v_multiorg then ' across '||r_user.orgs||' firms' else '' end||' — '||
       case when r_user.overdue>0 then r_user.overdue::text||' overdue' else '' end||
       case when r_user.overdue>0 and v_upcoming>0 then ' · ' else '' end||
       case when v_upcoming>0 then v_upcoming::text||' in the next '||p_days||' days' else '' end||'.</div></div>'||
@@ -127,7 +135,7 @@ begin
       '</div></div>';
 
     if p_mode = 'dry' then
-      v_preview := v_preview || jsonb_build_object('email',r_user.email,'name',r_user.name,'total',r_user.total,'overdue',r_user.overdue);
+      v_preview := v_preview || jsonb_build_object('email',r_user.email,'name',r_user.name,'total',r_user.total,'overdue',r_user.overdue,'orgs',r_user.orgs);
       continue;
     end if;
 
