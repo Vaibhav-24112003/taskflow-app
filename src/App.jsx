@@ -18546,7 +18546,8 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       client_id:logForm.client_id||null,
       work_type:logForm.work_type.trim()||(entry.item&&entry.item._title)||'',
       hours:hrs,minutes:mins,
-      notes:logForm.notes.trim()||entry.note||null
+      notes:logForm.notes.trim()||entry.note||null,
+      worksheet_row_id:(entry.item&&entry.item._kind==='wsrow')?entry.item._id:null
     }).select('id').single();
     setLoggingId(null);
     if(r.error){showToast('Log failed: '+r.error.message,'err');return;}
