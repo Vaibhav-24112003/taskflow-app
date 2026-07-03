@@ -10243,6 +10243,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   var [worksheets,setWorksheets]=useState(_ebc.worksheets||[]);
   var [clients,setClients]=useState(_ebc.clients||[]);
   var [members,setMembers]=useState(_ebc.members||[]);
+  var [stageSince,setStageSince]=useState(_ebc.stageSince||{}); // row_id -> last stage/status change ts (aging)
   var [groupBy,setGroupBy]=useState('status'); // 'status' | 'worktype'
   var [assigneeFilter,setAssigneeFilter]=useState('all'); // 'all' | 'mine' | userId
   var [clientQuery,setClientQuery]=useState('');
@@ -10275,14 +10276,18 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
         membersData=rp.data||[];
         setMembers(membersData);
       }
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date').eq('org_id',org.id).limit(5000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date,created_at').eq('org_id',org.id).limit(5000);
       if(rr.error){showToast('Failed to load board: '+rr.error.message,'err');return;}
       setRows(rr.data||[]);
       var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency,period_year,period_month').eq('org_id',org.id).limit(1000);
       setWorksheets(rw.data||[]);
       var rc=await supabase.from('clients').select('id,name,display_name').eq('org_id',org.id).order('name').limit(2000);
       setClients(rc.data||[]);
-      _erpBoardCache[org.id]={rows:rr.data||[],worksheets:rw.data||[],clients:rc.data||[],members:membersData};
+      // Aging: latest stage/status change per row (worksheet_row_stage_events). Falls back to created_at.
+      var smap={};
+      try{var reev=await supabase.from('worksheet_row_stage_events').select('row_id,moved_at').eq('org_id',org.id).order('moved_at',{ascending:false}).limit(20000);(reev.data||[]).forEach(function(ev){if(!smap[ev.row_id])smap[ev.row_id]=ev.moved_at;});}catch(_){}
+      setStageSince(smap);
+      _erpBoardCache[org.id]={rows:rr.data||[],worksheets:rw.data||[],clients:rc.data||[],members:membersData,stageSince:smap};
     }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
@@ -10367,6 +10372,15 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   var today=new Date().toISOString().slice(0,10);
   var pillStyle={fontSize:10,fontWeight:700,padding:'2px 6px',borderRadius:4,letterSpacing:'0.04em'};
 
+  // Days the row has sat in its current stage (since last tracked stage/status change,
+  // else since creation). Powers the "stuck" aging badge.
+  function daysInStage(r){
+    var base=stageSince[r.id]||r.created_at;
+    if(!base)return null;
+    var d=Math.floor((Date.now()-new Date(base).getTime())/86400000);
+    return d>=0?d:null;
+  }
+
   function Card(r,i){
     var c=clientMap[r.client_id]||{};
     var ws=wsMap[r.worksheet_id]||{};
@@ -10388,6 +10402,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
         {(function(){var wtc=ws.work_type&&(workTypeConfigs||[]).find(function(c){return c.name===ws.work_type;});var dept=wtc&&wtc.department_id&&(orgDepts||[]).find(function(d){return d.id===wtc.department_id;});return dept?<span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:dept.color,flexShrink:0}} title={dept.name}/>:null;})()}
         <span style={Object.assign({},pillStyle,{background:'rgba(14,42,71,0.12)',color:'#0e2a47'})}>{ws.work_type||'—'}</span>
         {ws.period_label&&<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{ws.period_label}</span>}
+        {(function(){if(isDone)return null;var d=daysInStage(r);if(d==null||d<3)return null;var col=d>=14?'#EF4444':d>=7?'#F4A52A':'var(--tf-text-mut)';var tracked=!!stageSince[r.id];return<span title={(tracked?'In current stage for ':'Open ')+d+' day'+(d===1?'':'s')+(tracked?'':' — no stage change tracked yet')} style={{fontSize:10,fontWeight:700,color:col,fontFamily:"'JetBrains Mono',monospace",display:'inline-flex',alignItems:'center',gap:2,marginLeft:'auto'}}>⏳{d}d</span>;})()}
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{assignee?assignee.name||assignee.email:'Unassigned'}</div>
