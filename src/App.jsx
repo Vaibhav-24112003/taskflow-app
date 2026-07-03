@@ -4083,6 +4083,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [frequency,setFrequency]=useState(config?config.frequency:'monthly');
   var [worksheetGroup,setWorksheetGroup]=useState(config?config.worksheet_group||'':'');
   var [prepDays,setPrepDays]=useState(config&&config.prep_days!=null?String(config.prep_days):'');
+  var [estHours,setEstHours]=useState(config&&config.estimated_hours!=null?String(config.estimated_hours):'');
   var [columns,setColumns]=useState(config?(config.columns||[]):[{key:'data_recv',label:'Data Rcvd'},{key:'done',label:'Completed'}]);
   var [dueDates,setDueDates]=useState(config&&config.due_dates&&config.due_dates.length>0?config.due_dates.map(function(d){return{label:d.label||'Due',day:d.day||'',month:d.month||'',month_offset:d.month_offset!=null?d.month_offset:1,monthly_map:d.monthly_map||null,quarterly_map:d.quarterly_map||null};}):config&&config.due_day?[{label:'Due',day:config.due_day,month:config.due_month||'',month_offset:1,monthly_map:null,quarterly_map:null}]:[]);
   var [clientFields,setClientFields]=useState(config?(config.client_fields||[]):[]);
@@ -4143,7 +4144,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
     setSaving(true);
     var firstDue=dueDates.length>0?dueDates[0]:null;
     var payload={
-      org_id:orgId, name:name.trim(), frequency:frequency, worksheet_group:worksheetGroup.trim()||null, prep_days:prepDays!==''&&prepDays!==null?Number(prepDays):null,
+      org_id:orgId, name:name.trim(), frequency:frequency, worksheet_group:worksheetGroup.trim()||null, prep_days:prepDays!==''&&prepDays!==null?Number(prepDays):null, estimated_hours:estHours!==''&&estHours!==null?Number(estHours):null,
       columns:columns.map(function(c){return{key:c.key,label:c.label.trim(),type:c.type||'checkbox',options:c.options||''};}),
       due_day:firstDue&&firstDue.day?Number(firstDue.day):null,
       due_month:firstDue&&firstDue.month?Number(firstDue.month):null,
@@ -4203,6 +4204,14 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>days before due date</span>
             </div>
             <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Tasks for this work type appear in My Work this many days before the due date. Leave blank to always show. <b>Examples:</b> ITR → 90, Audit → 60, GST → 10, TDS → 15.</div>
+          </div>
+          <div style={{marginBottom:14}}>
+            <label style={LBL}>Estimated Hours <span style={{fontWeight:400,textTransform:'none'}}>(optional)</span></label>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <input type="number" min="0" max="9999" step="0.5" value={estHours} onChange={function(e){setEstHours(e.target.value);}} style={Object.assign({},INP,{width:80})} placeholder="—"/>
+              <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>hours budgeted per task</span>
+            </div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Budgeted effort for one task of this work type. Logged time (from “→ Log”) is compared against it to show actual-vs-estimate and realization.</div>
           </div>
           <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(245,158,11,0.05)'}}>
             <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
@@ -10244,6 +10253,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   var [clients,setClients]=useState(_ebc.clients||[]);
   var [members,setMembers]=useState(_ebc.members||[]);
   var [stageSince,setStageSince]=useState(_ebc.stageSince||{}); // row_id -> last stage/status change ts (aging)
+  var [timeActual,setTimeActual]=useState(_ebc.timeActual||{}); // row_id -> actual logged hours
   var [groupBy,setGroupBy]=useState('status'); // 'status' | 'worktype'
   var [assigneeFilter,setAssigneeFilter]=useState('all'); // 'all' | 'mine' | userId
   var [clientQuery,setClientQuery]=useState('');
@@ -10276,7 +10286,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
         membersData=rp.data||[];
         setMembers(membersData);
       }
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date,created_at').eq('org_id',org.id).limit(5000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,current_stage,completed_at,data,start_date,created_at,estimated_hours').eq('org_id',org.id).limit(5000);
       if(rr.error){showToast('Failed to load board: '+rr.error.message,'err');return;}
       setRows(rr.data||[]);
       var rw=await supabase.from('worksheets').select('id,work_type,period_label,frequency,period_year,period_month').eq('org_id',org.id).limit(1000);
@@ -10287,7 +10297,11 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
       var smap={};
       try{var reev=await supabase.from('worksheet_row_stage_events').select('row_id,moved_at').eq('org_id',org.id).order('moved_at',{ascending:false}).limit(20000);(reev.data||[]).forEach(function(ev){if(!smap[ev.row_id])smap[ev.row_id]=ev.moved_at;});}catch(_){}
       setStageSince(smap);
-      _erpBoardCache[org.id]={rows:rr.data||[],worksheets:rw.data||[],clients:rc.data||[],members:membersData,stageSince:smap};
+      // Actual logged hours per task (time logs linked via worksheet_row_id).
+      var amap={};
+      try{var rta=await supabase.from('attendance_time_logs').select('worksheet_row_id,hours,minutes').eq('org_id',org.id).not('worksheet_row_id','is',null).limit(50000);(rta.data||[]).forEach(function(t){if(!t.worksheet_row_id)return;amap[t.worksheet_row_id]=(amap[t.worksheet_row_id]||0)+(Number(t.hours)||0)+(Number(t.minutes)||0)/60;});}catch(_){}
+      setTimeActual(amap);
+      _erpBoardCache[org.id]={rows:rr.data||[],worksheets:rw.data||[],clients:rc.data||[],members:membersData,stageSince:smap,timeActual:amap};
     }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
@@ -10380,6 +10394,12 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
     var d=Math.floor((Date.now()-new Date(base).getTime())/86400000);
     return d>=0?d:null;
   }
+  // Budgeted hours for a row: per-task override, else the work-type default.
+  function estFor(r){
+    if(r.estimated_hours!=null)return Number(r.estimated_hours);
+    var ws=wsMap[r.worksheet_id];var cfg=ws&&(workTypeConfigs||[]).find(function(c){return c.name===ws.work_type;});
+    return cfg&&cfg.estimated_hours!=null?Number(cfg.estimated_hours):null;
+  }
 
   function Card(r,i){
     var c=clientMap[r.client_id]||{};
@@ -10406,6 +10426,7 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
       </div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8}}>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{assignee?assignee.name||assignee.email:'Unassigned'}</div>
+        {(function(){var act=timeActual[r.id]||0;var est=estFor(r);if(act<=0&&est==null)return null;var a=Math.round(act*10)/10;var over=est!=null&&act>est+0.001;return<span title={'Logged '+a+'h'+(est!=null?' of '+est+'h budgeted':' (no estimate set)')} style={{fontSize:10,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:over?'#EF4444':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>⏱{a}h{est!=null?'/'+est+'h':''}</span>;})()}
         {r.due_date&&<div style={{fontSize:10,fontWeight:600,fontFamily:"'JetBrains Mono',monospace",color:overdue?'#EF4444':'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{overdue?'⚠ ':''}{r.due_date}</div>}
       </div>
       <div style={{marginTop:6,display:'flex',gap:4}}>
