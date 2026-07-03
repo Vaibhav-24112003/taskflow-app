@@ -10254,12 +10254,18 @@ function ErpBoardModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,orgDe
   var [members,setMembers]=useState(_ebc.members||[]);
   var [stageSince,setStageSince]=useState(_ebc.stageSince||{}); // row_id -> last stage/status change ts (aging)
   var [timeActual,setTimeActual]=useState(_ebc.timeActual||{}); // row_id -> actual logged hours
-  var [groupBy,setGroupBy]=useState('status'); // 'status' | 'worktype'
-  var [assigneeFilter,setAssigneeFilter]=useState('all'); // 'all' | 'mine' | userId
-  var [clientQuery,setClientQuery]=useState('');
-  var [hideCompleted,setHideCompleted]=useState(true);
-  var [deptFilter,setDeptFilter]=useState('all');
+  // Saved view: restore last-used filters for this org (persisted below), so they
+  // survive navigation instead of resetting every time the board is reopened.
+  var _ebFilterKey='tf_erpboard_filters_'+org.id;
+  var _ebf=(function(){try{return JSON.parse(localStorage.getItem(_ebFilterKey)||'{}')||{};}catch(_){return{};}})();
+  var [groupBy,setGroupBy]=useState(_ebf.groupBy||'status'); // 'status' | 'worktype'
+  var [assigneeFilter,setAssigneeFilter]=useState(_ebf.assigneeFilter||'all'); // 'all' | 'mine' | userId
+  var [clientQuery,setClientQuery]=useState(_ebf.clientQuery||'');
+  var [hideCompleted,setHideCompleted]=useState(_ebf.hideCompleted!=null?_ebf.hideCompleted:true);
+  var [deptFilter,setDeptFilter]=useState(_ebf.deptFilter||'all');
   var [toast,setToast]=useState(null);
+  useEffect(function(){try{localStorage.setItem(_ebFilterKey,JSON.stringify({groupBy:groupBy,assigneeFilter:assigneeFilter,clientQuery:clientQuery,hideCompleted:hideCompleted,deptFilter:deptFilter}));}catch(_){}},[groupBy,assigneeFilter,clientQuery,hideCompleted,deptFilter,org.id]);
+  useEffect(function(){var f;try{f=JSON.parse(localStorage.getItem('tf_erpboard_filters_'+org.id)||'{}')||{};}catch(_){f={};}setGroupBy(f.groupBy||'status');setAssigneeFilter(f.assigneeFilter||'all');setClientQuery(f.clientQuery||'');setHideCompleted(f.hideCompleted!=null?f.hideCompleted:true);setDeptFilter(f.deptFilter||'all');/* eslint-disable-next-line */},[org.id]);
   var [dragId,setDragId]=useState(null);
   var [dragOverCol,setDragOverCol]=useState(null);
   var wfHier=workflowHierarchy||[];
