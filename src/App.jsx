@@ -18265,6 +18265,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   var [expandedId,setExpandedId]=useState(null);
   var [logEntryId,setLogEntryId]=useState(null);
   var [logForm,setLogForm]=useState({client_id:'',work_type:'',hours:1,minutes:0,notes:''});
+  var [planCommentText,setPlanCommentText]=useState({}); // entry.id -> draft comment text
   var [clients,setClients]=useState([]);
   var [loggingId,setLoggingId]=useState(null);
   var [showDoneInPlan,setShowDoneInPlan]=useState(false); // hide completed plan entries by default
@@ -18537,7 +18538,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     }
     if(wsSourceIds.length>0){
       // Filter wsRows by org to prevent cross-org data leaking through daily_plans
-      var rwrQ=supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments').in('id',wsSourceIds);
+      var rwrQ=supabase.from('worksheet_rows').select('id,worksheet_id,client_id,org_id,status,due_date,due_label,data,comments,comments_thread').in('id',wsSourceIds);
       if(org)rwrQ=rwrQ.eq('org_id',org.id);
       var rwr=await rwrQ;
       (rwr.data||[]).forEach(function(w){wsRowMap[w.id]=w;});
@@ -18636,6 +18637,29 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   async function updateNote(planId,note){
     await supabase.from('daily_plans').update({note}).eq('id',planId);
     setPlan(function(p){return p.map(function(r){return r.id===planId?Object.assign({},r,{note}):r;});});
+  }
+
+  // Edit a worksheet-row task's status directly from the Plan Today card.
+  async function updatePlanWsStatus(entry,newStatus){
+    var it=entry.item;if(!it||it._kind!=='wsrow')return;
+    var rowId=it._id;
+    setPlan(function(p){return p.map(function(r){return (r.item&&r.item._kind==='wsrow'&&r.item._id===rowId)?Object.assign({},r,{item:Object.assign({},r.item,{_status:normalizeWsStatus(newStatus),_raw:Object.assign({},r.item._raw,{status:newStatus})})}):r;});});
+    var res=await supabase.from('worksheet_rows').update({status:newStatus}).eq('id',rowId);
+    if(res.error)showToast('Status update failed','err');else showToast('Status updated');
+  }
+
+  // Post a comment on a worksheet-row task from the Plan Today card.
+  async function postPlanComment(entry,text){
+    if(!text||!text.trim())return;
+    var it=entry.item;if(!it||it._kind!=='wsrow')return;
+    var rowId=it._id;
+    var authorName=cu.name||cu.user_metadata?.full_name||(cu.email||'').split('@')[0]||'User';
+    var newC={id:'c_'+Date.now(),author_id:cu.id,author_name:authorName,text:text.trim(),created_at:new Date().toISOString()};
+    var thread=((it._raw&&it._raw.comments_thread)||[]).concat([newC]);
+    setPlan(function(p){return p.map(function(r){return (r.item&&r.item._kind==='wsrow'&&r.item._id===rowId)?Object.assign({},r,{item:Object.assign({},r.item,{_raw:Object.assign({},r.item._raw,{comments_thread:thread})})}):r;});});
+    setPlanCommentText(function(pp){var n=Object.assign({},pp);delete n[entry.id];return n;});
+    var res=await supabase.from('worksheet_rows').update({comments_thread:thread}).eq('id',rowId);
+    if(res.error)showToast('Comment failed','err');
   }
 
   async function updateTimeBlock(planId,time_block){
@@ -18827,7 +18851,12 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
                     {/* Source kind badge */}
                     <span style={{fontSize:9,fontWeight:700,color:isWsRow?'#8b5cf6':'#3b82f6',background:isWsRow?'rgba(139,92,246,0.12)':'rgba(59,130,246,0.12)',borderRadius:4,padding:'1px 6px',textTransform:'uppercase',letterSpacing:'0.04em'}}>{isWsRow?'Worksheet':'Task'}</span>
                     <span style={{fontSize:10,fontWeight:700,color:pColor,background:pColor+'18',borderRadius:4,padding:'1px 7px',textTransform:'capitalize'}}>{item._priority}</span>
-                    <span style={{fontSize:10,fontWeight:600,color:STATUS_COLOR[item._status]||'#94a3b8',background:(STATUS_COLOR[item._status]||'#94a3b8')+'18',borderRadius:4,padding:'1px 7px'}}>{item._status}</span>
+                    {isWsRow&&!isReadOnly
+                      ?<select value={(item._raw&&item._raw.status)||'pending'} onClick={function(e){e.stopPropagation();}} onChange={function(e){e.stopPropagation();updatePlanWsStatus(entry,e.target.value);}}
+                        title="Change status" style={{fontSize:10,fontWeight:700,color:STATUS_COLOR[item._status]||'#94a3b8',background:(STATUS_COLOR[item._status]||'#94a3b8')+'18',border:'1px solid '+((STATUS_COLOR[item._status]||'#94a3b8')+'55'),borderRadius:6,padding:'1px 6px',outline:'none',cursor:'pointer',fontFamily:'inherit'}}>
+                        <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
+                      </select>
+                      :<span style={{fontSize:10,fontWeight:600,color:STATUS_COLOR[item._status]||'#94a3b8',background:(STATUS_COLOR[item._status]||'#94a3b8')+'18',borderRadius:4,padding:'1px 7px'}}>{item._status}</span>}
                     {ws&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>{ws.icon} {ws.name}</span>}
                     {isWsRow&&item._client_name&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>👤 {item._client_name}</span>}
                     {isWsRow&&item._work_type&&<span style={{fontSize:10,color:'var(--tf-text-sub)',background:'var(--tf-surface-hov)',borderRadius:4,padding:'1px 7px'}}>📄 {item._work_type}{item._period?' · '+item._period:''}</span>}
@@ -18886,6 +18915,37 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
                   </div>
                 </div>}
                 {cl.length===0&&!item._description&&!showLogForm&&!isWsRow&&<div style={{fontSize:12,color:'var(--tf-text-sub)',fontStyle:'italic'}}>No checklist items.</div>}
+
+                {/* Comments — worksheet-row tasks only */}
+                {isWsRow&&<div style={{marginTop:12,borderTop:'1px solid var(--tf-border)',paddingTop:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Discussion {((item._raw&&item._raw.comments_thread)||[]).length>0&&<span style={{fontWeight:500,textTransform:'none',letterSpacing:0}}>({(item._raw.comments_thread||[]).length})</span>}</div>
+                  {((item._raw&&item._raw.comments_thread)||[]).map(function(c){
+                    var initial=(c.author_name||'?')[0].toUpperCase();
+                    var ts=new Date(c.created_at);
+                    var tsStr=ts.toLocaleDateString('en-IN',{day:'2-digit',month:'short'})+' '+ts.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+                    return<div key={c.id} style={{display:'flex',gap:8,marginBottom:10}}>
+                      <div style={{width:24,height:24,borderRadius:12,background:'rgba(14,42,71,0.15)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#0e2a47'}}>{initial}</div>
+                      <div style={{flex:1}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:2}}>
+                          <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{c.author_name||'User'}</span>
+                          <span style={{fontSize:10,color:'var(--tf-text-sub)'}}>{tsStr}</span>
+                        </div>
+                        <div style={{fontSize:12,color:'var(--tf-text)',lineHeight:1.55,whiteSpace:'pre-wrap'}}>{c.text}</div>
+                      </div>
+                    </div>;
+                  })}
+                  {!isReadOnly&&<div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                    <div style={{width:24,height:24,borderRadius:12,background:'rgba(14,42,71,0.15)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#0e2a47'}}>{(cu.name||cu.email||'?')[0].toUpperCase()}</div>
+                    <div style={{flex:1}}>
+                      <textarea value={planCommentText[entry.id]||''} onChange={function(e){var v=e.target.value;setPlanCommentText(function(pp){return Object.assign({},pp,{[entry.id]:v});});}}
+                        onKeyDown={function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();postPlanComment(entry,planCommentText[entry.id]||'');}}}
+                        placeholder="Add a comment… (Enter to post)"
+                        style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'6px 9px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit',resize:'none',minHeight:34,boxSizing:'border-box'}}/>
+                      {(planCommentText[entry.id]||'').trim()&&<button onClick={function(){postPlanComment(entry,planCommentText[entry.id]||'');}}
+                        style={{marginTop:4,background:'#0e2a47',border:'none',borderRadius:6,padding:'3px 12px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Post</button>}
+                    </div>
+                  </div>}
+                </div>}
 
                 {/* Log form */}
                 {showLogForm&&<div style={{background:'rgba(14,42,71,0.06)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:10,padding:'12px 14px',marginTop:cl.length>0?12:0}}>
