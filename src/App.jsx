@@ -10851,6 +10851,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   var [dateFilter,setDateFilter]=useState('all');
   var [dashView,setDashView]=useState('board'); // 'list' | 'board' | 'calendar' | 'grid' | 'urgency'
   var [calMonthOffset,setCalMonthOffset]=useState(0); // 0=current month, -1=prev, +1=next …
+  var [dashCalSel,setDashCalSel]=useState(null); // YYYY-MM-DD selected day in calendar view (detail panel)
   var [editingDueDateId,setEditingDueDateId]=useState(null); // row.id whose due date is being edited inline
   var [planOpen,setPlanOpen]=useState(false); // Plan My Day side panel — collapsed by default to give the board full width
   var [viewMemberId,setViewMemberId]=useState(cu.id); // member whose worklist we're viewing
@@ -11956,7 +11957,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 var dayDeadlines=deadlineMap[dStr]||[];
                 var load=dayRows.length+dayDeadlines.length; // workload-heat intensity (real due count)
                 var heatBg=load>=6?'rgba(239,68,68,0.13)':load>0?'rgba(47,107,255,'+Math.min(0.06+load*0.04,0.20)+')':'var(--tf-panel)';
-                return<div key={i} style={{minHeight:88,background:isT?'rgba(47,107,255,0.10)':heatBg,border:'1px solid '+(isT?'#2F6BFF':dayDeadlines.length?'rgba(244,165,42,0.45)':'var(--tf-border)'),borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3}}>
+                var isSel=dStr===dashCalSel;
+                return<div key={i} onClick={function(){setDashCalSel(isSel?null:dStr);}} title="Click to see this day's tasks"
+                  style={{minHeight:88,background:isT?'rgba(47,107,255,0.10)':heatBg,border:'1px solid '+(isSel?'#2F6BFF':isT?'#2F6BFF':dayDeadlines.length?'rgba(244,165,42,0.45)':'var(--tf-border)'),boxShadow:isSel?'0 0 0 2px rgba(47,107,255,0.35)':'none',borderRadius:8,padding:6,opacity:inMonth?1:0.4,display:'flex',flexDirection:'column',gap:3,cursor:'pointer'}}>
                   <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                     <div style={{fontSize:11,fontWeight:isT?800:600,color:isT?'#2F6BFF':'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{dd.getDate()}</div>
                     {load>0&&<span title={load+' due'} style={{fontSize:9,fontWeight:800,fontFamily:"'JetBrains Mono',monospace",color:load>=6?'#EF4444':'#2F6BFF',background:load>=6?'rgba(239,68,68,0.14)':'rgba(47,107,255,0.14)',borderRadius:999,padding:'0 5px',minWidth:14,textAlign:'center'}}>{load}</span>}
@@ -11970,8 +11973,8 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   {dayRows.slice(0,3).map(function(r){
                     var rd=r.data||{};var c=clientMap[r.client_id]||{};
                     var isOver=r.due_date<todayStr;
-                    return<div key={r.id} onClick={function(){toggleExpand(r.id);}} title={(rd.__title||c.display_name||c.name||'Task')+(c.name?(' — '+(c.display_name||c.name)):'')}
-                      style={{fontSize:10,fontWeight:600,padding:'2px 5px',background:isOver?'rgba(239,68,68,0.08)':'rgba(14,42,71,0.1)',color:isOver?'#ef4444':'#0e2a47',borderRadius:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',cursor:'pointer'}}>
+                    return<div key={r.id} title={(rd.__title||c.display_name||c.name||'Task')+(c.name?(' — '+(c.display_name||c.name)):'')}
+                      style={{fontSize:10,fontWeight:600,padding:'2px 5px',background:isOver?'rgba(239,68,68,0.08)':'rgba(14,42,71,0.1)',color:isOver?'#ef4444':'#0e2a47',borderRadius:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {rd.__title||c.display_name||c.name||'Task'}
                     </div>;
                   })}
@@ -11979,6 +11982,49 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                 </div>;
               })}
             </div>
+            {dashCalSel&&(function(){
+              var selRows=(monthRows[dashCalSel]||[]).slice().sort(function(a,b){return (a.status==='completed'?1:0)-(b.status==='completed'?1:0);});
+              var selDl=deadlineMap[dashCalSel]||[];
+              var selDate=new Date(dashCalSel+'T00:00:00');
+              var isPast=dashCalSel<todayStr;
+              return<div style={{marginTop:14,background:'var(--tf-panel)',border:'1px solid #2F6BFF',borderRadius:12,overflow:'hidden',boxShadow:'0 6px 20px rgba(47,107,255,0.12)'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',background:'linear-gradient(135deg,rgba(47,107,255,0.10),rgba(20,199,192,0.08))',borderBottom:'1px solid var(--tf-border)'}}>
+                  <div style={{display:'flex',alignItems:'baseline',gap:8}}>
+                    <span style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>{selDate.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:isPast?'#ef4444':'var(--tf-text-sub)'}}>{selRows.length} task{selRows.length!==1?'s':''}{isPast&&selRows.length>0?' · overdue':''}</span>
+                  </div>
+                  <button onClick={function(){setDashCalSel(null);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,width:26,height:26,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
+                </div>
+                <div style={{padding:'8px 10px'}}>
+                  {selDl.map(function(dl,di){var dlc=dl.daysLeft<=3?'#ef4444':dl.daysLeft<=7?'#f59e0b':'#8b5cf6';return<div key={'sdl'+di} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',marginBottom:6,background:dlc+'12',borderLeft:'3px solid '+dlc,borderRadius:6}}><span style={{fontSize:12}}>⚖</span><span style={{fontSize:12,fontWeight:700,color:dlc}}>{dl.name}</span><span style={{fontSize:10,color:'var(--tf-text-sub)',marginLeft:'auto'}}>Statutory deadline</span></div>;})}
+                  {selRows.length===0&&selDl.length===0&&<div style={{padding:'18px 10px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12,fontStyle:'italic'}}>No tasks due on this day.</div>}
+                  {selRows.map(function(r){
+                    var rd=r.data||{};var c=clientMap[r.client_id]||{};var ws=wsMap[r.worksheet_id]||{};
+                    var aId=rd.__assignee||(function(){var k=Object.keys(rd).find(function(k){return k.indexOf('__h_')===0;});return k?rd[k]:null;})();
+                    var am=aId?orgMembers.find(function(m){return m.id===aId;}):null;
+                    var pr=rd.__priority||'medium';
+                    var done=r.status==='completed';
+                    return<div key={r.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderBottom:'1px solid var(--tf-border)',opacity:done?0.6:1}}>
+                      <div style={{width:3,alignSelf:'stretch',borderRadius:2,background:pr==='urgent'?'#ef4444':pr==='high'?'#f59e0b':pr==='low'?'#94a3b8':'#3b82f6',flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textDecoration:done?'line-through':'none'}}>{rd.__title||c.display_name||c.name||'Task'}</div>
+                        <div style={{fontSize:10,color:'var(--tf-text-sub)',display:'flex',gap:8,marginTop:2,flexWrap:'wrap'}}>
+                          {c.name&&<span style={{fontWeight:600,color:'#2F6BFF'}}>{c.display_name||c.name}</span>}
+                          {ws.work_type&&<span>{ws.work_type}</span>}
+                          {am&&<span>👤 {(am.name||am.email||'').split('@')[0].split(' ')[0]}</span>}
+                        </div>
+                      </div>
+                      <select value={r.status||'pending'} onChange={function(e){updateStatus(r.id,e.target.value);}}
+                        style={{background:'transparent',border:'1px solid',borderColor:SC[r.status||'pending'],borderRadius:20,padding:'2px 8px',color:SC[r.status||'pending'],fontSize:10,fontWeight:700,cursor:'pointer',outline:'none',textTransform:'capitalize',flexShrink:0}}>
+                        <option value="pending">Pending</option><option value="in_progress">In Progress</option><option value="under_review">Under Review</option><option value="completed">Completed</option>
+                      </select>
+                      <button onClick={function(){toggleMyDay(r.id);}} title={planTodayIds.includes(r.id)?'Remove from Plan Today':'Add to Plan Today'}
+                        style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:planTodayIds.includes(r.id)?'#f59e0b':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,flexShrink:0}}>☀</button>
+                    </div>;
+                  })}
+                </div>
+              </div>;
+            })()}
             {noDate.length>0&&<div style={{marginTop:14,padding:'10px 12px',background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10}}>
               <div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>No due date ({noDate.length})</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
