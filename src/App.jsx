@@ -1422,7 +1422,57 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
   </div>;
 }
 
-function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
+// ── Profile editor — lets a user set their display name (used for comments,
+// avatars, assignee labels everywhere). Writes profiles.name + auth metadata. ──
+function ProfileEditModal({cu,onClose,onSaved}){
+  var [name,setName]=useState(cu.name||cu.user_metadata?.full_name||(cu.email||'').split('@')[0]||'');
+  var [saving,setSaving]=useState(false);
+  var [err,setErr]=useState(null);
+  async function save(){
+    var nm=name.trim();
+    if(!nm){setErr('Name cannot be empty');return;}
+    setSaving(true);setErr(null);
+    try{
+      await upsertProfile({id:cu.id,email:cu.email,name:nm,avatar_url:cu.user_metadata?.avatar_url||null});
+      try{await supabase.auth.updateUser({data:{full_name:nm}});}catch(_){}
+      setSaving(false);
+      if(onSaved)onSaved();
+    }catch(e){setSaving(false);setErr(e.message||'Could not save');}
+  }
+  var LBL={display:'block',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5};
+  var INP={width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'};
+  return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1200,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'80px 16px'}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+    <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:440,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+      <div style={{padding:'18px 22px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <span style={{width:28,height:28,borderRadius:9,background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}}>👤</span>
+          <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>Your Profile</h3>
+        </div>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,width:30,height:30,color:'var(--tf-text-sub)',cursor:'pointer',fontSize:16,fontWeight:700}}>×</button>
+      </div>
+      <div style={{padding:'18px 22px',display:'flex',flexDirection:'column',gap:14}}>
+        <div>
+          <label style={LBL}>Display Name</label>
+          <input autoFocus type="text" value={name} onChange={function(e){setName(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter')save();}} placeholder="e.g., Vaibhav Bhoite" style={INP}/>
+          <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:5}}>This name appears on your comments, task assignments and avatar across the app — for you and your teammates.</div>
+        </div>
+        <div>
+          <label style={LBL}>Email</label>
+          <input type="text" value={cu.email||''} disabled style={Object.assign({},INP,{opacity:0.6,cursor:'not-allowed'})}/>
+          <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:5}}>Email is tied to your login and can't be changed here.</div>
+        </div>
+        {err&&<div style={{fontSize:12,color:'#ef4444',fontWeight:600}}>{err}</div>}
+      </div>
+      <div style={{padding:'14px 22px',borderTop:'1px solid var(--tf-border)',display:'flex',justifyContent:'flex-end',gap:8}}>
+        <button onClick={onClose} disabled={saving} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text)',cursor:saving?'not-allowed':'pointer',fontSize:12,fontWeight:700}}>Cancel</button>
+        <button onClick={save} disabled={saving} style={{background:saving?'var(--tf-surface)':'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'9px 20px',color:saving?'var(--tf-text-sub)':'#fff',cursor:saving?'not-allowed':'pointer',fontSize:12,fontWeight:800}}>{saving?'Saving…':'Save'}</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onProfileUpdated}){
   const [workspaces,setWorkspaces]=useState([]);const [activeWsId,setActiveWsId]=useState(null)
   const [orgs,setOrgs]=useState([])
   const [activeOrg,setActiveOrg]=useState(null)
@@ -1447,6 +1497,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
   const [fPriority,setFPriority]=useState('');const [search,setSearch]=useState('')
   const [loading,setLoading]=useState(true);const [toastData,setToastData]=useState(null)
   const [showUserMenu,setShowUserMenu]=useState(false);const [showWsMenu,setShowWsMenu]=useState(false)
+  const [showProfileEdit,setShowProfileEdit]=useState(false)
   const [showTransferOwner,setShowTransferOwner]=useState(false)
   const [lightMode,setLightMode]=useState(()=>{
     // First-time users land in light mode; choice is persisted on toggle.
@@ -1853,8 +1904,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         {showUserMenu&&<div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:220,boxShadow:G.shadowLg,backdropFilter:G.blur,WebkitBackdropFilter:G.blur,overflow:'hidden',zIndex:300}}>
           <div style={{padding:'12px 14px',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:10,alignItems:'center'}}>
             <Avatar user={curUser} size={32}/>
-            <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cu.email}</div></div>
+            <div><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{cu.name||cu.user_metadata?.full_name||(cu.email||'').split('@')[0]}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{cu.email}</div></div>
           </div>
+          <button onClick={()=>{setShowUserMenu(false);setShowProfileEdit(true)}} style={{display:'flex',alignItems:'center',gap:8,width:'100%',padding:'10px 14px',background:'none',border:'none',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',color:'var(--tf-text)',fontSize:13,textAlign:'left',fontFamily:G.font}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>👤 Edit profile</button>
           {pendingInvites.length>0&&<div style={{borderBottom:'1px solid var(--tf-border)'}}>
             <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:'#8fa5be',textTransform:'uppercase',letterSpacing:'0.06em'}}>Pending Invitations</div>
             {pendingInvites.map(inv=>{const ws=inv.workspace;const rgb=hexRgb(ws?.color||'#0e2a47');return<div key={inv.id} style={{padding:'8px 12px',borderTop:`1px solid rgba(${rgb},0.08)`}}>
@@ -1872,6 +1924,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites}){
         </div>}
       </div>
     </nav>
+
+    {showProfileEdit&&<ProfileEditModal cu={cu} onClose={()=>setShowProfileEdit(false)} onSaved={function(){setShowProfileEdit(false);if(onProfileUpdated)onProfileUpdated();}}/>}
 
     {/* CONTENT */}
     {adminModule==='users'&&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><UsersAdmin/></Suspense>}
@@ -5660,7 +5714,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     if(!text||!text.trim())return;
     var row=rows.find(function(r){return r.id===rowId;});
     if(!row)return;
-    var authorName=cu.name||cu.email||'User';
+    var authorName=cu.name||cu.user_metadata?.full_name||(cu.email||'').split('@')[0]||'User';
     var newC={id:Date.now()+'',author_id:cu.id,author_name:authorName,text:text.trim(),created_at:new Date().toISOString()};
     var thread=(row.comments_thread||[]).concat([newC]);
     await supabase.from('worksheet_rows').update({comments_thread:thread}).eq('id',rowId);
@@ -11095,7 +11149,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
   async function addDashComment(rowId,text){
     if(!(text||'').trim())return;
     var row=rows.find(function(r){return r.id===rowId;});if(!row)return;
-    var newC={id:'c_'+Date.now(),author_id:cu.id,author_name:cu.name||cu.email||'User',text:text.trim(),created_at:new Date().toISOString()};
+    var newC={id:'c_'+Date.now(),author_id:cu.id,author_name:cu.name||cu.user_metadata?.full_name||(cu.email||'').split('@')[0]||'User',text:text.trim(),created_at:new Date().toISOString()};
     var thread=(row.comments_thread||[]).concat([newC]);
     await supabase.from('worksheet_rows').update({comments_thread:thread}).eq('id',rowId);
     setRows(function(prev){return prev.map(function(r){return r.id===rowId?Object.assign({},r,{comments_thread:thread}):r;});});
@@ -19122,14 +19176,23 @@ export default function App(){
   const [inviteToken,setInviteToken]=useState(null)
   const [signInLoading,setSignInLoading]=useState(false)
   const initRef=useRef(false);const authIdRef=useRef(null)
+  // Editable display-name profile row for the signed-in user — merged onto `cu`
+  // so comments/avatars everywhere show the name they set, not their email.
+  const [profileRow,setProfileRow]=useState(null)
 
   // Check for invite token in URL
   useEffect(()=>{const p=new URLSearchParams(window.location.hash.replace('#','?')||window.location.search);const t=p.get('invite');if(t){setInviteToken(t);window.history.replaceState({},'',window.location.pathname)}},[])
+
+  const loadMyProfile=useCallback(async(id)=>{
+    if(!id)return
+    try{const{data}=await supabase.from('profiles').select('id,name,email,avatar_url').eq('id',id).single();if(data)setProfileRow(data)}catch(e){}
+  },[])
 
   const handleAuth=async user=>{
     authIdRef.current=user.id
     try{
       await upsertProfile({id:user.id,email:user.email,name:user.user_metadata?.full_name||(user.email||'').split('@')[0],avatar_url:user.user_metadata?.avatar_url||null})
+      loadMyProfile(user.id)
       // If arrived via invite token, accept it using server-side function
       if(inviteToken){
         await acceptInvitationByToken(inviteToken)
@@ -19198,5 +19261,6 @@ export default function App(){
   const handleSignIn=async()=>{setSignInLoading(true);try{await signInWithGoogle()}catch(e){console.error(e);setSignInLoading(false)}}
   if(loading)return<BrandLoader dark fullscreen label="Loading…"/>
   if(!session)return<Suspense fallback={<div style={{minHeight:'100vh',background:'#f5f7fa',display:'flex',alignItems:'center',justifyContent:'center',color:'#5c6b87',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif"}}><div style={{textAlign:'center'}}><div style={{width:44,height:44,borderRadius:13,background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px',boxShadow:'0 6px 24px rgba(47,107,255,0.4)'}}><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M4.5 12.5 10 18 20 6.5" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/></svg></div><div style={{fontSize:13}}>Loading…</div></div></div>}><LandingPage onSignIn={handleSignIn} loading={signInLoading}/></Suspense>
-  return<ErrorBoundary><TaskFlowApp cu={session.user} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)}/></ErrorBoundary>
+  const cuEnriched=Object.assign({},session.user,{name:(profileRow&&profileRow.name)||session.user.user_metadata?.full_name||(session.user.email||'').split('@')[0]})
+  return<ErrorBoundary><TaskFlowApp cu={cuEnriched} allProfiles={[]} onSignOut={onSignOut} pendingInvites={pendingInvites} refreshInvites={()=>refreshInvites(session.user.email)} onProfileUpdated={()=>loadMyProfile(session.user.id)}/></ErrorBoundary>
 }
