@@ -18335,8 +18335,9 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
       _client_name:clientName,
       _work_type:workType,
       _period:period,
-      _description:row.comments||'',
-      _checklist:null,
+      _description:(d.__description&&String(d.__description).trim())||row.comments||'',
+      _contact:d.__contact||'',
+      _checklist:(Array.isArray(d.__checklist)&&d.__checklist.length>0)?d.__checklist:null,
       _raw:row
     };
   }
@@ -18668,11 +18669,20 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   }
 
   async function toggleChecklistItem(taskId,itemIdx,currentDone){
-    var entry=plan.find(function(p){return p.item&&p.item._kind==='task'&&p.item._id===taskId;});
-    if(!entry||!entry.item||entry.item._kind!=='task')return;
+    var entry=plan.find(function(p){return p.item&&p.item._id===taskId;});
+    if(!entry||!entry.item)return;
+    var kind=entry.item._kind;
     var newChecklist=(entry.item._checklist||[]).map(function(c,i){return i===itemIdx?Object.assign({},c,{done:!currentDone}):c;});
-    await supabase.from('tasks').update({checklist:newChecklist}).eq('id',taskId);
-    setPlan(function(p){return p.map(function(r){return r.item&&r.item._kind==='task'&&r.item._id===taskId?Object.assign({},r,{item:Object.assign({},r.item,{_checklist:newChecklist})}):r;});});
+    if(kind==='task'){
+      await supabase.from('tasks').update({checklist:newChecklist}).eq('id',taskId);
+      setPlan(function(p){return p.map(function(r){return r.item&&r.item._kind==='task'&&r.item._id===taskId?Object.assign({},r,{item:Object.assign({},r.item,{_checklist:newChecklist})}):r;});});
+    }else{
+      // Worksheet-row checklist lives in data.__checklist — merge and persist.
+      var curData=(entry.item._raw&&entry.item._raw.data)||{};
+      var newData=Object.assign({},curData,{__checklist:newChecklist});
+      setPlan(function(p){return p.map(function(r){return r.item&&r.item._kind==='wsrow'&&r.item._id===taskId?Object.assign({},r,{item:Object.assign({},r.item,{_checklist:newChecklist,_raw:Object.assign({},r.item._raw,{data:newData})})}):r;});});
+      await supabase.from('worksheet_rows').update({data:newData}).eq('id',taskId);
+    }
   }
 
   async function handleDrop(dropIdx){
@@ -18885,6 +18895,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
               {/* Expanded section */}
               {isExpanded&&<div onClick={function(e){e.stopPropagation();}} style={{marginTop:12,marginLeft:30,borderTop:'1px solid var(--tf-border)',paddingTop:12}}>
                 {item._description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:10,lineHeight:1.6,whiteSpace:'pre-wrap'}}>{item._description}</div>}
+                {item._contact&&<div style={{fontSize:12,color:'var(--tf-text)',marginBottom:10,display:'flex',alignItems:'center',gap:6}}><span>📞</span><span style={{fontWeight:600}}>{item._contact}</span></div>}
 
                 {/* Worksheet row data fields */}
                 {isWsRow&&item._raw&&item._raw.data&&<div style={{marginBottom:10}}>
