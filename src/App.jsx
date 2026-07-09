@@ -4220,7 +4220,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
-  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'},{id:'sop',label:'SOP'+(sopSteps.length?' ('+sopSteps.length+')':'')},{id:'pipeline',label:'Pipeline'+(stages.length?' ('+stages.length+')':'')}];
+  var TABS=[{id:'basic',label:'Basic'},{id:'columns',label:'Columns'},{id:'duedates',label:'Due Dates'},{id:'clientfields',label:'Client Fields'},{id:'sop',label:'SOP'+(sopSteps.length?' ('+sopSteps.length+')':'')},{id:'pipeline',label:'Stages'+(stages.length?' ('+stages.length+')':'')}];
 
   return<div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
     <div style={{background:'var(--tf-bg)',borderRadius:16,width:'100%',maxWidth:560,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 80px rgba(0,0,0,0.4)'}}>
@@ -4240,6 +4240,8 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
           <div style={{marginBottom:14}}>
             <label style={LBL}>Frequency</label>
             <select value={frequency} onChange={function(e){setFrequency(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="yearly">Yearly</option>
@@ -4492,10 +4494,10 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
 
         {tab==='pipeline'&&<div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-            <label style={Object.assign({},LBL,{marginBottom:0})}>Pipeline Stages</label>
+            <label style={Object.assign({},LBL,{marginBottom:0})}>Stages of Work</label>
             <button onClick={addStage} style={{background:'rgba(14,42,71,0.1)',border:'1px solid rgba(14,42,71,0.25)',borderRadius:6,padding:'3px 10px',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:600}}>+ Add Stage</button>
           </div>
-          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>Define the stages clients move through for this work type. Team can drag/move clients between stages in Pipeline view.</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>Define the stages clients move through for this work type. Team can drag/move clients between stages in the Stages view.</div>
           <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap'}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',alignSelf:'center'}}>Presets:</span>
             {[{id:'itr',label:'ITR (9 stages)'},{id:'audit',label:'Audit (7 stages)'},{id:'gst',label:'GST (4 stages)'}].map(function(p){return<button key={p.id} onClick={function(){applyStagePreset(p.id);}} style={{background:'rgba(99,102,241,0.08)',border:'1px solid rgba(99,102,241,0.2)',borderRadius:6,padding:'3px 9px',color:'#2F6BFF',cursor:'pointer',fontSize:11,fontWeight:600}}>{p.label}</button>;})}
@@ -4705,8 +4707,20 @@ function computeDeadlinesForMonth(configs, calYear, calMonth) {
   return results.filter(function(r){var k=r.name+r.date.toISOString().slice(0,10);if(seen.has(k))return false;seen.add(k);return true;});
 }
 
-function getPeriodLabel(freq, year, month, quarter){
+// Monday of the week containing `d` (weeks are Mon–Sun, matching the app's calendars).
+function _mondayOf(d){var x=new Date(d.getFullYear(),d.getMonth(),d.getDate());var dow=x.getDay();var off=dow===0?6:dow-1;x.setDate(x.getDate()-off);return x;}
+// Fallback stages used in the Stages / Funnel views when a work type has none configured.
+var DEFAULT_STAGES=[{key:'pending',label:'Pending',color:'#94a3b8'},{key:'in_progress',label:'In Progress',color:'#3b82f6'},{key:'under_review',label:'Review',color:'#f59e0b'},{key:'completed',label:'Completed',color:'#22c55e'}];
+function getPeriodLabel(freq, year, month, quarter, ref){
   if(freq==='once')     return 'One-time';
+  if(freq==='daily'){
+    var dd=ref instanceof Date?ref:new Date();
+    return dd.getDate()+' '+MONTHS[dd.getMonth()]+' '+dd.getFullYear();
+  }
+  if(freq==='weekly'){
+    var mo=_mondayOf(ref instanceof Date?ref:new Date());
+    return 'Week of '+mo.getDate()+' '+MONTHS[mo.getMonth()]+' '+mo.getFullYear();
+  }
   if(freq==='monthly'){
     // year = FY start year. month 4-12 fall in 'year', month 1-3 fall in 'year+1'
     var calYear=month>=4?year:year+1;
@@ -4725,6 +4739,8 @@ function getCurrentPeriod(freq){
   // Indian FY: Apr-Mar. FY start year: Apr 2025 → 2025, Jan 2026 → 2025
   var fy=m>=4?y:y-1;
   if(freq==='once')      return {year:fy,month:null,quarter:null};
+  if(freq==='daily')     return {year:fy,month:m,quarter:null,ref:now};
+  if(freq==='weekly')    return {year:fy,month:null,quarter:null,ref:now};
   if(freq==='monthly')   return {year:fy,month:m,quarter:null};
   if(freq==='quarterly'){
     var q=m>=4&&m<=6?1:m>=7&&m<=9?2:m>=10&&m<=12?3:4;
@@ -5651,7 +5667,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     var targetCfg=classifiableConfigs.find(function(c){return c.name===newWorkType;});
     var freq=targetCfg?targetCfg.frequency:'once';
     var p=getCurrentPeriod(freq);
-    var label=getPeriodLabel(freq,p.year,p.month,p.quarter);
+    var label=getPeriodLabel(freq,p.year,p.month,p.quarter,p.ref);
     var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',newWorkType).eq('period_label',label).maybeSingle();
     var targetWs=rw.data;
     if(!targetWs){
@@ -5850,6 +5866,8 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   }
 
   var cfg=activeType&&WS_TYPE_CONFIGS[activeType]?WS_TYPE_CONFIGS[activeType]:{frequency:'monthly',cols:[]};
+  // Stages/Funnel views fall back to default stages when the work type defines none.
+  var effStages=(cfg.stages&&cfg.stages.length>0)?cfg.stages:DEFAULT_STAGES;
   var typeClients=clients.filter(function(c){
     var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
     return wts.some(function(t){return t.trim()===activeType;});
@@ -6258,16 +6276,12 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       </div>}
 
       {/* Pipeline Kanban View */}
-      {wsView==='pipeline'&&(!cfg.stages||cfg.stages.length===0)&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'36px 24px',textAlign:'center'}}>
-        <div style={{fontSize:32,marginBottom:12}}>⬛</div>
-        <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No pipeline stages configured for {activeType}</div>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Stages view.</div>
-      </div>}
-      {wsView==='pipeline'&&cfg.stages&&cfg.stages.length>0&&<div style={{overflowX:'auto',paddingBottom:12}}>
+      {wsView==='pipeline'&&<div style={{overflowX:'auto',paddingBottom:12}}>
+        {(!cfg.stages||cfg.stages.length===0)&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10,padding:'7px 11px',background:'rgba(47,107,255,0.06)',border:'1px solid rgba(47,107,255,0.2)',borderRadius:8}}>Showing <b>default stages</b> (Pending · In Progress · Review · Completed). Add custom stages in <b>Master Data → Work Types → Edit → Stages</b>.</div>}
         <div style={{display:'flex',gap:12,minWidth:'max-content'}}>
           {(function(){
-            var noStageRows=filteredRows.filter(function(r){return !r.current_stage||!cfg.stages.find(function(s){return s.key===r.current_stage;});});
-            var allCols=[{key:'__none',label:'Not Started',color:'#64748b',rows:noStageRows}].concat(cfg.stages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#0e2a47',rows:filteredRows.filter(function(r){return r.current_stage===st.key;})};}));
+            var noStageRows=filteredRows.filter(function(r){return !r.current_stage||!effStages.find(function(s){return s.key===r.current_stage;});});
+            var allCols=[{key:'__none',label:'Not Started',color:'#64748b',rows:noStageRows}].concat(effStages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#0e2a47',rows:filteredRows.filter(function(r){return r.current_stage===st.key;})};}));
             return allCols.map(function(col){
               return<div key={col.key} style={{width:230,flexShrink:0}}
                 onDragOver={function(e){e.preventDefault();}}
@@ -6310,17 +6324,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       </div>}
 
       {/* Funnel Summary View */}
-      {wsView==='funnel'&&(!cfg.stages||cfg.stages.length===0)&&<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'36px 24px',textAlign:'center'}}>
-        <div style={{fontSize:32,marginBottom:12}}>◇</div>
-        <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No pipeline stages configured for {activeType}</div>
-        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Go to <b>Master Data → Work Types → Edit → Pipeline tab</b> to add stages and enable the Summary view.</div>
-      </div>}
-      {wsView==='funnel'&&cfg.stages&&cfg.stages.length>0&&<div>
+      {wsView==='funnel'&&<div>
+        {(!cfg.stages||cfg.stages.length===0)&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:12,padding:'7px 11px',background:'rgba(47,107,255,0.06)',border:'1px solid rgba(47,107,255,0.2)',borderRadius:8}}>Showing <b>default stages</b>. Add custom stages in <b>Master Data → Work Types → Edit → Stages</b>.</div>}
         <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
           {(function(){
             var total=filteredRows.length||1;
-            var noStage=filteredRows.filter(function(r){return !r.current_stage||!cfg.stages.find(function(s){return s.key===r.current_stage;});}).length;
-            var cols=[{key:'__none',label:'Not Started',color:'#64748b',count:noStage}].concat(cfg.stages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#0e2a47',count:filteredRows.filter(function(r){return r.current_stage===st.key;}).length};}));
+            var noStage=filteredRows.filter(function(r){return !r.current_stage||!effStages.find(function(s){return s.key===r.current_stage;});}).length;
+            var cols=[{key:'__none',label:'Not Started',color:'#64748b',count:noStage}].concat(effStages.map(function(st){return{key:st.key,label:st.label,color:st.color||'#0e2a47',count:filteredRows.filter(function(r){return r.current_stage===st.key;}).length};}));
             return cols.map(function(col,i){
               var pct=Math.round(col.count/total*100);
               var barW=Math.max(20,pct);
@@ -6798,11 +6808,11 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           </div>
           <div style={{padding:'16px 20px'}}>
             {/* Stage selector */}
-            {cfg.stages&&cfg.stages.length>0&&<div style={{marginBottom:16}}>
+            {effStages&&effStages.length>0&&<div style={{marginBottom:16}}>
               <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:7}}>Stage</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                 <button onClick={function(){moveToStage(pRow.id,null);setPipelineDetailRow(function(p){return Object.assign({},p,{current_stage:null});});}} style={{background:!pRow.current_stage?'#64748b':'transparent',border:'1px solid #64748b',borderRadius:20,padding:'4px 12px',color:!pRow.current_stage?'#fff':'#64748b',cursor:'pointer',fontSize:11,fontWeight:700}}>Not Started</button>
-                {cfg.stages.map(function(s){var isActive=pRow.current_stage===s.key;return<button key={s.key} onClick={function(){moveToStage(pRow.id,s.key);setPipelineDetailRow(function(p){return Object.assign({},p,{current_stage:s.key});});}} style={{background:isActive?s.color||'#0e2a47':'transparent',border:'1px solid '+(s.color||'#0e2a47'),borderRadius:20,padding:'4px 12px',color:isActive?'#fff':s.color||'#0e2a47',cursor:'pointer',fontSize:11,fontWeight:700}}>{s.label}</button>;})}
+                {effStages.map(function(s){var isActive=pRow.current_stage===s.key;return<button key={s.key} onClick={function(){moveToStage(pRow.id,s.key);setPipelineDetailRow(function(p){return Object.assign({},p,{current_stage:s.key});});}} style={{background:isActive?s.color||'#0e2a47':'transparent',border:'1px solid '+(s.color||'#0e2a47'),borderRadius:20,padding:'4px 12px',color:isActive?'#fff':s.color||'#0e2a47',cursor:'pointer',fontSize:11,fontWeight:700}}>{s.label}</button>;})}
               </div>
             </div>}
             {/* Meta */}
@@ -11203,7 +11213,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
     var freq=cfg?cfg.frequency:'once';
     var effectiveName=wtName||'Unclassified';
     var p=getCurrentPeriod(freq);
-    var label=getPeriodLabel(freq,p.year,p.month,p.quarter);
+    var label=getPeriodLabel(freq,p.year,p.month,p.quarter,p.ref);
     var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',effectiveName).eq('period_label',label).maybeSingle();
     if(rw.data)return rw.data;
     var ins=await supabase.from('worksheets').insert({
@@ -18396,7 +18406,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
     var freq=cfg?cfg.frequency:'once';
     var effectiveName=wtName||'Unclassified';
     var p=getCurrentPeriod(freq);
-    var label=getPeriodLabel(freq,p.year,p.month,p.quarter);
+    var label=getPeriodLabel(freq,p.year,p.month,p.quarter,p.ref);
     var rw=await supabase.from('worksheets').select('*').eq('org_id',org.id).eq('work_type',effectiveName).eq('period_label',label).maybeSingle();
     if(rw.data)return rw.data;
     var ins=await supabase.from('worksheets').insert({org_id:org.id,work_type:effectiveName,period_label:label,period_year:p.year,period_month:freq==='monthly'?p.month:null,period_quarter:freq==='quarterly'?p.quarter:null,frequency:freq,created_by:cu.id}).select().single();
