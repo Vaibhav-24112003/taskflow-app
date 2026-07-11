@@ -4144,6 +4144,7 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [sopSteps,setSopSteps]=useState(config&&config.sop_steps?config.sop_steps.map(function(s){return{title:s.title||'',description:s.description||'',link:s.link||''};}):[]);
   var [stages,setStages]=useState(config&&config.stages&&config.stages.length>0?config.stages.map(function(s){return{key:s.key||'s_'+Date.now(),label:s.label||'',color:s.color||'#0e2a47'};}): []);
   var [isItrWorktype,setIsItrWorktype]=useState(config?!!config.is_itr_worktype:false);
+  var [autoCarry,setAutoCarry]=useState(config?config.auto_carry_assignments!==false:true);
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
@@ -4208,7 +4209,8 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       stages:stages.filter(function(s){return s.label.trim();}).map(function(s,i){return{key:s.key,label:s.label.trim(),color:s.color||'#0e2a47',order:i};}),
       is_active:config?config.is_active:true,
       sort_order:config?config.sort_order:99,
-      is_itr_worktype:isItrWorktype
+      is_itr_worktype:isItrWorktype,
+      auto_carry_assignments:autoCarry
     };
     var result;
     if(isEdit){result=await updateWorkTypeConfig(config.id,payload);}
@@ -4268,6 +4270,15 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>hours budgeted per task</span>
             </div>
             <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Budgeted effort for one task of this work type. Logged time (from “→ Log”) is compared against it to show actual-vs-estimate and realization.</div>
+          </div>
+          <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(47,107,255,0.05)'}}>
+            <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
+              <input type="checkbox" checked={autoCarry} onChange={function(e){setAutoCarry(e.target.checked);}} style={{width:16,height:16,marginTop:2,cursor:'pointer',flexShrink:0}}/>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>🔁 Auto-assign each cycle</div>
+                <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>New periods automatically inherit the team (assignee, reviewer, all roles) from the most recent prior period for each client — no manual “Copy from”. Only fills blank rows; never overwrites an assignment you’ve changed.</div>
+              </div>
+            </label>
           </div>
           <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(245,158,11,0.05)'}}>
             <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
@@ -5398,16 +5409,22 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       var existingClientIds=[...new Set(existingRows.map(function(r){return r.client_id;}))];
       var missing=typeClients.filter(function(c){return !existingClientIds.includes(c.id);});
 
+      // Rolling assignments: pre-fill new rows with the team from the latest prior period.
+      var carryMap={};
+      if((missing.length>0||dueDateList.length>1)&&cfg.auto_carry_assignments!==false){
+        carryMap=await getCarryAssignments();
+      }
+
       // Build new rows for missing clients
       var newRows=[];
       if(missing.length>0){
         if(dueDateList.length<=1){
           var dd=dueDateList[0]||null;
-          missing.forEach(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{}};if(dd){r.due_date=dd.date;r.due_label=dd.label;var sd=computeStartDate(dd.date);if(sd)r.start_date=sd;}newRows.push(r);});
+          missing.forEach(function(c){var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:Object.assign({},carryMap[c.id]||{})};if(dd){r.due_date=dd.date;r.due_label=dd.label;var sd=computeStartDate(dd.date);if(sd)r.start_date=sd;}newRows.push(r);});
         }else{
           missing.forEach(function(c){
             dueDateList.forEach(function(dd){
-              var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label};
+              var r={worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:Object.assign({},carryMap[c.id]||{}),due_date:dd.date,due_label:dd.label};
               var sd=computeStartDate(dd.date);if(sd)r.start_date=sd;
               newRows.push(r);
             });
@@ -5422,7 +5439,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         typeClients.forEach(function(c){
           dueDateList.forEach(function(dd){
             if(!existingKeys[c.id+'_'+dd.label]){
-              newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:{},due_date:dd.date,due_label:dd.label});
+              newRows.push({worksheet_id:ws.id,client_id:c.id,org_id:org.id,data:Object.assign({},carryMap[c.id]||{}),due_date:dd.date,due_label:dd.label});
             }
           });
         });
@@ -5453,6 +5470,30 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       // Reset copy-from state when period changes
       setShowCopyFrom(false);setCopyFromPeriods([]);setSelCopyPeriod(null);setCopyFromMap(null);
     }
+  }
+
+  // Rolling/sticky assignments: build a client_id → {assignee keys} map from the
+  // most recent prior period(s) for this work type, so new-cycle rows auto-inherit
+  // the team without a manual "Copy from". Only fills; never overwrites.
+  async function getCarryAssignments(){
+    try{
+      var hierKeys=wfHierarchy.length>0?wfHierarchy.map(function(h){return'__h_'+h.key;}):['__assignee','__reviewer'];
+      var rw=await supabase.from('worksheets').select('id,period_year,period_month,period_quarter').eq('org_id',org.id).eq('work_type',activeType).neq('period_label',periodLabel).order('period_year',{ascending:false}).order('period_month',{ascending:false}).order('period_quarter',{ascending:false}).limit(4);
+      var wsList=rw.data||[]; if(!wsList.length)return {};
+      var rank={}; wsList.forEach(function(w,i){rank[w.id]=i;});
+      var rr=await supabase.from('worksheet_rows').select('worksheet_id,client_id,data').in('worksheet_id',wsList.map(function(w){return w.id;})).limit(4000);
+      var byClient={};
+      (rr.data||[]).forEach(function(r){
+        var d=r.data||{}; var assigned={};
+        hierKeys.forEach(function(k){if(d[k])assigned[k]=d[k];});
+        if(d.__assignee&&!assigned.__assignee)assigned.__assignee=d.__assignee;
+        if(!Object.keys(assigned).length)return;
+        var rk=rank[r.worksheet_id];
+        if(byClient[r.client_id]===undefined||rk<byClient[r.client_id].rank)byClient[r.client_id]={rank:rk,assigned:assigned};
+      });
+      var map={}; Object.keys(byClient).forEach(function(cid){map[cid]=byClient[cid].assigned;});
+      return map;
+    }catch(e){return {};}
   }
 
   async function openCopyFrom(){
