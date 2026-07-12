@@ -17832,6 +17832,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             {MODULES.map(function(m){
               var tourAttr={'data-tour':'tour-'+m.id};
               var mTint=MODULE_TINT[m.id]||'#2F6BFF';
+              var mLocked=(m.id==='comms'||m.id==='billing')&&!hasModule(m.id); // paid add-ons
               return<button key={m.id} onClick={function(){openModule(m);}} {...tourAttr}
                 style={{textAlign:'left',padding:20,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,cursor:'pointer',position:'relative',transition:'transform 0.16s, border-color 0.16s, box-shadow 0.16s',fontFamily:'inherit'}}
                 onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor=mTint;e.currentTarget.style.boxShadow='0 10px 30px -18px rgba(14,42,71,0.35)';}}
@@ -17840,6 +17841,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
                 <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
                   {m.label}
                   {m.soon&&<span style={{fontSize:9,fontWeight:700,color:'#f59e0b',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:3,padding:'1px 5px',letterSpacing:'0.06em'}}>PREVIEW</span>}
+                  {mLocked&&<span title="Paid add-on — not included in the free plan" style={{fontSize:9,fontWeight:800,color:'#0EA5A0',background:'rgba(20,199,192,0.1)',border:'1px solid rgba(20,199,192,0.35)',borderRadius:3,padding:'1px 6px',letterSpacing:'0.06em'}}>🔒 ADD-ON</span>}
                 </div>
                 <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.5,marginBottom:m.tabs&&m.tabs.length>1?12:0}}>{m.desc}</div>
                 {m.tabs&&m.tabs.length>1&&<div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
@@ -17927,6 +17929,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
                   {m.id==='chat'&&chatUnread>0&&!sidebarOpen&&<span style={{position:'absolute',top:-4,right:-5,minWidth:8,height:8,borderRadius:8,background:'#ef4444',border:'1.5px solid #0e1929',boxShadow:'0 0 0 1px rgba(239,68,68,0.4)'}}/>}
                 </span>
                 {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#ffffff':'#c7d2e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{m.label}</span>}
+                {sidebarOpen&&(m.id==='comms'||m.id==='billing')&&!hasModule(m.id)&&<span title="Paid add-on — free 6-month trial available" style={{flexShrink:0,fontSize:10,opacity:0.7}}>🔒</span>}
                 {m.id==='chat'&&chatUnread>0&&sidebarOpen&&<span style={{flexShrink:0,minWidth:18,height:18,padding:'0 5px',borderRadius:9,background:'#ef4444',color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'JetBrains Mono',monospace"}}>{chatUnread>99?'99+':chatUnread}</span>}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:32,marginBottom:6}}>
