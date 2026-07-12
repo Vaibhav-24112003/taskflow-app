@@ -564,6 +564,8 @@ export default function LandingPage({ onSignIn, loading }) {
         <FAQItem q="Do I need a card to start?" a="No. Sign up free on the Free plan — free forever for up to 25 clients, no card required. Upgrade to Pro or Max whenever your team is ready; switch between monthly and yearly anytime." />
         <FAQItem q="Is my client data secure?" a="Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. The Max plan adds SSO." />
         <FAQItem q="Can clients upload documents themselves?" a="Yes — the Client Portal lets clients respond to document requests and approvals directly, so you stop chasing paperwork over email and WhatsApp." />
+        <FAQItem q="What's free and what's paid?" a="Workspaces (Kanban boards), the WorkZone board and the compliance calendar are free. Practice Hub — Communication (client email & portal) and Billing (invoices & payments) — is a paid add-on on Pro, and it's free for your first 6 months." />
+        <FAQItem q="Will you help me get set up?" a="Yes — onboarding is free. Our team imports your client list, configures your work types and gets your first period live with you. Book a slot from the 'Get onboarding help' button in pricing or the demo section." />
       </section>
 
       {/* TESTIMONIAL */}
@@ -597,7 +599,7 @@ export default function LandingPage({ onSignIn, loading }) {
             <h3>Free</h3>
             <div className="amt">₹0<small>/mo</small></div>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For an individual practitioner starting out.</p>
-            <ul><li>{check}Up to 25 clients</li><li>{check}WorkZone + Stages board</li><li>{check}Compliance calendar &amp; My Work planner</li></ul>
+            <ul><li>{check}Up to 25 clients</li><li>{check}Workspaces — Kanban boards <b style={{color:'#0EA5A0'}}>(free)</b></li><li>{check}WorkZone + Stages board</li><li>{check}Compliance calendar &amp; My Work planner</li></ul>
             <button className="btn btn-ghost" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started free</button>
           </div>
           <div className="plan featured">
@@ -606,7 +608,7 @@ export default function LandingPage({ onSignIn, loading }) {
             <div className="amt">₹{billing === 'yearly' ? '1,249' : '1,499'}<small>/mo</small></div>
             <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹14,990/year — 2 months free' : 'Billed monthly · switch to yearly to save'}</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For a growing firm running work as a team.</p>
-            <ul><li>{check}Everything in Free</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
+            <ul><li>{check}Everything in Free</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Practice Hub — Communication &amp; Billing <b style={{color:'#0EA5A0'}}>(6 months free)</b></li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
             <button className="btn btn-primary" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started</button>
           </div>
           <div className="plan">
@@ -616,6 +618,24 @@ export default function LandingPage({ onSignIn, loading }) {
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For multi-branch practices &amp; advisory groups.</p>
             <ul><li>{check}Everything in Pro</li><li>{check}Unlimited team members</li><li>{check}Multiple branches / offices</li><li>{check}SSO &amp; advanced roles</li><li>{check}Priority support &amp; onboarding</li></ul>
             <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width: '100%', justifyContent: 'center' }}>Talk to sales</button>
+          </div>
+        </div>
+        {/* Practice Hub promo + onboarding help */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 28 }}>
+          <div style={{ background: 'linear-gradient(135deg,rgba(47,107,255,.08),rgba(20,199,192,.08))', border: '1px solid rgba(20,199,192,.3)', borderRadius: 16, padding: '20px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 26, lineHeight: 1 }}>🎁</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>Practice Hub — free for 6 months</div>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.55 }}>Get <b>Communication</b> (client email &amp; portal) and <b>Billing</b> (invoices &amp; payments) free for your first 6 months on Pro. Workspaces (Kanban) stays free forever.</p>
+            </div>
+          </div>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 16, padding: '20px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <span style={{ fontSize: 26, lineHeight: 1 }}>🤝</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>Free onboarding &amp; client migration</div>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 10px', lineHeight: 1.55 }}>New to TaskFlowCo? Our team imports your client list, sets up your work types and gets your first period running — at no cost.</p>
+              <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ fontSize: 13, padding: '8px 16px' }}>Get onboarding help →</button>
+            </div>
           </div>
         </div>
         <p style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 12, marginTop: 22 }}>All prices in ₹, exclude 18% GST · Cancel anytime · Your data stays yours</p>
