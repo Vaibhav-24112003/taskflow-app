@@ -611,8 +611,8 @@ export default function LandingPage({ onSignIn, loading }) {
           </div>
           <div className="plan">
             <h3>Max</h3>
-            <div className="amt">₹{billing === 'yearly' ? '2,916' : '3,499'}<small>/mo</small></div>
-            <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹34,990/year — 2 months free' : 'Billed monthly'}</p>
+            <div className="amt">Custom</div>
+            <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>Tailored to your firm's size &amp; branches</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For multi-branch practices &amp; advisory groups.</p>
             <ul><li>{check}Everything in Pro</li><li>{check}Unlimited team members</li><li>{check}Multiple branches / offices</li><li>{check}SSO &amp; advanced roles</li><li>{check}Priority support &amp; onboarding</li></ul>
             <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width: '100%', justifyContent: 'center' }}>Talk to sales</button>
