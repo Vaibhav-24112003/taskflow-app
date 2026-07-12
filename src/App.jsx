@@ -6303,16 +6303,20 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         </div>
       </div>}
 
-      {/* Summary stats */}
-      {rows.length>0&&<div style={{display:'flex',gap:12,marginBottom:12,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
+      {/* Summary stats — click a counter to filter the grid to the rows still missing it */}
+      {rows.length>0&&<div style={{display:'flex',gap:8,marginBottom:12,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap',alignItems:'center'}}>
         {cfg.cols.map(function(col){
           var ct=col.type||'checkbox';
-          if(ct==='checkbox'){
-            var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
-            return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}</span>;
-          }
-          var filled=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
-          return<span key={col.key}><b style={{color:'var(--tf-text)'}}>{filled}/{rows.length}</b> {col.label} filled</span>;
+          var count=rows.filter(function(r){return r.data&&r.data[col.key];}).length;
+          var pending=rows.length-count;
+          var wantVal=ct==='checkbox'?'unchecked':'__empty';
+          var isActive=filters[col.key]===wantVal;
+          function toggle(){setFilters(function(prev){var n=Object.assign({},prev);if(isActive)delete n[col.key];else n[col.key]=wantVal;return n;});}
+          return<button key={col.key} onClick={toggle} title={isActive?'Showing rows missing '+col.label+' — click to clear':'Show the '+pending+' rows still missing '+col.label}
+            style={{display:'inline-flex',alignItems:'center',gap:5,background:isActive?'rgba(47,107,255,0.12)':'var(--tf-surface)',border:'1px solid '+(isActive?'#2F6BFF':'var(--tf-border)'),borderRadius:20,padding:'3px 10px',cursor:'pointer',fontSize:11,color:isActive?'#2F6BFF':'var(--tf-text-sub)',fontFamily:'inherit'}}>
+            <b style={{color:isActive?'#2F6BFF':'var(--tf-text)'}}>{count}/{rows.length}</b> {col.label}{ct!=='checkbox'?' filled':''}
+            {isActive&&<span style={{fontSize:12,lineHeight:1}}>×</span>}
+          </button>;
         })}
       </div>}
 
