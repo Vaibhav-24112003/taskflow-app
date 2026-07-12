@@ -2549,10 +2549,24 @@ function ClientImportModal({orgId,supabase,onClose,onImported,workTypeConfigs}){
     var url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
     var a=document.createElement('a');a.href=url;a.download='client_import_template.csv';a.click();URL.revokeObjectURL(url);
   }
-  function handleFile(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(ev){var lines=ev.target.result.split(/\r?\n/).filter(function(l){return l.trim();});if(lines.length<2)return;var h=parseRow(lines[0]);var d=lines.slice(1).map(function(l){return parseRow(l);});setCols(h);setRows(d);var am={};h.forEach(function(hh,i){var low=hh.toLowerCase().replace(/[ -]/g,'_');var m=KNOWN.find(function(c){return c===low||c.replace(/_/g,'').includes(low.replace(/_/g,''))||low.replace(/_/g,'').includes(c.replace(/_/g,''));});am[i]=m||'__custom__';});setMapping(am);setStep('preview');};rd.readAsText(f);}
+  function handleFile(e){var f=e.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(ev){var lines=ev.target.result.split(/\r?\n/).filter(function(l){return l.trim();});if(lines.length<2)return;var h=parseRow(lines[0]);var d=lines.slice(1).map(function(l){return parseRow(l);});setCols(h);setRows(d);var am={};h.forEach(function(hh,i){var low=hh.toLowerCase().replace(/[ -]/g,'_');var lowc=low.replace(/_/g,'');var m=KNOWN.find(function(c){return c===low;})||KNOWN.find(function(c){return c.replace(/_/g,'')===lowc;})||KNOWN.find(function(c){var cc=c.replace(/_/g,'');return cc.includes(lowc)||lowc.includes(cc);});am[i]=m||'__custom__';});setMapping(am);setStep('preview');};rd.readAsText(f);}
+  // client_type must match the DB check constraint (lowercase enum). Normalise CSV values.
+  function normClientType(v){
+    if(!v)return 'business';
+    var s=String(v).trim().toLowerCase();
+    if(['business','individual','company','partnership','llp','trust','huf','aop'].indexOf(s)>=0)return s;
+    if(/llp/.test(s))return 'llp';
+    if(/pvt|private|\bltd\b|limited|company|corp|incorp/.test(s))return 'company';
+    if(/partner|\bfirm\b/.test(s))return 'partnership';
+    if(/prop|sole|individual|proprietor|person/.test(s))return 'individual';
+    if(/trust/.test(s))return 'trust';
+    if(/huf/.test(s))return 'huf';
+    if(/aop|association/.test(s))return 'aop';
+    return 'business';
+  }
   async function importAll(){setStep('importing');var user=(await supabase.auth.getUser()).data.user;var ok=0,fail=0;
     var allObjs=[];
-    for(var i=0;i<rows.length;i++){var row=rows[i];var obj={custom_fields:{}};if(orgId)obj.org_id=orgId;if(user)obj.created_by=user.id;cols.forEach(function(co,ci){var t=mapping[ci];if(!t||t==='__skip__')return;var v=row[ci]?row[ci].trim():null;if(t==='work_types'){obj.custom_fields.work_types=v||'';}else if(t==='__custom__'){var cfk=co.toLowerCase().replace(/[^a-z0-9]+/g,'_');obj.custom_fields[cfk]=v;}else if(DB_COLS.indexOf(t)!==-1){obj[t]=v;}else{obj.custom_fields[t]=v;}});if(!obj.name){fail++;continue;}if(!obj.status)obj.status='active';if(!obj.client_type)obj.client_type='business';allObjs.push(obj);}
+    for(var i=0;i<rows.length;i++){var row=rows[i];var obj={custom_fields:{}};if(orgId)obj.org_id=orgId;if(user)obj.created_by=user.id;cols.forEach(function(co,ci){var t=mapping[ci];if(!t||t==='__skip__')return;var v=row[ci]?row[ci].trim():null;if(t==='work_types'){obj.custom_fields.work_types=v||'';}else if(t==='__custom__'){var cfk=co.toLowerCase().replace(/[^a-z0-9]+/g,'_');obj.custom_fields[cfk]=v;}else if(DB_COLS.indexOf(t)!==-1){obj[t]=v;}else{obj.custom_fields[t]=v;}});if(!obj.name){fail++;continue;}obj.client_type=normClientType(obj.client_type);obj.status=obj.status?String(obj.status).trim().toLowerCase():'active';if(obj.pan)obj.pan=String(obj.pan).trim().toUpperCase();if(obj.gstin)obj.gstin=String(obj.gstin).trim().toUpperCase();allObjs.push(obj);}
     var batchSize=50;
     for(var b=0;b<allObjs.length;b+=batchSize){var batch=allObjs.slice(b,b+batchSize);var r=await supabase.from('clients').insert(batch);if(!r.error){ok+=batch.length;}else{console.warn('Batch failed:',r.error.message,'— retrying individually');for(var j=0;j<batch.length;j++){var r2=await supabase.from('clients').insert(batch[j]);if(!r2.error)ok++;else{fail++;console.warn('Row failed:',batch[j].name,r2.error.message);}}}setProgress(Math.round(Math.min(b+batchSize,allObjs.length)/allObjs.length*100));}
     setResults({ok,fail,errMsg:fail>0?'Check browser console (F12) for details':null});setStep('done');}
@@ -2562,7 +2576,39 @@ function ClientImportModal({orgId,supabase,onClose,onImported,workTypeConfigs}){
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'15px 20px',borderBottom:'1px solid var(--tf-border)'}}><h3 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--tf-text)'}}>Import Clients from CSV</h3>{step!=='importing'&&<button onClick={onClose} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:20}}>×</button>}</div>
       <div style={{padding:'16px 20px',overflowY:'auto',flex:1}}>
         {step==='upload'&&<div><div style={{background:'rgba(14,42,71,0.06)',border:'1px dashed rgba(14,42,71,0.35)',borderRadius:10,padding:28,textAlign:'center',marginBottom:16}}><div style={{fontSize:28,marginBottom:10}}>📄</div><div style={{fontWeight:600,color:'var(--tf-text)',marginBottom:6}}>Select CSV File</div><div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Required: name column. All fields auto-mapped including city, state, notes, work types.</div><input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{display:'none'}}/><div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}><button onClick={function(){fileRef.current.click();}} style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'8px 20px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Choose File</button><button onClick={downloadTemplate} style={{background:'transparent',border:'1px solid rgba(14,42,71,0.4)',borderRadius:7,padding:'8px 16px',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:600}}>Download Template CSV</button></div></div><div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'var(--tf-text-sub)'}}><div style={{fontWeight:700,marginBottom:4,color:'var(--tf-text)'}}>Supported Columns</div>name, display_name, client_type, email, phone, city, state, pan, gstin, status, notes, work_types (comma-separated){wtFields.length>0&&<span>, <b>Work Type Fields:</b> {wtFields.map(function(f){return f.label;}).join(', ')}</span>}. Extra columns saved as custom fields.</div></div>}
-        {step==='preview'&&<div><div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:12}}>{rows.length} rows. Map columns:</div><div style={{display:'flex',flexDirection:'column',gap:5,maxHeight:260,overflowY:'auto'}}>{cols.map(function(co,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',borderRadius:7,padding:'7px 10px',border:'1px solid var(--tf-border)'}}><div style={{flex:'0 0 140px',fontSize:12,fontWeight:600,color:'var(--tf-text)'}}>{co}</div><span style={{color:'var(--tf-text-sub)'}}>→</span><select value={mapping[i]||'__skip__'} onChange={function(e){var v=e.target.value;var idx=i;setMapping(function(m){var n=Object.assign({},m);n[idx]=v;return n;});}} style={Object.assign({},INP2,{flex:1})}><option value="__skip__">⊘ Skip</option>{BASE_COLS.map(function(k){return<option key={k} value={k}>{k}</option>;})}<option value="work_types">work_types</option>{wtFields.length>0&&<optgroup label="Work Type Fields">{wtFields.map(function(f){return<option key={f.key} value={f.key}>{f.label}</option>;})}</optgroup>}<option value="__custom__">Custom Field</option></select><div style={{flex:'0 0 80px',fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{rows[0]&&rows[0][i]||'—'}</div></div>;})} </div></div>}
+        {step==='preview'&&<div>
+          <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:10}}><b style={{color:'var(--tf-text)'}}>{rows.length}</b> rows found · match each CSV column to a client field</div>
+          <div style={{border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden'}}>
+            <div style={{maxHeight:320,overflowY:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead><tr style={{background:'var(--tf-surface)',position:'sticky',top:0,zIndex:1}}>
+                  <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--tf-border)'}}>CSV Column</th>
+                  <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--tf-border)'}}>Maps to client field</th>
+                  <th style={{textAlign:'left',padding:'8px 12px',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',borderBottom:'1px solid var(--tf-border)'}}>Sample</th>
+                </tr></thead>
+                <tbody>
+                  {cols.map(function(co,i){
+                    var skipped=(mapping[i]||'__skip__')==='__skip__';
+                    return<tr key={i} style={{borderBottom:'1px solid var(--tf-border)',opacity:skipped?0.55:1}}>
+                      <td style={{padding:'7px 12px',fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap'}}>{co||<span style={{color:'var(--tf-text-sub)',fontStyle:'italic'}}>(blank)</span>}</td>
+                      <td style={{padding:'7px 12px'}}>
+                        <select value={mapping[i]||'__skip__'} onChange={function(e){var v=e.target.value;var idx=i;setMapping(function(m){var n=Object.assign({},m);n[idx]=v;return n;});}} style={Object.assign({},INP2,{width:'100%',minWidth:150,borderColor:skipped?'var(--tf-border)':'#2F6BFF'})}>
+                          <option value="__skip__">⊘ Skip this column</option>
+                          {BASE_COLS.map(function(k){return<option key={k} value={k}>{k}</option>;})}
+                          <option value="work_types">work_types</option>
+                          {wtFields.length>0&&<optgroup label="Work Type Fields">{wtFields.map(function(f){return<option key={f.key} value={f.key}>{f.label}</option>;})}</optgroup>}
+                          <option value="__custom__">Custom field</option>
+                        </select>
+                      </td>
+                      <td style={{padding:'7px 12px',fontSize:11,color:'var(--tf-text-sub)',maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(rows[0]&&rows[0][i])||'—'}</td>
+                    </tr>;
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>💡 <b>client_type</b> values like "Individual", "Pvt Ltd", "Firm" are auto-normalised. Unmatched columns are saved as custom fields.</div>
+        </div>}
         {step==='importing'&&<div style={{textAlign:'center',padding:28}}><div style={{fontSize:24,marginBottom:12}}>⏳</div><div style={{fontWeight:600,fontSize:14,color:'var(--tf-text)',marginBottom:10}}>Importing... {progress}%</div><div style={{background:'var(--tf-border)',borderRadius:99,height:6,overflow:'hidden'}}><div style={{width:progress+'%',height:'100%',background:'#0e2a47',transition:'width 0.3s'}}/></div></div>}
         {step==='done'&&results&&<div style={{textAlign:'center',padding:28}}><div style={{fontSize:32,marginBottom:10}}>✅</div><div style={{fontWeight:700,fontSize:16,color:'var(--tf-text)',marginBottom:6}}>Import Complete</div><div style={{color:'#22c55e',fontWeight:600}}>✓ {results.ok} clients imported</div>{results.fail>0&&<div style={{color:'#ef4444',fontSize:13,marginTop:4}}>✗ {results.fail} failed</div>}{results.errMsg&&<div style={{color:'var(--tf-text-sub)',fontSize:11,marginTop:8}}>{results.errMsg}</div>}</div>}
       </div>
