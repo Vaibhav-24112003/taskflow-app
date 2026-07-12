@@ -351,6 +351,7 @@ export default function LandingPage({ onSignIn, loading }) {
   useEffect(() => { try { localStorage.setItem('tfc-theme', dark ? 'dark' : 'light') } catch (_) {} }, [dark])
   const [launchOpen, setLaunchOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
+  const [billing, setBilling] = useState('yearly') // 'monthly' | 'yearly' — yearly is the default (best value)
   // Trial / sign-in CTAs open the auth modal (Google + email link, incl. admin
   // / domain mailboxes) rather than jumping straight into Google.
   const start = () => setAuthOpen(true)
@@ -393,7 +394,7 @@ export default function LandingPage({ onSignIn, loading }) {
             <h1>Stop juggling. <span className="grad-text">Start flowing.</span></h1>
             <p className="lede">Run your entire practice with total clarity — worksheets, returns, reminders and team workload in one source of truth that never lets a deadline slip.</p>
             <div className="cta-row">
-              <button className="btn btn-primary" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Start free trial'}</button>
+              <button className="btn btn-primary" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Get started free'}</button>
               <button className="btn btn-ghost" onClick={() => setLaunchOpen(true)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 6.5v11l9-5.5z" fill="#2F6BFF" /></svg>Watch demo</button>
             </div>
             <div className="trust">
@@ -560,7 +561,7 @@ export default function LandingPage({ onSignIn, loading }) {
         </div>
         <FAQItem defaultOpen q="Is TaskFlowCo built specifically for CA / CS / CMA firms?" a="Yes. The compliance calendar, work types and worksheets are pre-built for Indian practice work — GST, ITR, ROC and more — so you are productive on day one." />
         <FAQItem q="Can I import my existing client list?" a="Absolutely. Upload an Excel sheet and we map the columns automatically. Most firms import their entire client base in a few minutes." />
-        <FAQItem q="How does the free trial work?" a="Start on the Practice plan free for 14 days — no card required. At the end you can pick a plan or stay on Solo, which is free forever for up to 25 clients." />
+        <FAQItem q="Do I need a card to start?" a="No. Sign up free on the Solo plan — free forever for up to 25 clients, no card required. Upgrade to Practice or Firm whenever your team is ready; switch between monthly and yearly anytime." />
         <FAQItem q="Is my client data secure?" a="Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. The Firm plan adds SSO." />
         <FAQItem q="Can clients upload documents themselves?" a="Yes — the Client Portal lets clients respond to document requests and approvals directly, so you stop chasing paperwork over email and WhatsApp." />
       </section>
@@ -575,34 +576,49 @@ export default function LandingPage({ onSignIn, loading }) {
 
       {/* PRICING */}
       <section className="section wrap" id="pricing">
-        <div style={{ textAlign: 'center', marginBottom: 46 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <span className="eyebrow">Simple pricing</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Plans that scale with your firm</h2>
+          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>One price per firm. Your whole team included.</h2>
+          <p style={{ color: 'var(--text-2)', fontSize: 14, marginTop: 8 }}>No per-user fees. No setup cost. Start free, upgrade when you're ready.</p>
+        </div>
+        {/* Monthly / Yearly toggle */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 34 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 99, padding: 4 }}>
+            {['monthly', 'yearly'].map(cyc => (
+              <button key={cyc} onClick={() => setBilling(cyc)} style={{ border: 'none', cursor: 'pointer', borderRadius: 99, padding: '8px 18px', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 7, background: billing === cyc ? 'var(--grad)' : 'transparent', color: billing === cyc ? '#fff' : 'var(--text-2)', transition: 'all .15s' }}>
+                {cyc === 'monthly' ? 'Monthly' : 'Yearly'}
+                {cyc === 'yearly' && <span style={{ fontSize: 10, fontWeight: 800, background: billing === 'yearly' ? 'rgba(255,255,255,.22)' : 'rgba(20,199,192,.15)', color: billing === 'yearly' ? '#fff' : '#0EA5A0', borderRadius: 99, padding: '2px 7px' }}>Save 2 months</span>}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="price-grid">
           <div className="plan">
             <h3>Solo</h3>
             <div className="amt">₹0<small>/mo</small></div>
-            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For individual practitioners getting started.</p>
-            <ul><li>{check}Up to 25 clients</li><li>{check}WorkZone board</li><li>{check}Compliance calendar</li></ul>
-            <button className="btn btn-ghost" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started</button>
+            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For an individual practitioner starting out.</p>
+            <ul><li>{check}Up to 25 clients</li><li>{check}WorkZone + Stages board</li><li>{check}Compliance calendar &amp; My Work planner</li></ul>
+            <button className="btn btn-ghost" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started free</button>
           </div>
           <div className="plan featured">
             <span className="tag">Most popular</span>
             <h3>Practice</h3>
-            <div className="amt">₹1,499<small>/mo</small></div>
-            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For growing firms with a team.</p>
-            <ul><li>{check}Unlimited clients</li><li>{check}Up to 15 team members</li><li>{check}Analytics &amp; reports</li><li>{check}Client reminders</li></ul>
-            <button className="btn btn-primary" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Start free trial</button>
+            <div className="amt">₹{billing === 'yearly' ? '1,249' : '1,499'}<small>/mo</small></div>
+            <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹14,990/year — 2 months free' : 'Billed monthly · switch to yearly to save'}</p>
+            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For a growing firm running work as a team.</p>
+            <ul><li>{check}Everything in Solo</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
+            <button className="btn btn-primary" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started</button>
           </div>
           <div className="plan">
             <h3>Firm</h3>
-            <div className="amt">Custom</div>
+            <div className="amt">₹{billing === 'yearly' ? '2,916' : '3,499'}<small>/mo</small></div>
+            <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹34,990/year — 2 months free' : 'Billed monthly'}</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For multi-branch practices &amp; advisory groups.</p>
-            <ul><li>{check}Everything in Practice</li><li>{check}SSO &amp; roles</li><li>{check}Priority support</li></ul>
+            <ul><li>{check}Everything in Practice</li><li>{check}Unlimited team members</li><li>{check}Multiple branches / offices</li><li>{check}SSO &amp; advanced roles</li><li>{check}Priority support &amp; onboarding</li></ul>
             <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width: '100%', justifyContent: 'center' }}>Talk to sales</button>
           </div>
         </div>
+        <p style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 12, marginTop: 22 }}>All prices in ₹, exclude 18% GST · Cancel anytime · Your data stays yours</p>
       </section>
 
       {/* CTA BAND */}
@@ -610,7 +626,7 @@ export default function LandingPage({ onSignIn, loading }) {
         <div className="cta-band">
           <h2>Give every deadline a home.</h2>
           <p>Join firms and their teams who run their compliance work on TaskFlowCo. Free to start, no card required.</p>
-          <button className="btn btn-primary" onClick={start} style={{ fontSize: 15.5, padding: '15px 30px' }}>Start free trial</button>
+          <button className="btn btn-primary" onClick={start} style={{ fontSize: 15.5, padding: '15px 30px' }}>Get started free</button>
         </div>
       </section>
 
