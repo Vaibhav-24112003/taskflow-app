@@ -14367,6 +14367,19 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var [tplSubject,setTplSubject]=useState('');
   var [tplBody,setTplBody]=useState('');
   var [editTplId,setEditTplId]=useState(null);
+  // Client reminders state
+  var _remCfg=(org&&org.client_reminder_config)||{};
+  var DEFAULT_REM_SUBJECT='Reminder from {firm}: {work_type} due for {client}';
+  var DEFAULT_REM_BODY='Dear {client},\n\nThis is a friendly reminder from {firm} regarding your upcoming compliance work:\n\n{items}\n\nKindly share the required documents and details at the earliest so we can complete the filing on time. Feel free to reach out if you have any questions.\n\nWarm regards,\n{firm}';
+  var [remSubject,setRemSubject]=useState(_remCfg.subject||DEFAULT_REM_SUBJECT);
+  var [remBody,setRemBody]=useState(_remCfg.body||DEFAULT_REM_BODY);
+  var [remDays,setRemDays]=useState(_remCfg.days_before||7);
+  var [remAuto,setRemAuto]=useState(!!_remCfg.enabled);
+  var [remRows,setRemRows]=useState([]);
+  var [remSel,setRemSel]=useState({});
+  var [remLoading,setRemLoading]=useState(false);
+  var [remSending,setRemSending]=useState(false);
+  var [remLoaded,setRemLoaded]=useState(false);
   // Trails state
   var [commLogs,setCommLogs]=useState([]);
   var [trailClientId,setTrailClientId]=useState(null);
@@ -14852,6 +14865,63 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));
   }
 
+  // ── Client reminders ──────────────────────────────────────────────────
+  async function loadReminderWork(){
+    setRemLoading(true);
+    try{
+      var todayStr=new Date().toISOString().slice(0,10);
+      var maxStr=new Date(Date.now()+(Number(remDays)||7)*86400000).toISOString().slice(0,10);
+      var rw=await supabase.from('worksheets').select('id,work_type,period_label').eq('org_id',org.id).limit(4000);
+      var wsMap={};(rw.data||[]).forEach(function(w){wsMap[w.id]=w;});
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,due_date,status').eq('org_id',org.id).neq('status','completed').not('due_date','is',null).lte('due_date',maxStr).limit(6000);
+      var byClient={};
+      (rr.data||[]).forEach(function(r){
+        var ws=wsMap[r.worksheet_id];if(!ws)return;
+        var c=emailClients.find(function(x){return x.id===r.client_id;});
+        if(!c||!c.email)return;
+        var e=byClient[r.client_id]||(byClient[r.client_id]={client:c,items:[]});
+        e.items.push({row_id:r.id,work_type:ws.work_type,period:ws.period_label,due_date:r.due_date,overdue:r.due_date<todayStr});
+      });
+      var list=Object.keys(byClient).map(function(cid){var e=byClient[cid];e.items.sort(function(a,b){return (a.due_date||'').localeCompare(b.due_date||'');});e.overdueCount=e.items.filter(function(i){return i.overdue;}).length;return e;})
+        .sort(function(a,b){return (b.overdueCount-a.overdueCount)||a.client.name.localeCompare(b.client.name);});
+      setRemRows(list);
+      var sel={};list.forEach(function(x){sel[x.client.id]=true;});setRemSel(sel);
+      setRemLoaded(true);
+    }catch(e){showToast('Failed to load due work','err');}
+    setRemLoading(false);
+  }
+  function mergeRem(tpl,e){
+    var c=e.client;
+    var itemsText=e.items.map(function(it){return '• '+it.work_type+(it.period?' ('+it.period+')':'')+' — due '+it.due_date+(it.overdue?' — OVERDUE':'');}).join('\n');
+    var first=e.items[0]||{};
+    return String(tpl||'').replace(/\{client\}/g,c.display_name||c.name||'').replace(/\{firm\}/g,org.name||'').replace(/\{work_type\}/g,first.work_type||'').replace(/\{due_date\}/g,first.due_date||'').replace(/\{period\}/g,first.period||'').replace(/\{items\}/g,itemsText);
+  }
+  async function sendReminders(){
+    if(!gmailToken){showToast('Connect Gmail (Gmail tab) to send from your firm address','err');return;}
+    var sel=remRows.filter(function(x){return remSel[x.client.id];});
+    if(!sel.length){showToast('Select at least one client','err');return;}
+    if(!remSubject.trim()){showToast('Subject required','err');return;}
+    setRemSending(true);var ok=0,fail=0;
+    for(var i=0;i<sel.length;i++){
+      var e=sel[i];var c=e.client;
+      try{
+        var encoded=buildMimeEmail(c.email,mergeRem(remSubject,e),mergeRem(remBody,e),'','','','','',[]);
+        var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
+        if(res&&res.id){ok++;logComm(c.id,'email_sent',mergeRem(remSubject,e),mergeRem(remBody,e),c.email,'');}else fail++;
+      }catch(err){fail++;}
+    }
+    setRemSending(false);
+    showToast('Sent '+ok+' reminder'+(ok!==1?'s':'')+(fail?' · '+fail+' failed':''),fail&&!ok?'err':'ok');
+  }
+  async function saveRemConfig(nextAuto){
+    var auto=nextAuto===undefined?remAuto:nextAuto;
+    var cfg={enabled:auto,days_before:Number(remDays)||7,subject:remSubject,body:remBody};
+    setRemAuto(auto);
+    var res=await supabase.from('organizations').update({client_reminder_config:cfg}).eq('id',org.id);
+    if(!res.error){if(org)org.client_reminder_config=cfg;showToast(auto?'Auto-reminders ON · settings saved':'Settings saved');}
+    else showToast('Save failed','err');
+  }
+
   function sendSingle(threadId){
     var to=singleTo.trim()||'';
     if(!to&&singleClientId){var c=emailClients.find(function(x){return x.id===singleClientId;});if(c)to=c.email||'';}
@@ -14878,7 +14948,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     <div style={{width:gmailThreePaneActive?185:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0,transition:'width 0.2s'}}>
       <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
         <div style={{display:'flex',gap:4}}>
-          {[{id:'gmail',label:'Gmail',icon:'📧'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'templates',label:'Templates',icon:'📋'}].map(function(t){
+          {[{id:'gmail',label:'Gmail',icon:'📧'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'reminders',label:'Reminders',icon:'🔔'},{id:'templates',label:'Templates',icon:'📋'}].map(function(t){
             var active=activeTab===t.id;
             return<button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{flex:1,padding:'8px 6px',border:'1px solid',borderColor:active?'#0e2a47':'var(--tf-border)',borderRadius:8,background:active?'rgba(14,42,71,0.1)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit',textAlign:'center'}}>{t.icon} {t.label}</button>;
           })}
@@ -14987,6 +15057,17 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             </label>;
           })}
           {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients found.</div>}
+        </>:activeTab==='reminders'?
+        <>
+          <div style={{padding:'12px 14px'}}>
+            <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:8}}>How reminders work</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.6}}>
+              <p style={{margin:'0 0 8px'}}>1. Edit the reminder <b>template</b> (right).</p>
+              <p style={{margin:'0 0 8px'}}>2. <b>Find clients with due work</b> — auto-picks anyone with tasks due soon or overdue.</p>
+              <p style={{margin:'0 0 8px'}}>3. <b>Send now</b> from your Gmail, or flip <b>Auto-send</b> to have the server do it each cycle.</p>
+              <p style={{margin:'8px 0 0',color:'#0EA5A0',fontWeight:600}}>Only clients with an email on file are included.</p>
+            </div>
+          </div>
         </>:
         /* Templates list in left panel */
         <>
@@ -15208,6 +15289,64 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
           </div>}
         </div>
         <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0} style={{background:Object.keys(bulkSelIds).length>0?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0?'#2454D6':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
+      </>:activeTab==='reminders'?<>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Reminders 🔔</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>Email clients about their upcoming &amp; overdue work — sent from your connected Gmail. Use variables <b>{'{client}'}</b>, <b>{'{firm}'}</b>, <b>{'{items}'}</b>, <b>{'{work_type}'}</b>, <b>{'{due_date}'}</b>, <b>{'{period}'}</b>.</div>
+
+        {/* Template */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginBottom:16}}>
+          <div style={{display:'flex',gap:10,alignItems:'flex-end',marginBottom:10,flexWrap:'wrap'}}>
+            <div style={{flex:1,minWidth:220}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Subject</label>
+              <input value={remSubject} onChange={function(e){setRemSubject(e.target.value);}} style={INP}/>
+            </div>
+            <div style={{width:130}}>
+              <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Due within</label>
+              <div style={{display:'flex',alignItems:'center',gap:6}}>
+                <input type="number" min="0" max="120" value={remDays} onChange={function(e){setRemDays(e.target.value);}} style={Object.assign({},INP,{width:60})}/>
+                <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>days</span>
+              </div>
+            </div>
+          </div>
+          <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Message</label>
+          <textarea value={remBody} onChange={function(e){setRemBody(e.target.value);}} rows={7} style={Object.assign({},INP,{resize:'vertical',fontFamily:'inherit',lineHeight:1.5})}/>
+          <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
+            <button onClick={function(){saveRemConfig();}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:700}}>Save template</button>
+            <label style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto',cursor:'pointer',background:remAuto?'rgba(34,197,94,0.1)':'var(--tf-bg)',border:'1px solid '+(remAuto?'rgba(34,197,94,0.4)':'var(--tf-border)'),borderRadius:8,padding:'7px 12px'}}>
+              <input type="checkbox" checked={remAuto} onChange={function(e){saveRemConfig(e.target.checked);}} style={{width:15,height:15,cursor:'pointer'}}/>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:remAuto?'#16a34a':'var(--tf-text)'}}>Auto-send every cycle</div>
+                <div style={{fontSize:10,color:'var(--tf-text-sub)'}}>Server sends these automatically each period. Off = send manually below.</div>
+              </div>
+            </label>
+          </div>
+          {remAuto&&<div style={{fontSize:11,color:'#b45309',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:7,padding:'7px 10px',marginTop:10}}>⚠ Auto-send goes out from <b>no-reply@taskflowco.in</b> (server), not your Gmail. Manual "Send now" uses your Gmail. Ask us to verify your own domain for branded auto-emails.</div>}
+        </div>
+
+        {/* Recipients */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexWrap:'wrap',gap:8}}>
+          <button onClick={loadReminderWork} disabled={remLoading} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:remLoading?'not-allowed':'pointer',fontSize:12,fontWeight:700,opacity:remLoading?0.6:1}}>{remLoading?'Loading…':(remLoaded?'↻ Refresh due work':'Find clients with due work')}</button>
+          {remLoaded&&<div style={{fontSize:12,color:'var(--tf-text-sub)'}}><b style={{color:'var(--tf-text)'}}>{remRows.length}</b> clients · <b style={{color:'var(--tf-text)'}}>{Object.keys(remSel).filter(function(k){return remSel[k];}).length}</b> selected</div>}
+        </div>
+
+        {remLoaded&&(remRows.length===0
+          ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:10,padding:'28px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No clients with due work in the next {remDays} days (or none have an email on file).</div>
+          :<div style={{border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden',marginBottom:16}}>
+            <div style={{maxHeight:300,overflowY:'auto'}}>
+              {remRows.map(function(e){var checked=!!remSel[e.client.id];return<div key={e.client.id} onClick={function(){setRemSel(function(p){return Object.assign({},p,{[e.client.id]:!p[e.client.id]});});}} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderBottom:'1px solid var(--tf-border)',cursor:'pointer',background:checked?'rgba(47,107,255,0.04)':'transparent'}}>
+                <div style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:checked?'#2F6BFF':'var(--tf-border)',background:checked?'#2F6BFF':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{checked&&<span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span>}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{e.client.display_name||e.client.name} <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:400}}>· {e.client.email}</span></div>
+                  <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.items.map(function(it){return it.work_type+(it.overdue?' ⚠':'');}).join(' · ')}</div>
+                </div>
+                {e.overdueCount>0&&<span style={{fontSize:10,fontWeight:800,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'1px 8px',flexShrink:0}}>{e.overdueCount} overdue</span>}
+                <span style={{fontSize:10,color:'var(--tf-text-sub)',flexShrink:0}}>{e.items.length} task{e.items.length!==1?'s':''}</span>
+              </div>;})}
+            </div>
+          </div>)}
+
+        {remLoaded&&remRows.length>0&&<button onClick={sendReminders} disabled={remSending||!gmailToken} title={!gmailToken?'Connect Gmail in the Gmail tab first':''} style={{background:remSending||!gmailToken?'var(--tf-surface)':'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'1px solid',borderColor:remSending||!gmailToken?'var(--tf-border)':'#2454D6',borderRadius:8,padding:'11px 26px',color:remSending||!gmailToken?'var(--tf-text-sub)':'#fff',cursor:remSending||!gmailToken?'not-allowed':'pointer',fontSize:14,fontWeight:700}}>{remSending?'Sending…':'Send reminders now ('+Object.keys(remSel).filter(function(k){return remSel[k];}).length+')'}</button>}
+        {!gmailToken&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Connect Gmail in the <b>Gmail</b> tab to send from your firm's address.</div>}
       </>:
       /* Templates tab — editor on right */
       <>
