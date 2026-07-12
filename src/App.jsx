@@ -14380,6 +14380,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var [remLoading,setRemLoading]=useState(false);
   var [remSending,setRemSending]=useState(false);
   var [remLoaded,setRemLoaded]=useState(false);
+  var [remResult,setRemResult]=useState(null); // {ok,fail} persistent send confirmation
   // Trails state
   var [commLogs,setCommLogs]=useState([]);
   var [trailClientId,setTrailClientId]=useState(null);
@@ -14901,16 +14902,21 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     var sel=remRows.filter(function(x){return remSel[x.client.id];});
     if(!sel.length){showToast('Select at least one client','err');return;}
     if(!remSubject.trim()){showToast('Subject required','err');return;}
-    setRemSending(true);var ok=0,fail=0;
+    setRemSending(true);setRemResult(null);var ok=0,fail=0;
     for(var i=0;i<sel.length;i++){
       var e=sel[i];var c=e.client;
+      var subjM=mergeRem(remSubject,e);
+      var plain=mergeRem(remBody,e);
+      // buildMimeEmail sends text/html — convert newlines to <br> so paragraphs render.
+      var htmlBody='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;max-width:600px;">'+plain.replace(/\n/g,'<br>')+'</div>';
       try{
-        var encoded=buildMimeEmail(c.email,mergeRem(remSubject,e),mergeRem(remBody,e),'','','','','',[]);
+        var encoded=buildMimeEmail(c.email,subjM,htmlBody,'','','','','',[]);
         var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
-        if(res&&res.id){ok++;logComm(c.id,'email_sent',mergeRem(remSubject,e),mergeRem(remBody,e),c.email,'');}else fail++;
+        if(res&&res.id){ok++;logComm(c.id,'email_sent',subjM,plain,c.email,'');}else fail++;
       }catch(err){fail++;}
     }
     setRemSending(false);
+    setRemResult({ok:ok,fail:fail});
     showToast('Sent '+ok+' reminder'+(ok!==1?'s':'')+(fail?' · '+fail+' failed':''),fail&&!ok?'err':'ok');
   }
   async function saveRemConfig(nextAuto){
@@ -15345,8 +15351,14 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             </div>
           </div>)}
 
-        {remLoaded&&remRows.length>0&&<button onClick={sendReminders} disabled={remSending||!gmailToken} title={!gmailToken?'Connect Gmail in the Gmail tab first':''} style={{background:remSending||!gmailToken?'var(--tf-surface)':'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'1px solid',borderColor:remSending||!gmailToken?'var(--tf-border)':'#2454D6',borderRadius:8,padding:'11px 26px',color:remSending||!gmailToken?'var(--tf-text-sub)':'#fff',cursor:remSending||!gmailToken?'not-allowed':'pointer',fontSize:14,fontWeight:700}}>{remSending?'Sending…':'Send reminders now ('+Object.keys(remSel).filter(function(k){return remSel[k];}).length+')'}</button>}
-        {!gmailToken&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Connect Gmail in the <b>Gmail</b> tab to send from your firm's address.</div>}
+        {remLoaded&&remRows.length>0&&<div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          <button onClick={sendReminders} disabled={remSending||!gmailToken} title={!gmailToken?'Connect Gmail in the Gmail tab first':''} style={{background:remSending||!gmailToken?'var(--tf-surface)':'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'1px solid',borderColor:remSending||!gmailToken?'var(--tf-border)':'#2454D6',borderRadius:8,padding:'11px 26px',color:remSending||!gmailToken?'var(--tf-text-sub)':'#fff',cursor:remSending||!gmailToken?'not-allowed':'pointer',fontSize:14,fontWeight:700}}>{remSending?'Sending…':'Send reminders now ('+Object.keys(remSel).filter(function(k){return remSel[k];}).length+')'}</button>
+          {remResult&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:700,color:remResult.fail&&!remResult.ok?'#ef4444':'#16a34a',background:remResult.fail&&!remResult.ok?'rgba(239,68,68,0.08)':'rgba(34,197,94,0.1)',border:'1px solid '+(remResult.fail&&!remResult.ok?'rgba(239,68,68,0.3)':'rgba(34,197,94,0.3)'),borderRadius:8,padding:'8px 14px'}}>
+            <span>{remResult.fail&&!remResult.ok?'✗':'✓'}</span>
+            <span>Sent {remResult.ok} reminder{remResult.ok!==1?'s':''}{remResult.fail?' · '+remResult.fail+' failed':''}</span>
+          </div>}
+        </div>}
+        {!gmailToken&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Connect Gmail in the <b>Gmail</b> tab to send from your firm's address. (If it keeps disconnecting, your admin needs to add <b>taskflowco.in</b> to the Google OAuth "Authorized JavaScript origins".)</div>}
       </>:
       /* Templates tab — editor on right */
       <>
