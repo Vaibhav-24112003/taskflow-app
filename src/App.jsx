@@ -14440,9 +14440,33 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
         setGmailActiveEmail(firstValid.email);
         fetchGmailProfile(firstValid.token);
         fetchGmailThreads(firstValid.token,'INBOX');
+      }else{
+        // Token expired while the tab was closed — silently re-acquire (no click needed)
+        // as soon as Google Identity Services is ready, instead of forcing a reconnect.
+        var last=loaded[loaded.length-1];
+        setGmailActiveEmail(last.email);
+        var tries=0;
+        var iv=setInterval(function(){
+          tries++;
+          if(typeof google!=='undefined'&&google.accounts&&gmailClientId){clearInterval(iv);silentRefreshGmail(last.email);}
+          else if(tries>40){clearInterval(iv);}
+        },500);
       }
     }
   },[]);
+
+  // When the tab regains focus, re-acquire silently if the active token is expired or expiring soon.
+  useEffect(function(){
+    function onVisible(){
+      if(document.visibilityState!=='visible')return;
+      var acc=(loadLocalAccounts()||[]).filter(function(a){return a.email===gmailActiveEmail;})[0]||loadLocalAccounts()[loadLocalAccounts().length-1];
+      if(acc&&(!acc.token||Date.now()>acc.expiry-120000)&&typeof google!=='undefined'&&google.accounts&&gmailClientId){
+        silentRefreshGmail(acc.email);
+      }
+    }
+    document.addEventListener('visibilitychange',onVisible);
+    return function(){document.removeEventListener('visibilitychange',onVisible);};
+  },[gmailActiveEmail]);
 
   // Cleanup auto-refresh timer on unmount
   useEffect(function(){return function(){if(gmailAutoRefreshRef.current)clearTimeout(gmailAutoRefreshRef.current);};},[]);
