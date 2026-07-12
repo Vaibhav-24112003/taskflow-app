@@ -4850,6 +4850,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var [showColMenu,setShowColMenu]=useState(false);
   // Filters
   var [filters,setFilters]=useState({});
+  var [teamEditRow,setTeamEditRow]=useState(null); // row.id whose collapsed "Team" cell popover is open
   // Filter: client name search
   var [filterClient,setFilterClient]=useState('');
   // Mine-only filter: restrict rows to those where current user is assignee or in any hierarchy level
@@ -5924,6 +5925,12 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   // All toggleable columns (dynamic + built-in)
   var hierarchyCols=wfHierarchy.length>0?wfHierarchy.map(function(h){return{key:'__h_'+h.key,label:h.label};}):
     [{key:'__assignee',label:'Assignee'}];
+  // Batch 2b — collapsed "Team" column: visible workflow roles + member/colour lookups.
+  var visHierCols=hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);});
+  var wsMemberById={};(orgMembers||[]).forEach(function(m){wsMemberById[m.id]=m;});
+  function wsMemberLabel(id){var m=wsMemberById[id];return m?(m.name||(m.email||'').split('@')[0]||'Member'):'—';}
+  function wsMemberInitials(id){var n=wsMemberLabel(id);return n==='—'?'?':n.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';}
+  function wsAvatarColor(id){var pal=['#0e2a47','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b','#ef4444'];var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return pal[n%pal.length];}
   var allToggleCols=cfg.cols.map(function(c){return{key:c.key,label:c.label};}).concat(hierarchyCols).concat([{key:'__startdate',label:'Start By'},{key:'__status',label:'Status'},{key:'__comments',label:'Comments'},{key:'__taskcard',label:'Task Card'}]);
   var showStartDate=!hiddenCols.includes('__startdate');
   var showStatus=!hiddenCols.includes('__status');
@@ -5953,12 +5960,14 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     // Assignee filter
     // Hierarchy / assignee filters
     for(var hi=0;hi<hierarchyCols.length;hi++){var hk=hierarchyCols[hi].key;var hf=filters[hk];if(hf&&hf!=='all'){var hv=(row.data||{})[hk]||'';if(hf==='__unassigned'&&hv)return false;if(hf!=='__unassigned'&&hv!==hf)return false;}}
+    // Collapsed "Team" filter: match if ANY visible role holds the chosen member (or none, for Unassigned)
+    if(filters.__team&&filters.__team!=='all'){var _rv=visHierCols.map(function(h){return (row.data||{})[h.key]||'';}).filter(Boolean);if(filters.__team==='__unassigned'){if(_rv.length>0)return false;}else if(_rv.indexOf(filters.__team)<0)return false;}
     // Column filters
     var d=row.data||{};
     var keys=Object.keys(filters);
     for(var i=0;i<keys.length;i++){
       var k=keys[i];
-      if(k==='__status'||k.indexOf('__h_')===0||k==='__assignee')continue;
+      if(k==='__status'||k==='__team'||k.indexOf('__h_')===0||k==='__assignee')continue;
       var fv=filters[k];
       var colDef=cfg.cols.find(function(c){return c.key===k;});
       var ct=colDef&&colDef.type||'checkbox';
@@ -6444,7 +6453,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
           <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing archived rows for {activeType||'this work type'}. Restore puts them back; Delete forever is permanent.</div>
         </div>
       </div>}
-      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',height:'calc(100vh - 240px)',minHeight:240}} onClick={function(){setHeaderFilterOpen(null);}}>
+      <div style={{background:'var(--tf-surface)',borderRadius:12,border:'1px solid var(--tf-border)',overflow:'auto',height:'calc(100vh - 240px)',minHeight:240}} onClick={function(){setHeaderFilterOpen(null);setTeamEditRow(null);}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:400}}>
           <thead style={{position:'sticky',top:0,zIndex:5,boxShadow:'0 2px 6px rgba(0,0,0,0.08)'}}>
             <tr style={{background:'var(--tf-table-header)'}}>
@@ -6465,21 +6474,21 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   {filterClient&&<button onClick={function(){setFilterClient('');setHeaderFilterOpen(null);}} style={{marginTop:6,width:'100%',background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px',color:'#ef4444',cursor:'pointer',fontSize:11}}>Clear</button>}
                 </div>}
               </th>
-              {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hfActive=filters[hc.key]&&filters[hc.key]!=='all';return<th key={hc.key} onClick={function(){toggleSort(hc.key);}} style={{padding:'10px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:sortCol===hc.key?'#0e2a47':'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(14,42,71,0.4)',whiteSpace:'nowrap',minWidth:120,cursor:'pointer',userSelect:'none',position:'relative'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4}}>
-                  {hc.label}
-                  <span style={{fontSize:9,opacity:0.7}}>{sortCol===hc.key?(sortDir==='asc'?'▲':'▼'):'⇅'}</span>
-                  {hfActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
-                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p===hc.key?null:hc.key;});}} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,lineHeight:1,marginLeft:4,cursor:'pointer',padding:'2px 5px',borderRadius:4,background:hfActive?'rgba(245,158,11,0.18)':'rgba(14,42,71,0.12)',color:hfActive?'#f59e0b':'#0e2a47',border:'1px solid '+(hfActive?'rgba(245,158,11,0.35)':'rgba(14,42,71,0.25)'),fontWeight:700}} title="Filter this column">▼</span>
+              {visHierCols.length>0&&(function(){var tfActive=filters.__team&&filters.__team!=='all';return<th style={{padding:'10px 10px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'2px solid rgba(14,42,71,0.4)',whiteSpace:'nowrap',minWidth:150,position:'relative'}}>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  Team
+                  <span style={{fontSize:9,fontWeight:500,textTransform:'none',color:'var(--tf-text-sub)',opacity:0.7}}>({visHierCols.length} roles)</span>
+                  {tfActive&&<span style={{width:6,height:6,borderRadius:'50%',background:'#f59e0b',display:'inline-block'}} title="Filter active"/>}
+                  <span onClick={function(e){e.stopPropagation();setHeaderFilterOpen(function(p){return p==='__team'?null:'__team';});}} style={{display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:11,lineHeight:1,marginLeft:'auto',cursor:'pointer',padding:'2px 5px',borderRadius:4,background:tfActive?'rgba(245,158,11,0.18)':'rgba(14,42,71,0.12)',color:tfActive?'#f59e0b':'#0e2a47',border:'1px solid '+(tfActive?'rgba(245,158,11,0.35)':'rgba(14,42,71,0.25)'),fontWeight:700}} title="Filter by member">▼</span>
                 </div>
-                {headerFilterOpen===hc.key&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:'50%',transform:'translateX(-50%)',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:160,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
-                  <select value={filters[hc.key]||'all'} onChange={function(e){setFilter(hc.key,e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
-                    <option value="all">All {hc.label}s</option>
+                {headerFilterOpen==='__team'&&<div onClick={function(e){e.stopPropagation();}} style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px',minWidth:180,zIndex:200,boxShadow:'0 8px 24px rgba(0,0,0,0.3)'}}>
+                  <select value={filters.__team||'all'} onChange={function(e){setFilter('__team',e.target.value);setHeaderFilterOpen(null);}} style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:'var(--tf-text)',fontSize:12,cursor:'pointer',outline:'none'}}>
+                    <option value="all">All members</option>
                     <option value="__unassigned">Unassigned</option>
                     {orgMembers.map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
                   </select>
                 </div>}
-              </th>;})}
+              </th>;})()}
               {visibleCols.map(function(col){
                 var ct=col.type||'checkbox';var mw=ct==='checkbox'?80:ct==='date'||ct==='time'?110:ct==='select'?120:100;
                 var cfActive=filters[col.key]&&filters[col.key]!=='all';
@@ -6534,7 +6543,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               var wsClDone=(d.__checklist||[]).filter(function(c){return c.done;}).length;
               var wsClTotal=(d.__checklist||[]).length;
               var hasDetails=!!(d.__title||d.__description||d.__contact||wsClTotal>0);
-              var totalCols=2+hierarchyCols.filter(function(h){return !hiddenCols.includes(h.key);}).length+visibleCols.length+(showStartDate?1:0)+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
+              var totalCols=2+(visHierCols.length>0?1:0)+visibleCols.length+(showStartDate?1:0)+(showStatus?1:0)+(showComments?1:0)+(showTaskCard?1:0)+(cfg.frequency==='once'?1:0);
               var isSel=selectedIds.has(row.id);
               var rowBg=allDone?'linear-gradient(rgba(34,197,94,0.04),rgba(34,197,94,0.04)),var(--tf-bg)':ri%2?'linear-gradient(rgba(14,42,71,0.025),rgba(14,42,71,0.025)),var(--tf-bg)':'var(--tf-bg)';
               var selBg='linear-gradient(rgba(99,102,241,0.08),rgba(99,102,241,0.08)),var(--tf-bg)';
@@ -6561,12 +6570,37 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   {client.display_name&&client.display_name!==client.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginLeft:13}}>{client.display_name}</div>}
                   {cfg.frequency==='once'?<div style={{marginTop:2,marginLeft:13}}><input type="date" value={row.due_date||''} onChange={function(e){updateRowDueDate(row.id,e.target.value);}} onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:5,padding:'2px 6px',color:'var(--tf-text)',fontSize:10,outline:'none',fontFamily:'inherit'}}/></div>:row.due_date&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:1,marginLeft:13}}>Due: {new Date(row.due_date).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div>}
                 </td>
-                {hierarchyCols.map(function(hc){if(hiddenCols.includes(hc.key))return null;var hVal=(row.data||{})[hc.key]||'';return<td key={hc.key} style={{padding:'6px 8px',textAlign:'center'}}>
-                  <select value={hVal} onChange={function(e){updateCellData(row.id,hc.key,e.target.value);}}
-                    style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 6px',color:hVal?'var(--tf-text)':'var(--tf-text-sub)',fontSize:11,outline:'none',fontFamily:'inherit',cursor:'pointer',maxWidth:140,WebkitAppearance:'none',MozAppearance:'none',appearance:'none',backgroundImage:'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'8\' height=\'5\' viewBox=\'0 0 8 5\'%3E%3Cpath d=\'M0 0l4 5 4-5z\' fill=\'%230e2a47\'/%3E%3C/svg%3E")',backgroundRepeat:'no-repeat',backgroundPosition:'right 6px center',paddingRight:18}}>
-                    {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'—')}
-                  </select>
-                </td>;})}
+                {visHierCols.length>0&&<td style={{padding:'6px 8px'}} onClick={function(e){e.stopPropagation();}}>
+                  {(function(){
+                    var open=teamEditRow&&teamEditRow.id===row.id;
+                    var assigned=visHierCols.filter(function(hc){return (row.data||{})[hc.key];});
+                    return<>
+                      <div onClick={function(e){if(open){setTeamEditRow(null);return;}var r=e.currentTarget.getBoundingClientRect();var top=Math.min(r.bottom+4,window.innerHeight-260);setTeamEditRow({id:row.id,top:top,left:Math.min(r.left,window.innerWidth-250)});}} title="Click to assign the team"
+                        style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer',borderRadius:8,padding:'3px 6px',minHeight:26,border:'1px solid '+(open?'#2F6BFF':'transparent'),background:open?'rgba(47,107,255,0.06)':'transparent'}}
+                        onMouseEnter={function(e){if(!open)e.currentTarget.style.background='var(--tf-bg)';}}
+                        onMouseLeave={function(e){if(!open)e.currentTarget.style.background='transparent';}}>
+                        {assigned.length===0
+                          ?<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>+ Assign</span>
+                          :assigned.map(function(hc){var uid=(row.data||{})[hc.key];return<span key={hc.key} title={hc.label+': '+wsMemberLabel(uid)} style={{width:22,height:22,borderRadius:'50%',background:wsAvatarColor(uid),display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,color:'#fff',flexShrink:0,marginLeft:-4,border:'1.5px solid var(--tf-surface)'}}>{wsMemberInitials(uid)}</span>;})}
+                        <span style={{fontSize:9,color:'var(--tf-text-sub)',marginLeft:4}}>▾</span>
+                      </div>
+                      {open&&<>
+                        <div onClick={function(){setTeamEditRow(null);}} style={{position:'fixed',inset:0,zIndex:249}}/>
+                        <div style={{position:'fixed',top:teamEditRow.top,left:teamEditRow.left,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 12px',width:230,zIndex:250,boxShadow:'0 10px 30px rgba(0,0,0,0.28)'}}>
+                          <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>Assign team</div>
+                          {visHierCols.map(function(hc){var hVal=(row.data||{})[hc.key]||'';return<div key={hc.key} style={{marginBottom:8}}>
+                            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginBottom:3}}>{hc.label}</div>
+                            <select value={hVal} onChange={function(e){updateCellData(row.id,hc.key,e.target.value);}}
+                              style={{width:'100%',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 8px',color:hVal?'var(--tf-text)':'var(--tf-text-sub)',fontSize:12,outline:'none',fontFamily:'inherit',cursor:'pointer'}}>
+                              {renderGroupedMemberOptions(orgMembers,orgGroups||[],orgGroupMemberships||[],'—')}
+                            </select>
+                          </div>;})}
+                          <button onClick={function(){setTeamEditRow(null);}} style={{width:'100%',marginTop:2,background:'#0e2a47',border:'none',borderRadius:6,padding:'5px 0',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Done</button>
+                        </div>
+                      </>}
+                    </>;
+                  })()}
+                </td>}
                 {visibleCols.map(function(col){
                   var colType=col.type||'checkbox';
                   // Checkbox stays an always-on toggle — it already reads as a clean badge.
