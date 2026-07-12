@@ -561,8 +561,8 @@ export default function LandingPage({ onSignIn, loading }) {
         </div>
         <FAQItem defaultOpen q="Is TaskFlowCo built specifically for CA / CS / CMA firms?" a="Yes. The compliance calendar, work types and worksheets are pre-built for Indian practice work — GST, ITR, ROC and more — so you are productive on day one." />
         <FAQItem q="Can I import my existing client list?" a="Absolutely. Upload an Excel sheet and we map the columns automatically. Most firms import their entire client base in a few minutes." />
-        <FAQItem q="Do I need a card to start?" a="No. Sign up free on the Solo plan — free forever for up to 25 clients, no card required. Upgrade to Practice or Firm whenever your team is ready; switch between monthly and yearly anytime." />
-        <FAQItem q="Is my client data secure?" a="Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. The Firm plan adds SSO." />
+        <FAQItem q="Do I need a card to start?" a="No. Sign up free on the Free plan — free forever for up to 25 clients, no card required. Upgrade to Pro or Max whenever your team is ready; switch between monthly and yearly anytime." />
+        <FAQItem q="Is my client data secure?" a="Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. The Max plan adds SSO." />
         <FAQItem q="Can clients upload documents themselves?" a="Yes — the Client Portal lets clients respond to document requests and approvals directly, so you stop chasing paperwork over email and WhatsApp." />
       </section>
 
@@ -594,7 +594,7 @@ export default function LandingPage({ onSignIn, loading }) {
         </div>
         <div className="price-grid">
           <div className="plan">
-            <h3>Solo</h3>
+            <h3>Free</h3>
             <div className="amt">₹0<small>/mo</small></div>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For an individual practitioner starting out.</p>
             <ul><li>{check}Up to 25 clients</li><li>{check}WorkZone + Stages board</li><li>{check}Compliance calendar &amp; My Work planner</li></ul>
@@ -602,19 +602,19 @@ export default function LandingPage({ onSignIn, loading }) {
           </div>
           <div className="plan featured">
             <span className="tag">Most popular</span>
-            <h3>Practice</h3>
+            <h3>Pro</h3>
             <div className="amt">₹{billing === 'yearly' ? '1,249' : '1,499'}<small>/mo</small></div>
             <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹14,990/year — 2 months free' : 'Billed monthly · switch to yearly to save'}</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For a growing firm running work as a team.</p>
-            <ul><li>{check}Everything in Solo</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
+            <ul><li>{check}Everything in Free</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
             <button className="btn btn-primary" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started</button>
           </div>
           <div className="plan">
-            <h3>Firm</h3>
+            <h3>Max</h3>
             <div className="amt">₹{billing === 'yearly' ? '2,916' : '3,499'}<small>/mo</small></div>
             <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹34,990/year — 2 months free' : 'Billed monthly'}</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For multi-branch practices &amp; advisory groups.</p>
-            <ul><li>{check}Everything in Practice</li><li>{check}Unlimited team members</li><li>{check}Multiple branches / offices</li><li>{check}SSO &amp; advanced roles</li><li>{check}Priority support &amp; onboarding</li></ul>
+            <ul><li>{check}Everything in Pro</li><li>{check}Unlimited team members</li><li>{check}Multiple branches / offices</li><li>{check}SSO &amp; advanced roles</li><li>{check}Priority support &amp; onboarding</li></ul>
             <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width: '100%', justifyContent: 'center' }}>Talk to sales</button>
           </div>
         </div>
