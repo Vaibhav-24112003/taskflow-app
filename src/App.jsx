@@ -8397,6 +8397,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   var [worksheets,setWorksheets]=useState(_adc.worksheets||[]);
   var [allRows,setAllRows]=useState(_adc.allRows||[]);
   var [itrRecords,setItrRecords]=useState(_adc.itrRecords||[]);
+  var [members,setMembers]=useState(_adc.members||[]); // org members for per-person workload
   var [selectedYear,setSelectedYear]=useState(_initYear);
   var [activeTab,setActiveTab]=useState('overview');
   var [filterMonth,setFilterMonth]=useState(0);
@@ -8444,10 +8445,14 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     try{var ri=await supabase.from('itr_compilation').select('client_id,status,completeness').eq('org_id',org.id).eq('assessment_year',itrAY).limit(2000);if(!ri.error){itrData=ri.data||[];setItrRecords(itrData);}}catch(_){setItrRecords([]);}
     setClients(clientData);
     setWorksheets(wsData);
+    // Org members (for per-person workload)
+    var memberData=[];
+    try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(300);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(300);memberData=rp.data||[];}}catch(_){}
+    setMembers(memberData);
     var allRowsData=[];
     if(wsData.length>0){
       var wsIds=wsData.map(function(w){return w.id;});
-      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage,start_date').in('worksheet_id',wsIds).limit(2000);
+      var rr=await supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,due_date,due_label,completed_at,current_stage,start_date,data').in('worksheet_id',wsIds).limit(2000);
       if(rr.error){showToast('Failed to load analytics data: '+rr.error.message,'err');return;}
       var rowData=rr.data||[];
       // Backfill: rows at the last stage of their work type that still have status!='completed'
@@ -8478,7 +8483,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
       allRowsData=rowData;
       setAllRows(rowData);
     }else{setAllRows([]);}
-    _analyticsCache[org.id+'_'+selectedYear]={clients:clientData,worksheets:wsData,allRows:allRowsData,itrRecords:itrData};
+    _analyticsCache[org.id+'_'+selectedYear]={clients:clientData,worksheets:wsData,allRows:allRowsData,itrRecords:itrData,members:memberData};
     }catch(e){console.error(e);if(gen===loadGenRef.current)setLoadError('error');}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}
   }
 
@@ -8561,6 +8566,11 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   // "On-track" = of the work due so far, how much is done. This is the honest KPI.
   var onTrackPct=totals.dueTotal>0?Math.round(totals.dueCompleted/totals.dueTotal*100):100;
   var duePending=totals.dueTotal-totals.dueCompleted;
+  // On-time filing rate = of completed work with a due date, how much landed on/before it.
+  var tEarly=0,tOntime=0,tLate=0;
+  workTypeStats.forEach(function(s){tEarly+=s.early;tOntime+=s.ontime;tLate+=s.late;});
+  var timedDone=tEarly+tOntime+tLate;
+  var onTimePct=timedDone>0?Math.round((tEarly+tOntime)/timedDone*100):100;
 
   // Drill-down
   var drillData=null;
@@ -8621,6 +8631,33 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     return Object.assign({},r,{work_type:ws?ws.work_type:'',period_label:ws?ws.period_label:'',daysOverdue:Math.abs(daysDiff(today,r.due_date))});
   }).sort(function(a,b){return b.daysOverdue-a.daysOverdue;});
 
+  // ── Per-person workload ──────────────────────────────────────────────
+  // Attribute each task to its primary owner (explicit assignee, else first
+  // workflow role holder). Uses stage-aware "done" like the rest of Analytics.
+  var wsWtMap={};filteredWS.forEach(function(w){wsWtMap[w.id]=w.work_type;});
+  var wtLastMap={};(workTypeConfigs||[]).forEach(function(c){if(c.stages&&c.stages.length>0)wtLastMap[c.name]=c.stages[c.stages.length-1].key;});
+  function rowIsDone(r){var lk=wtLastMap[wsWtMap[r.worksheet_id]];return r.status==='completed'||(lk&&r.current_stage===lk);}
+  function ownerOf(r){var d=r.data||{};if(d.__assignee)return d.__assignee;var k=Object.keys(d).find(function(x){return x.indexOf('__h_')===0&&d[x];});return k?d[k]:null;}
+  var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
+  var _mstat={};
+  filteredRows.forEach(function(r){
+    var oid=ownerOf(r);if(!oid)return;
+    var m=_mstat[oid]||(_mstat[oid]={id:oid,total:0,done:0,overdue:0,pending:0,upcoming:0,late:0});
+    m.total++;
+    if(rowIsDone(r)){m.done++;if(r.completed_at&&r.due_date){var diff=Math.round((new Date(r.completed_at)-new Date(r.due_date))/86400000);if(diff>0)m.late++;}}
+    else if(r.due_date&&new Date(r.due_date)<today)m.overdue++;
+    else if(r.due_date&&new Date(r.due_date)>today)m.upcoming++;
+    else m.pending++;
+  });
+  function mAvatarColor(id){var pal=['#0e2a47','#5b6cf0','#8b5cf6','#0ea5e9','#22c55e','#f59e0b','#ef4444'];var n=0;for(var i=0;i<(id||'').length;i++)n+=id.charCodeAt(i);return pal[n%pal.length];}
+  var memberStats=Object.keys(_mstat).map(function(oid){
+    var s=_mstat[oid];var mm=memberMap[oid];
+    var name=mm?(mm.name||(mm.email||'').split('@')[0]||'Member'):'Unknown';
+    var onTime=s.done>0?Math.round((s.done-s.late)/s.done*100):100;
+    var openDue=s.overdue+s.pending; // active work that's due now
+    return Object.assign({},s,{name:name,onTime:onTime,openDue:openDue});
+  }).sort(function(a,b){return (b.overdue-a.overdue)||(b.openDue-a.openDue)||(b.total-a.total);});
+
   var TAB_BTN=function(id,label,count){
     var active=activeTab===id;
     return<button key={id} onClick={function(){setActiveTab(id);setDrillType(null);}} style={{padding:'7px 16px',border:'none',borderBottom:active?'2px solid #0e2a47':'2px solid transparent',background:'none',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:active?700:500,whiteSpace:'nowrap'}}>{label}{count!=null&&<span style={{fontSize:10,marginLeft:4,opacity:0.7}}>({count})</span>}</button>;
@@ -8650,6 +8687,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
       {TAB_BTN('ledger','Client Ledger',null)}
       {TAB_BTN('monthly','Monthly',null)}
       {TAB_BTN('clients','Clients',clientStats.length)}
+      {TAB_BTN('team','Team',memberStats.length)}
       {TAB_BTN('overdue','Overdue',overdueRows.length)}
     </div>
 
@@ -8668,7 +8706,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
           {label:'On-track',value:onTrackPct+'%',color:onTrackPct>=80?'#22c55e':onTrackPct>=50?'#f59e0b':'#ef4444',sub:totals.dueCompleted+' of '+totals.dueTotal+' due done'},
           {label:'Pending (due)',value:duePending,color:'#f59e0b',sub:'should be done by now'},
           {label:'Overdue',value:totals.overdue,color:'#ef4444',sub:'past due date'},
-          {label:'Upcoming',value:totals.upcoming,color:'#94a3b8',sub:'not due yet'}
+          {label:'Upcoming',value:totals.upcoming,color:'#94a3b8',sub:'not due yet'},
+          {label:'On-time filing',value:onTimePct+'%',color:onTimePct>=80?'#22c55e':onTimePct>=50?'#f59e0b':'#ef4444',sub:timedDone>0?tLate+' filed late of '+timedDone:'no filings yet'}
         ].map(function(k){
           return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
             <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
@@ -8992,6 +9031,47 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
 
     {/* ── OVERDUE TAB ── */}
     {activeTab==='ledger'&&<ClientLedgerTab org={org} supabase={supabase} clients={clients} initClientId={ledgerInitClient}/>}
+
+    {/* ── TEAM WORKLOAD TAB ── */}
+    {activeTab==='team'&&(memberStats.length===0
+      ?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'40px 24px',textAlign:'center'}}>
+        <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No assigned work yet</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Assign tasks to team members in Worksheets to see workload here.</div>
+      </div>
+      :<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+        <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',fontSize:12,color:'var(--tf-text-sub)'}}>Workload by person — <b style={{color:'var(--tf-text)'}}>{memberStats.length}</b> members · sorted by overdue &amp; open work. On-time = of a person's completed filings, how many landed on/before the due date.</div>
+        <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:640}}>
+          <thead><tr style={{background:'var(--tf-bg)'}}>
+            {['Member','Total','Open','Overdue','Done','On-time'].map(function(h,hi){return<th key={h} style={{padding:'9px 14px',textAlign:hi===0?'left':'center',fontSize:11,fontWeight:700,color:hi===3?'#ef4444':'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.04em',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>;})}
+          </tr></thead>
+          <tbody>
+            {memberStats.map(function(m){
+              var initials=(m.name||'?').split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
+              var maxOpen=Math.max.apply(null,memberStats.map(function(x){return x.openDue;}).concat([1]));
+              return<tr key={m.id} style={{borderBottom:'1px solid var(--tf-border)'}}>
+                <td style={{padding:'10px 14px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:9}}>
+                    <div style={{width:26,height:26,borderRadius:'50%',background:mAvatarColor(m.id),display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:800,color:'#fff',flexShrink:0}}>{initials}</div>
+                    <span style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{m.name}</span>
+                  </div>
+                </td>
+                <td style={{padding:'10px 14px',textAlign:'center',fontSize:13,fontWeight:700,color:'var(--tf-text)',fontFamily:"'JetBrains Mono',monospace"}}>{m.total}</td>
+                <td style={{padding:'10px 14px',textAlign:'center'}}>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                    <span style={{fontSize:13,fontWeight:700,color:m.openDue>0?'#f59e0b':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{m.openDue}</span>
+                    <div style={{width:70,height:4,background:'var(--tf-border)',borderRadius:2,overflow:'hidden'}}><div style={{width:Math.round(m.openDue/maxOpen*100)+'%',height:'100%',background:m.overdue>0?'#ef4444':'#f59e0b'}}/></div>
+                  </div>
+                </td>
+                <td style={{padding:'10px 14px',textAlign:'center',fontSize:13,fontWeight:700,color:m.overdue>0?'#ef4444':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{m.overdue||'—'}</td>
+                <td style={{padding:'10px 14px',textAlign:'center',fontSize:13,fontWeight:700,color:'#22c55e',fontFamily:"'JetBrains Mono',monospace"}}>{m.done}</td>
+                <td style={{padding:'10px 14px',textAlign:'center',fontSize:13,fontWeight:700,color:m.onTime>=80?'#22c55e':m.onTime>=50?'#f59e0b':'#ef4444',fontFamily:"'JetBrains Mono',monospace"}}>{m.done>0?m.onTime+'%':'—'}</td>
+              </tr>;
+            })}
+          </tbody>
+        </table>
+        </div>
+      </div>)}
 
     {activeTab==='overdue'&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
       <div style={{padding:'14px 18px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
