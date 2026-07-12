@@ -312,6 +312,19 @@ the `supabase/functions/generate-recurring-worksheets` TS file is reference-only
 - **⑤ Saved filters** — ErpBoard filters (groupBy/assignee/client/hideCompleted/dept) persist to
   `localStorage tf_erpboard_filters_<org.id>`; survive navigation.
 
+- **⑥ Client reminders** (2026-07) — email CLIENTS about their upcoming/overdue work.
+  **Two modes, one template** (`organizations.client_reminder_config` jsonb: `{enabled,days_before,subject,body}`;
+  vars `{client}{firm}{items}{work_type}{due_date}{period}`):
+  - **Manual** — Communication → **Reminders** tab: "Find clients with due work" auto-picks
+    clients (with an email) having non-completed rows due within N days, personalised bulk **send via
+    the firm's connected Gmail** (correct from-address), logged to `comm_logs`.
+  - **Auto** — toggle "Auto-send every cycle" → `tf_jobs.send_client_reminders(mode)` PL/pgSQL cron
+    (**`send-client-reminders` @ 04:00 UTC / 09:30 IST**) sends via **Resend** from `no-reply@taskflowco.in`.
+    Dedupes per worksheet row via `client_reminder_sent` (never emails the same row twice). Test:
+    `select tf_jobs.send_client_reminders('dry')` (preview) / `('test','x@y.com')` (one live sample).
+  - ⚠ Auto uses taskflowco.in sender (Resend); manual uses the firm's Gmail. TODO: cap items per email
+    for big clients (one client had 55 due rows in dry test); optionally verify firm domains in Resend.
+
 Verify crons: `select jobname,schedule,active from cron.job;`. pg_cron + pg_net + supabase_vault all enabled.
 
 ## SESSION HANDOFF — Design Refresh (brand blue/teal + Plus Jakarta Sans)
