@@ -8511,6 +8511,13 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     var completed=wtRows.filter(function(r){return r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);}).length;
     var pending=total-completed;
     var overdue=wtRows.filter(function(r){var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);return !isDone&&r.due_date&&new Date(r.due_date)<today;}).length;
+    // Honest completion: only count work that is actually DUE by now (due_date<=today or
+    // undated). Future auto-generated periods are "upcoming", not "pending", so they no
+    // longer drag the completion % down.
+    var dueRows=wtRows.filter(function(r){return !r.due_date||new Date(r.due_date)<=today;});
+    var dueTotal=dueRows.length;
+    var dueCompleted=dueRows.filter(function(r){return r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);}).length;
+    var upcoming=wtRows.filter(function(r){var isDone=r.status==='completed'||(lastStageKey&&r.current_stage===lastStageKey);return !isDone&&r.due_date&&new Date(r.due_date)>today;}).length;
     // Stage counts: {stageKey: count}
     // For the last stage, also count rows with status='completed' but no stage set (legacy completed rows)
     var stageCounts={};
@@ -8540,13 +8547,16 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
       }
     });
     var avgDays=completedWithDue>0?Math.round(totalDays/completedWithDue):0;
-    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,early:early,ontime:ontime,late:late,avgDays:avgDays,rows:wtRows,wsIds:wsIds,stages:wtStages,stageCounts:stageCounts,lastStageKey:lastStageKey,notStarted:notStarted};
+    return{wt:wt,total:total,completed:completed,pending:pending,overdue:overdue,dueTotal:dueTotal,dueCompleted:dueCompleted,upcoming:upcoming,early:early,ontime:ontime,late:late,avgDays:avgDays,rows:wtRows,wsIds:wsIds,stages:wtStages,stageCounts:stageCounts,lastStageKey:lastStageKey,notStarted:notStarted};
   });
 
   // Totals
-  var totals={total:0,completed:0,pending:0,overdue:0};
-  workTypeStats.forEach(function(s){totals.total+=s.total;totals.completed+=s.completed;totals.pending+=s.pending;totals.overdue+=s.overdue;});
+  var totals={total:0,completed:0,pending:0,overdue:0,dueTotal:0,dueCompleted:0,upcoming:0};
+  workTypeStats.forEach(function(s){totals.total+=s.total;totals.completed+=s.completed;totals.pending+=s.pending;totals.overdue+=s.overdue;totals.dueTotal+=s.dueTotal;totals.dueCompleted+=s.dueCompleted;totals.upcoming+=s.upcoming;});
   var totalPct=totals.total>0?Math.round(totals.completed/totals.total*100):0;
+  // "On-track" = of the work due so far, how much is done. This is the honest KPI.
+  var onTrackPct=totals.dueTotal>0?Math.round(totals.dueCompleted/totals.dueTotal*100):100;
+  var duePending=totals.dueTotal-totals.dueCompleted;
 
   // Drill-down
   var drillData=null;
@@ -8649,10 +8659,17 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     {activeTab==='overview'&&<>
       {/* KPI Row */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10,marginBottom:20}}>
-        {[{label:'Total Tasks',value:totals.total,color:'var(--tf-text)'},{label:'Completed',value:totalPct+'%',color:'#22c55e'},{label:'Pending',value:totals.pending,color:'#94a3b8'},{label:'Overdue',value:totals.overdue,color:'#ef4444'}].map(function(k){
+        {[
+          {label:'Total Tasks',value:totals.total,color:'var(--tf-text)',sub:totals.completed+' done · '+totals.total+' this FY'},
+          {label:'On-track',value:onTrackPct+'%',color:onTrackPct>=80?'#22c55e':onTrackPct>=50?'#f59e0b':'#ef4444',sub:totals.dueCompleted+' of '+totals.dueTotal+' due done'},
+          {label:'Pending (due)',value:duePending,color:'#f59e0b',sub:'should be done by now'},
+          {label:'Overdue',value:totals.overdue,color:'#ef4444',sub:'past due date'},
+          {label:'Upcoming',value:totals.upcoming,color:'#94a3b8',sub:'not due yet'}
+        ].map(function(k){
           return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
             <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
             <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.label}</div>
+            {k.sub&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:3,opacity:0.75}}>{k.sub}</div>}
           </div>;
         })}
       </div>
@@ -8668,21 +8685,23 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
       {(function(){
         // Shared work-type card (level 2)
         var WTCARD=function(s){
-          var pct=s.total>0?Math.round(s.completed/s.total*100):0;
+          var pct=s.dueTotal>0?Math.round(s.dueCompleted/s.dueTotal*100):100; // on-track %, not diluted by future periods
+          var sDuePending=s.dueTotal-s.dueCompleted;
           var isActive=drillType===s.wt;
           return<div key={s.wt} onClick={function(){setDrillType(isActive?null:s.wt);setDrillFilter('all');}}
             style={{background:isActive?'rgba(14,42,71,0.08)':'var(--tf-surface)',border:'1px solid',borderColor:isActive?'#0e2a47':'var(--tf-border)',borderRadius:12,padding:'16px 18px',cursor:'pointer',transition:'all 0.15s'}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
               <span style={{fontWeight:700,fontSize:14,color:'var(--tf-text)'}}>{s.wt}</span>
-              <span style={{fontSize:20,fontWeight:800,color:pct===100?'#22c55e':pct>50?'#0e2a47':'#94a3b8'}}>{pct}%</span>
+              <span title="On-track: of work due so far, how much is done" style={{fontSize:20,fontWeight:800,color:pct>=80?'#22c55e':pct>=50?'#0e2a47':'#94a3b8'}}>{pct}%</span>
             </div>
             <div style={{background:'var(--tf-border)',borderRadius:99,height:6,marginBottom:10,overflow:'hidden'}}>
-              <div style={{width:pct+'%',height:'100%',background:pct===100?'#22c55e':'#0e2a47',transition:'width 0.3s',borderRadius:99}}/>
+              <div style={{width:pct+'%',height:'100%',background:pct>=80?'#22c55e':'#0e2a47',transition:'width 0.3s',borderRadius:99}}/>
             </div>
-            <div style={{display:'flex',gap:12,fontSize:11}}>
+            <div style={{display:'flex',gap:10,fontSize:11,flexWrap:'wrap'}}>
               <span style={{color:'#22c55e'}}><b>{s.completed}</b> done</span>
-              <span style={{color:'#94a3b8'}}><b>{s.pending}</b> pending</span>
+              {sDuePending>0&&<span style={{color:'#f59e0b'}}><b>{sDuePending}</b> pending</span>}
               {s.overdue>0&&<span style={{color:'#ef4444'}}><b>{s.overdue}</b> overdue</span>}
+              {s.upcoming>0&&<span style={{color:'#94a3b8'}}><b>{s.upcoming}</b> upcoming</span>}
             </div>
             {(s.early>0||s.ontime>0||s.late>0)&&<div style={{display:'flex',gap:10,fontSize:10,marginTop:6,color:'var(--tf-text-sub)'}}>
               {s.early>0&&<span style={{color:'#22c55e'}}>{s.early} early</span>}
@@ -8729,10 +8748,10 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
         // ── LEVEL 2: inside a group ──
         if(overviewDrillGroup){
           var activeGroup=groups.find(function(g){return g.label===overviewDrillGroup;})||{label:overviewDrillGroup,stats:[],color:'#2F6BFF'};
-          var gDone=activeGroup.stats.reduce(function(s,x){return s+x.completed;},0);
-          var gTot=activeGroup.stats.reduce(function(s,x){return s+x.total;},0);
+          var gDueDone=activeGroup.stats.reduce(function(s,x){return s+x.dueCompleted;},0);
+          var gDue=activeGroup.stats.reduce(function(s,x){return s+x.dueTotal;},0);
           var gOvd=activeGroup.stats.reduce(function(s,x){return s+x.overdue;},0);
-          var gPct=gTot>0?Math.round(gDone/gTot*100):0;
+          var gPct=gDue>0?Math.round(gDueDone/gDue*100):100;
           return<div style={{marginBottom:24}}>
             {/* Breadcrumb */}
             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
@@ -8740,7 +8759,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
               <span style={{color:'var(--tf-text-sub)'}}>›</span>
               {activeGroup.color&&<span style={{display:'inline-block',width:10,height:10,borderRadius:'50%',background:activeGroup.color,flexShrink:0}}/>}
               <span style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{activeGroup.label}</span>
-              <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{activeGroup.stats.length} work types · {gPct}% complete</span>
+              <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{activeGroup.stats.length} work types · {gPct}% on-track</span>
               {gOvd>0&&<span style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'2px 9px'}}>{gOvd} overdue</span>}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
@@ -8752,10 +8771,12 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
         // ── LEVEL 1: group summary tiles ──
         var GROUP_TILE=function(g){
           var gDone=g.stats.reduce(function(s,x){return s+x.completed;},0);
-          var gTot=g.stats.reduce(function(s,x){return s+x.total;},0);
+          var gDue=g.stats.reduce(function(s,x){return s+x.dueTotal;},0);
+          var gDueDone=g.stats.reduce(function(s,x){return s+x.dueCompleted;},0);
           var gOvd=g.stats.reduce(function(s,x){return s+x.overdue;},0);
-          var gPnd=g.stats.reduce(function(s,x){return s+x.pending;},0);
-          var gPct=gTot>0?Math.round(gDone/gTot*100):0;
+          var gUpc=g.stats.reduce(function(s,x){return s+x.upcoming;},0);
+          var gPnd=gDue-gDueDone;
+          var gPct=gDue>0?Math.round(gDueDone/gDue*100):100;
           return<div key={g.label} onClick={function(){setOverviewDrillGroup(g.label);setDrillType(null);}}
             style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,padding:'20px 22px',cursor:'pointer',transition:'all 0.15s',position:'relative',overflow:'hidden'}}
             onMouseEnter={function(e){e.currentTarget.style.borderColor='#0e2a47';e.currentTarget.style.boxShadow='0 2px 12px rgba(14,42,71,0.08)';}}
@@ -8763,18 +8784,19 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
             <div style={{position:'absolute',top:0,left:0,width:4,height:'100%',background:g.color,borderRadius:'14px 0 0 14px'}}/>
             <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,paddingLeft:8}}>
               <span style={{fontWeight:800,fontSize:16,color:'var(--tf-text)',lineHeight:1.2}}>{g.label}</span>
-              <span style={{fontSize:24,fontWeight:900,color:gPct===100?'#22c55e':gPct>50?'#0e2a47':'#94a3b8',lineHeight:1}}>{gPct}%</span>
+              <span title="On-track: of work due so far, how much is done" style={{fontSize:24,fontWeight:900,color:gPct>=80?'#22c55e':gPct>=50?'#0e2a47':'#94a3b8',lineHeight:1}}>{gPct}%</span>
             </div>
             <div style={{paddingLeft:8,marginBottom:12}}>
               <div style={{background:'var(--tf-border)',borderRadius:99,height:7,overflow:'hidden'}}>
-                <div style={{width:gPct+'%',height:'100%',background:gPct===100?'#22c55e':'#0e2a47',borderRadius:99,transition:'width 0.4s'}}/>
+                <div style={{width:gPct+'%',height:'100%',background:gPct>=80?'#22c55e':'#0e2a47',borderRadius:99,transition:'width 0.4s'}}/>
               </div>
             </div>
             <div style={{display:'flex',gap:14,fontSize:12,paddingLeft:8,flexWrap:'wrap'}}>
               <span style={{color:'var(--tf-text-sub)'}}><b style={{color:'var(--tf-text)'}}>{g.stats.length}</b> work types</span>
               <span style={{color:'#22c55e'}}><b>{gDone}</b> done</span>
-              <span style={{color:'#94a3b8'}}><b>{gPnd}</b> pending</span>
+              {gPnd>0&&<span style={{color:'#f59e0b'}}><b>{gPnd}</b> pending</span>}
               {gOvd>0&&<span style={{color:'#ef4444',fontWeight:700}}><b>{gOvd}</b> overdue</span>}
+              {gUpc>0&&<span style={{color:'#94a3b8'}}><b>{gUpc}</b> upcoming</span>}
             </div>
             <div style={{position:'absolute',bottom:14,right:16,fontSize:18,color:'var(--tf-border)'}}>›</div>
           </div>;
@@ -8794,7 +8816,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
 
         return<div>
           {showItrTile&&!overviewDrillGroup&&<div style={{marginBottom:16}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>ITR Desk — {itrAY2}</div>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>ITR Desk — AY {itrAY2} <span style={{fontWeight:500,textTransform:'none',letterSpacing:0,opacity:0.8}}>(FY {selectedYear}-{String(selectedYear+1).slice(2)})</span></div>
             <div style={{background:'var(--tf-surface)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:14,padding:'18px 22px',position:'relative',overflow:'hidden'}}>
               <div style={{position:'absolute',top:0,left:0,width:4,height:'100%',background:'#f59e0b',borderRadius:'14px 0 0 14px'}}/>
               <div style={{paddingLeft:8}}>
@@ -11751,19 +11773,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
 
         {/* BOARD VIEW — kanban by status */}
         {dashView==='board'&&<div style={{display:'flex',flexDirection:'column',gap:0,height:'100%'}}>
-          {/* Quick filter bar */}
-          <div style={{padding:'8px 2px 10px',flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
-            <div style={{position:'relative',flex:'0 0 260px'}}>
-              <span style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'var(--tf-text-sub)',fontSize:13,pointerEvents:'none'}}>🔍</span>
-              <input
-                type="text" value={boardSearch} onChange={function(e){setBoardSearch(e.target.value);}}
-                placeholder="Filter by client or task…"
-                style={{width:'100%',paddingLeft:30,paddingRight:boardSearch?28:10,paddingTop:6,paddingBottom:6,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,color:'var(--tf-text)',fontSize:12,outline:'none',boxSizing:'border-box'}}/>
-              {boardSearch&&<button onClick={function(){setBoardSearch('');}} style={{position:'absolute',right:7,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:14,lineHeight:1,padding:0}}>×</button>}
-            </div>
-            {boardSearch&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Showing matches only — others dimmed</span>}
-          </div>
-          <div style={{display:'flex',gap:14,overflowX:'auto',paddingBottom:8,alignItems:'flex-start',flex:1}}>
+          <div style={{display:'flex',gap:14,overflowX:'auto',paddingBottom:8,paddingTop:8,alignItems:'flex-start',flex:1}}>
           {[
             {id:'pending',label:'To Do',color:'#64748b',bg:'rgba(100,116,139,0.07)'},
             {id:'in_progress',label:'In Progress',color:'#3b82f6',bg:'rgba(59,130,246,0.07)'},
@@ -11822,9 +11832,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   var assigneeMember=assigneeId?orgMembers.find(function(m){return m.id===assigneeId;}):null;
                   var assigneeName=assigneeMember?(assigneeMember.name||assigneeMember.email||'?'):'?';
                   var assigneeInitials=assigneeName.split(' ').slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase()||'?';
-                  // Quick filter: dim non-matching cards
-                  var matchesFilter=!boardSearch||(rd.__title||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0||(c.display_name||c.name||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0||(ws.work_type||'').toLowerCase().indexOf(boardSearch.toLowerCase())>=0;
-                  if(!matchesFilter)return null;
                   return<div key={r.id}
                     onDragOver={function(e){
                       if(dragSrc&&dragSrc.rowId!==r.id){
@@ -11883,7 +11890,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                       </div>
                       {/* Bottom: client + assignee + due + my day */}
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6}}>
-                        <span style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{c.display_name||c.name||''}</span>
+                        <span style={{fontSize:10,color:'var(--tf-text-sub)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{rd.__title?(c.display_name||c.name||''):''}</span>
                         <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
                           {assigneeId&&<div style={{width:20,height:20,borderRadius:'50%',background:avatarColor(assigneeId),display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,color:'#fff'}} title={assigneeName}>{assigneeInitials}</div>}
                           {r.due_date&&<span style={{fontSize:10,fontWeight:600,color:isOver?'#ef4444':'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace",whiteSpace:'nowrap'}}>{isOver?'⚠ ':''}{r.due_date.slice(5)}</span>}
