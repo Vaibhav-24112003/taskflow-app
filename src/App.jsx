@@ -1180,7 +1180,7 @@ var CMD_MODULES=[
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
-  {id:'comms',label:'Communication',tabs:[{id:'connect',label:'Client Connect'},{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'mailing',label:'Mail'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]},
   {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
   {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
@@ -14402,6 +14402,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var [gmailThreads,setGmailThreads]=useState([]);
   var [gmailSelThread,setGmailSelThread]=useState(null);
   var [gmailThreadMsgs,setGmailThreadMsgs]=useState([]);
+  var [gmailFull,setGmailFull]=useState(false); // read the email full-screen
   var [gmailLoading,setGmailLoading]=useState(false);
   var [gmailProfile,setGmailProfile]=useState(null);
   var [gmailFolder,setGmailFolder]=useState('INBOX');
@@ -14976,11 +14977,16 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   return<div style={{display:'flex',height:'calc(100vh - 120px)',margin:'0 -24px -60px'}}>
     {/* LEFT PANEL — Tabs + Folder nav */}
     <div style={{width:gmailThreePaneActive?185:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0,transition:'width 0.2s'}}>
-      <div style={{padding:'16px 14px 12px',borderBottom:'1px solid var(--tf-border)'}}>
-        <div style={{display:'flex',gap:4}}>
-          {[{id:'gmail',label:'Gmail',icon:'📧'},{id:'bulk',label:'Bulk',icon:'✉'},{id:'reminders',label:'Reminders',icon:'🔔'},{id:'templates',label:'Templates',icon:'📋'}].map(function(t){
+      <div style={{padding:'14px 12px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+        <div style={{display:'flex',gap:6}}>
+          {[
+            {id:'gmail',label:'Inbox',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>},
+            {id:'bulk',label:'Bulk',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>},
+            {id:'reminders',label:'Reminders',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>},
+            {id:'templates',label:'Templates',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>}
+          ].map(function(t){
             var active=activeTab===t.id;
-            return<button key={t.id} onClick={function(){setActiveTab(t.id);}} style={{flex:1,padding:'8px 6px',border:'1px solid',borderColor:active?'#0e2a47':'var(--tf-border)',borderRadius:8,background:active?'rgba(14,42,71,0.1)':'transparent',color:active?'#0e2a47':'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:active?700:500,fontFamily:'inherit',textAlign:'center'}}>{t.icon} {t.label}</button>;
+            return<button key={t.id} onClick={function(){setActiveTab(t.id);}} title={t.label} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,padding:'9px 4px',border:'1px solid',borderColor:active?'#2F6BFF':'var(--tf-border)',borderRadius:10,background:active?'rgba(47,107,255,0.08)':'var(--tf-surface)',color:active?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:10.5,fontWeight:active?800:600,fontFamily:'inherit',transition:'all 0.12s'}}>{t.svg}<span>{t.label}</span></button>;
           })}
         </div>
       </div>
@@ -15198,11 +15204,13 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
           <div style={{fontSize:40,marginBottom:12}}>📬</div>
           <div style={{fontSize:16,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>Select a conversation</div>
           <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>Choose an email thread from the left panel to read it.</div>
-        </div>:<div>
+        </div>:<div style={gmailFull?{position:'fixed',inset:0,zIndex:1500,background:'var(--tf-bg)',padding:'18px 26px 40px',overflowY:'auto'}:undefined}>
           {/* Thread view header */}
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-            <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailThreadMsgs.length>0?gmailThreadMsgs[0].subject:'Loading...'}</div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap',position:gmailFull?'sticky':'static',top:gmailFull?-18:'auto',background:gmailFull?'var(--tf-bg)':'transparent',paddingTop:gmailFull?4:0,paddingBottom:gmailFull?8:0,zIndex:2,maxWidth:gmailFull?900:'none',margin:gmailFull?'0 auto 12px':'0 0 12px'}}>
+            {gmailFull&&<button onClick={function(){setGmailSelThread(null);setGmailFull(false);}} title="Back" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,width:30,height:30,cursor:'pointer',fontSize:15,color:'var(--tf-text-sub)',flexShrink:0}}>←</button>}
+            <div style={{fontSize:gmailFull?20:15,fontWeight:800,color:'var(--tf-text)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{gmailThreadMsgs.length>0?gmailThreadMsgs[0].subject:'Loading...'}</div>
             <div style={{display:'flex',gap:4,flexShrink:0}}>
+              <button onClick={function(){setGmailFull(function(f){return !f;});}} title={gmailFull?'Exit full screen':'Full screen'} style={{background:gmailFull?'rgba(47,107,255,0.1)':'var(--tf-surface)',border:'1px solid '+(gmailFull?'#2F6BFF':'var(--tf-border)'),borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12,color:gmailFull?'#2F6BFF':'var(--tf-text-sub)'}}>{gmailFull?'⤢ Exit':'⤢ Full screen'}</button>
               <button onClick={function(){markThreadUnread(gmailSelThread);}} title="Mark unread" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>● Unread</button>
               <button onClick={function(){archiveThread(gmailSelThread);}} title="Archive" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)'}}>📥 Archive</button>
               <button onClick={function(){if(window.confirm('Move to Trash?'))trashThread(gmailSelThread);}} title="Delete" style={{background:'rgba(239,68,68,0.06)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,color:'#ef4444'}}>🗑 Trash</button>
@@ -15952,7 +15960,7 @@ function ClientConnectModule({org,supabase,cu,onEmailClient,onGoTab}){
   var INP2={width:'100%',boxSizing:'border-box',padding:'9px 12px',border:'1px solid var(--tf-border)',borderRadius:8,background:'var(--tf-surface)',color:'var(--tf-text)',fontSize:13,fontFamily:'inherit',outline:'none'};
 
   if(loadError)return<div style={{textAlign:'center',padding:48}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={loadAll} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
-  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading Client Connect…</div>;
+  if(loading)return<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading Requests &amp; Campaigns…</div>;
 
   return<div style={{display:'flex',height:'calc(100vh - 110px)',minHeight:0}}>
     {/* Sidebar */}
@@ -16054,7 +16062,7 @@ function ClientConnectModule({org,supabase,cu,onEmailClient,onGoTab}){
       !selClient?
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:12,color:'var(--tf-text-sub)',textAlign:'center',padding:24}}>
           <div style={{fontSize:40}}>📋</div>
-          <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Client Connect</div>
+          <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)'}}>Requests &amp; Campaigns</div>
           <div style={{fontSize:13,maxWidth:340}}>Send Q&A questionnaires and data requests to clients via a simple shareable link — no login required. Files go to your own cloud storage.</div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap',justifyContent:'center',marginTop:8}}>
             <button onClick={function(){setCreateMode('bulk');setNewQuestions([]);setNewTitle('');setNewDesc('');setBulkClientIds([]);setShowCreate(true);}} style={{padding:'8px 16px',background:'#0e2a47',border:'none',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,color:'#fff',fontFamily:'inherit'}}>👥 Bulk Send</button>
@@ -17968,7 +17976,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(canSeeAnalytics&&ffOn('analytics')){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
-  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Everything client-facing in one place — Client Connect link forms, the login-based Client Portal, and email to clients.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'connect',label:'Client Connect'},{id:'portal',label:'Client Portal'},{id:'mailing',label:'Mailing'}]});
+  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Everything client-facing in one place — email your clients, the login-based Client Portal, and request/campaign link forms.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'mailing',label:'Mail'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]});
   if(ffOn('billing'))MODULES.push({id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]});
   MODULES.push({id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:masterdataTabs});
   MODULES.push({id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:setupTabs});
@@ -18104,9 +18112,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
-            {tab!=='portal'&&tab!=='mailing'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
+            {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
             {tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-            {tab==='mailing'&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
+            {tab==='connect'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
           </>
         : <ModuleLock module="comms" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Comms for '+(org?.name||''),'_blank')}/>)}
       {/* Billing — paid module */}
