@@ -1171,13 +1171,13 @@ function Stage({ children }) {
         flexShrink:0 }}>
         <button onClick={() => setTime(0)} style={barBtn} title="Back to start">
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-            <path d="M3 2v10M12 2L5 7l7 5V2z" stroke="#eef0f8" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
+            <path d="M3 2v10M12 2L5 7l7 5V2z" stroke="#0E2A47" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round"/>
           </svg>
         </button>
         <button onClick={() => setPlaying(p=>!p)} style={barBtn}>
           {playing
-            ? <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="3" y="2" width="3" height="10" fill="#eef0f8"/><rect x="8" y="2" width="3" height="10" fill="#eef0f8"/></svg>
-            : <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3 2l9 5-9 5V2z" fill="#eef0f8"/></svg>}
+            ? <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="3" y="2" width="3" height="10" fill="#0E2A47"/><rect x="8" y="2" width="3" height="10" fill="#0E2A47"/></svg>
+            : <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3 2l9 5-9 5V2z" fill="#0E2A47"/></svg>}
         </button>
         <span style={{ fontFamily:FM, fontSize:12, color:TF.text, width:52, textAlign:'right', flexShrink:0 }}>{fmt(time)}</span>
         <div ref={trackRef} onMouseDown={e=>{seekFromEvent(e); setPlaying(false)}}
@@ -1190,8 +1190,8 @@ function Stage({ children }) {
         <span style={{ fontFamily:FM, fontSize:12, color:TF.sub, width:52, flexShrink:0 }}>{fmt(DURATION)}</span>
         <button onClick={() => setMuted(m=>!m)} style={barBtn} title={muted?'Unmute narration':'Mute narration'}>
           {muted
-            ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#eef0f8"/><path d="M17 9l4 6M21 9l-4 6" stroke="#eef0f8" strokeWidth="1.8" strokeLinecap="round"/></svg>
-            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#eef0f8"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="#5B9BFF" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+            ? <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#0E2A47"/><path d="M17 9l4 6M21 9l-4 6" stroke="#0E2A47" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#0E2A47"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke="#2F6BFF" strokeWidth="1.8" strokeLinecap="round"/></svg>}
         </button>
       </div>
     </div>
@@ -1201,7 +1201,7 @@ function Stage({ children }) {
 const barBtn = {
   width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center',
   background:'rgba(14,42,71,0.055)', border:'1px solid rgba(14,42,71,0.14)',
-  borderRadius:6, color:'#eef0f8', cursor:'pointer', padding:0, flexShrink:0,
+  borderRadius:6, color:'#0E2A47', cursor:'pointer', padding:0, flexShrink:0,
 }
 
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
