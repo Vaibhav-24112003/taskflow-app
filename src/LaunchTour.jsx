@@ -16,12 +16,12 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
 // ── Brand ────────────────────────────────────────────────────────────────────
 const TF = {
-  bg:'#0B2237', bg2:'#0E2A47', panel:'#0F2C49', surface:'#143A5E',
-  border:'rgba(255,255,255,0.08)', borderHov:'rgba(255,255,255,0.18)',
-  text:'#EAF1F8', sub:'#9FB6D4', mut:'#4A6485',
-  accent:'#2F6BFF', accentBright:'#5B9BFF',
-  good:'#1FA971', warn:'#F4A52A', bad:'#EF4444',
-  violet:'#2F6BFF', cyan:'#14C7C0', pink:'#ec4899', amber:'#F4A52A',
+  bg:'#EEF3F9', bg2:'#FFFFFF', panel:'#FFFFFF', surface:'#E5EDF6',
+  border:'rgba(14,42,71,0.10)', borderHov:'rgba(14,42,71,0.22)',
+  text:'#0E2A47', sub:'#5A6B84', mut:'#8A9BB2',
+  accent:'#2F6BFF', accentBright:'#2F6BFF',
+  good:'#1FA971', warn:'#E8A33D', bad:'#EF4444',
+  violet:'#2F6BFF', cyan:'#0EA5A0', pink:'#ec4899', amber:'#E8A33D',
 }
 const FD = "'Geist','Inter',system-ui,sans-serif"
 const FS = "'Inter',system-ui,sans-serif"
@@ -101,7 +101,7 @@ function ModuleBadge({ tier }) {
   return (
     <div style={{ position:'absolute', right:80, top:110,
       display:'inline-flex', alignItems:'center', gap:10,
-      padding:'8px 14px', background:'rgba(255,255,255,0.03)',
+      padding:'8px 14px', background:'rgba(14,42,71,0.035)',
       border:`1px solid ${TF.border}`, borderRadius:100,
       fontFamily:FM, fontSize:11, color:TF.text, fontWeight:700,
       letterSpacing:'0.14em', textTransform:'uppercase' }}>
@@ -129,7 +129,7 @@ function SceneLabel({ index, label, x=80, y=80, progress=1 }) {
 function AppFrame({ width=960, height=820, title='taskflowco', children }) {
   return (
     <div style={{ width, height, background:TF.bg, border:`1px solid ${TF.border}`, borderRadius:14,
-      overflow:'hidden', boxShadow:'0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+      overflow:'hidden', boxShadow:'0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(14,42,71,0.045)',
       position:'relative' }}>
       <div style={{ display:'flex', alignItems:'center', gap:12, height:40, padding:'0 16px',
         borderBottom:`1px solid ${TF.border}`, background:TF.bg2 }}>
@@ -230,7 +230,7 @@ function SceneIntro() {
         const free = clamp((t-3.4)/0.6,0,1)
         const exit = clamp((t-4.6)/0.5,0,1)
         return (
-          <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse at 50% 45%,#131a2e,#0a0e18 60%)',
+          <div style={{ position:'absolute', inset:0, background:'radial-gradient(ellipse at 50% 45%,#FFFFFF,#E7EEF6 60%)',
             display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
             opacity:1-exit, transform:`scale(${1+exit*0.04})` }}>
             <div style={{ position:'absolute', inset:0,
@@ -386,7 +386,7 @@ function SceneTasks() {
                     <span style={{ fontFamily:FS, fontSize:14, color:TF.accentBright, fontWeight:600 }}>New worksheet from template…</span>
                     {['GSTR-3B','TDS Q1','ROC AOC-4'].map(s => (
                       <span key={s} style={{ fontFamily:FM, fontSize:10, padding:'3px 7px', borderRadius:4,
-                        background:'rgba(255,255,255,0.04)', border:`1px solid ${TF.border}`, color:TF.sub }}>{s}</span>
+                        background:'rgba(14,42,71,0.045)', border:`1px solid ${TF.border}`, color:TF.sub }}>{s}</span>
                     ))}
                   </div>
                 )}
@@ -421,7 +421,7 @@ function SceneViews() {
             <div style={{ position:'absolute', left:80, top:620, display:'flex', gap:10, opacity:clamp((t-1.2)/0.6,0,1) }}>
               {views.map(p => (
                 <div key={p.n} style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 16px', borderRadius:8,
-                  background:p.a?'rgba(127,163,199,0.16)':'rgba(255,255,255,0.03)',
+                  background:p.a?'rgba(127,163,199,0.16)':'rgba(14,42,71,0.035)',
                   border:`1px solid ${p.a?TF.accent:TF.border}`, color:p.a?TF.accentBright:TF.sub,
                   fontFamily:FS, fontSize:13, fontWeight:600, transition:'all 0.3s' }}>
                   <Icon name={p.icon} size={14} color={p.a?TF.accentBright:TF.sub}/><span>{p.n}</span>
@@ -886,7 +886,7 @@ function SceneWorkspace() {
           <div style={{ position:'absolute', inset:0, background:TF.bg, opacity:1-exit }}>
             <WatermarkLogo show/>
             <div style={{ position:'absolute', right:80, top:110, display:'inline-flex', alignItems:'center', gap:10,
-              padding:'8px 14px', background:'rgba(255,255,255,0.03)', border:`1px solid ${TF.border}`,
+              padding:'8px 14px', background:'rgba(14,42,71,0.035)', border:`1px solid ${TF.border}`,
               borderRadius:100, fontFamily:FM, fontSize:11, color:TF.good, fontWeight:700,
               letterSpacing:'0.14em', textTransform:'uppercase' }}>
               <span style={{ width:7, height:7, borderRadius:7, background:TF.good, boxShadow:`0 0 0 3px ${TF.good}22` }}/>
@@ -950,7 +950,7 @@ function SceneEnd() {
         const features = ['Tasks','Worksheets','Stages','Boards','Calendar','Heatmap','Library','Analytics','Tally export','Kanban']
         return (
           <div style={{ position:'absolute', inset:0,
-            background:'radial-gradient(ellipse at 50% 45%,#131a2e,#0a0e18 70%)',
+            background:'radial-gradient(ellipse at 50% 45%,#FFFFFF,#E7EEF6 70%)',
             display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
             <div style={{ position:'absolute', inset:0,
               backgroundImage:`linear-gradient(${TF.border} 1px,transparent 1px),linear-gradient(90deg,${TF.border} 1px,transparent 1px)`,
@@ -1153,7 +1153,7 @@ function Stage({ children }) {
   const ctx = useMemo(() => ({ time, duration:DURATION }), [time])
 
   return (
-    <div ref={wrapRef} style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, background:'#050810' }}>
+    <div ref={wrapRef} style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0, background:'#D7E0EC' }}>
       {/* Canvas */}
       <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', minHeight:0 }}>
         <div style={{ width:1920, height:1080, position:'relative', background:TF.bg,
@@ -1167,7 +1167,7 @@ function Stage({ children }) {
       </div>
       {/* Playback bar */}
       <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 20px',
-        background:'rgba(10,14,24,0.95)', borderTop:'1px solid rgba(255,255,255,0.06)',
+        background:'rgba(255,255,255,0.92)', borderTop:'1px solid rgba(14,42,71,0.055)',
         flexShrink:0 }}>
         <button onClick={() => setTime(0)} style={barBtn} title="Back to start">
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
@@ -1182,7 +1182,7 @@ function Stage({ children }) {
         <span style={{ fontFamily:FM, fontSize:12, color:TF.text, width:52, textAlign:'right', flexShrink:0 }}>{fmt(time)}</span>
         <div ref={trackRef} onMouseDown={e=>{seekFromEvent(e); setPlaying(false)}}
           style={{ flex:1, height:22, position:'relative', cursor:'pointer', display:'flex', alignItems:'center' }}>
-          <div style={{ position:'absolute', left:0, right:0, height:4, background:'rgba(255,255,255,0.1)', borderRadius:2 }}/>
+          <div style={{ position:'absolute', left:0, right:0, height:4, background:'rgba(14,42,71,0.14)', borderRadius:2 }}/>
           <div style={{ position:'absolute', left:0, width:`${pct}%`, height:4, background:TF.accentBright, borderRadius:2 }}/>
           <div style={{ position:'absolute', left:`${pct}%`, top:'50%', width:12, height:12,
             marginLeft:-6, marginTop:-6, background:'#fff', borderRadius:6, boxShadow:'0 2px 4px rgba(0,0,0,0.4)' }}/>
@@ -1200,7 +1200,7 @@ function Stage({ children }) {
 
 const barBtn = {
   width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center',
-  background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)',
+  background:'rgba(14,42,71,0.055)', border:'1px solid rgba(14,42,71,0.14)',
   borderRadius:6, color:'#eef0f8', cursor:'pointer', padding:0, flexShrink:0,
 }
 
@@ -1215,19 +1215,19 @@ export default function LaunchTour({ open, onClose }) {
 
   if (!open) return null
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(5,8,18,0.94)',
+    <div style={{ position:'fixed', inset:0, zIndex:2000, background:'rgba(237,242,248,0.975)',
       display:'flex', flexDirection:'column', fontFamily:FS }}>
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:16, padding:'12px 20px',
-        borderBottom:'1px solid rgba(255,255,255,0.07)', flexShrink:0, background:'rgba(10,14,24,0.95)' }}>
-        <span style={{ fontFamily:FM, fontSize:11, color:'#5B9BFF', letterSpacing:'0.18em',
+        borderBottom:'1px solid rgba(14,42,71,0.10)', flexShrink:0, background:'rgba(255,255,255,0.92)' }}>
+        <span style={{ fontFamily:FM, fontSize:11, color:'#2F6BFF', letterSpacing:'0.18em',
           textTransform:'uppercase', fontWeight:700 }}>Launch tour · 80s</span>
-        <span style={{ fontFamily:FM, fontSize:10, color:'rgba(134,147,176,0.6)', letterSpacing:'0.1em', textTransform:'uppercase' }}>
+        <span style={{ fontFamily:FM, fontSize:10, color:'rgba(90,107,132,0.85)', letterSpacing:'0.1em', textTransform:'uppercase' }}>
           space = play/pause · ← → seek · esc = close
         </span>
         <button onClick={onClose} style={{ marginLeft:'auto', padding:'6px 14px', borderRadius:7,
-          background:'transparent', border:'1px solid rgba(255,255,255,0.1)',
-          color:'rgba(238,240,248,0.7)', fontSize:13, fontWeight:600, cursor:'pointer',
+          background:'transparent', border:'1px solid rgba(14,42,71,0.14)',
+          color:'rgba(14,42,71,0.62)', fontSize:13, fontWeight:600, cursor:'pointer',
           fontFamily:FS, display:'flex', alignItems:'center', gap:8 }}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
             <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
