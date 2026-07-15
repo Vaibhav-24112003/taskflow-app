@@ -16991,13 +16991,13 @@ function CredentialsModule({org,supabase,cu}){
         <thead>
           {/* Group header row */}
           <tr>
-            <th colSpan={4} style={{padding:'6px 10px',background:'rgba(14,42,71,0.06)',borderBottom:'1px solid var(--tf-border)',borderRight:'2px solid var(--tf-border)',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textAlign:'left',letterSpacing:'0.06em',textTransform:'uppercase'}}>Client Details</th>
+            <th colSpan={4} style={{padding:'6px 10px',background:'rgba(233,238,244,0.99)',borderBottom:'1px solid var(--tf-border)',borderRight:'2px solid var(--tf-border)',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textAlign:'left',letterSpacing:'0.06em',textTransform:'uppercase',position:'sticky',left:0,zIndex:3}}>Client Details</th>
             {portalCols.length>0&&<th colSpan={portalCols.length} style={{padding:'6px 10px',background:'rgba(59,130,246,0.06)',borderBottom:'1px solid var(--tf-border)',fontSize:10,fontWeight:700,color:'#3b82f6',textAlign:'center',letterSpacing:'0.06em',textTransform:'uppercase'}}>Login Credentials</th>}
             <th style={{padding:'6px 10px',background:'var(--tf-bg)',borderBottom:'1px solid var(--tf-border)',fontSize:10,color:'transparent'}}>+</th>
           </tr>
           {/* Column header row */}
           <tr style={{background:'rgba(14,42,71,0.04)'}}>
-            {['Client Name','PAN','Email','Type'].map(function(h,i){return<th key={h} style={{padding:'7px 10px',textAlign:'left',fontWeight:700,color:'var(--tf-text-sub)',borderBottom:'2px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:FIXED_W[i],borderRight:i===3?'2px solid var(--tf-border)':'1px solid var(--tf-border)',position:'sticky',top:0,background:'rgba(245,247,250,0.98)',zIndex:2,textTransform:'uppercase',letterSpacing:'0.05em',fontSize:10}}>{h}</th>;})}
+            {['Client Name','PAN','Email','Type'].map(function(h,i){return<th key={h} style={{padding:'7px 10px',textAlign:'left',fontWeight:700,color:'var(--tf-text-sub)',borderBottom:'2px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:FIXED_W[i],borderRight:i===3?'2px solid var(--tf-border)':'1px solid var(--tf-border)',position:'sticky',top:0,left:i===0?0:undefined,background:'rgba(245,247,250,0.99)',zIndex:i===0?4:2,boxShadow:i===0?'2px 0 6px rgba(14,42,71,0.10)':undefined,textTransform:'uppercase',letterSpacing:'0.05em',fontSize:10}}>{h}</th>;})}
             {portalCols.map(function(p){return<th key={p} style={{padding:'7px 10px',textAlign:'center',fontWeight:700,color:'#3b82f6',borderBottom:'2px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',whiteSpace:'nowrap',minWidth:130,position:'sticky',top:0,background:'rgba(245,247,250,0.98)',zIndex:2,fontSize:11}}>{p}</th>;})}
             <th style={{padding:'7px 10px',borderBottom:'2px solid var(--tf-border)',position:'sticky',top:0,background:'rgba(245,247,250,0.98)',zIndex:2,minWidth:40}}/>
           </tr>
@@ -17008,8 +17008,8 @@ function CredentialsModule({org,supabase,cu}){
           </td></tr>:filtered.map(function(client,ri){
             var bg=ri%2===0?'transparent':'rgba(14,42,71,0.02)';
             return<tr key={client.id} style={{background:bg}}>
-              {/* Fixed columns */}
-              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',maxWidth:180}}>
+              {/* Fixed columns — Client Name frozen to the left */}
+              <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',maxWidth:200,minWidth:150,position:'sticky',left:0,zIndex:1,background:ri%2===0?'var(--tf-panel)':'var(--tf-surface)',boxShadow:'2px 0 6px rgba(14,42,71,0.07)'}}>
                 <div style={{fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{client.name}</div>
               </td>
               <td style={{padding:'7px 10px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',fontFamily:'monospace',color:'var(--tf-text-sub)',fontSize:11,whiteSpace:'nowrap'}}>{client.pan||'—'}</td>
