@@ -18280,6 +18280,10 @@ function ClientPortal({supabase}){
   var [activeTab,setActiveTab]=useState('all');
   var [oldPw,setOldPw]=useState('');
   var [accountChoices,setAccountChoices]=useState(null); // multi-firm login picker
+  var [theme,setTheme]=useState(function(){try{return localStorage.getItem('tf_portal_theme')||'light';}catch(e){return 'light';}});
+  useEffect(function(){try{document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('tf_portal_theme',theme);}catch(e){}return function(){/* keep theme on unmount so app route isn't disturbed */};},[theme]);
+  var dark=theme==='dark';
+  function toggleTheme(){setTheme(function(t){return t==='dark'?'light':'dark';});}
 
   // Check saved session
   useEffect(function(){
@@ -18380,38 +18384,42 @@ function ClientPortal({supabase}){
 
   // Login screen
   if(!portalUser){
-    return<div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0b0f1a,#131825)',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif",padding:16}}>
+    var lp=dark
+      ?{bg:'linear-gradient(135deg,#0b0f1a,#131825)',card:'#131825',cardBorder:'rgba(255,255,255,0.07)',input:'#0b0f1a',inputBorder:'rgba(255,255,255,0.09)',text:'#eaecf5',sub:'#5c6b87',foot:'#2a3655'}
+      :{bg:'linear-gradient(135deg,#f4f7fc,#e7edf7)',card:'#ffffff',cardBorder:'rgba(14,42,71,0.1)',input:'#f6f8fc',inputBorder:'rgba(14,42,71,0.12)',text:'#0E2A47',sub:'#5c6b87',foot:'#9aa7bd'};
+    return<div style={{minHeight:'100vh',background:lp.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif",padding:16,position:'relative'}}>
+      <button onClick={toggleTheme} title="Toggle theme" style={{position:'absolute',top:16,right:16,background:lp.card,border:'1px solid '+lp.cardBorder,borderRadius:8,width:34,height:34,color:lp.text,cursor:'pointer',fontSize:15}}>{dark?'☀️':'🌙'}</button>
       <div style={{width:'100%',maxWidth:400}}>
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{width:52,height:52,borderRadius:14,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 14px',boxShadow:'0 8px 32px rgba(6,182,212,0.3)',color:'#fff'}}>🔗</div>
-          <h1 style={{fontSize:22,fontWeight:800,color:'#eaecf5',margin:'0 0 4px'}}>Client Portal</h1>
-          <div style={{fontSize:12,color:'#5c6b87'}}>Login to access your requests and documents</div>
+          <h1 style={{fontSize:22,fontWeight:800,color:lp.text,margin:'0 0 4px'}}>Client Portal</h1>
+          <div style={{fontSize:12,color:lp.sub}}>Login to access your requests and documents</div>
         </div>
-        <div style={{background:'#131825',border:'1px solid rgba(255,255,255,0.07)',borderRadius:14,padding:24}}>
+        <div style={{background:lp.card,border:'1px solid '+lp.cardBorder,borderRadius:14,padding:24}}>
           {accountChoices?<>
-            <div style={{fontSize:13,fontWeight:700,color:'#eaecf5',marginBottom:4}}>Choose a firm</div>
-            <div style={{fontSize:11,color:'#5c6b87',marginBottom:14}}>This login is linked to more than one firm. Pick the one you want to open.</div>
-            {accountChoices.map(function(acct){return<button key={acct.id} onClick={function(){enterAccount(acct);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.09)',borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer'}}>
+            <div style={{fontSize:13,fontWeight:700,color:lp.text,marginBottom:4}}>Choose a firm</div>
+            <div style={{fontSize:11,color:lp.sub,marginBottom:14}}>This login is linked to more than one firm. Pick the one you want to open.</div>
+            {accountChoices.map(function(acct){return<button key={acct.id} onClick={function(){enterAccount(acct);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,background:lp.input,border:'1px solid '+lp.inputBorder,borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer'}}>
               <span style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,color:'#fff',fontWeight:800,flexShrink:0}}>{(acct.firm||'?').charAt(0).toUpperCase()}</span>
-              <span style={{flex:1}}><span style={{display:'block',fontSize:13,fontWeight:700,color:'#eaecf5'}}>{acct.firm||'Firm'}</span><span style={{display:'block',fontSize:11,color:'#5c6b87'}}>{acct.display_name||acct.email}</span></span>
+              <span style={{flex:1}}><span style={{display:'block',fontSize:13,fontWeight:700,color:lp.text}}>{acct.firm||'Firm'}</span><span style={{display:'block',fontSize:11,color:lp.sub}}>{acct.display_name||acct.email}</span></span>
               <span style={{fontSize:16,color:'#06b6d4'}}>→</span>
             </button>;})}
-            <button onClick={function(){setAccountChoices(null);}} style={{width:'100%',background:'none',border:'none',color:'#5c6b87',fontSize:11,fontWeight:600,cursor:'pointer',marginTop:4,fontFamily:'inherit'}}>← Use a different login</button>
+            <button onClick={function(){setAccountChoices(null);}} style={{width:'100%',background:'none',border:'none',color:lp.sub,fontSize:11,fontWeight:600,cursor:'pointer',marginTop:4,fontFamily:'inherit'}}>← Use a different login</button>
           </>:<>
           {loginErr&&<div style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'8px 12px',color:'#ef4444',fontSize:12,fontWeight:600,marginBottom:14}}>{loginErr}</div>}
           <div style={{marginBottom:14}}>
-            <label style={{fontSize:10,fontWeight:700,color:'#5c6b87',textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Email</label>
-            <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="your@email.com" style={{width:'100%',background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',color:'#eaecf5',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            <label style={{fontSize:10,fontWeight:700,color:lp.sub,textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Email</label>
+            <input type="email" value={email} onChange={function(e){setEmail(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="your@email.com" style={{width:'100%',background:lp.input,border:'1px solid '+lp.inputBorder,borderRadius:8,padding:'10px 12px',color:lp.text,fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
           <div style={{marginBottom:18}}>
-            <label style={{fontSize:10,fontWeight:700,color:'#5c6b87',textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Password</label>
-            <input type="password" value={password} onChange={function(e){setPassword(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="••••••••" style={{width:'100%',background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',color:'#eaecf5',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            <label style={{fontSize:10,fontWeight:700,color:lp.sub,textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Password</label>
+            <input type="password" value={password} onChange={function(e){setPassword(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="••••••••" style={{width:'100%',background:lp.input,border:'1px solid '+lp.inputBorder,borderRadius:8,padding:'10px 12px',color:lp.text,fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
           <button onClick={doLogin} disabled={logging} style={{width:'100%',background:'linear-gradient(135deg,#06b6d4,#0891b2)',border:'none',borderRadius:8,padding:'11px 0',color:'#fff',fontSize:13,fontWeight:700,cursor:logging?'not-allowed':'pointer',boxShadow:'0 4px 14px rgba(6,182,212,0.3)'}}>{logging?'Logging in...':'Login'}</button>
-          <div style={{textAlign:'center',marginTop:14,fontSize:11,color:'#5c6b87'}}>Forgot your password? Contact your firm — they can reset it for you.</div>
+          <div style={{textAlign:'center',marginTop:14,fontSize:11,color:lp.sub}}>Forgot your password? Contact your firm — they can reset it for you.</div>
           </>}
         </div>
-        <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#2a3655'}}>Powered by TaskFlowCo</div>
+        <div style={{textAlign:'center',marginTop:20,fontSize:10,color:lp.foot}}>Powered by TaskFlowCo</div>
       </div>
     </div>;
   }
@@ -18530,6 +18538,7 @@ function ClientPortal({supabase}){
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
         <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{portalUser.display_name||portalUser.email}</span>
+        <button onClick={toggleTheme} title="Toggle theme" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>{dark?'☀️':'🌙'}</button>
         <button onClick={function(){setChangePw(!changePw);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>⚙️</button>
         <button onClick={logout} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:600}}>Logout</button>
       </div>
