@@ -18277,16 +18277,18 @@ function MyPortalsButton({cu,supabase}){
     try{
       localStorage.setItem('tf_portal_accounts',JSON.stringify(accts));
       localStorage.setItem('tf_portal_session',JSON.stringify(active||accts[0]));
+      localStorage.setItem('tf_portal_from_app','1');
     }catch(e){}
     window.location.hash='#portal';
     window.location.reload();
   }
-  var btnStyle={padding:'5px 12px',background:'rgba(6,182,212,0.1)',border:'1px solid rgba(6,182,212,0.35)',borderRadius:6,color:'#0891b2',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5};
+  var portalIcon=<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>;
+  var btnStyle={padding:'6px 12px',background:'linear-gradient(135deg,rgba(6,182,212,0.14),rgba(47,107,255,0.14))',border:'1px solid rgba(6,182,212,0.4)',borderRadius:8,color:'#0891b2',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:6};
   if(accts.length===1){
-    return <button onClick={function(){openPortal(accts[0]);}} title={'Open your client portal'+(accts[0].firm?' ('+accts[0].firm+')':'')} style={btnStyle}>🔗 Client Portal</button>;
+    return <button onClick={function(){openPortal(accts[0]);}} title={'Open your client portal'+(accts[0].firm?' ('+accts[0].firm+')':'')} style={btnStyle}>{portalIcon}Client Portal</button>;
   }
   return <div style={{position:'relative',flexShrink:0}}>
-    <button onClick={function(){setOpen(!open);}} title="Open your client portal" style={btnStyle}>🔗 Client Portal ▾</button>
+    <button onClick={function(){setOpen(!open);}} title="Open your client portal" style={btnStyle}>{portalIcon}Client Portal<span style={{fontSize:9,opacity:0.7}}>▾</span></button>
     {open&&<>
       <div onClick={function(){setOpen(false);}} style={{position:'fixed',inset:0,zIndex:60}}/>
       <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',width:250,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 12px 32px rgba(0,0,0,0.18)',zIndex:70,overflow:'hidden'}}>
@@ -18331,6 +18333,8 @@ function ClientPortal({supabase}){
   // client can switch firms without logging out / re-entering the password.
   var [accounts,setAccounts]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_portal_accounts')||'[]');}catch(e){return [];}});
   var [acctMenu,setAcctMenu]=useState(false);
+  var fromApp=(function(){try{return localStorage.getItem('tf_portal_from_app')==='1';}catch(e){return false;}})();
+  function backToApp(){try{localStorage.removeItem('tf_portal_from_app');}catch(e){}window.location.href=window.location.origin+window.location.pathname;}
 
   function rememberAccounts(newOnes){
     setAccounts(function(prev){
@@ -18459,6 +18463,7 @@ function ClientPortal({supabase}){
       :{bg:'linear-gradient(135deg,#f4f7fc,#e7edf7)',card:'#ffffff',cardBorder:'rgba(14,42,71,0.1)',input:'#f6f8fc',inputBorder:'rgba(14,42,71,0.12)',text:'#0E2A47',sub:'#5c6b87',foot:'#9aa7bd'};
     return<div style={{minHeight:'100vh',background:lp.bg,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Plus Jakarta Sans','DM Sans',system-ui,sans-serif",padding:16,position:'relative'}}>
       <button onClick={toggleTheme} title="Toggle theme" style={{position:'absolute',top:16,right:16,background:lp.card,border:'1px solid '+lp.cardBorder,borderRadius:8,width:34,height:34,color:lp.text,cursor:'pointer',fontSize:15}}>{dark?'☀️':'🌙'}</button>
+      {fromApp&&<button onClick={backToApp} title="Back to TaskFlowCo" style={{position:'absolute',top:16,left:16,background:lp.card,border:'1px solid '+lp.cardBorder,borderRadius:8,padding:'0 12px',height:34,color:lp.text,cursor:'pointer',fontSize:12,fontWeight:700}}>← Back to app</button>}
       <div style={{width:'100%',maxWidth:400}}>
         <div style={{textAlign:'center',marginBottom:32}}>
           <div style={{width:52,height:52,borderRadius:14,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:24,margin:'0 auto 14px',boxShadow:'0 8px 32px rgba(6,182,212,0.3)',color:'#fff'}}>🔗</div>
@@ -18607,6 +18612,7 @@ function ClientPortal({supabase}){
         <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{siteName}</div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
+        {fromApp&&<button onClick={backToApp} title="Back to TaskFlowCo" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'5px 11px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:11,fontWeight:700,display:'flex',alignItems:'center',gap:5}}>← Back to app</button>}
         <button onClick={toggleTheme} title="Toggle theme" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>{dark?'☀️':'🌙'}</button>
         <button onClick={function(){setChangePw(!changePw);}} title="Change password" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>⚙️</button>
         {/* Firm / account switcher */}
