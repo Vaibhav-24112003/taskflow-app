@@ -15515,10 +15515,21 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
 
   async function inviteUser(){
     if(!invClientId||!invEmail.trim()){showToast('Client and email required','err');return;}
+    var emailLc=invEmail.trim().toLowerCase();
+    var existing=(users||[]).find(function(u){return (u.email||'').toLowerCase()===emailLc;});
+    if(existing){
+      var exClient=clients.find(function(c){return c.id===existing.client_id;});
+      showToast('This email already has portal access here'+(exClient?' ('+(exClient.display_name||exClient.name)+')':'')+'. Select that client and use 🔑 Reset password.','err');
+      return;
+    }
     setInvSaving(true);
     var pw=invPass.trim()||genPassword();
-    var res=await supabase.rpc('create_client_portal_user',{p_client_id:invClientId,p_org_id:org.id,p_email:invEmail.trim().toLowerCase(),p_password:pw,p_display_name:invName.trim()||null});
-    if(res.error){showToast(res.error.message,'err');setInvSaving(false);return;}
+    var res=await supabase.rpc('create_client_portal_user',{p_client_id:invClientId,p_org_id:org.id,p_email:emailLc,p_password:pw,p_display_name:invName.trim()||null});
+    if(res.error){
+      var m=(res.error.message||'');
+      if(m.indexOf('client_portal_access_email_org_id_key')>=0||m.indexOf('duplicate key')>=0)m='This email already has portal access in this firm. Use 🔑 Reset password instead.';
+      showToast(m,'err');setInvSaving(false);return;
+    }
     showToast('Portal user created!');
     // Open mailto with credentials
     var client=clients.find(function(c){return c.id===invClientId;});
@@ -15536,6 +15547,19 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
     await supabase.from('client_portal_access').update({is_active:!u.is_active}).eq('id',u.id);
     setUsers(function(p){return p.map(function(x){return x.id===u.id?Object.assign({},x,{is_active:!u.is_active}):x;});});
     showToast(u.is_active?'User deactivated':'User activated');
+  }
+
+  async function resetPortalPassword(u){
+    var pw=genPassword();
+    var res=await supabase.rpc('reset_client_portal_password',{p_access_id:u.id,p_new_password:pw});
+    if(res.error){showToast(res.error.message,'err');return;}
+    showToast('Password reset — email opened');
+    var client=clients.find(function(c){return c.id===u.client_id;});
+    var cName=client?(client.display_name||client.name):(u.display_name||'Client');
+    var portalUrl=window.location.origin+'/#portal';
+    var subject=encodeURIComponent('Your '+org.name+' Portal — password reset');
+    var body=encodeURIComponent('Hi '+cName+',\n\nYour client portal password has been reset.\n\nPortal: '+portalUrl+'\nEmail: '+u.email+'\nNew password: '+pw+'\n\nPlease login and change it from the portal.\n\nRegards,\n'+org.name);
+    window.open('mailto:'+encodeURIComponent(u.email)+'?subject='+subject+'&body='+body,'_blank');
   }
 
   async function createRequest(){
@@ -15740,7 +15764,13 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
               {selClientUsers.length>0&&selClientUsers[0].last_login&&<span> · Last login: {new Date(selClientUsers[0].last_login).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
             </div>
           </div>
-          <button onClick={function(){setShowReqForm(!showReqForm);setReqClientId(selClientId);}} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Request</button>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+            {selClientUsers.map(function(u){return<div key={u.id} style={{display:'flex',gap:6,alignItems:'center'}}>
+              <button onClick={function(){resetPortalPassword(u);}} title={'Reset password for '+u.email} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text)',cursor:'pointer',fontSize:11,fontWeight:700}}>🔑 Reset password</button>
+              <button onClick={function(){toggleUserActive(u);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:u.is_active?'#ef4444':'#22c55e',cursor:'pointer',fontSize:11,fontWeight:700}}>{u.is_active?'Deactivate':'Activate'}</button>
+            </div>;})}
+            <button onClick={function(){setShowReqForm(!showReqForm);setReqClientId(selClientId);}} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Request</button>
+          </div>
         </div>
 
         {/* New request form */}
@@ -18248,49 +18278,57 @@ function ClientPortal({supabase}){
   var [formVals,setFormVals]=useState({});
   var [formSaving,setFormSaving]=useState(false);
   var [activeTab,setActiveTab]=useState('all');
+  var [oldPw,setOldPw]=useState('');
+  var [accountChoices,setAccountChoices]=useState(null); // multi-firm login picker
 
   // Check saved session
   useEffect(function(){
     var saved=localStorage.getItem('tf_portal_session');
-    if(saved){try{var s=JSON.parse(saved);setPortalUser(s);loadOrg(s.org_id);loadRequests(s.client_id,s.org_id);}catch(e){}}
+    if(saved){try{var s=JSON.parse(saved);setPortalUser(s);loadOrg(s.org_id,s.id);loadRequests(s.id);}catch(e){}}
   },[]);
 
-  async function loadOrg(orgId){
-    var r=await supabase.from('organizations').select('id,name,description,portal_settings').eq('id',orgId).single();
+  function enterAccount(acct){
+    setPortalUser(acct);
+    localStorage.setItem('tf_portal_session',JSON.stringify(acct));
+    setAccountChoices(null);setEmail('');setPassword('');setLoginErr('');
+    loadOrg(acct.org_id,acct.id);
+    loadRequests(acct.id);
+  }
+
+  async function loadOrg(orgId,userId){
+    var r=await supabase.rpc('portal_get_org',{p_user_id:userId,p_org_id:orgId});
     if(r.data)setOrg(r.data);
   }
 
   async function doLogin(){
     if(!email.trim()||!password.trim()){setLoginErr('Email and password required');return;}
-    setLogging(true);setLoginErr('');
+    setLogging(true);setLoginErr('');setAccountChoices(null);
     var res=await supabase.rpc('client_portal_login',{p_email:email.trim().toLowerCase(),p_password:password.trim()});
     if(res.error){setLoginErr(res.error.message);setLogging(false);return;}
     var data=res.data;
     if(data&&data.error){setLoginErr(data.error);setLogging(false);return;}
+    if(data&&data.multi){setAccountChoices(data.accounts||[]);setLogging(false);return;}
     if(!data||!data.id){setLoginErr('Invalid credentials');setLogging(false);return;}
-    setPortalUser(data);
-    localStorage.setItem('tf_portal_session',JSON.stringify(data));
-    loadOrg(data.org_id);
-    loadRequests(data.client_id,data.org_id);
     setLogging(false);
+    enterAccount(data);
   }
 
   function logout(){setPortalUser(null);setOrg(null);setRequests([]);setSelReq(null);setMessages([]);localStorage.removeItem('tf_portal_session');}
 
-  async function loadRequests(clientId,orgId){setLoading(true);try{var r=await supabase.from('client_requests').select('*').eq('org_id',orgId).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200);setRequests(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
+  async function loadRequests(userId){setLoading(true);try{var r=await supabase.rpc('portal_list_requests',{p_user_id:userId});setRequests(r.data||[]);}catch(e){console.error(e);}finally{setLoading(false);}}
 
   async function loadMessages(reqId){
-    var r=await supabase.from('client_request_messages').select('*').eq('request_id',reqId).order('created_at').limit(500);
+    if(!portalUser)return;
+    var r=await supabase.rpc('portal_list_messages',{p_user_id:portalUser.id,p_request_id:reqId});
     setMessages(r.data||[]);
   }
 
   async function sendMessage(){
     if(!msgText.trim()||!selReq||!portalUser)return;
-    var ins=await supabase.from('client_request_messages').insert({request_id:selReq.id,sender_type:'client',sender_id:portalUser.id,message:msgText.trim()}).select().single();
+    var ins=await supabase.rpc('portal_send_message',{p_user_id:portalUser.id,p_request_id:selReq.id,p_message:msgText.trim()});
+    if(ins.error){alert(ins.error.message);return;}
     if(ins.data)setMessages(function(p){return[...p,ins.data];});
-    // Mark request as responded
     if(selReq.status==='pending'){
-      await supabase.from('client_requests').update({status:'responded',updated_at:new Date().toISOString()}).eq('id',selReq.id);
       setSelReq(Object.assign({},selReq,{status:'responded'}));
       setRequests(function(p){return p.map(function(r){return r.id===selReq.id?Object.assign({},r,{status:'responded'}):r;});});
     }
@@ -18298,10 +18336,12 @@ function ClientPortal({supabase}){
   }
 
   async function changePassword(){
-    if(!newPw.trim()||newPw.trim().length<6){setPwMsg('Password must be at least 6 characters');return;}
-    var res=await supabase.rpc('change_client_portal_password',{p_user_id:portalUser.id,p_new_password:newPw.trim()});
+    if(!oldPw.trim()){setPwMsg('Enter your current password');return;}
+    if(!newPw.trim()||newPw.trim().length<6){setPwMsg('New password must be at least 6 characters');return;}
+    var res=await supabase.rpc('change_client_portal_password',{p_user_id:portalUser.id,p_old_password:oldPw.trim(),p_new_password:newPw.trim()});
     if(res.error){setPwMsg(res.error.message);return;}
-    setPwMsg('Password changed!');setNewPw('');setTimeout(function(){setChangePw(false);setPwMsg('');},1500);
+    if(res.data&&res.data.error){setPwMsg(res.data.error);return;}
+    setPwMsg('Password changed!');setNewPw('');setOldPw('');setTimeout(function(){setChangePw(false);setPwMsg('');},1500);
   }
 
   // File upload for data_collection requests
@@ -18314,9 +18354,9 @@ function ClientPortal({supabase}){
     if(up.error){alert('Upload failed: '+up.error.message);setUploading(false);return;}
     var pubUrl=supabase.storage.from('client-portal').getPublicUrl(path).data.publicUrl;
     var newFile={name:file.name,url:pubUrl,size:file.size,uploaded_by:'client',uploaded_at:new Date().toISOString()};
-    var existingFiles=selReq.files||[];
-    var updatedFiles=[...existingFiles,newFile];
-    await supabase.from('client_requests').update({files:updatedFiles,status:'responded',updated_at:new Date().toISOString()}).eq('id',selReq.id);
+    var upd=await supabase.rpc('portal_add_file',{p_user_id:portalUser.id,p_request_id:selReq.id,p_file:newFile});
+    if(upd.error){alert('Save failed: '+upd.error.message);setUploading(false);e.target.value='';return;}
+    var updatedFiles=(upd.data&&upd.data.files)||[...(selReq.files||[]),newFile];
     setSelReq(Object.assign({},selReq,{files:updatedFiles,status:'responded'}));
     setRequests(function(p){return p.map(function(r){return r.id===selReq.id?Object.assign({},r,{files:updatedFiles,status:'responded'}):r;});});
     setUploading(false);
@@ -18327,7 +18367,8 @@ function ClientPortal({supabase}){
   async function submitForm(){
     if(!selReq)return;
     setFormSaving(true);
-    await supabase.from('client_requests').update({form_responses:formVals,status:'responded',updated_at:new Date().toISOString()}).eq('id',selReq.id);
+    var res=await supabase.rpc('portal_submit_form',{p_user_id:portalUser.id,p_request_id:selReq.id,p_responses:formVals});
+    if(res.error){alert('Submit failed: '+res.error.message);setFormSaving(false);return;}
     setSelReq(Object.assign({},selReq,{form_responses:formVals,status:'responded'}));
     setRequests(function(p){return p.map(function(r){return r.id===selReq.id?Object.assign({},r,{form_responses:formVals,status:'responded'}):r;});});
     setFormSaving(false);
@@ -18347,6 +18388,16 @@ function ClientPortal({supabase}){
           <div style={{fontSize:12,color:'#5c6b87'}}>Login to access your requests and documents</div>
         </div>
         <div style={{background:'#131825',border:'1px solid rgba(255,255,255,0.07)',borderRadius:14,padding:24}}>
+          {accountChoices?<>
+            <div style={{fontSize:13,fontWeight:700,color:'#eaecf5',marginBottom:4}}>Choose a firm</div>
+            <div style={{fontSize:11,color:'#5c6b87',marginBottom:14}}>This login is linked to more than one firm. Pick the one you want to open.</div>
+            {accountChoices.map(function(acct){return<button key={acct.id} onClick={function(){enterAccount(acct);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.09)',borderRadius:10,padding:'12px 14px',marginBottom:8,cursor:'pointer'}}>
+              <span style={{width:34,height:34,borderRadius:9,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:15,color:'#fff',fontWeight:800,flexShrink:0}}>{(acct.firm||'?').charAt(0).toUpperCase()}</span>
+              <span style={{flex:1}}><span style={{display:'block',fontSize:13,fontWeight:700,color:'#eaecf5'}}>{acct.firm||'Firm'}</span><span style={{display:'block',fontSize:11,color:'#5c6b87'}}>{acct.display_name||acct.email}</span></span>
+              <span style={{fontSize:16,color:'#06b6d4'}}>→</span>
+            </button>;})}
+            <button onClick={function(){setAccountChoices(null);}} style={{width:'100%',background:'none',border:'none',color:'#5c6b87',fontSize:11,fontWeight:600,cursor:'pointer',marginTop:4,fontFamily:'inherit'}}>← Use a different login</button>
+          </>:<>
           {loginErr&&<div style={{background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:8,padding:'8px 12px',color:'#ef4444',fontSize:12,fontWeight:600,marginBottom:14}}>{loginErr}</div>}
           <div style={{marginBottom:14}}>
             <label style={{fontSize:10,fontWeight:700,color:'#5c6b87',textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:5}}>Email</label>
@@ -18357,6 +18408,8 @@ function ClientPortal({supabase}){
             <input type="password" value={password} onChange={function(e){setPassword(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')doLogin();}} placeholder="••••••••" style={{width:'100%',background:'#0b0f1a',border:'1px solid rgba(255,255,255,0.07)',borderRadius:8,padding:'10px 12px',color:'#eaecf5',fontSize:13,outline:'none',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
           <button onClick={doLogin} disabled={logging} style={{width:'100%',background:'linear-gradient(135deg,#06b6d4,#0891b2)',border:'none',borderRadius:8,padding:'11px 0',color:'#fff',fontSize:13,fontWeight:700,cursor:logging?'not-allowed':'pointer',boxShadow:'0 4px 14px rgba(6,182,212,0.3)'}}>{logging?'Logging in...':'Login'}</button>
+          <div style={{textAlign:'center',marginTop:14,fontSize:11,color:'#5c6b87'}}>Forgot your password? Contact your firm — they can reset it for you.</div>
+          </>}
         </div>
         <div style={{textAlign:'center',marginTop:20,fontSize:10,color:'#2a3655'}}>Powered by TaskFlowCo</div>
       </div>
@@ -18485,8 +18538,9 @@ function ClientPortal({supabase}){
       {/* Change password */}
       {changePw&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:16,marginBottom:16}}>
         <div style={{fontSize:12,fontWeight:700,color:'var(--tf-text)',marginBottom:8}}>Change Password</div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <input type="password" value={newPw} onChange={function(e){setNewPw(e.target.value);}} placeholder="New password (min 6 chars)" style={{flex:1,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          <input type="password" value={oldPw} onChange={function(e){setOldPw(e.target.value);}} placeholder="Current password" style={{flex:'1 1 140px',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
+          <input type="password" value={newPw} onChange={function(e){setNewPw(e.target.value);}} placeholder="New password (min 6 chars)" style={{flex:'1 1 140px',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:12,outline:'none',fontFamily:'inherit'}}/>
           <button onClick={changePassword} style={{background:'linear-gradient(135deg,#06b6d4,#0891b2)',border:'none',borderRadius:8,padding:'8px 14px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Update</button>
         </div>
         {pwMsg&&<div style={{fontSize:11,color:pwMsg.includes('changed')?'#22c55e':'#ef4444',marginTop:6}}>{pwMsg}</div>}
