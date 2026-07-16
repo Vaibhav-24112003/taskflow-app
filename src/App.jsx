@@ -14348,7 +14348,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var [portalUsers,setPortalUsers]=useState([]);
   var [templates,setTemplates]=useState([]);
   var [toast,setToast]=useState(null);
-  var [activeTab,setActiveTab]=useState('trails'); // 'trails' | 'bulk' | 'single' | 'templates'
+  var [activeTab,setActiveTab]=useState('gmail'); // 'gmail'(Inbox) | 'bulk' | 'reminders' | 'templates'
   // Bulk email state
   var [bulkSelIds,setBulkSelIds]=useState({});
   var [bulkFilterWT,setBulkFilterWT]=useState('');
@@ -14792,18 +14792,17 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   }
 
   useEffect(function(){loadData();},[org.id]);
-  // Cross-link from Client Connect: preselect a client in the single-email composer.
+  // Cross-link from Requests & Campaigns "Email client": open the Bulk composer with
+  // that client preselected (the old 'single' tab never existed, so this dead-ended).
   useEffect(function(){
     if(!initClientId||!clients.length)return;
-    var c=clients.find(function(x){return x.id===initClientId;});
-    setActiveTab('single');
-    setSingleClientId(initClientId);
-    if(c&&c.email)setSingleTo(c.email);
+    setActiveTab('bulk');
+    setBulkSelIds({[initClientId]:true});
     if(onConsumeInit)onConsumeInit();
   },[initClientId,clients.length]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);var rl=await supabase.from('comm_logs').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(2000);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);setCommLogs(rl.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
