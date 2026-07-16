@@ -1883,6 +1883,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
           </div>}
         </div>;
       })()}
+      {/* My Client Portals — if this user's email also has portal access */}
+      <MyPortalsButton cu={cu} supabase={supabase}/>
       {/* Admin button — @taskflowco.in only */}
       {isAdminEmail(cu?.email)&&<button onClick={()=>setShowAdminShell(true)} title="Platform Admin Dashboard" style={{padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5}}>🛡 Admin</button>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
@@ -18256,6 +18258,46 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
         {moduleContent}
       </div>
       {showAppTour&&<AppTour onClose={function(){setShowAppTour(false);}}/>}
+  </div>;
+}
+
+// Top-bar entry point: if the logged-in TaskFlowCo user's email also has
+// client-portal access at one or more firms, offer a one-click jump into the
+// portal (no separate portal login — they're already authenticated as that email).
+function MyPortalsButton({cu,supabase}){
+  var [accts,setAccts]=useState([]);
+  var [open,setOpen]=useState(false);
+  useEffect(function(){
+    var alive=true;
+    (async function(){try{var r=await supabase.rpc('my_portal_accounts');if(alive&&Array.isArray(r.data))setAccts(r.data);}catch(e){}})();
+    return function(){alive=false;};
+  },[cu&&cu.email]);
+  if(!accts||accts.length===0)return null;
+  function openPortal(active){
+    try{
+      localStorage.setItem('tf_portal_accounts',JSON.stringify(accts));
+      localStorage.setItem('tf_portal_session',JSON.stringify(active||accts[0]));
+    }catch(e){}
+    window.location.hash='#portal';
+    window.location.reload();
+  }
+  var btnStyle={padding:'5px 12px',background:'rgba(6,182,212,0.1)',border:'1px solid rgba(6,182,212,0.35)',borderRadius:6,color:'#0891b2',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5};
+  if(accts.length===1){
+    return <button onClick={function(){openPortal(accts[0]);}} title={'Open your client portal'+(accts[0].firm?' ('+accts[0].firm+')':'')} style={btnStyle}>🔗 Client Portal</button>;
+  }
+  return <div style={{position:'relative',flexShrink:0}}>
+    <button onClick={function(){setOpen(!open);}} title="Open your client portal" style={btnStyle}>🔗 Client Portal ▾</button>
+    {open&&<>
+      <div onClick={function(){setOpen(false);}} style={{position:'fixed',inset:0,zIndex:60}}/>
+      <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',width:250,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 12px 32px rgba(0,0,0,0.18)',zIndex:70,overflow:'hidden'}}>
+        <div style={{padding:'8px 12px',fontSize:9,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Open portal for</div>
+        {accts.map(function(a){return <button key={a.id} onClick={function(){openPortal(a);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:9,background:'transparent',border:'none',borderTop:'1px solid var(--tf-border)',padding:'9px 12px',cursor:'pointer',fontFamily:'inherit'}}>
+          <span style={{width:24,height:24,borderRadius:6,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:800,flexShrink:0}}>{(a.firm||'?').charAt(0).toUpperCase()}</span>
+          <span style={{flex:1}}><span style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{a.firm||'Firm'}</span><span style={{display:'block',fontSize:10,color:'var(--tf-text-sub)'}}>{a.display_name||a.email}</span></span>
+          <span style={{fontSize:12,color:'#06b6d4'}}>→</span>
+        </button>;})}
+      </div>
+    </>}
   </div>;
 }
 
