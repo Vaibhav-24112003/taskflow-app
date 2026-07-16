@@ -14355,6 +14355,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var [bulkSubject,setBulkSubject]=useState('');
   var [bulkBody,setBulkBody]=useState('');
   var [bulkCC,setBulkCC]=useState('');
+  var [bulkSending,setBulkSending]=useState(false);
+  var [bulkResult,setBulkResult]=useState(null); // {ok,fail}
   var [clientSearch,setClientSearch]=useState('');
   // Single email state
   var [singleTo,setSingleTo]=useState('');
@@ -14874,20 +14876,51 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     return res.data;
   }
 
-  function sendBulk(){
-    var selCount=Object.keys(bulkSelIds).length;
-    if(selCount===0){showToast('Select at least one client','err');return;}
-    if(!bulkSubject.trim()){showToast('Subject required','err');return;}
-    var emails=[];
+  // App-wide personalisation variables — used by Bulk (and reusable elsewhere).
+  function mergeClientVars(tpl,c){
+    var cf=(c&&c.custom_fields)||{};
+    return String(tpl||'')
+      .replace(/\{client\}/g,(c&&(c.display_name||c.name))||'')
+      .replace(/\{name\}/g,(c&&c.name)||'')
+      .replace(/\{firm\}/g,(org&&org.name)||'')
+      .replace(/\{pan\}/g,(c&&c.pan)||'')
+      .replace(/\{email\}/g,(c&&c.email)||'')
+      .replace(/\{gstin\}/g,cf.gstin||'')
+      .replace(/\{work_type\}/g,bulkFilterWT||'');
+  }
+  async function sendBulk(){
     var cids=Object.keys(bulkSelIds);
-    cids.forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email&&emails.indexOf(c.email)===-1)emails.push(c.email);});
-    if(emails.length===0){showToast('No emails found for selected clients','err');return;}
-    var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','));
-    if(bulkCC.trim())mailto+='&cc='+encodeURIComponent(bulkCC.trim());
-    mailto+='&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
-    window.open(mailto,'_blank');
-    cids.forEach(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(c&&c.email)logComm(cid,'email_sent',bulkSubject,bulkBody,c.email,bulkCC);});
-    showToast('Email client opened for '+emails.length+' recipient'+(emails.length!==1?'s':''));
+    if(cids.length===0){showToast('Select at least one client','err');return;}
+    if(!bulkSubject.trim()){showToast('Subject required','err');return;}
+    var recips=cids.map(function(cid){return emailClients.find(function(x){return x.id===cid;});}).filter(function(c){return c&&c.email;});
+    if(recips.length===0){showToast('No emails found for selected clients','err');return;}
+    setBulkResult(null);
+    if(gmailToken){
+      // Personalised INDIVIDUAL emails via Gmail (no BCC) — each client gets their own.
+      setBulkSending(true);var ok=0,fail=0;
+      for(var i=0;i<recips.length;i++){
+        var c=recips[i];
+        var subj=mergeClientVars(bulkSubject,c);
+        var plain=mergeClientVars(bulkBody,c);
+        var html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;">'+plain.replace(/\n/g,'<br>')+'</div>';
+        try{
+          var encoded=buildMimeEmail(c.email,subj,html,bulkCC,'','','','',[]);
+          var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
+          if(res&&res.id){ok++;logComm(c.id,'email_sent',subj,plain,c.email,bulkCC);}else fail++;
+        }catch(e){fail++;}
+      }
+      setBulkSending(false);setBulkResult({ok:ok,fail:fail});
+      showToast('Sent '+ok+' individual email'+(ok!==1?'s':'')+(fail?' · '+fail+' failed':''),fail&&!ok?'err':'ok');
+    } else {
+      // Fallback (no Gmail connected): open the OS mail app with everyone BCC'd.
+      var emails=recips.map(function(c){return c.email;}).filter(function(e,i,a){return a.indexOf(e)===i;});
+      var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','));
+      if(bulkCC.trim())mailto+='&cc='+encodeURIComponent(bulkCC.trim());
+      mailto+='&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
+      window.open(mailto,'_blank');
+      recips.forEach(function(c){logComm(c.id,'email_sent',bulkSubject,bulkBody,c.email,bulkCC);});
+      showToast('Opened your mail app ('+emails.length+' BCC). Connect Gmail to send personalised individual emails.');
+    }
   }
 
   // ── Client reminders ──────────────────────────────────────────────────
@@ -14977,7 +15010,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     {/* LEFT PANEL — Tabs + Folder nav */}
     <div style={{width:gmailThreePaneActive?185:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0,transition:'width 0.2s'}}>
       <div style={{padding:'14px 12px 12px',borderBottom:'1px solid var(--tf-border)'}}>
-        <div style={{display:'flex',gap:6}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
           {[
             {id:'gmail',label:'Inbox',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>},
             {id:'bulk',label:'Bulk',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>},
@@ -14985,7 +15018,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             {id:'templates',label:'Templates',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>}
           ].map(function(t){
             var active=activeTab===t.id;
-            return<button key={t.id} onClick={function(){setActiveTab(t.id);}} title={t.label} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:5,padding:'9px 4px',border:'1px solid',borderColor:active?'#2F6BFF':'var(--tf-border)',borderRadius:10,background:active?'rgba(47,107,255,0.08)':'var(--tf-surface)',color:active?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:10.5,fontWeight:active?800:600,fontFamily:'inherit',transition:'all 0.12s'}}>{t.svg}<span>{t.label}</span></button>;
+            return<button key={t.id} onClick={function(){setActiveTab(t.id);}} title={t.label} style={{display:'flex',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,padding:'9px 6px',border:'1px solid',borderColor:active?'#2F6BFF':'var(--tf-border)',borderRadius:10,background:active?'rgba(47,107,255,0.08)':'var(--tf-surface)',color:active?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:11.5,fontWeight:active?800:600,fontFamily:'inherit',transition:'all 0.12s'}}><span style={{flexShrink:0,display:'inline-flex'}}>{t.svg}</span><span style={{whiteSpace:'nowrap'}}>{t.label}</span></button>;
           })}
         </div>
       </div>
@@ -15280,7 +15313,12 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
         </div>}
       </>:activeTab==='bulk'?<>
         <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Bulk Email</div>
-        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:20}}>Compose and send emails to multiple clients. Recipients are BCC'd so they don't see each other.</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:12}}>{gmailToken?'A separate, personalised email is sent to each client via your Gmail — no BCC, so it reads like a 1-to-1 message.':'Connect Gmail (Inbox tab) to send personalised individual emails. Without it, your mail app opens with everyone BCC’d.'}</div>
+        {/* Personalisation variables — click to insert into the body */}
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:16,padding:'8px 10px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8}}>
+          <span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>Insert:</span>
+          {['{client}','{firm}','{pan}','{email}','{work_type}','{gstin}'].map(function(v){return<button key={v} onClick={function(){setBulkBody(function(b){return (b||'')+' '+v;});}} title={'Auto-filled per client'} style={{fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:'#2F6BFF',background:'rgba(47,107,255,0.08)',border:'1px solid rgba(47,107,255,0.25)',borderRadius:6,padding:'2px 8px',cursor:'pointer'}}>{v}</button>;})}
+        </div>
         {/* Filter + Template row */}
         <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
           <div style={{flex:1,minWidth:180}}>
@@ -15325,7 +15363,10 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             </span>;})}
           </div>}
         </div>
-        <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0} style={{background:Object.keys(bulkSelIds).length>0?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0?'#2454D6':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>Send to {Object.keys(bulkSelIds).length} Client{Object.keys(bulkSelIds).length!==1?'s':''}</button>
+        <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
+          <button onClick={sendBulk} disabled={Object.keys(bulkSelIds).length===0||bulkSending} style={{background:Object.keys(bulkSelIds).length>0&&!bulkSending?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid',borderColor:Object.keys(bulkSelIds).length>0&&!bulkSending?'#2454D6':'var(--tf-border)',borderRadius:8,padding:'11px 28px',color:Object.keys(bulkSelIds).length>0&&!bulkSending?'#fff':'var(--tf-text-sub)',cursor:Object.keys(bulkSelIds).length>0&&!bulkSending?'pointer':'not-allowed',fontSize:14,fontWeight:700,boxShadow:Object.keys(bulkSelIds).length>0&&!bulkSending?'0 4px 14px rgba(99,102,241,0.25)':'none'}}>{bulkSending?'Sending…':(gmailToken?'Send '+Object.keys(bulkSelIds).length+' individual email'+(Object.keys(bulkSelIds).length!==1?'s':''):'Send to '+Object.keys(bulkSelIds).length+' Client'+(Object.keys(bulkSelIds).length!==1?'s':''))}</button>
+          {bulkResult&&<div style={{display:'flex',alignItems:'center',gap:8,fontSize:13,fontWeight:700,color:bulkResult.fail&&!bulkResult.ok?'#ef4444':'#16a34a',background:bulkResult.fail&&!bulkResult.ok?'rgba(239,68,68,0.08)':'rgba(34,197,94,0.1)',border:'1px solid '+(bulkResult.fail&&!bulkResult.ok?'rgba(239,68,68,0.3)':'rgba(34,197,94,0.3)'),borderRadius:8,padding:'8px 14px'}}>{bulkResult.fail&&!bulkResult.ok?'✗':'✓'} Sent {bulkResult.ok}{bulkResult.fail?' · '+bulkResult.fail+' failed':''}</div>}
+        </div>
       </>:activeTab==='reminders'?<>
         <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Client Reminders 🔔</div>
         <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:16}}>Email clients about their upcoming &amp; overdue work — sent from your connected Gmail. Use variables <b>{'{client}'}</b>, <b>{'{firm}'}</b>, <b>{'{items}'}</b>, <b>{'{work_type}'}</b>, <b>{'{due_date}'}</b>, <b>{'{period}'}</b>.</div>
@@ -15346,6 +15387,10 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             </div>
           </div>
           <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Message</label>
+          <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>
+            <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',alignSelf:'center'}}>Insert:</span>
+            {['{client}','{firm}','{work_type}','{due_date}','{period}','{items}'].map(function(v){return<button key={v} onClick={function(){setRemBody(function(b){return (b||'')+v;});}} style={{fontFamily:'JetBrains Mono,monospace',fontSize:10.5,padding:'3px 7px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-surface)',color:'#2F6BFF',cursor:'pointer',fontWeight:600}}>{v}</button>;})}
+          </div>
           <textarea value={remBody} onChange={function(e){setRemBody(e.target.value);}} rows={7} style={Object.assign({},INP,{resize:'vertical',fontFamily:'inherit',lineHeight:1.5})}/>
           <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
             <button onClick={function(){saveRemConfig();}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 14px',color:'var(--tf-text)',cursor:'pointer',fontSize:12,fontWeight:700}}>Save template</button>
