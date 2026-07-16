@@ -15764,10 +15764,11 @@ function ClientPortalModule({org,supabase,cu,workTypeConfigs}){
               {selClientUsers.length>0&&selClientUsers[0].last_login&&<span> · Last login: {new Date(selClientUsers[0].last_login).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>}
             </div>
           </div>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-            {selClientUsers.map(function(u){return<div key={u.id} style={{display:'flex',gap:6,alignItems:'center'}}>
-              <button onClick={function(){resetPortalPassword(u);}} title={'Reset password for '+u.email} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:'var(--tf-text)',cursor:'pointer',fontSize:11,fontWeight:700}}>🔑 Reset password</button>
-              <button onClick={function(){toggleUserActive(u);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 12px',color:u.is_active?'#ef4444':'#22c55e',cursor:'pointer',fontSize:11,fontWeight:700}}>{u.is_active?'Deactivate':'Activate'}</button>
+          <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+            {selClientUsers.map(function(u){return<div key={u.id} style={{display:'flex',gap:6,alignItems:'center',border:'1px solid var(--tf-border)',borderRadius:9,padding:'4px 6px 4px 10px'}}>
+              {selClientUsers.length>1&&<span style={{fontSize:10,color:'var(--tf-text-sub)',maxWidth:130,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.email}</span>}
+              <button onClick={function(){resetPortalPassword(u);}} title={'Reset password for '+u.email} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',cursor:'pointer',fontSize:11,fontWeight:700}}>🔑 Reset</button>
+              <button onClick={function(){toggleUserActive(u);}} title={(u.is_active?'Deactivate ':'Activate ')+u.email} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:u.is_active?'#ef4444':'#22c55e',cursor:'pointer',fontSize:11,fontWeight:700}}>{u.is_active?'Deactivate':'Activate'}</button>
             </div>;})}
             <button onClick={function(){setShowReqForm(!showReqForm);setReqClientId(selClientId);}} style={{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>+ New Request</button>
           </div>
@@ -18284,6 +18285,19 @@ function ClientPortal({supabase}){
   useEffect(function(){try{document.documentElement.setAttribute('data-theme',theme);localStorage.setItem('tf_portal_theme',theme);}catch(e){}return function(){/* keep theme on unmount so app route isn't disturbed */};},[theme]);
   var dark=theme==='dark';
   function toggleTheme(){setTheme(function(t){return t==='dark'?'light':'dark';});}
+  // Signed-in accounts (Gmail-style multi-firm switcher) — remembered so the
+  // client can switch firms without logging out / re-entering the password.
+  var [accounts,setAccounts]=useState(function(){try{return JSON.parse(localStorage.getItem('tf_portal_accounts')||'[]');}catch(e){return [];}});
+  var [acctMenu,setAcctMenu]=useState(false);
+
+  function rememberAccounts(newOnes){
+    setAccounts(function(prev){
+      var byId={};(prev||[]).forEach(function(a){byId[a.id]=a;});(newOnes||[]).forEach(function(a){if(a&&a.id)byId[a.id]=a;});
+      var list=Object.keys(byId).map(function(k){return byId[k];});
+      try{localStorage.setItem('tf_portal_accounts',JSON.stringify(list));}catch(e){}
+      return list;
+    });
+  }
 
   // Check saved session
   useEffect(function(){
@@ -18292,11 +18306,25 @@ function ClientPortal({supabase}){
   },[]);
 
   function enterAccount(acct){
+    rememberAccounts([acct]);
     setPortalUser(acct);
     localStorage.setItem('tf_portal_session',JSON.stringify(acct));
-    setAccountChoices(null);setEmail('');setPassword('');setLoginErr('');
+    setAccountChoices(null);setEmail('');setPassword('');setLoginErr('');setAcctMenu(false);
+    setSelReq(null);setMessages([]);setChangePw(false);
     loadOrg(acct.org_id,acct.id);
     loadRequests(acct.id);
+  }
+
+  function switchAccount(acct){ if(!portalUser||acct.id!==portalUser.id) enterAccount(acct); setAcctMenu(false); }
+  function addAnotherFirm(){ setPortalUser(null);setAccountChoices(null);setEmail('');setPassword('');setLoginErr('');setAcctMenu(false); }
+  function logoutAccount(acct){
+    var remaining=(accounts||[]).filter(function(a){return a.id!==acct.id;});
+    try{localStorage.setItem('tf_portal_accounts',JSON.stringify(remaining));}catch(e){}
+    setAccounts(remaining);setAcctMenu(false);
+    if(portalUser&&acct.id===portalUser.id){
+      if(remaining.length>0){enterAccount(remaining[0]);}
+      else{setPortalUser(null);setOrg(null);setRequests([]);setSelReq(null);setMessages([]);localStorage.removeItem('tf_portal_session');}
+    }
   }
 
   async function loadOrg(orgId,userId){
@@ -18311,7 +18339,7 @@ function ClientPortal({supabase}){
     if(res.error){setLoginErr(res.error.message);setLogging(false);return;}
     var data=res.data;
     if(data&&data.error){setLoginErr(data.error);setLogging(false);return;}
-    if(data&&data.multi){setAccountChoices(data.accounts||[]);setLogging(false);return;}
+    if(data&&data.multi){rememberAccounts(data.accounts||[]);setAccountChoices(data.accounts||[]);setLogging(false);return;}
     if(!data||!data.id){setLoginErr('Invalid credentials');setLogging(false);return;}
     setLogging(false);
     enterAccount(data);
@@ -18537,10 +18565,29 @@ function ClientPortal({supabase}){
         <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{siteName}</div>
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
-        <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{portalUser.display_name||portalUser.email}</span>
         <button onClick={toggleTheme} title="Toggle theme" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>{dark?'☀️':'🌙'}</button>
-        <button onClick={function(){setChangePw(!changePw);}} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>⚙️</button>
-        <button onClick={logout} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'#ef4444',cursor:'pointer',fontSize:10,fontWeight:600}}>Logout</button>
+        <button onClick={function(){setChangePw(!changePw);}} title="Change password" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600}}>⚙️</button>
+        {/* Firm / account switcher */}
+        <div style={{position:'relative'}}>
+          <button onClick={function(){setAcctMenu(!acctMenu);}} style={{display:'flex',alignItems:'center',gap:8,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'5px 10px',cursor:'pointer',fontFamily:'inherit'}}>
+            <span style={{width:22,height:22,borderRadius:6,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:800}}>{(portalUser.firm||siteName||'?').charAt(0).toUpperCase()}</span>
+            <span style={{textAlign:'left',lineHeight:1.15}}><span style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text)'}}>{portalUser.firm||siteName}</span><span style={{display:'block',fontSize:9,color:'var(--tf-text-sub)'}}>{portalUser.display_name||portalUser.email}</span></span>
+            <span style={{fontSize:9,color:'var(--tf-text-sub)'}}>▾</span>
+          </button>
+          {acctMenu&&<>
+            <div onClick={function(){setAcctMenu(false);}} style={{position:'fixed',inset:0,zIndex:40}}/>
+            <div style={{position:'absolute',right:0,top:'calc(100% + 6px)',width:240,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 12px 32px rgba(0,0,0,0.18)',zIndex:50,overflow:'hidden'}}>
+              <div style={{padding:'8px 12px',fontSize:9,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em'}}>Your firms</div>
+              {(accounts||[]).map(function(a){var cur=a.id===portalUser.id;return<button key={a.id} onClick={function(){switchAccount(a);}} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:9,background:cur?'var(--tf-surface)':'transparent',border:'none',borderTop:'1px solid var(--tf-border)',padding:'9px 12px',cursor:'pointer',fontFamily:'inherit'}}>
+                <span style={{width:24,height:24,borderRadius:6,background:'linear-gradient(135deg,#06b6d4,#0891b2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff',fontWeight:800,flexShrink:0}}>{(a.firm||'?').charAt(0).toUpperCase()}</span>
+                <span style={{flex:1}}><span style={{display:'block',fontSize:12,fontWeight:700,color:'var(--tf-text)'}}>{a.firm||'Firm'}</span><span style={{display:'block',fontSize:10,color:'var(--tf-text-sub)'}}>{a.display_name||a.email}</span></span>
+                {cur?<span style={{fontSize:11,color:'#22c55e',fontWeight:700}}>✓</span>:<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>→</span>}
+                <span onClick={function(e){e.stopPropagation();logoutAccount(a);}} title="Sign out of this firm" style={{fontSize:12,color:'var(--tf-text-sub)',padding:'0 2px'}}>✕</span>
+              </button>;})}
+              <button onClick={addAnotherFirm} style={{width:'100%',textAlign:'left',background:'transparent',border:'none',borderTop:'1px solid var(--tf-border)',padding:'10px 12px',cursor:'pointer',fontFamily:'inherit',fontSize:12,fontWeight:700,color:'#2F6BFF'}}>➕ Add another firm</button>
+            </div>
+          </>}
+        </div>
       </div>
     </div>
     <div style={{maxWidth:800,margin:'0 auto',padding:'24px 16px 60px'}}>
