@@ -16071,7 +16071,7 @@ function ClientConnectModule({org,supabase,cu,onEmailClient,onGoTab}){
             </div>}
         </div>:
       ccSection==='public'?
-        (function(){var pubReqs=requests.filter(function(r){return r.is_public;});return
+        (function(){var pubReqs=requests.filter(function(r){return r.is_public;});return(
         <div style={{flex:1,overflowY:'auto',padding:20}}>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,gap:8,flexWrap:'wrap'}}>
             <div>
@@ -16102,7 +16102,7 @@ function ClientConnectModule({org,supabase,cu,onEmailClient,onGoTab}){
                 </div>
               </div>;
             })}
-        </div>;})():
+        </div>);})():
       !selClient?
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',gap:12,color:'var(--tf-text-sub)',textAlign:'center',padding:24}}>
           <div style={{fontSize:40}}>📋</div>
@@ -19264,7 +19264,7 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
         <button onClick={function(){var d=new Date(planDate+'T00:00:00');d.setDate(d.getDate()+1);setPlanDate(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));}} style={{background:'none',border:'none',borderRadius:5,padding:'3px 7px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,lineHeight:1}}>›</button>
       </div>
       {planDate!==todayStr&&<button onClick={function(){setPlanDate(todayStr);}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>Today</button>}
-      <button onClick={refreshAll} disabled={loading} title="Refresh" style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,opacity:loading?0.6:1,lineHeight:1}} title="Refresh">{loading?'↻…':'↻'}</button>
+      <button onClick={refreshAll} disabled={loading} title="Refresh" style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',color:'var(--tf-text-sub)',cursor:loading?'wait':'pointer',fontSize:12,opacity:loading?0.6:1,lineHeight:1}}>{loading?'↻…':'↻'}</button>
       <div style={{flex:1}}/>
       {canViewOthers&&orgMembers.length>0&&<select value={viewingMember?viewingMember.id:''} onChange={function(e){var uid=e.target.value;if(!uid){setViewingMember(null);}else{var m=orgMembers.find(function(x){return x.id===uid;});setViewingMember(m?{id:m.id,name:m.name||m.email}:null);}setShowPicker(false);}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',fontFamily:'inherit',maxWidth:110}}>
         {renderGroupedMemberOptions(orgMembers.filter(function(m){return m.id!==cu.id;}),orgGroups||[],orgGroupMemberships||[],'My Plan')}
