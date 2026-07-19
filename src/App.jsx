@@ -14266,10 +14266,22 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
 
 function RichEditor({id,value,onChange,placeholder,minHeight}){
   var editorRef=useRef(null);
+  var savedRangeRef=useRef(null);
   var [showLinkModal,setShowLinkModal]=useState(false);
   var [linkUrl,setLinkUrl]=useState('');
+  var [linkText,setLinkText]=useState('');
 
   function exec(cmd,val){document.execCommand(cmd,false,val||null);if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);}
+
+  function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function escAttr(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  function openLinkModal(){
+    var sel=window.getSelection&&window.getSelection();
+    savedRangeRef.current=(sel&&sel.rangeCount)?sel.getRangeAt(0).cloneRange():null;
+    var selText=sel?sel.toString():'';
+    setLinkText(selText||'');setLinkUrl('');setShowLinkModal(true);
+  }
 
   function insertTable(){
     var html='<table style="border-collapse:collapse;width:100%;margin:8px 0"><tbody>';
@@ -14280,8 +14292,24 @@ function RichEditor({id,value,onChange,placeholder,minHeight}){
   }
 
   function insertLink(){
-    if(linkUrl.trim()){document.execCommand('createLink',false,linkUrl.trim());}
-    setShowLinkModal(false);setLinkUrl('');
+    var url=linkUrl.trim();
+    if(!url){setShowLinkModal(false);return;}
+    if(!/^(https?:|mailto:|tel:)/i.test(url))url='https://'+url;
+    var text=linkText.trim();
+    var editor=editorRef.current;
+    if(editor)editor.focus();
+    var sel=window.getSelection&&window.getSelection();
+    if(savedRangeRef.current&&sel){sel.removeAllRanges();sel.addRange(savedRangeRef.current);}
+    var hasSelection=sel&&!sel.isCollapsed;
+    if(hasSelection&&!text){
+      // wrap the selected text, then set href/style on the created anchor
+      document.execCommand('createLink',false,url);
+    } else {
+      if(!text)text=url;
+      var anchor='<a href="'+escAttr(url)+'" target="_blank" rel="noopener noreferrer" style="color:#2F6BFF;text-decoration:underline">'+escHtml(text)+'</a>&nbsp;';
+      document.execCommand('insertHTML',false,anchor);
+    }
+    setShowLinkModal(false);setLinkUrl('');setLinkText('');savedRangeRef.current=null;
     if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);
   }
 
@@ -14325,16 +14353,17 @@ function RichEditor({id,value,onChange,placeholder,minHeight}){
       <button type="button" onClick={function(){exec('indent');}} style={TB} title="Indent">{'→'}|</button>
       <button type="button" onClick={function(){exec('outdent');}} style={TB} title="Outdent">|{'←'}</button>
       <div style={SEP}/>
-      <button type="button" onClick={function(){setShowLinkModal(true);}} style={TB} title="Insert link">{'🔗'}</button>
+      <button type="button" onClick={openLinkModal} style={TB} title="Insert link">{'🔗'}</button>
       <button type="button" onClick={insertTable} style={TB} title="Insert table">{'⊞'}</button>
       <button type="button" onClick={function(){exec('formatBlock','blockquote');}} style={TB} title="Quote">{'❝'}</button>
       <button type="button" onClick={function(){exec('removeFormat');}} style={TB} title="Clear formatting">{'✕'}</button>
     </div>
-    {/* Link modal */}
-    {showLinkModal&&<div style={{padding:'6px 8px',background:'var(--tf-bg)',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:4,alignItems:'center'}}>
-      <input value={linkUrl} onChange={function(e){setLinkUrl(e.target.value);}} placeholder="https://..." onKeyDown={function(e){if(e.key==='Enter')insertLink();}} style={{flex:1,padding:'4px 8px',border:'1px solid var(--tf-border)',borderRadius:4,fontSize:11,background:'var(--tf-surface)',color:'var(--tf-text)',outline:'none',fontFamily:'inherit'}}/>
-      <button onClick={insertLink} style={{padding:'4px 10px',background:'#4285f4',border:'none',borderRadius:4,color:'#fff',fontSize:11,cursor:'pointer',fontWeight:600}}>Add</button>
-      <button onClick={function(){setShowLinkModal(false);setLinkUrl('');}} style={{padding:'4px 8px',background:'none',border:'1px solid var(--tf-border)',borderRadius:4,color:'var(--tf-text-sub)',fontSize:11,cursor:'pointer'}}>Cancel</button>
+    {/* Link modal — display text + URL */}
+    {showLinkModal&&<div style={{padding:'8px',background:'var(--tf-bg)',borderBottom:'1px solid var(--tf-border)',display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+      <input value={linkText} onChange={function(e){setLinkText(e.target.value);}} placeholder="Text to display (e.g. Submit Information)" onKeyDown={function(e){if(e.key==='Enter')insertLink();}} style={{flex:'1 1 180px',padding:'5px 8px',border:'1px solid var(--tf-border)',borderRadius:4,fontSize:11,background:'var(--tf-surface)',color:'var(--tf-text)',outline:'none',fontFamily:'inherit'}}/>
+      <input value={linkUrl} onChange={function(e){setLinkUrl(e.target.value);}} placeholder="https://... (link URL)" onKeyDown={function(e){if(e.key==='Enter')insertLink();}} autoFocus style={{flex:'1 1 180px',padding:'5px 8px',border:'1px solid var(--tf-border)',borderRadius:4,fontSize:11,background:'var(--tf-surface)',color:'var(--tf-text)',outline:'none',fontFamily:'inherit'}}/>
+      <button onClick={insertLink} style={{padding:'5px 12px',background:'#2F6BFF',border:'none',borderRadius:4,color:'#fff',fontSize:11,cursor:'pointer',fontWeight:700}}>Add link</button>
+      <button onClick={function(){setShowLinkModal(false);setLinkUrl('');setLinkText('');}} style={{padding:'5px 8px',background:'none',border:'1px solid var(--tf-border)',borderRadius:4,color:'var(--tf-text-sub)',fontSize:11,cursor:'pointer'}}>Cancel</button>
     </div>}
     {/* Editor area */}
     <div ref={editorRef} id={id} contentEditable={true} onInput={function(){if(onChange&&editorRef.current)onChange(editorRef.current.innerHTML);}} data-placeholder={placeholder||'Write your email...'} style={{minHeight:minHeight||200,padding:'10px 12px',outline:'none',fontSize:13,lineHeight:1.6,color:'var(--tf-text)',fontFamily:'inherit',overflowY:'auto',maxHeight:400}}/>
@@ -14904,7 +14933,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
         var c=recips[i];
         var subj=mergeClientVars(bulkSubject,c);
         var plain=mergeClientVars(bulkBody,c);
-        var html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;">'+plain.replace(/\n/g,'<br>')+'</div>';
+        var html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;">'+tfLinkify(plain).replace(/\n/g,'<br>')+'</div>';
         try{
           var encoded=buildMimeEmail(c.email,subj,html,bulkCC,'','','','',[]);
           var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
@@ -14950,6 +14979,12 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     }catch(e){showToast('Failed to load due work','err');}
     setRemLoading(false);
   }
+  // Turn [display text](https://url) markdown into real clickable links (emails go out as HTML).
+  function tfLinkify(s){
+    return String(s||'').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+|tel:[^\s)]+)\)/g,function(m,t,u){
+      return '<a href="'+u.replace(/"/g,'%22')+'" target="_blank" rel="noopener noreferrer" style="color:#2F6BFF;text-decoration:underline">'+t+'</a>';
+    });
+  }
   function mergeRem(tpl,e){
     var c=e.client;
     var itemsText=e.items.map(function(it){return '• '+it.work_type+(it.period?' ('+it.period+')':'')+' — due '+it.due_date+(it.overdue?' — OVERDUE':'');}).join('\n');
@@ -14967,7 +15002,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
       var subjM=mergeRem(remSubject,e);
       var plain=mergeRem(remBody,e);
       // buildMimeEmail sends text/html — convert newlines to <br> so paragraphs render.
-      var htmlBody='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;max-width:600px;">'+plain.replace(/\n/g,'<br>')+'</div>';
+      var htmlBody='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;max-width:600px;">'+tfLinkify(plain).replace(/\n/g,'<br>')+'</div>';
       try{
         var encoded=buildMimeEmail(c.email,subjM,htmlBody,'','','','','',[]);
         var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
@@ -15320,6 +15355,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
         <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:16,padding:'8px 10px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8}}>
           <span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>Insert:</span>
           {['{client}','{firm}','{pan}','{email}','{work_type}','{gstin}'].map(function(v){return<button key={v} onClick={function(){setBulkBody(function(b){return (b||'')+' '+v;});}} title={'Auto-filled per client'} style={{fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:'#2F6BFF',background:'rgba(47,107,255,0.08)',border:'1px solid rgba(47,107,255,0.25)',borderRadius:6,padding:'2px 8px',cursor:'pointer'}}>{v}</button>;})}
+          <button onClick={function(){setBulkBody(function(b){return (b||'')+'[Click here](https://)';});}} title={'Insert a clickable link — edit the label and URL'} style={{fontSize:11,fontWeight:700,color:'#0891b2',background:'rgba(6,182,212,0.1)',border:'1px solid rgba(6,182,212,0.3)',borderRadius:6,padding:'2px 8px',cursor:'pointer'}}>🔗 Link</button>
+          <span style={{fontSize:10,color:'var(--tf-text-sub)',width:'100%',marginTop:2}}>Links: type <code style={{fontFamily:'JetBrains Mono,monospace'}}>[Submit Information](https://your-link)</code> — the label becomes a clickable link.</span>
         </div>
         {/* Filter + Template row */}
         <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
@@ -15392,6 +15429,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
           <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:6}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',alignSelf:'center'}}>Insert:</span>
             {['{client}','{firm}','{work_type}','{due_date}','{period}','{items}'].map(function(v){return<button key={v} onClick={function(){setRemBody(function(b){return (b||'')+v;});}} style={{fontFamily:'JetBrains Mono,monospace',fontSize:10.5,padding:'3px 7px',border:'1px solid var(--tf-border)',borderRadius:6,background:'var(--tf-surface)',color:'#2F6BFF',cursor:'pointer',fontWeight:600}}>{v}</button>;})}
+            <button onClick={function(){setRemBody(function(b){return (b||'')+'[Click here](https://)';});}} title={'Insert a clickable link — edit the label and URL'} style={{fontSize:10.5,padding:'3px 7px',border:'1px solid rgba(6,182,212,0.3)',borderRadius:6,background:'rgba(6,182,212,0.1)',color:'#0891b2',cursor:'pointer',fontWeight:700}}>🔗 Link</button>
           </div>
           <textarea value={remBody} onChange={function(e){setRemBody(e.target.value);}} rows={7} style={Object.assign({},INP,{resize:'vertical',fontFamily:'inherit',lineHeight:1.5})}/>
           <div style={{display:'flex',gap:8,marginTop:10,flexWrap:'wrap',alignItems:'center'}}>
