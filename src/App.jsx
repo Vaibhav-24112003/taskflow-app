@@ -14415,6 +14415,11 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var [bulkCC,setBulkCC]=useState('');
   var [bulkSending,setBulkSending]=useState(false);
   var [bulkResult,setBulkResult]=useState(null); // {ok,fail}
+  // WhatsApp broadcast state (click-through, one tap per client)
+  var [waBody,setWaBody]=useState('Hi {client},\n\nThis is a reminder from {firm}. ');
+  var [waFilterWT,setWaFilterWT]=useState('');
+  var [waSelIds,setWaSelIds]=useState({});
+  var [waSentIds,setWaSentIds]=useState({});
   var [clientSearch,setClientSearch]=useState('');
   // Single email state
   var [singleTo,setSingleTo]=useState('');
@@ -14935,7 +14940,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   }
 
   // App-wide personalisation variables — used by Bulk (and reusable elsewhere).
-  function mergeClientVars(tpl,c){
+  function mergeClientVars(tpl,c,wt){
     var cf=(c&&c.custom_fields)||{};
     return String(tpl||'')
       .replace(/\{client\}/g,(c&&(c.display_name||c.name))||'')
@@ -14944,7 +14949,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
       .replace(/\{pan\}/g,(c&&c.pan)||'')
       .replace(/\{email\}/g,(c&&c.email)||'')
       .replace(/\{gstin\}/g,cf.gstin||'')
-      .replace(/\{work_type\}/g,bulkFilterWT||'');
+      .replace(/\{work_type\}/g,(wt!==undefined?wt:bulkFilterWT)||'');
   }
   async function sendBulk(){
     var cids=Object.keys(bulkSelIds);
@@ -15079,7 +15084,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             {id:'gmail',label:'Inbox',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>},
             {id:'bulk',label:'Bulk',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>},
             {id:'reminders',label:'Reminders',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>},
-            {id:'templates',label:'Templates',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>}
+            {id:'templates',label:'Templates',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>},
+            {id:'whatsapp',label:'WhatsApp',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.6.1-.2.3-.7 1-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.9-2.1-.2-.5-.4-.4-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2 0 1.3.9 2.5 1.1 2.7.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.3-.2-.5-.3zM12 2a10 10 0 00-8.6 15l-1.3 4.7L7 20.4A10 10 0 1012 2z"/></svg>}
           ].map(function(t){
             var active=activeTab===t.id;
             return<button key={t.id} onClick={function(){setActiveTab(t.id);}} title={t.label} style={{display:'flex',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,padding:'9px 6px',border:'1px solid',borderColor:active?'#2F6BFF':'var(--tf-border)',borderRadius:10,background:active?'rgba(47,107,255,0.08)':'var(--tf-surface)',color:active?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:11.5,fontWeight:active?800:600,fontFamily:'inherit',transition:'all 0.12s'}}><span style={{flexShrink:0,display:'inline-flex'}}>{t.svg}</span><span style={{whiteSpace:'nowrap'}}>{t.label}</span></button>;
@@ -15198,6 +15204,17 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
               <p style={{margin:'0 0 8px'}}>2. <b>Find clients with due work</b> — auto-picks anyone with tasks due soon or overdue.</p>
               <p style={{margin:'0 0 8px'}}>3. <b>Send now</b> from your Gmail, or flip <b>Auto-send</b> to have the server do it each cycle.</p>
               <p style={{margin:'8px 0 0',color:'#0EA5A0',fontWeight:600}}>Only clients with an email on file are included.</p>
+            </div>
+          </div>
+        </>:activeTab==='whatsapp'?
+        <>
+          <div style={{padding:'12px 14px'}}>
+            <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text)',marginBottom:8}}>How WhatsApp send works</div>
+            <div style={{fontSize:11,color:'var(--tf-text-sub)',lineHeight:1.6}}>
+              <p style={{margin:'0 0 8px'}}>1. Pick a <b>template</b> or type your message (right).</p>
+              <p style={{margin:'0 0 8px'}}>2. <b>Select clients</b> (or filter by work type).</p>
+              <p style={{margin:'0 0 8px'}}>3. Tap <b>Open WhatsApp</b> per client — a personalised chat opens; press send there.</p>
+              <p style={{margin:'8px 0 0',color:'#128C7E',fontWeight:600}}>Only clients with a phone number are shown. No cost, no setup.</p>
             </div>
           </div>
         </>:
@@ -15503,7 +15520,77 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
           </div>}
         </div>}
         {!gmailToken&&<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Connect Gmail in the <b>Gmail</b> tab to send from your firm's address. (If it keeps disconnecting, your admin needs to add <b>taskflowco.in</b> to the Google OAuth "Authorized JavaScript origins".)</div>}
-      </>:
+      </>:activeTab==='whatsapp'?(function(){
+        var waClients=emailClients.filter(function(c){return c.phone;});
+        var selected=waClients.filter(function(c){return waSelIds[c.id];});
+        var sentCount=selected.filter(function(c){return waSentIds[c.id];}).length;
+        var nextUnsent=selected.find(function(c){return !waSentIds[c.id];});
+        function stripToText(s){return String(s||'').replace(/<br\s*\/?>(\n)?/gi,'\n').replace(/<\/(p|div|li)>/gi,'\n').replace(/<[^>]+>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&');}
+        function sendOne(c){
+          var msg=tfWaText(mergeClientVars(waBody,c,waFilterWT));
+          if(!tfWaOpen(c.phone,msg)){showToast('No valid phone for '+c.name,'err');return;}
+          setWaSentIds(function(s){return Object.assign({},s,{[c.id]:true});});
+          try{logComm(c.id,'whatsapp_sent','WhatsApp',msg,c.phone,'');}catch(e){}
+        }
+        return<>
+        <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>WhatsApp Broadcast 💬</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Pick a template, choose clients, then tap <b>Open WhatsApp</b> for each — a personalised chat opens with the message pre-filled (you press send in WhatsApp). Variables: <b>{'{client}'}</b> <b>{'{firm}'}</b> <b>{'{pan}'}</b> <b>{'{work_type}'}</b>.</div>
+
+        {/* Filter + template */}
+        <div style={{display:'flex',gap:12,marginBottom:12,flexWrap:'wrap',alignItems:'flex-end'}}>
+          <div style={{flex:1,minWidth:170}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Filter by Work Type</label>
+            <select value={waFilterWT} onChange={function(e){var wt=e.target.value;setWaFilterWT(wt);if(!wt){setWaSelIds({});return;}var sel={};waClients.forEach(function(c){if(c.workTypes.some(function(w){return w===wt;}))sel[c.id]=true;});setWaSelIds(sel);}} style={INP}>
+              <option value="">— All clients with phone —</option>
+              {(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
+            </select>
+          </div>
+          <div style={{flex:1,minWidth:170}}>
+            <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Use Template</label>
+            <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t)setWaBody(stripToText(t.body||''));e.target.value='';}} style={INP}>
+              <option value="">— Pick a template —</option>
+              {templates.map(function(t){return<option key={t.id} value={t.id}>{t.name}</option>;})}
+            </select>
+          </div>
+        </div>
+
+        {/* Message + variables */}
+        <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:8}}>
+          <span style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em'}}>Insert:</span>
+          {['{client}','{firm}','{pan}','{work_type}'].map(function(v){return<button key={v} onClick={function(){setWaBody(function(b){return (b||'')+' '+v;});}} style={{fontSize:11,fontWeight:700,fontFamily:"'JetBrains Mono',monospace",color:'#128C7E',background:'rgba(37,211,102,0.1)',border:'1px solid rgba(37,211,102,0.3)',borderRadius:6,padding:'2px 8px',cursor:'pointer'}}>{v}</button>;})}
+          <button onClick={function(){setWaBody(function(b){return (b||'')+'[Click here](https://)';});}} title="Insert a link (label: url in WhatsApp)" style={{fontSize:11,fontWeight:700,color:'#0891b2',background:'rgba(6,182,212,0.1)',border:'1px solid rgba(6,182,212,0.3)',borderRadius:6,padding:'2px 8px',cursor:'pointer'}}>🔗 Link</button>
+        </div>
+        <textarea value={waBody} onChange={function(e){setWaBody(e.target.value);}} rows={5} placeholder="Type your WhatsApp message…" style={Object.assign({},INP,{resize:'vertical',lineHeight:1.5,marginBottom:14})}/>
+
+        {/* Recipients */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexWrap:'wrap',gap:8}}>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)'}}><b style={{color:'var(--tf-text)'}}>{selected.length}</b> selected · <b style={{color:'#128C7E'}}>{sentCount}</b> sent · {waClients.length} clients have a phone</div>
+          <div style={{display:'flex',gap:6}}>
+            <button onClick={function(){var sel={};waClients.forEach(function(c){sel[c.id]=true;});setWaSelIds(sel);}} style={{fontSize:11,fontWeight:600,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',color:'var(--tf-text)'}}>Select all</button>
+            <button onClick={function(){setWaSelIds({});}} style={{fontSize:11,fontWeight:600,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',color:'var(--tf-text-sub)'}}>Clear</button>
+            {sentCount>0&&<button onClick={function(){setWaSentIds({});}} style={{fontSize:11,fontWeight:600,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',cursor:'pointer',color:'var(--tf-text-sub)'}}>Reset sent</button>}
+          </div>
+        </div>
+        {waClients.length===0?<div style={{padding:'20px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:12,border:'1px dashed var(--tf-border)',borderRadius:10}}>No clients have a phone number yet. Add phone numbers in Client Master.</div>:
+        <div style={{border:'1px solid var(--tf-border)',borderRadius:10,overflow:'hidden',maxHeight:380,overflowY:'auto'}}>
+          {waClients.map(function(c){var checked=!!waSelIds[c.id];var sent=!!waSentIds[c.id];return<div key={c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderBottom:'1px solid var(--tf-border)',background:sent?'rgba(37,211,102,0.05)':'transparent'}}>
+            <div onClick={function(){setWaSelIds(function(p){return Object.assign({},p,{[c.id]:!p[c.id]});});}} style={{width:16,height:16,borderRadius:4,border:'2px solid',borderColor:checked?'#128C7E':'var(--tf-border)',background:checked?'#128C7E':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:'pointer'}}>{checked&&<span style={{color:'#fff',fontSize:10,fontWeight:900}}>✓</span>}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.name}</div>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.phone}</div>
+            </div>
+            {sent&&<span style={{fontSize:10,fontWeight:800,color:'#128C7E',background:'rgba(37,211,102,0.12)',borderRadius:10,padding:'1px 8px',flexShrink:0}}>✓ sent</span>}
+            <button onClick={function(){sendOne(c);}} style={{flexShrink:0,display:'inline-flex',alignItems:'center',gap:5,background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.4)',borderRadius:7,padding:'5px 10px',cursor:'pointer',color:'#128C7E',fontSize:11,fontWeight:700,fontFamily:'inherit'}}>Open WhatsApp</button>
+          </div>;})}
+        </div>}
+
+        {/* Sticky action */}
+        {selected.length>0&&<div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginTop:14,position:'sticky',bottom:0,background:'var(--tf-panel)',padding:'10px 0'}}>
+          <button onClick={function(){if(nextUnsent)sendOne(nextUnsent);}} disabled={!nextUnsent} style={{background:nextUnsent?'linear-gradient(135deg,#25D366,#128C7E)':'var(--tf-surface)',border:'1px solid',borderColor:nextUnsent?'#128C7E':'var(--tf-border)',borderRadius:8,padding:'11px 24px',color:nextUnsent?'#fff':'var(--tf-text-sub)',cursor:nextUnsent?'pointer':'not-allowed',fontSize:14,fontWeight:700}}>{nextUnsent?'Open WhatsApp for next ('+(sentCount+1)+' of '+selected.length+') →':'✓ All '+selected.length+' opened'}</button>
+          <span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Opens one chat at a time — press send in WhatsApp, come back, repeat.</span>
+        </div>}
+        </>;
+      })():
       /* Templates tab — editor on right */
       <>
         <div style={{fontSize:18,fontWeight:800,color:'var(--tf-text)',marginBottom:4}}>Email Templates</div>
