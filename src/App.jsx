@@ -2376,7 +2376,7 @@ function ClientsModule({cu,orgId,supabase,allWorkspaces,workTypeNames,workTypeCo
               return<tr key={c.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
                 <td style={{padding:'9px 12px'}}><div style={{fontWeight:600,color:'var(--tf-text)',fontSize:14,display:'flex',alignItems:'center',gap:5}}>{c.name}{isITR&&<span style={{fontSize:10,fontWeight:700,color:'#d97706',background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:4,padding:'1px 5px'}}>ITR</span>}</div>{c.display_name&&c.display_name!==c.name&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.display_name}</div>}</td>
                 <td style={{padding:'9px 12px',fontSize:12,color:'var(--tf-text-sub)',textTransform:'capitalize'}}>{c.client_type}</td>
-                <td style={{padding:'9px 12px'}}>{c.email&&<div style={{fontSize:12}}>{c.email}</div>}{c.phone&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{c.phone}</div>}</td>
+                <td style={{padding:'9px 12px'}}>{c.email&&<div style={{fontSize:12}}>{c.email}</div>}{c.phone&&<div style={{fontSize:11,color:'var(--tf-text-sub)',display:'flex',alignItems:'center',gap:6}}>{c.phone}<button onClick={function(){tfWaOpen(c.phone,'Hi '+(c.display_name||c.name)+', ');}} title={'WhatsApp '+c.phone} style={{display:'inline-flex',alignItems:'center',background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.4)',borderRadius:5,padding:'2px 5px',cursor:'pointer',color:'#128C7E'}}><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.6.1-.2.3-.7 1-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.9-2.1-.2-.5-.4-.4-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2 0 1.3.9 2.5 1.1 2.7.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.3-.2-.5-.3zM12 2a10 10 0 00-8.6 15l-1.3 4.7L7 20.4A10 10 0 1012 2z"/></svg></button></div>}</td>
                 <td style={{padding:'9px 12px'}}>{c.pan&&<div style={{fontSize:11,fontFamily:'monospace'}}>{c.pan}</div>}{c.gstin&&<div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>}</td>
                 <td style={{padding:'9px 12px'}}><div style={{display:'flex',flexWrap:'wrap',gap:3}}>{enrolledWTs.length?enrolledWTs.map(function(wt){var isItrWt=(workTypeConfigs||[]).some(function(cfg){return cfg.name===wt&&cfg.is_itr_worktype;});return<span key={wt} style={{fontSize:10,fontWeight:600,color:isItrWt?'#d97706':'#0e2a47',background:isItrWt?'rgba(245,158,11,0.1)':'rgba(14,42,71,0.1)',border:'1px solid '+(isItrWt?'rgba(245,158,11,0.3)':'rgba(14,42,71,0.25)'),borderRadius:4,padding:'1px 6px'}}>{wt}</span>;}):'-'}</div></td>
                 <td style={{padding:'9px 12px'}}><span style={{background:SC[c.status]+'20',color:SC[c.status],border:'1px solid '+SC[c.status]+'40',borderRadius:20,padding:'2px 9px',fontSize:11,fontWeight:600,textTransform:'capitalize'}}>{c.status}</span></td>
@@ -8207,19 +8207,22 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
   var [timeLogs,setTimeLogs]=useState([]);
   var [clientRows,setClientRows]=useState([]);
   var [clientWorksheets,setClientWorksheets]=useState([]);
+  var [clientInfo,setClientInfo]=useState(null);
 
   useEffect(function(){if(selClientId)loadClientData(selClientId);},[selClientId,org.id]);
   useEffect(function(){if(initClientId&&initClientId!==selClientId)setSelClientId(initClientId);},[initClientId]);
 
   async function loadClientData(clientId){
     setLoading(true);
-    var [ri,rp,rl,rr,rw]=await Promise.all([
+    var [ri,rp,rl,rr,rw,rci]=await Promise.all([
       supabase.from('invoices').select('*').eq('org_id',org.id).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200),
       supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(500),
       supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('client_id',clientId).order('date',{ascending:false}).limit(500),
       supabase.from('worksheet_rows').select('id,worksheet_id,status,due_date,completed_at,data,current_stage').eq('org_id',org.id).eq('client_id',clientId).limit(500),
       supabase.from('worksheets').select('id,work_type,period_label,period_year,frequency').eq('org_id',org.id).limit(1000),
+      supabase.from('clients').select('id,name,display_name,phone,email').eq('id',clientId).maybeSingle(),
     ]);
+    setClientInfo(rci.data||null);
     var invData=ri.data||[];
     var invIds=new Set(invData.map(function(i){return i.id;}));
     setInvoices(invData);
@@ -8409,12 +8412,14 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
             <th style={{padding:'8px 10px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Paid</th>
             <th style={{padding:'8px 10px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Balance</th>
             <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Status</th>
+            <th style={{padding:'8px 10px',textAlign:'center',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',borderBottom:'1px solid var(--tf-border)'}}>Send</th>
           </tr></thead>
           <tbody>{invoices.map(function(inv,i){
             var tot=calcInvTotal(inv);
             var paid=payments.filter(function(p){return p.invoice_id===inv.id;}).reduce(function(s,p){return s+Number(p.amount);},0);
             var bal=tot-paid;
             var stColor=inv.status==='paid'?'#22c55e':inv.status==='partial'?'#f59e0b':'#ef4444';
+            var waMsg=function(){var nm=(clientInfo&&(clientInfo.display_name||clientInfo.name))||'';var f=org.name||'';return 'Hi '+nm+',\n\n'+'Invoice '+(inv.invoice_no||'')+' from '+f+'\nAmount: ₹'+tot.toLocaleString('en-IN')+'\nBalance due: ₹'+Math.max(0,bal).toLocaleString('en-IN')+(inv.due_date?'\nDue date: '+inv.due_date:'')+'\n\nKindly arrange the payment at your earliest. Thank you.\n\nRegards,\n'+f;};
             return<tr key={inv.id} style={{borderBottom:'1px solid var(--tf-border)',background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
               <td style={{padding:'9px 16px',fontWeight:700,color:'#2F6BFF'}}>{inv.invoice_no||'—'}</td>
               <td style={{padding:'9px 10px',textAlign:'center',color:'var(--tf-text-sub)'}}>{inv.invoice_date||inv.created_at?.slice(0,10)||'—'}</td>
@@ -8422,6 +8427,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
               <td style={{padding:'9px 10px',textAlign:'right',color:'#22c55e'}}>₹{paid.toLocaleString('en-IN')}</td>
               <td style={{padding:'9px 10px',textAlign:'right',fontWeight:700,color:bal>0?'#ef4444':'#22c55e'}}>₹{Math.max(0,bal).toLocaleString('en-IN')}</td>
               <td style={{padding:'9px 10px',textAlign:'center'}}><span style={{fontSize:10,fontWeight:700,color:stColor,background:stColor+'18',border:'1px solid '+stColor+'30',borderRadius:20,padding:'2px 8px',textTransform:'capitalize'}}>{inv.status||'draft'}</span></td>
+              <td style={{padding:'9px 10px',textAlign:'center'}}>{clientInfo&&clientInfo.phone?<button onClick={function(){tfWaOpen(clientInfo.phone,waMsg());}} title={'Send invoice on WhatsApp to '+clientInfo.phone} style={{display:'inline-flex',alignItems:'center',gap:4,background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.4)',borderRadius:6,padding:'4px 8px',cursor:'pointer',color:'#128C7E',fontSize:11,fontWeight:700,fontFamily:'inherit'}}><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.6.1-.2.3-.7 1-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.9-2.1-.2-.5-.4-.4-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2 0 1.3.9 2.5 1.1 2.7.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.3-.2-.5-.3zM12 2a10 10 0 00-8.6 15l-1.3 4.7L7 20.4A10 10 0 1012 2z"/></svg>WhatsApp</button>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>No phone</span>}</td>
             </tr>;
           })}
           <tr style={{borderTop:'2px solid var(--tf-border)',background:'rgba(14,42,71,0.04)'}}>
@@ -8429,7 +8435,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
             <td style={{padding:'9px 10px',textAlign:'right',fontWeight:800}}>₹{totalInvoiced.toLocaleString('en-IN')}</td>
             <td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,color:'#22c55e'}}>₹{totalReceived.toLocaleString('en-IN')}</td>
             <td style={{padding:'9px 10px',textAlign:'right',fontWeight:800,color:outstanding>0?'#ef4444':'#22c55e'}}>₹{Math.max(0,outstanding).toLocaleString('en-IN')}</td>
-            <td/>
+            <td/><td/>
           </tr>
           </tbody>
         </table></div>}
@@ -14262,6 +14268,27 @@ function BigClientsModule({org,supabase,cu,workTypeConfigs,workflowHierarchy,org
 
 
 
+// ── WhatsApp click-to-send helpers ──
+// Build a wa.me link (opens WhatsApp with the number + a prefilled message).
+function tfWaHref(phone, text){
+  var d=String(phone||'').replace(/\D/g,'');
+  if(!d) return null;
+  if(d.length===10) d='91'+d;                     // bare Indian mobile → add country code
+  else if(d.length===11 && d.charAt(0)==='0') d='91'+d.slice(1);
+  // 12+ digits: assume it already includes a country code
+  return 'https://wa.me/'+d+(text?('?text='+encodeURIComponent(text)):'');
+}
+// WhatsApp is plain-text: turn [label](url) markdown into "label: url".
+function tfWaText(s){
+  return String(s||'').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+|tel:[^\s)]+)\)/g,'$1: $2');
+}
+function tfWaOpen(phone, text){
+  var href=tfWaHref(phone,text);
+  if(!href) return false;
+  window.open(href,'_blank','noopener');
+  return true;
+}
+
 // ── Rich Text Editor (contentEditable) ──
 
 function RichEditor({id,value,onChange,placeholder,minHeight}){
@@ -14835,7 +14862,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   },[initClientId,clients.length]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
@@ -14843,7 +14870,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
   var emailClients=clients.map(function(c){
     var email=portalEmailMap[c.id]||c.email||'';
     var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean).map(function(w){return w.trim();});
-    return{id:c.id,name:c.display_name||c.name,pan:c.pan||'',email:email,workTypes:wts};
+    return{id:c.id,name:c.display_name||c.name,pan:c.pan||'',email:email,phone:c.phone||'',workTypes:wts};
   });
 
   // Filter by work type
@@ -15463,6 +15490,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
                 </div>
                 {e.overdueCount>0&&<span style={{fontSize:10,fontWeight:800,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:10,padding:'1px 8px',flexShrink:0}}>{e.overdueCount} overdue</span>}
                 <span style={{fontSize:10,color:'var(--tf-text-sub)',flexShrink:0}}>{e.items.length} task{e.items.length!==1?'s':''}</span>
+                {e.client.phone?<button onClick={function(ev){ev.stopPropagation();tfWaOpen(e.client.phone,tfWaText(mergeRem(remBody,e)));}} title={'WhatsApp '+e.client.phone} style={{flexShrink:0,display:'inline-flex',alignItems:'center',gap:4,background:'rgba(37,211,102,0.12)',border:'1px solid rgba(37,211,102,0.4)',borderRadius:7,padding:'5px 9px',cursor:'pointer',color:'#128C7E',fontSize:11,fontWeight:700,fontFamily:'inherit'}}><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.6.1-.2.3-.7 1-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.9-2.1-.2-.5-.4-.4-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2 0 1.3.9 2.5 1.1 2.7.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.3-.2-.5-.3zM12 2a10 10 0 00-8.6 15l-1.3 4.7L7 20.4A10 10 0 1012 2z"/></svg>WA</button>:null}
               </div>;})}
             </div>
           </div>)}
