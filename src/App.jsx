@@ -3112,6 +3112,7 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
           {key:'billing',label:'Billing',desc:'Invoices, proposals, payments and exports.',icon:'💳',defaultOn:true},
           {key:'masterdata_groups',label:'Groups & Teams (Master Data)',desc:'Groups & Teams tab inside Master Data.',icon:'🏷️',defaultOn:true},
           {key:'workzone_itr',label:'ITR Desk (WorkZone tab)',desc:'ITR compilation desk inside WorkZone.',icon:'📋',defaultOn:true},
+          {key:'workzone_gst',label:'GST Desk (WorkZone tab)',desc:'GST return filing-status desk inside WorkZone.',icon:'🧾',defaultOn:true},
           {key:'workzone_bigclients',label:'Big Clients (WorkZone tab)',desc:'Big-client tracking inside WorkZone.',icon:'⭐',defaultOn:true},
           {key:'workzone_board',label:'Board (WorkZone tab)',desc:'Kanban board view inside WorkZone.',icon:'🗂️',defaultOn:true},
           {key:'depts',label:'Departments',desc:'Department structure and dept-level access control.',icon:'🏢',defaultOn:true},
@@ -7470,6 +7471,199 @@ function itrComputeCompleteness(internal,tpl){
 // file the FY that just ended — e.g. Apr–Dec 2026 → file FY 2025-26 = AY 2026-27,
 // so return 2026. Before Apr, the prior FY's AY is still active.
 function itrDefaultAY(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;} // AY label = base..base+1
+
+// ── GST Desk — return filing-status tracker (RETTRACK-shaped) ──
+var _gstDeskCache={}; // orgId+'_'+fy+'_'+retType -> {clients, rows}
+var GST_RET_TYPES=[{key:'GSTR3B',label:'GSTR-3B',dueDay:20},{key:'GSTR1',label:'GSTR-1',dueDay:11}];
+var GST_MONTHS=['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+function gstDefaultFY(){var d=new Date();var y=d.getFullYear();var start=d.getMonth()>=3?y:y-1;return start+'-'+String(start+1).slice(2);}
+function gstFyStartYear(fy){return parseInt(String(fy).slice(0,4),10);}
+// 12 monthly periods of a FY → {period:'MMYYYY', mon, calMonth(1-12), calYear}
+function gstPeriods(fy){
+  var sy=gstFyStartYear(fy);var out=[];
+  for(var i=0;i<12;i++){var cm=((3+i)%12)+1;var cy=(3+i)>11?sy+1:sy;
+    out.push({period:String(cm).padStart(2,'0')+String(cy),mon:GST_MONTHS[i],calMonth:cm,calYear:cy});}
+  return out;
+}
+// Statutory due date (Date) for a period given the return type's dueDay (next month)
+function gstDueDate(p,dueDay){var m=p.calMonth+1,y=p.calYear;if(m>12){m=1;y++;}return new Date(y,m-1,dueDay);}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+
+function GstDeskModule({org,supabase,cu,workTypeConfigs}){
+  var [fy,setFy]=useState(gstDefaultFY());
+  var [retType,setRetType]=useState('GSTR3B');
+  var ck=org.id+'_'+fy+'_'+retType;
+  var [loading,setLoading]=useState(!_gstDeskCache[ck]);
+  var [clients,setClients]=useState((_gstDeskCache[ck]||{}).clients||[]);
+  var [rows,setRows]=useState((_gstDeskCache[ck]||{}).rows||{}); // key clientId+'_'+period -> row
+  var [search,setSearch]=useState('');
+  var [edit,setEdit]=useState(null); // {client, p, row}
+  var [saving,setSaving]=useState(false);
+  var [showGsp,setShowGsp]=useState(false);
+  var [toast,setToast]=useState(null);
+  function showToast(m,k){setToast({m:m,k:k||'ok'});setTimeout(function(){setToast(null);},2200);}
+  var rtCfg=GST_RET_TYPES.find(function(r){return r.key===retType;})||GST_RET_TYPES[0];
+  var periods=gstPeriods(fy);
+  var today=new Date();
+
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id,fy,retType]);
+  async function load(){
+    if(!_gstDeskCache[ck])setLoading(true);
+    try{
+      var rc=await supabase.from('clients').select('id,name,display_name,gstin,phone').eq('org_id',org.id).not('gstin','is',null).order('name').limit(3000);
+      var cl=(rc.data||[]).filter(function(c){return (c.gstin||'').trim();});
+      var rs=await supabase.from('gst_filing_status').select('*').eq('org_id',org.id).eq('fy',fy).eq('ret_type',retType).limit(20000);
+      var map={};(rs.data||[]).forEach(function(r){map[r.client_id+'_'+r.ret_period]=r;});
+      _gstDeskCache[ck]={clients:cl,rows:map};
+      setClients(cl);setRows(map);
+    }catch(e){console.error(e);}finally{setLoading(false);}
+  }
+
+  function cellState(clientId,p){
+    var row=rows[clientId+'_'+p.period];
+    var due=gstDueDate(p,rtCfg.dueDay);
+    var notYetDue=today<due;
+    if(row&&row.status==='Filed'){
+      var late=row.is_late||(row.filed_date&&new Date(row.filed_date+'T00:00:00')>due);
+      return{code:late?'late':'ontime',color:late?'#f59e0b':'#22c55e',label:late?'Filed late':'Filed on time',row:row,due:due};
+    }
+    if(row&&row.status==='Not Filed'){return{code:'notfiled',color:'#ef4444',label:'Not filed',row:row,due:due};}
+    if(notYetDue)return{code:'upcoming',color:'#cbd5e1',label:'Not due yet',row:row,due:due};
+    return{code:'pending',color:'#ef4444',label:'Overdue — not confirmed',row:row,due:due};
+  }
+
+  async function saveStatus(client,p,status,arn,filedDate){
+    setSaving(true);
+    var due=gstDueDate(p,rtCfg.dueDay);
+    var isLate=status==='Filed'&&filedDate?(new Date(filedDate+'T00:00:00')>due):false;
+    var payload={org_id:org.id,client_id:client.id,gstin:client.gstin||null,fy:fy,ret_type:retType,ret_period:p.period,
+      arn:arn||null,status:status,filed_date:(status==='Filed'&&filedDate)?filedDate:null,due_date:ymd(due),is_late:isLate,source:'manual',
+      created_by:cu.id,updated_at:new Date().toISOString()};
+    var res=await supabase.from('gst_filing_status').upsert(payload,{onConflict:'org_id,client_id,ret_type,ret_period'}).select().single();
+    setSaving(false);
+    if(res.error){showToast(res.error.message,'err');return;}
+    setRows(function(prev){var n=Object.assign({},prev);n[client.id+'_'+p.period]=res.data;return n;});
+    if(_gstDeskCache[ck])_gstDeskCache[ck].rows[client.id+'_'+p.period]=res.data;
+    setEdit(null);showToast('Status saved');
+  }
+
+  function openPortal(client){
+    try{navigator.clipboard&&navigator.clipboard.writeText(client.gstin||'');}catch(e){}
+    window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');
+    showToast('GSTIN copied — paste it in Search Taxpayer');
+  }
+
+  var filtered=clients.filter(function(c){var q=search.trim().toLowerCase();if(!q)return true;return (c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q)||(c.gstin||'').toLowerCase().includes(q);});
+  // summary
+  var totFiled=0,totLate=0,totPending=0,totCells=0;
+  filtered.forEach(function(c){periods.forEach(function(p){var s=cellState(c.id,p);if(s.code==='upcoming')return;totCells++;if(s.code==='ontime')totFiled++;else if(s.code==='late'){totFiled++;totLate++;}else totPending++;});});
+  var fyOpts=[];{var yn=gstFyStartYear(gstDefaultFY());for(var y=yn+1;y>=yn-3;y--)fyOpts.push(y+'-'+String(y+1).slice(2));}
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'7px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
+
+  return<div style={{padding:'0 4px 60px'}}>
+    {toast&&<div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:toast.k==='err'?'#ef4444':'#0e2a47',color:'#fff',padding:'9px 18px',borderRadius:10,fontSize:13,fontWeight:600,zIndex:3000,boxShadow:'0 8px 24px rgba(0,0,0,0.2)'}}>{toast.m}</div>}
+    {/* Header */}
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:14}}>
+      <div>
+        <h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>GST Desk 🧾</h2>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:3}}>Return filing status across your GST clients. Assisted lookup now · auto-sync when you connect a GSP.</div>
+      </div>
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <select value={fy} onChange={function(e){setFy(e.target.value);}} style={INP}>{fyOpts.map(function(f){return<option key={f} value={f}>FY {f}</option>;})}</select>
+        <div style={{display:'flex',border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden'}}>
+          {GST_RET_TYPES.map(function(r){var on=retType===r.key;return<button key={r.key} onClick={function(){setRetType(r.key);}} style={{padding:'7px 14px',border:'none',background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{r.label}</button>;})}
+        </div>
+        <button onClick={function(){setShowGsp(true);}} style={{padding:'7px 14px',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>⚡ Auto-sync (GSP)</button>
+      </div>
+    </div>
+
+    {/* Summary */}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10,marginBottom:14}}>
+      {[{l:'GST clients',v:clients.length,c:'#0e2a47'},{l:'Filed',v:totFiled,c:'#22c55e'},{l:'Late-filed',v:totLate,c:'#f59e0b'},{l:'Pending / overdue',v:totPending,c:'#ef4444'}].map(function(k){return<div key={k.l} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:22,fontWeight:800,color:k.c,fontFamily:"'JetBrains Mono',monospace"}}>{k.v}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.l}</div></div>;})}
+    </div>
+
+    <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:10,flexWrap:'wrap'}}>
+      <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search client / GSTIN…" style={Object.assign({},INP,{minWidth:220})}/>
+      <div style={{display:'flex',gap:12,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
+        {[['#22c55e','On time'],['#f59e0b','Late'],['#ef4444','Not filed / overdue'],['#cbd5e1','Not due']].map(function(l){return<span key={l[1]} style={{display:'inline-flex',alignItems:'center',gap:5}}><span style={{width:11,height:11,borderRadius:3,background:l[0]}}/>{l[1]}</span>;})}
+      </div>
+    </div>
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading GST clients…</div>:
+     clients.length===0?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',border:'1px dashed var(--tf-border)',borderRadius:12,fontSize:13}}>No clients have a GSTIN yet. Add GSTINs in Client Master to track their GST filing here.</div>:
+    <div style={{overflowX:'auto',border:'1px solid var(--tf-border)',borderRadius:12}}>
+      <table style={{borderCollapse:'collapse',width:'100%',fontSize:12}}>
+        <thead><tr style={{background:'rgba(14,42,71,0.05)'}}>
+          <th style={{position:'sticky',left:0,background:'var(--tf-panel)',zIndex:2,textAlign:'left',padding:'9px 12px',borderBottom:'1px solid var(--tf-border)',minWidth:200}}>Client</th>
+          {periods.map(function(p){return<th key={p.period} style={{padding:'9px 4px',textAlign:'center',fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',borderBottom:'1px solid var(--tf-border)',minWidth:34}}>{p.mon}</th>;})}
+          <th style={{padding:'9px 10px',borderBottom:'1px solid var(--tf-border)'}}></th>
+        </tr></thead>
+        <tbody>
+          {filtered.map(function(c,i){return<tr key={c.id} style={{background:i%2?'rgba(14,42,71,0.02)':'transparent'}}>
+            <td style={{position:'sticky',left:0,background:i%2?'#f6f8fc':'var(--tf-panel)',zIndex:1,padding:'8px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+              <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
+              <div style={{fontSize:10,fontFamily:'monospace',color:'var(--tf-text-sub)'}}>{c.gstin}</div>
+            </td>
+            {periods.map(function(p){var s=cellState(c.id,p);return<td key={p.period} style={{padding:'4px 3px',textAlign:'center',borderBottom:'1px solid var(--tf-border)'}}>
+              <button onClick={function(){setEdit({client:c,p:p,s:s});}} title={p.mon+' — '+s.label+(s.row&&s.row.filed_date?' ('+s.row.filed_date+')':'')} style={{width:24,height:24,borderRadius:6,border:'1px solid rgba(0,0,0,0.06)',background:s.color,cursor:'pointer',opacity:s.code==='upcoming'?0.5:1}}/>
+            </td>;})}
+            <td style={{padding:'6px 8px',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>
+              <button onClick={function(){openPortal(c);}} title="Open GST portal (GSTIN copied)" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'5px 9px',cursor:'pointer',fontSize:11,fontWeight:700,color:'#0e2a47'}}>Portal ↗</button>
+            </td>
+          </tr>;})}
+        </tbody>
+      </table>
+    </div>}
+
+    {/* Edit popover */}
+    {edit&&<div onClick={function(){setEdit(null);}} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.45)',zIndex:2500,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,padding:20,width:'100%',maxWidth:380}}>
+        <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>{edit.client.display_name||edit.client.name}</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>{rtCfg.label} · {edit.p.mon} {edit.p.calYear} · due {ymd(gstDueDate(edit.p,rtCfg.dueDay))}</div>
+        {(function(){
+          var r=edit.s.row||{};
+          return<GstStatusForm initStatus={r.status||''} initArn={r.arn||''} initDate={r.filed_date||''} saving={saving}
+            onSave={function(st,arn,dt){saveStatus(edit.client,edit.p,st,arn,dt);}}
+            onPortal={function(){openPortal(edit.client);}}/>;
+        })()}
+      </div>
+    </div>}
+
+    {/* GSP info modal */}
+    {showGsp&&<div onClick={function(){setShowGsp(false);}} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:2500,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,padding:24,width:'100%',maxWidth:460}}>
+        <div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)',marginBottom:8}}>⚡ Auto-sync filing status</div>
+        <div style={{fontSize:13,color:'var(--tf-text-sub)',lineHeight:1.6,marginBottom:14}}>
+          The GST portal's official <b>“View & Track Returns” (RETTRACK)</b> API returns filing status for any GSTIN — no client login needed. It's accessed through a <b>GSP</b> (small pay-per-call cost) with server-side auth + encryption.
+          <br/><br/>Once you connect a GSP, a background job fills the exact same status cells automatically — nothing here changes. Until then, use <b>Portal ↗</b> to check and record status in one tap.
+        </div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 12px',marginBottom:14}}>Low-cost GSP / return-status APIs: <b>Sandbox (Quicko)</b>, <b>Surepass</b>, <b>Masters India</b>, <b>Deepvue</b>. Ask us to wire your key when ready.</div>
+        <div style={{textAlign:'right'}}><button onClick={function(){setShowGsp(false);}} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 18px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Got it</button></div>
+      </div>
+    </div>}
+  </div>;
+}
+
+function GstStatusForm({initStatus,initArn,initDate,saving,onSave,onPortal}){
+  var [status,setStatus]=useState(initStatus||'');
+  var [arn,setArn]=useState(initArn||'');
+  var [dt,setDt]=useState(initDate||'');
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+  return<div>
+    <div style={{display:'flex',gap:8,marginBottom:10}}>
+      {[['Filed','#22c55e'],['Not Filed','#ef4444']].map(function(o){var on=status===o[0];return<button key={o[0]} onClick={function(){setStatus(o[0]);}} style={{flex:1,padding:'9px 0',borderRadius:8,border:'1.5px solid '+(on?o[1]:'var(--tf-border)'),background:on?o[1]+'18':'var(--tf-surface)',color:on?o[1]:'var(--tf-text-sub)',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{o[0]}</button>;})}
+    </div>
+    {status==='Filed'&&<div style={{display:'flex',gap:8,marginBottom:10}}>
+      <div style={{flex:1}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Filed date</label><input type="date" value={dt} onChange={function(e){setDt(e.target.value);}} style={INP}/></div>
+      <div style={{flex:1}}><label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>ARN</label><input value={arn} onChange={function(e){setArn(e.target.value);}} placeholder="AA…" style={INP}/></div>
+    </div>}
+    <div style={{display:'flex',gap:8,alignItems:'center',marginTop:6}}>
+      <button onClick={function(){if(status)onSave(status,arn,dt);}} disabled={!status||saving} style={{flex:1,background:status&&!saving?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 0',color:status&&!saving?'#fff':'var(--tf-text-sub)',cursor:status&&!saving?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>{saving?'Saving…':'Save status'}</button>
+      <button onClick={onPortal} title="Open GST portal (GSTIN copied)" style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'10px 14px',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:700}}>Portal ↗</button>
+    </div>
+  </div>;
+}
 
 // ── ITR Compilation Panel (full-screen overlay) ──
 function ITRCompilationPanel({org,supabase,cu,client,ay,existing,template,onClose,onSaved}){
@@ -18262,6 +18456,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var workzoneTabs=[{id:'worksheets',label:'Worksheets'}];
   if(ffOn('workzone_board'))workzoneTabs.push({id:'board',label:'Board'});
   if(ffOn('workzone_itr'))workzoneTabs.push({id:'itr',label:'ITR Desk'});
+  if(ffOn('workzone_gst'))workzoneTabs.push({id:'gst',label:'GST Desk'});
   if(ffOn('workzone_bigclients'))workzoneTabs.push({id:'bigclients',label:'Big Clients'});
   workzoneTabs.push({id:'teamview',label:'Team View'});
 
@@ -18402,6 +18597,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='workzone'&&tab==='gst'&&<GstDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
