@@ -4045,11 +4045,11 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
 
   async function seedDefaults(){
     setSeeding(true);
-    var entries=Object.entries(DEFAULT_WS_TYPE_CONFIGS);
-    var batch=entries.map(function(e,i){return{org_id:org.id,name:e[0],frequency:e[1].frequency,columns:e[1].cols,due_day:e[1].due_day||null,due_month:e[1].due_month||null,is_active:true,sort_order:i};});
+    var wts=INDUSTRY_TEMPLATES.ca_firm.workTypes;
+    var batch=wts.map(function(wt,i){return wtcRowFromTemplate(wt,org.id,i);});
     await supabase.from('work_type_configs').insert(batch);
     setSeeding(false);
-    showToast('Default work types created');
+    showToast(batch.length+' standard CA work types created');
     if(onReload)onReload();
   }
 
@@ -4070,7 +4070,7 @@ function WorkTypeConfigPanel({org,supabase,cu,workTypeConfigs,onReload}){
     var t=INDUSTRY_TEMPLATES[key];if(!t)return;
     if(!window.confirm('Load "'+t.label+'" template? This will add '+t.workTypes.length+' work type'+(t.workTypes.length!==1?'s':'')+'.'))return;
     setLoadingTemplate(true);
-    var batch=t.workTypes.map(function(wt,i){return{org_id:org.id,name:wt.name,frequency:wt.frequency||'monthly',columns:wt.columns||[],due_day:wt.due_day||null,due_month:wt.due_month||null,stages:wt.stages||[],is_active:true,is_itr_worktype:!!wt.is_itr_worktype,sort_order:configs.length+i};});
+    var batch=t.workTypes.map(function(wt,i){return wtcRowFromTemplate(wt,org.id,configs.length+i);});
     await supabase.from('work_type_configs').insert(batch);
     setLoadingTemplate(false);setShowTemplateGallery(false);
     showToast(t.label+' template loaded!');
@@ -4611,15 +4611,60 @@ var DEFAULT_WS_TYPE_CONFIGS = {
 var INDUSTRY_TEMPLATES = {
   ca_firm: {
     label:'CA / Tax Firm', icon:'🏛️', color:'#0e2a47',
-    desc:'GST, ITR, TDS, Audit, Payroll — standard Indian CA practice',
+    desc:'GST, Income Tax, TDS, Audit, ROC, Payroll — hardened Indian CA compliance with statutory due dates',
     workTypes:[
-      {name:'GST Returns',frequency:'monthly',due_day:11,columns:[{key:'gstr1_recv',label:'GSTR1 Rcvd',type:'checkbox'},{key:'gstr1_done',label:'GSTR1 Filed',type:'checkbox'},{key:'gstr3b_recv',label:'GSTR3B Rcvd',type:'checkbox'},{key:'gstr3b_done',label:'GSTR3B Filed',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Return Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
-      {name:'ITR',frequency:'yearly',due_day:31,due_month:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],stages:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'working',label:'Working',color:'#8b5cf6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}],is_itr_worktype:true},
-      {name:'TDS Returns',frequency:'quarterly',due_day:31,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
-      {name:'TDS Payments',frequency:'monthly',due_day:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Paid',type:'checkbox'}],stages:[]},
-      {name:'Audit',frequency:'yearly',due_day:30,due_month:9,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Completed',type:'checkbox'}],stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'draft_accounts',label:'Draft Accounts',color:'#3b82f6'},{key:'internal_review',label:'Internal Review',color:'#8b5cf6'},{key:'client_review',label:'Client Review',color:'#f59e0b'},{key:'signing',label:'Signing',color:'#ec4899'},{key:'filing',label:'Filing',color:'#22c55e'}]},
-      {name:'Payroll',frequency:'monthly',due_day:7,columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Processed',type:'checkbox'}],stages:[]},
-      {name:'MIS',frequency:'monthly',columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Completed',type:'checkbox'}],stages:[]},
+      // ── GST ──
+      {name:'GST Returns',frequency:'monthly',worksheet_group:'GST',prep_days:10,estimated_hours:2,due_day:20,
+        due_dates:[{label:'GSTR-3B',day:20,month_offset:1}],
+        columns:[{key:'gstr1_recv',label:'GSTR1 Rcvd',type:'checkbox'},{key:'gstr1_done',label:'GSTR1 Filed',type:'checkbox'},{key:'gstr3b_recv',label:'GSTR3B Rcvd',type:'checkbox'},{key:'gstr3b_done',label:'GSTR3B Filed',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Return Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}],
+        sop_steps:[{step:1,title:'Collect sales & purchase data',description:'Sales register / e-invoices and purchase register from the client'},{step:2,title:'Reconcile GSTR-2B (ITC)',description:'Match input tax credit with auto-drafted GSTR-2B'},{step:3,title:'File GSTR-1 & GSTR-3B',description:'File both returns and share the ARN with the client'}]},
+      {name:'GST Annual Return',frequency:'yearly',worksheet_group:'GST',prep_days:45,estimated_hours:8,due_day:31,due_month:12,
+        due_dates:[{label:'GSTR-9 / 9C',day:31,month:12,month_offset:1}],
+        columns:[{key:'gstr9',label:'GSTR-9',type:'checkbox'},{key:'gstr9c',label:'GSTR-9C',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'reconciliation',label:'Reconciliation',color:'#3b82f6'},{key:'preparation',label:'Preparation',color:'#8b5cf6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      // ── Income Tax ──
+      {name:'ITR',frequency:'yearly',prep_days:90,estimated_hours:3,is_itr_worktype:true,due_day:31,due_month:7,
+        due_dates:[{label:'ITR (Non-Audit)',day:31,month:7,month_offset:1}],
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'computed',label:'Computation Done',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],
+        stages:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'working',label:'Computation',color:'#8b5cf6'},{key:'review',label:'Review & Approval',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}],
+        sop_steps:[{step:1,title:'Request documents',description:'Form 16, 26AS, AIS/TIS, bank & investment proofs'},{step:2,title:'Prepare computation',description:'Compute income, deductions and tax; reconcile with 26AS/AIS'},{step:3,title:'Client approval & file',description:'Get approval, file the return and e-verify'}]},
+      {name:'ITR (Audit)',frequency:'yearly',prep_days:120,estimated_hours:5,is_itr_worktype:true,due_day:31,due_month:10,
+        due_dates:[{label:'ITR (Audit cases)',day:31,month:10,month_offset:1}],
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'computed',label:'Computation Done',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],
+        stages:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'audit_done',label:'Audit Completed',color:'#3b82f6'},{key:'working',label:'Computation',color:'#8b5cf6'},{key:'review',label:'Review & Approval',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      {name:'Advance Tax',frequency:'quarterly',prep_days:7,estimated_hours:2,
+        due_dates:[{label:'Advance Tax Instalment',quarterly_map:{1:{day:15,due_month:6},2:{day:15,due_month:9},3:{day:15,due_month:12},4:{day:15,due_month:3}}}],
+        columns:[{key:'computed',label:'Computed',type:'checkbox'},{key:'paid',label:'Challan Paid',type:'checkbox'}],stages:[]},
+      // ── TDS ──
+      {name:'TDS Returns',frequency:'quarterly',worksheet_group:'TDS',prep_days:15,estimated_hours:3,
+        due_dates:[{label:'24Q / 26Q',quarterly_map:{1:{day:31,due_month:7},2:{day:31,due_month:10},3:{day:31,due_month:1},4:{day:31,due_month:5}}}],
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'challan',label:'Challans Verified',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      {name:'TDS Payments',frequency:'monthly',worksheet_group:'TDS',prep_days:3,estimated_hours:1,due_day:7,
+        due_dates:[{label:'TDS Challan',day:7,month_offset:1}],
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'paid',label:'Paid',type:'checkbox'}],stages:[]},
+      // ── Audit ──
+      {name:'Tax Audit',frequency:'yearly',prep_days:60,estimated_hours:12,due_day:30,due_month:9,
+        due_dates:[{label:'3CA/3CB-3CD',day:30,month:9,month_offset:1}],
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'form3cd',label:'3CD Ready',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'verification',label:'Verification',color:'#3b82f6'},{key:'form_prep',label:'3CD Preparation',color:'#8b5cf6'},{key:'review',label:'Partner Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      {name:'Audit',frequency:'yearly',prep_days:60,estimated_hours:20,due_day:30,due_month:9,
+        due_dates:[{label:'Statutory Audit',day:30,month:9,month_offset:1}],
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'done',label:'Completed',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'draft_accounts',label:'Draft Accounts',color:'#3b82f6'},{key:'internal_review',label:'Internal Review',color:'#8b5cf6'},{key:'client_review',label:'Client Review',color:'#f59e0b'},{key:'signing',label:'Signing',color:'#ec4899'},{key:'filing',label:'Filing',color:'#22c55e'}]},
+      // ── ROC / MCA ──
+      {name:'ROC Annual Filing',frequency:'yearly',prep_days:30,estimated_hours:6,due_day:30,due_month:10,
+        due_dates:[{label:'AOC-4 / MGT-7',day:30,month:10,month_offset:1}],
+        columns:[{key:'aoc4',label:'AOC-4',type:'checkbox'},{key:'mgt7',label:'MGT-7',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Form Preparation',color:'#3b82f6'},{key:'director_review',label:'Director Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
+      // ── Payroll & Accounts ──
+      {name:'Payroll',frequency:'monthly',prep_days:3,estimated_hours:2,due_day:7,
+        due_dates:[{label:'Payroll Run',day:7,month_offset:1}],
+        columns:[{key:'data_recv',label:'Inputs Rcvd',type:'checkbox'},{key:'done',label:'Processed',type:'checkbox'}],stages:[]},
+      {name:'Accounting',frequency:'monthly',worksheet_group:'Accounts',prep_days:5,estimated_hours:4,
+        columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'entries',label:'Entries Done',type:'checkbox'},{key:'reconciled',label:'Reconciled',type:'checkbox'}],
+        stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'entry',label:'Data Entry',color:'#3b82f6'},{key:'reconciliation',label:'Reconciliation',color:'#8b5cf6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'delivered',label:'Delivered',color:'#22c55e'}]},
     ]
   },
   law_firm: {
@@ -4667,6 +4712,30 @@ var INDUSTRY_TEMPLATES = {
     ]
   },
 };
+
+// Map a template work-type definition → a full work_type_configs DB row.
+// Single source of truth so every seed path (template gallery, org creation,
+// setup wizard, "Load CA Defaults") persists ALL the rich, hardened keys.
+function wtcRowFromTemplate(wt, orgId, sortIndex){
+  return {
+    org_id: orgId,
+    name: wt.name,
+    frequency: wt.frequency || 'monthly',
+    columns: wt.columns || [],
+    due_day: (wt.due_day !== undefined ? wt.due_day : null),
+    due_month: (wt.due_month !== undefined ? wt.due_month : null),
+    due_dates: wt.due_dates || [],
+    stages: wt.stages || [],
+    sop_steps: wt.sop_steps || [],
+    client_fields: wt.client_fields || [],
+    prep_days: (wt.prep_days !== undefined ? wt.prep_days : null),
+    estimated_hours: (wt.estimated_hours !== undefined ? wt.estimated_hours : null),
+    worksheet_group: wt.worksheet_group || null,
+    is_active: true,
+    is_itr_worktype: !!wt.is_itr_worktype,
+    sort_order: (sortIndex !== undefined ? sortIndex : 99),
+  };
+}
 
 var MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 var QUARTERS=['Q1 (Apr-Jun)','Q2 (Jul-Sep)','Q3 (Oct-Dec)','Q4 (Jan-Mar)'];
@@ -7171,7 +7240,7 @@ function OrgCreateModal({open,cu,supabase,onClose,onCreated}){
     // Load template if selected
     if(selectedTemplate&&INDUSTRY_TEMPLATES[selectedTemplate]){
       var t=INDUSTRY_TEMPLATES[selectedTemplate];
-      var batch=t.workTypes.map(function(wt,i){return{org_id:newOrg.id,name:wt.name,frequency:wt.frequency||'monthly',columns:wt.columns||[],due_day:wt.due_day||null,due_month:wt.due_month||null,stages:wt.stages||[],is_active:true,is_itr_worktype:!!wt.is_itr_worktype,sort_order:i};});
+      var batch=t.workTypes.map(function(wt,i){return wtcRowFromTemplate(wt,newOrg.id,i);});
       await supabase.from('work_type_configs').insert(batch);
     }
     setSaving(false);setName('');setErr('');setStep(1);setSelectedTemplate(null);setTeamSize('');
@@ -17671,14 +17740,21 @@ function CoachmarkTour({step,setStep,onDone,navigate,steps}){
 
 // ── First-run Setup Wizard ─────────────────────────────────────────
 // Shown to the org owner/admin when the org has no work types and no clients.
+// Names MUST match INDUSTRY_TEMPLATES.ca_firm work types so the wizard pulls
+// the hardened config (stages, statutory due dates, prep days) for each.
 var WIZARD_PRESETS=[
-  {name:'GST Returns',desc:'GSTR-1 & GSTR-3B monthly filing',icon:'🧾',freq:'Monthly',color:'#0e2a47'},
-  {name:'ITR',desc:'Income tax returns — yearly',icon:'📋',freq:'Yearly',color:'#2454D6'},
-  {name:'TDS Returns',desc:'Quarterly TDS return filing',icon:'📄',freq:'Quarterly',color:'#0891b2'},
-  {name:'TDS Payments',desc:'Monthly TDS challan payments',icon:'💸',freq:'Monthly',color:'#059669'},
-  {name:'Accounts',desc:'Monthly book-keeping',icon:'📚',freq:'Monthly',color:'#d97706'},
-  {name:'Audit',desc:'Yearly statutory / tax audit',icon:'🔍',freq:'Yearly',color:'#7c3aed'},
+  {name:'GST Returns',desc:'GSTR-1 & GSTR-3B monthly',icon:'🧾',freq:'Monthly',color:'#0e2a47'},
+  {name:'GST Annual Return',desc:'GSTR-9 / 9C yearly',icon:'📊',freq:'Yearly',color:'#0e2a47'},
+  {name:'ITR',desc:'Income tax — non-audit (Jul 31)',icon:'📋',freq:'Yearly',color:'#2454D6'},
+  {name:'ITR (Audit)',desc:'Income tax — audit cases (Oct 31)',icon:'📋',freq:'Yearly',color:'#2454D6'},
+  {name:'Advance Tax',desc:'Quarterly instalments (15th)',icon:'💰',freq:'Quarterly',color:'#2454D6'},
+  {name:'TDS Returns',desc:'24Q / 26Q quarterly',icon:'📄',freq:'Quarterly',color:'#0891b2'},
+  {name:'TDS Payments',desc:'Monthly challan (7th)',icon:'💸',freq:'Monthly',color:'#059669'},
+  {name:'Tax Audit',desc:'3CA/3CB-3CD (Sep 30)',icon:'🔍',freq:'Yearly',color:'#7c3aed'},
+  {name:'Audit',desc:'Statutory audit',icon:'📗',freq:'Yearly',color:'#7c3aed'},
+  {name:'ROC Annual Filing',desc:'AOC-4 / MGT-7',icon:'🏢',freq:'Yearly',color:'#b45309'},
   {name:'Payroll',desc:'Monthly salary processing',icon:'👥',freq:'Monthly',color:'#db2777'},
+  {name:'Accounting',desc:'Monthly bookkeeping',icon:'📚',freq:'Monthly',color:'#d97706'},
   {name:'Other',desc:'Anything else your firm does',icon:'📌',freq:'Custom',color:'#475569'},
 ];
 
@@ -17722,9 +17798,11 @@ function SetupWizard({org,cu,supabase,onClose}){
   async function saveWorkTypes(){
     if(selWT.length===0){setStep(2);return;}
     setBusy(true);setErr('');
+    var caByName={};INDUSTRY_TEMPLATES.ca_firm.workTypes.forEach(function(w){caByName[w.name]=w;});
     var batch=selWT.map(function(name,i){
-      var d=DEFAULT_WS_TYPE_CONFIGS[name]||DEFAULT_WS_TYPE_CONFIGS['Other'];
-      return{org_id:org.id,name,frequency:d.frequency,columns:d.cols,due_day:d.due_day||null,due_month:d.due_month||null,is_active:true,sort_order:i};
+      var wt=caByName[name];
+      if(!wt){var d=DEFAULT_WS_TYPE_CONFIGS[name]||DEFAULT_WS_TYPE_CONFIGS['Other'];wt={name:name,frequency:d.frequency,columns:d.cols,due_day:d.due_day,due_month:d.due_month};}
+      return wtcRowFromTemplate(wt,org.id,i);
     });
     var r=await supabase.from('work_type_configs').insert(batch);
     setBusy(false);
