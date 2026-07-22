@@ -4967,6 +4967,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [showCreateTask,setShowCreateTask]=useState(null); // {row, client}
   var [showClientRequest,setShowClientRequest]=useState(null); // {row, client} → Client Portal data request
   var [reqStatusMap,setReqStatusMap]=useState({}); // client_requests id -> status (for the row chip)
+  var [gstStatusByClient,setGstStatusByClient]=useState({}); // client_id -> gst_filing_status for the current GST period
+  var [gstEdit,setGstEdit]=useState(null); // {row, client} → inline GST portal-status editor
   var [editingCell,setEditingCell]=useState(null); // 'rowId:colKey' — which custom-column cell is open for editing
   var [saving,setSaving]=useState(false);
   // One-time task form
@@ -5145,6 +5147,18 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     return function(){alive=false;};
     // eslint-disable-next-line
   },[rows]);
+  // GST worksheets: load the government portal filing status for the current period.
+  useEffect(function(){
+    var cls=gstClassify(activeType||'');
+    if(!cls.isGst||!periodMonth){setGstStatusByClient({});return;}
+    var retType=cls.retType==='GST'?'GSTR3B':cls.retType;
+    var calY=periodMonth>=4?periodYear:periodYear+1;
+    var retPeriod=String(periodMonth).padStart(2,'0')+calY;
+    var alive=true;
+    (async function(){try{var r=await supabase.from('gst_filing_status').select('client_id,status,filed_date,is_late,arn,ret_type').eq('org_id',org.id).eq('ret_period',retPeriod).eq('ret_type',retType).limit(6000);if(alive&&r.data){var m={};r.data.forEach(function(x){m[x.client_id]=x;});setGstStatusByClient(m);}}catch(e){}})();
+    return function(){alive=false;};
+    // eslint-disable-next-line
+  },[activeType,periodMonth,periodYear,org.id]);
 
   var [recalculating,setRecalculating]=useState(false);
   var [showCopyFrom,setShowCopyFrom]=useState(false);
@@ -6092,6 +6106,9 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
 
   var periodLabel=activeType?getPeriodLabel(cfg.frequency,periodYear,periodMonth,periodQuarter):'';
+  var _gstCls=gstClassify(activeType||'');
+  var gstWsActive=_gstCls.isGst&&!!periodMonth; // show inline GST portal status on monthly GST worksheets
+  var gstRetTypeR=_gstCls.retType==='GST'?'GSTR3B':_gstCls.retType;
 
   var SC_STATUS={pending:'#94a3b8',in_progress:'#f59e0b',under_review:'#8b5cf6',completed:'#22c55e'};
 
@@ -6748,7 +6765,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:7,height:7,borderRadius:'50%',background:WS_PC[wsPriority],flexShrink:0}} title={wsPriority+' priority'}/>
                     <div style={{flex:1}}>
-                      <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}{row.current_stage&&cfg.stages&&cfg.stages.length>0&&(function(){var st=cfg.stages.find(function(s){return s.key===row.current_stage;});return st?<span style={{fontSize:9,fontWeight:700,color:'#fff',background:st.color||'#0e2a47',borderRadius:4,padding:'1px 6px',marginLeft:6}}>{st.label}</span>:null;})()}</div>
+                      <div style={{fontWeight:600,color:'var(--tf-text)',fontSize:13}}>{client.name}{row.due_label&&row.due_label!=='Due'&&<span style={{fontSize:10,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.1)',borderRadius:4,padding:'1px 5px',marginLeft:6}}>{row.due_label}</span>}{row.current_stage&&cfg.stages&&cfg.stages.length>0&&(function(){var st=cfg.stages.find(function(s){return s.key===row.current_stage;});return st?<span style={{fontSize:9,fontWeight:700,color:'#fff',background:st.color||'#0e2a47',borderRadius:4,padding:'1px 6px',marginLeft:6}}>{st.label}</span>:null;})()}{gstWsActive&&(function(){var gs=gstStatusByClient[client.id];var filed=gs&&gs.status==='Filed';var late=gs&&gs.is_late;var notfiled=gs&&gs.status==='Not Filed';var col=filed?(late?'#f59e0b':'#22c55e'):notfiled?'#ef4444':'#94a3b8';var lbl=filed?(late?'⚠ Filed late':'✓ Filed'):notfiled?'✕ Not filed':'⟳ Portal';var solid=filed||notfiled;return<span onClick={function(e){e.stopPropagation();setGstEdit({row:row,client:client});}} title={'GST portal · '+gstRetTypeR+(gs&&gs.filed_date?' · filed '+gs.filed_date:'')+(gs&&gs.arn?' · '+gs.arn:'')+' — click to record/check'} style={{fontSize:9,fontWeight:800,color:solid?'#fff':col,background:solid?col:'transparent',border:'1px solid '+col,borderRadius:4,padding:'1px 6px',marginLeft:6,cursor:'pointer'}}>{lbl}</span>;})()}</div>
                       {d.__title&&<div style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{d.__title}</div>}
                     </div>
                     {wsClTotal>0&&<span style={{fontSize:9,color:wsClDone===wsClTotal?'#22c55e':'#0e2a47',fontWeight:700,whiteSpace:'nowrap'}}>✓{wsClDone}/{wsClTotal}</span>}
@@ -7060,6 +7077,30 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     {showCreateTask&&<WorksheetTaskModal row={showCreateTask.row} client={showCreateTask.client} workType={activeType} period={periodLabel} allWorkspaces={allWorkspaces} supabase={supabase} cu={cu} orgId={org.id} onClose={function(){setShowCreateTask(null);}} onCreated={function(taskId,wsId){supabase.from('worksheet_rows').update({task_card_id:taskId,task_workspace_id:wsId}).eq('id',showCreateTask.row.id).then(function(){setRows(function(p){return p.map(function(r){return r.id===showCreateTask.row.id?Object.assign({},r,{task_card_id:taskId,task_workspace_id:wsId}):r;});});setShowCreateTask(null);showToast('Task card created!');});}}/>}
 
     {showClientRequest&&<PortalRequestModal row={showClientRequest.row} client={showClientRequest.client} workType={activeType} period={periodLabel} onClose={function(){setShowClientRequest(null);}} onSubmit={async function(fields){var r=await createPortalRequest(showClientRequest.row,showClientRequest.client,fields);if(r)setShowClientRequest(null);}}/>}
+
+    {gstEdit&&(function(){
+      var calY=periodMonth>=4?periodYear:periodYear+1;
+      var retPeriod=String(periodMonth).padStart(2,'0')+calY;
+      var fyStr=periodYear+'-'+String(periodYear+1).slice(2);
+      var dueDay=gstRetTypeR==='GSTR1'?11:20;var dm=periodMonth+1,dy=calY;if(dm>12){dm=1;dy++;}
+      var dueStr=dy+'-'+String(dm).padStart(2,'0')+'-'+String(dueDay).padStart(2,'0');
+      var st=gstStatusByClient[gstEdit.client.id]||{};
+      async function saveGst(status,arn,dt){
+        var isLate=status==='Filed'&&dt?(new Date(dt+'T00:00:00')>new Date(dueStr+'T00:00:00')):false;
+        var payload={org_id:org.id,client_id:gstEdit.client.id,gstin:gstEdit.client.gstin||null,fy:fyStr,ret_type:gstRetTypeR,ret_period:retPeriod,arn:arn||null,status:status,filed_date:(status==='Filed'&&dt)?dt:null,due_date:dueStr,is_late:isLate,source:'manual',created_by:cu.id,updated_at:new Date().toISOString()};
+        var res=await supabase.from('gst_filing_status').upsert(payload,{onConflict:'org_id,client_id,ret_type,ret_period'}).select().single();
+        if(res.error){showToast(res.error.message,'err');return;}
+        setGstStatusByClient(function(m){var n=Object.assign({},m);n[gstEdit.client.id]=res.data;return n;});
+        setGstEdit(null);showToast('GST status saved');
+      }
+      return<div onClick={function(){setGstEdit(null);}} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+        <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,padding:20,width:'100%',maxWidth:380}}>
+          <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>{gstEdit.client.display_name||gstEdit.client.name}</div>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>{gstRetTypeR} · {periodLabel} · due {dueStr}{gstEdit.client.gstin?' · '+gstEdit.client.gstin:' · no GSTIN on file'}</div>
+          <GstStatusForm initStatus={st.status||''} initArn={st.arn||''} initDate={st.filed_date||''} saving={false} onSave={saveGst} onPortal={function(){try{navigator.clipboard&&navigator.clipboard.writeText(gstEdit.client.gstin||'');}catch(e){}window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');showToast('GSTIN copied — paste in Search Taxpayer');}}/>
+        </div>
+      </div>;
+    })()}
 
     {/* Pipeline Card Detail Panel */}
     {pipelineDetailRow&&(function(){
