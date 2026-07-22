@@ -4907,6 +4907,32 @@ function getDefaultPeriod(freq, cfg){
   return p;
 }
 
+// Modal: create a Client Portal data-collection request from a worksheet row.
+function PortalRequestModal({row,client,workType,period,onClose,onSubmit}){
+  var defTitle=(workType||'Documents')+(period?' — '+period:'');
+  var [title,setTitle]=useState(defTitle);
+  var [desc,setDesc]=useState('Please upload the documents / details required for '+(workType||'this work')+(period?' ('+period+')':'')+'. Thank you.');
+  var [due,setDue]=useState(row.due_date||'');
+  var [busy,setBusy]=useState(false);
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+  var LBL={fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',display:'block',marginBottom:4};
+  var hasEmail=client&&client.email;
+  return<div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+    <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,padding:22,width:'100%',maxWidth:460}}>
+      <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>📥 Request from client</div>
+      <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>Creates a data-collection task in <b>{client?(client.display_name||client.name):'the client'}</b>'s Client Portal, linked to this worksheet row.</div>
+      <div style={{marginBottom:10}}><label style={LBL}>Title</label><input value={title} onChange={function(e){setTitle(e.target.value);}} style={INP}/></div>
+      <div style={{marginBottom:10}}><label style={LBL}>Message to client</label><textarea value={desc} onChange={function(e){setDesc(e.target.value);}} rows={4} style={Object.assign({},INP,{resize:'vertical',lineHeight:1.5})}/></div>
+      <div style={{marginBottom:14}}><label style={LBL}>Due date</label><input type="date" value={due||''} onChange={function(e){setDue(e.target.value);}} style={Object.assign({},INP,{maxWidth:180})}/></div>
+      {!hasEmail&&<div style={{fontSize:11,color:'#b45309',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:8,padding:'8px 10px',marginBottom:12}}>⚠ This client has no email — they'll only see it after logging into the portal. Add an email in Client Master to notify them.</div>}
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+        <button onClick={onClose} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 16px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:600}}>Cancel</button>
+        <button disabled={!title.trim()||busy} onClick={async function(){setBusy(true);await onSubmit({title:title.trim(),description:desc.trim(),due_date:due||null});setBusy(false);}} style={{background:title.trim()&&!busy?'linear-gradient(135deg,#2F6BFF,#14C7C0)':'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 18px',color:title.trim()&&!busy?'#fff':'var(--tf-text-sub)',cursor:title.trim()&&!busy?'pointer':'not-allowed',fontSize:13,fontWeight:700}}>{busy?'Sending…':'Send request'}</button>
+      </div>
+    </div>
+  </div>;
+}
+
 function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, workflowHierarchy, initWorkType, initMineOnly, orgGroups, orgGroupMemberships, orgDepts, orgDeptMembers}){
   var wfHierarchy=workflowHierarchy||[];
   // Build lookup from DB configs: { name: { frequency, cols: [{key,label}] } }
@@ -4939,6 +4965,8 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [periodMonth,setPeriodMonth]=useState(_initP.month||1);
   var [periodQuarter,setPeriodQuarter]=useState(_initQ.quarter||1);
   var [showCreateTask,setShowCreateTask]=useState(null); // {row, client}
+  var [showClientRequest,setShowClientRequest]=useState(null); // {row, client} → Client Portal data request
+  var [reqStatusMap,setReqStatusMap]=useState({}); // client_requests id -> status (for the row chip)
   var [editingCell,setEditingCell]=useState(null); // 'rowId:colKey' — which custom-column cell is open for editing
   var [saving,setSaving]=useState(false);
   // One-time task form
@@ -5089,6 +5117,34 @@ var [showExportMenu,setShowExportMenu]=useState(false);
   },[deptFilter]);
 
   function showToast(msg,type){setToast({msg,type:type||'ok'});setTimeout(function(){setToast(null);},3000);}
+
+  // Create a Client Portal data-collection request from a worksheet row, linked
+  // back via data.__portal_request_id so the row reflects the client's response.
+  async function createPortalRequest(row,client,fields){
+    if(!client){showToast('No client on this row','err');return null;}
+    var ins=await supabase.from('client_requests').insert({
+      org_id:org.id,client_id:client.id,type:'data_collection',
+      title:fields.title,description:fields.description||null,due_date:fields.due_date||row.due_date||null,
+      status:'pending',created_by:cu.id
+    }).select('id,status').single();
+    if(ins.error){showToast(ins.error.message,'err');return null;}
+    var reqId=ins.data.id;
+    var d=Object.assign({},row.data||{});d.__portal_request_id=reqId;d.__portal_request_title=fields.title;
+    await supabase.from('worksheet_rows').update({data:d}).eq('id',row.id);
+    setRows(function(prev){return prev.map(function(r){return r.id===row.id?Object.assign({},r,{data:d}):r;});});
+    setReqStatusMap(function(m){var n=Object.assign({},m);n[reqId]='pending';return n;});
+    showToast('Portal request sent to '+(client.display_name||client.name));
+    return {id:reqId,client:client,title:fields.title};
+  }
+  // Side-load statuses for any rows that already have a linked portal request.
+  useEffect(function(){
+    var ids=(rows||[]).map(function(r){return (r.data||{}).__portal_request_id;}).filter(Boolean);
+    if(!ids.length)return;
+    var alive=true;
+    (async function(){try{var rq=await supabase.from('client_requests').select('id,status').in('id',ids).limit(2000);if(alive&&rq.data){var m={};rq.data.forEach(function(x){m[x.id]=x.status;});setReqStatusMap(function(prev){return Object.assign({},prev,m);});}}catch(e){}})();
+    return function(){alive=false;};
+    // eslint-disable-next-line
+  },[rows]);
 
   var [recalculating,setRecalculating]=useState(false);
   var [showCopyFrom,setShowCopyFrom]=useState(false);
@@ -6856,8 +6912,13 @@ var [showExportMenu,setShowExportMenu]=useState(false);
                     <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}>
                       <span style={{fontSize:10,fontWeight:800,color:WS_PC[wsPriority],background:wsPriority==='urgent'?'rgba(239,68,68,0.1)':wsPriority==='high'?'rgba(245,158,11,0.1)':wsPriority==='medium'?'rgba(59,130,246,0.1)':'rgba(148,163,184,0.1)',padding:'2px 10px',borderRadius:10,textTransform:'uppercase',letterSpacing:'0.04em'}}>{wsPriority}</span>
                       {d.__contact&&<span style={{fontSize:11,color:'var(--tf-text-sub)'}}>Contact: {d.__contact}</span>}
-                      <button onClick={function(e){e.stopPropagation();startWsEditing(row);}}
-                        style={{marginLeft:'auto',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit Details</button>
+                      {(function(){var rid=d.__portal_request_id;if(!rid)return null;var st=reqStatusMap[rid]||'pending';var responded=st==='responded'||st==='closed';return<span title="Client Portal request" style={{fontSize:10,fontWeight:800,color:responded?'#16a34a':'#2F6BFF',background:responded?'rgba(34,197,94,0.1)':'rgba(47,107,255,0.1)',border:'1px solid '+(responded?'rgba(34,197,94,0.3)':'rgba(47,107,255,0.25)'),padding:'2px 8px',borderRadius:10}}>{responded?'✓ Data received':'📥 Requested'}</span>;})()}
+                      <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+                        {client&&<button onClick={function(e){e.stopPropagation();setShowClientRequest({row:row,client:client});}} title="Ask this client for documents via the Client Portal"
+                          style={{background:'rgba(47,107,255,0.08)',border:'1px solid rgba(47,107,255,0.3)',borderRadius:6,padding:'3px 10px',color:'#2F6BFF',cursor:'pointer',fontSize:10,fontWeight:700}}>📥 Request from client</button>}
+                        <button onClick={function(e){e.stopPropagation();startWsEditing(row);}}
+                          style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 10px',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700}}>Edit Details</button>
+                      </div>
                     </div>
                     {d.__description&&<div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:8,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{d.__description}</div>}
                     {wsClTotal>0&&<div>
@@ -6997,6 +7058,8 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     </div>}
 
     {showCreateTask&&<WorksheetTaskModal row={showCreateTask.row} client={showCreateTask.client} workType={activeType} period={periodLabel} allWorkspaces={allWorkspaces} supabase={supabase} cu={cu} orgId={org.id} onClose={function(){setShowCreateTask(null);}} onCreated={function(taskId,wsId){supabase.from('worksheet_rows').update({task_card_id:taskId,task_workspace_id:wsId}).eq('id',showCreateTask.row.id).then(function(){setRows(function(p){return p.map(function(r){return r.id===showCreateTask.row.id?Object.assign({},r,{task_card_id:taskId,task_workspace_id:wsId}):r;});});setShowCreateTask(null);showToast('Task card created!');});}}/>}
+
+    {showClientRequest&&<PortalRequestModal row={showClientRequest.row} client={showClientRequest.client} workType={activeType} period={periodLabel} onClose={function(){setShowClientRequest(null);}} onSubmit={async function(fields){var r=await createPortalRequest(showClientRequest.row,showClientRequest.client,fields);if(r)setShowClientRequest(null);}}/>}
 
     {/* Pipeline Card Detail Panel */}
     {pipelineDetailRow&&(function(){
