@@ -4968,6 +4968,7 @@ function WorksheetsModule({org, supabase, cu, allWorkspaces, workTypeConfigs, wo
   var [showClientRequest,setShowClientRequest]=useState(null); // {row, client} → Client Portal data request
   var [reqStatusMap,setReqStatusMap]=useState({}); // client_requests id -> status (for the row chip)
   var [gstStatusByClient,setGstStatusByClient]=useState({}); // client_id -> gst_filing_status for the current GST period
+  var [gstCredsWs,setGstCredsWs]=useState({}); // client_id -> {username,password} GST login
   var [gstEdit,setGstEdit]=useState(null); // {row, client} → inline GST portal-status editor
   var [editingCell,setEditingCell]=useState(null); // 'rowId:colKey' — which custom-column cell is open for editing
   var [saving,setSaving]=useState(false);
@@ -5156,6 +5157,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     var retPeriod=String(periodMonth).padStart(2,'0')+calY;
     var alive=true;
     (async function(){try{var r=await supabase.from('gst_filing_status').select('client_id,status,filed_date,is_late,arn,ret_type').eq('org_id',org.id).eq('ret_period',retPeriod).eq('ret_type',retType).limit(6000);if(alive&&r.data){var m={};r.data.forEach(function(x){m[x.client_id]=x;});setGstStatusByClient(m);}}catch(e){}})();
+    (async function(){try{var rcr=await supabase.from('client_credentials').select('client_id,portal_name,username,password').eq('org_id',org.id).limit(8000);if(alive){var cm={};(rcr.data||[]).forEach(function(cr){if(/gst/i.test(cr.portal_name||'')&&!cm[cr.client_id])cm[cr.client_id]={username:cr.username||'',password:cr.password||''};});setGstCredsWs(cm);}}catch(e){}})();
     return function(){alive=false;};
     // eslint-disable-next-line
   },[activeType,periodMonth,periodYear,org.id]);
@@ -7096,8 +7098,20 @@ var [showExportMenu,setShowExportMenu]=useState(false);
       return<div onClick={function(){setGstEdit(null);}} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:3000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
         <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,padding:20,width:'100%',maxWidth:380}}>
           <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',marginBottom:2}}>{gstEdit.client.display_name||gstEdit.client.name}</div>
-          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:14}}>{gstRetTypeR} · {periodLabel} · due {dueStr}{gstEdit.client.gstin?' · '+gstEdit.client.gstin:' · no GSTIN on file'}</div>
-          <GstStatusForm initStatus={st.status||''} initArn={st.arn||''} initDate={st.filed_date||''} saving={false} onSave={saveGst} onPortal={function(){try{navigator.clipboard&&navigator.clipboard.writeText(gstEdit.client.gstin||'');}catch(e){}window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');showToast('GSTIN copied — paste in Search Taxpayer');}}/>
+          <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:12}}>{gstRetTypeR} · {periodLabel} · due {dueStr}{gstEdit.client.gstin?' · '+gstEdit.client.gstin:' · no GSTIN on file'}</div>
+          {(function(){var cr=gstCredsWs[gstEdit.client.id];function cp(t,l){try{if(navigator.clipboard)navigator.clipboard.writeText(t||'');}catch(e){}showToast(l);}
+            return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>GST portal login</div>
+              {cr&&cr.username?<>
+                <div style={{display:'flex',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                  <button onClick={function(){cp(cr.username,'User ID copied');}} style={{flex:1,minWidth:110,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 User ID<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.username}</div></button>
+                  <button onClick={function(){cp(cr.password,'Password copied');}} style={{flex:1,minWidth:110,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 Password<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.password?'••••••••':'—'}</div></button>
+                </div>
+                <button onClick={function(){window.open('https://services.gst.gov.in/services/login','_blank','noopener');}} style={{width:'100%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:7,padding:'8px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Open GST login ↗</button>
+              </>:<button onClick={function(){cp(gstEdit.client.gstin||'','GSTIN copied');window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');}} style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 0',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:700}}>Search Taxpayer ↗ (GSTIN copied)</button>}
+            </div>;
+          })()}
+          <GstStatusForm initStatus={st.status||''} initArn={st.arn||''} initDate={st.filed_date||''} saving={false} onSave={saveGst} onPortal={function(){var cr=gstCredsWs[gstEdit.client.id];if(cr&&cr.username){try{if(navigator.clipboard)navigator.clipboard.writeText(cr.username);}catch(e){}window.open('https://services.gst.gov.in/services/login','_blank','noopener');showToast('User ID copied — paste in GST login');}else{try{if(navigator.clipboard)navigator.clipboard.writeText(gstEdit.client.gstin||'');}catch(e){}window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');showToast('GSTIN copied — Search Taxpayer');}}}/>
         </div>
       </div>;
     })()}
