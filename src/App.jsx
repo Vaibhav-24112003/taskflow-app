@@ -8162,6 +8162,9 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
   var [members,setMembers]=useState(_itrCache[cacheKey]?(_itrCache[cacheKey].members||[]):[]);
   var [memberFilter,setMemberFilter]=useState('all'); // 'all' | 'mine' | <user_id>
   var [assignFor,setAssignFor]=useState(null); // {clientId, left, top} for the fixed popover
+  var [itrLogin,setItrLogin]=useState(null); // {client,left,top} — IT portal login helper
+  var [itrCreds,setItrCreds]=useState({}); // client_id -> {username,password} (Income Tax portal)
+  var [itrCopied,setItrCopied]=useState('');
   var [savingAssign,setSavingAssign]=useState(false);
   var [selectedClients,setSelectedClients]=useState(new Set()); // for bulk assign
   var [bulkAssignOpen,setBulkAssignOpen]=useState(false);
@@ -8224,6 +8227,10 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       var mlist=[];
       try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(300);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(300);mlist=rp.data||[];}}catch(_){}
       setMembers(mlist);
+      // Income Tax portal login credentials from the vault (portal_name mentions income/ITR/e-filing).
+      var itrCredMap={};
+      try{var rcr=await supabase.from('client_credentials').select('client_id,portal_name,username,password').eq('org_id',org.id).limit(8000);(rcr.data||[]).forEach(function(cr){var pn=(cr.portal_name||'').toLowerCase();if(/income|itr|e-?fil|it ?portal|traces/.test(pn)&&!itrCredMap[cr.client_id])itrCredMap[cr.client_id]={username:cr.username||'',password:cr.password||''};});}catch(_){}
+      setItrCreds(itrCredMap);
       _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,rowIdByClient:rowIds,dueByClient:dueDates,members:mlist};
       // Org form template (silent — falls back to defaults if table/row absent)
       try{var rt=await supabase.from('itr_templates').select('template').eq('org_id',org.id).maybeSingle();if(rt&&rt.data&&rt.data.template)setTemplate(rt.data.template);}catch(_){}
@@ -8393,7 +8400,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
     </div>;
   }
 
-  return<div style={{padding:'0 0 60px'}} onClick={function(){if(assignFor)setAssignFor(null);if(bulkAssignOpen)setBulkAssignOpen(false);}}>
+  return<div style={{padding:'0 0 60px'}} onClick={function(){if(assignFor)setAssignFor(null);if(bulkAssignOpen)setBulkAssignOpen(false);if(itrLogin)setItrLogin(null);}}>
     {/* Header */}
     <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:12}}>
       <div>
@@ -8573,6 +8580,9 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
               <div style={{flex:1,height:6,borderRadius:4,background:'var(--tf-border)',overflow:'hidden'}}><div style={{width:comp+'%',height:'100%',background:comp>=80?'#22c55e':comp>=40?'#f59e0b':'#2F6BFF'}}/></div>
               <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',minWidth:30,textAlign:'right'}}>{comp}%</span>
             </div>
+            <div style={{flex:'0 0 32px',textAlign:'center'}} onClick={function(e){e.stopPropagation();}}>
+              <button onClick={function(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setItrCopied('');setItrLogin({client:c,left:Math.max(8,r.right-256),top:Math.min(r.bottom+4,window.innerHeight-230)});}} title="Income Tax portal — login helper" style={{background:'rgba(47,107,255,0.08)',border:'1px solid rgba(47,107,255,0.25)',borderRadius:6,padding:'3px 7px',cursor:'pointer',fontSize:12,color:'#2F6BFF'}}>🔑</button>
+            </div>
             <div style={{flex:'0 0 130px',textAlign:'right',cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
               {rec?<span style={{fontSize:11,fontWeight:700,color:sm[2],background:sm[2]+'1a',border:'1px solid '+sm[2]+'33',borderRadius:20,padding:'3px 11px'}}>{sm[1]}</span>:
               <span style={{fontSize:11,fontWeight:600,color:'#0e2a47',background:'rgba(14,42,71,0.08)',borderRadius:20,padding:'3px 11px'}}>+ Start</span>}
@@ -8586,6 +8596,22 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         </div>}
       </div>}
     </>}
+
+    {/* IT portal login helper — copy credentials, open portal, read status manually */}
+    {itrLogin&&(function(){var c=itrLogin.client;var cr=itrCreds[c.id]||{};var userId=cr.username||c.pan||'';
+      function copy(t,l){try{if(navigator.clipboard)navigator.clipboard.writeText(t||'');}catch(e){}setItrCopied(l);setTimeout(function(){setItrCopied('');},1400);}
+      var BTN={width:'100%',textAlign:'left',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',marginBottom:6};
+      return<div onClick={function(e){e.stopPropagation();}} style={{position:'fixed',left:itrLogin.left,top:itrLogin.top,zIndex:9999,width:256,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:14}}>
+        <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
+        <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Income Tax portal login</div>
+        <button onClick={function(){copy(userId,'User ID copied');}} style={BTN}>📋 User ID <span style={{display:'block',fontFamily:'monospace',fontWeight:400,color:'var(--tf-text-sub)',fontSize:11}}>{userId||'— (no PAN)'}</span></button>
+        <button onClick={function(){if(cr.password)copy(cr.password,'Password copied');}} disabled={!cr.password} style={Object.assign({},BTN,{opacity:cr.password?1:0.55,cursor:cr.password?'pointer':'not-allowed'})}>📋 Password <span style={{display:'block',fontFamily:'monospace',fontWeight:400,color:'var(--tf-text-sub)',fontSize:11}}>{cr.password?'••••••••':'not saved in vault'}</span></button>
+        <button onClick={function(){window.open('https://eportal.incometax.gov.in/iec/foservices/#/login','_blank','noopener');}} style={{width:'100%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:7,padding:'9px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Open IT portal login ↗</button>
+        <div style={{minHeight:16,textAlign:'center',fontSize:11,fontWeight:700,color:'#16a34a',marginTop:6}}>{itrCopied}</div>
+        <div style={{fontSize:10,color:'var(--tf-text-sub)',lineHeight:1.5}}>Copy each field, paste on the portal (OTP may be required), open the client's return status, then record it here.</div>
+        <button onClick={function(){setItrLogin(null);}} style={{width:'100%',background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:11,cursor:'pointer',marginTop:6,fontWeight:600}}>Close</button>
+      </div>;
+    })()}
 
     {/* Fixed assignment popover — rendered outside any overflow:hidden ancestor */}
     {assignFor&&<div onClick={function(e){e.stopPropagation();}} style={{position:'fixed',left:assignFor.left,top:Math.min(assignFor.top,Math.max(8,window.innerHeight-360)),maxHeight:'calc(100vh - 16px)',overflowY:'auto',zIndex:9999,width:240,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:10,boxShadow:'0 8px 28px rgba(10,16,28,0.25)',padding:'12px 14px'}}>
