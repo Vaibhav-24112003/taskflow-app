@@ -4615,22 +4615,22 @@ var INDUSTRY_TEMPLATES = {
     desc:'GST, Income Tax, TDS, Audit, ROC, Payroll — hardened Indian CA compliance with statutory due dates',
     workTypes:[
       // ── GST ──
-      {name:'GST Returns',frequency:'monthly',worksheet_group:'GST',prep_days:10,estimated_hours:2,due_day:20,
+      {name:'GST Returns',desk_type:'gst',frequency:'monthly',worksheet_group:'GST',prep_days:10,estimated_hours:2,due_day:20,
         due_dates:[{label:'GSTR-3B',day:20,month_offset:1}],
         columns:[{key:'gstr1_recv',label:'GSTR1 Rcvd',type:'checkbox'},{key:'gstr1_done',label:'GSTR1 Filed',type:'checkbox'},{key:'gstr3b_recv',label:'GSTR3B Rcvd',type:'checkbox'},{key:'gstr3b_done',label:'GSTR3B Filed',type:'checkbox'}],
         stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'preparation',label:'Return Preparation',color:'#3b82f6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}],
         sop_steps:[{step:1,title:'Collect sales & purchase data',description:'Sales register / e-invoices and purchase register from the client'},{step:2,title:'Reconcile GSTR-2B (ITC)',description:'Match input tax credit with auto-drafted GSTR-2B'},{step:3,title:'File GSTR-1 & GSTR-3B',description:'File both returns and share the ARN with the client'}]},
-      {name:'GST Annual Return',frequency:'yearly',worksheet_group:'GST',prep_days:45,estimated_hours:8,due_day:31,due_month:12,
+      {name:'GST Annual Return',desk_type:'gst',frequency:'yearly',worksheet_group:'GST',prep_days:45,estimated_hours:8,due_day:31,due_month:12,
         due_dates:[{label:'GSTR-9 / 9C',day:31,month:12,month_offset:1}],
         columns:[{key:'gstr9',label:'GSTR-9',type:'checkbox'},{key:'gstr9c',label:'GSTR-9C',type:'checkbox'}],
         stages:[{key:'data_collection',label:'Data Collection',color:'#94a3b8'},{key:'reconciliation',label:'Reconciliation',color:'#3b82f6'},{key:'preparation',label:'Preparation',color:'#8b5cf6'},{key:'review',label:'Review',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
       // ── Income Tax ──
-      {name:'ITR',frequency:'yearly',prep_days:90,estimated_hours:3,is_itr_worktype:true,due_day:31,due_month:7,
+      {name:'ITR',desk_type:'itr',frequency:'yearly',prep_days:90,estimated_hours:3,is_itr_worktype:true,due_day:31,due_month:7,
         due_dates:[{label:'ITR (Non-Audit)',day:31,month:7,month_offset:1}],
         columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'computed',label:'Computation Done',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],
         stages:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'data_received',label:'Data Received',color:'#3b82f6'},{key:'working',label:'Computation',color:'#8b5cf6'},{key:'review',label:'Review & Approval',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}],
         sop_steps:[{step:1,title:'Request documents',description:'Form 16, 26AS, AIS/TIS, bank & investment proofs'},{step:2,title:'Prepare computation',description:'Compute income, deductions and tax; reconcile with 26AS/AIS'},{step:3,title:'Client approval & file',description:'Get approval, file the return and e-verify'}]},
-      {name:'ITR (Audit)',frequency:'yearly',prep_days:120,estimated_hours:5,is_itr_worktype:true,due_day:31,due_month:10,
+      {name:'ITR (Audit)',desk_type:'itr',frequency:'yearly',prep_days:120,estimated_hours:5,is_itr_worktype:true,due_day:31,due_month:10,
         due_dates:[{label:'ITR (Audit cases)',day:31,month:10,month_offset:1}],
         columns:[{key:'data_recv',label:'Data Rcvd',type:'checkbox'},{key:'computed',label:'Computation Done',type:'checkbox'},{key:'done',label:'Filed',type:'checkbox'}],
         stages:[{key:'data_requested',label:'Data Requested',color:'#94a3b8'},{key:'audit_done',label:'Audit Completed',color:'#3b82f6'},{key:'working',label:'Computation',color:'#8b5cf6'},{key:'review',label:'Review & Approval',color:'#f59e0b'},{key:'filed',label:'Filed',color:'#22c55e'}]},
@@ -4734,6 +4734,7 @@ function wtcRowFromTemplate(wt, orgId, sortIndex){
     worksheet_group: wt.worksheet_group || null,
     is_active: true,
     is_itr_worktype: !!wt.is_itr_worktype,
+    desk_type: wt.desk_type || null,
     sort_order: (sortIndex !== undefined ? sortIndex : 99),
   };
 }
@@ -7497,6 +7498,7 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
   var [clients,setClients]=useState((_gstDeskCache[ck]||{}).clients||[]);
   var [rows,setRows]=useState((_gstDeskCache[ck]||{}).rows||{}); // key clientId+'_'+period -> row
   var [search,setSearch]=useState('');
+  var [scope,setScope]=useState('enrolled'); // 'enrolled' (do GST returns with us) | 'gstin' (anyone with a GSTIN)
   var [edit,setEdit]=useState(null); // {client, p, row}
   var [saving,setSaving]=useState(false);
   var [showGsp,setShowGsp]=useState(false);
@@ -7510,14 +7512,21 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
   async function load(){
     if(!_gstDeskCache[ck])setLoading(true);
     try{
-      var rc=await supabase.from('clients').select('id,name,display_name,gstin,phone').eq('org_id',org.id).not('gstin','is',null).order('name').limit(3000);
-      var cl=(rc.data||[]).filter(function(c){return (c.gstin||'').trim();});
+      var rc=await supabase.from('clients').select('id,name,display_name,gstin,phone,custom_fields').eq('org_id',org.id).order('name').limit(5000);
+      var cl=rc.data||[];
       var rs=await supabase.from('gst_filing_status').select('*').eq('org_id',org.id).eq('fy',fy).eq('ret_type',retType).limit(20000);
       var map={};(rs.data||[]).forEach(function(r){map[r.client_id+'_'+r.ret_period]=r;});
       _gstDeskCache[ck]={clients:cl,rows:map};
       setClients(cl);setRows(map);
     }catch(e){console.error(e);}finally{setLoading(false);}
   }
+  // Names of GST work types (a client is a "GST client" only if enrolled in one).
+  var gstWtNames={};(workTypeConfigs||[]).forEach(function(c){if(c.desk_type==='gst'||/gst/i.test(c.name||''))gstWtNames[(c.name||'').trim().toLowerCase()]=1;});
+  function isGstEnrolled(c){
+    var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',');
+    return wts.some(function(w){return gstWtNames[w.trim().toLowerCase()];});
+  }
+  function hasGstin(c){return (c.gstin||'').trim();}
 
   function cellState(clientId,p){
     var row=rows[clientId+'_'+p.period];
@@ -7553,7 +7562,11 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
     showToast('GSTIN copied — paste it in Search Taxpayer');
   }
 
-  var filtered=clients.filter(function(c){var q=search.trim().toLowerCase();if(!q)return true;return (c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q)||(c.gstin||'').toLowerCase().includes(q);});
+  // Base set by scope: enrolled-in-a-GST-work-type (default) vs anyone with a GSTIN.
+  var baseList=clients.filter(function(c){return scope==='enrolled'?isGstEnrolled(c):hasGstin(c);});
+  var trackable=baseList.filter(hasGstin);
+  var missingGstin=scope==='enrolled'?baseList.filter(function(c){return !hasGstin(c);}):[];
+  var filtered=trackable.filter(function(c){var q=search.trim().toLowerCase();if(!q)return true;return (c.name||'').toLowerCase().includes(q)||(c.display_name||'').toLowerCase().includes(q)||(c.gstin||'').toLowerCase().includes(q);});
   // summary
   var totFiled=0,totLate=0,totPending=0,totCells=0;
   filtered.forEach(function(c){periods.forEach(function(p){var s=cellState(c.id,p);if(s.code==='upcoming')return;totCells++;if(s.code==='ontime')totFiled++;else if(s.code==='late'){totFiled++;totLate++;}else totPending++;});});
@@ -7574,13 +7587,16 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
         <div style={{display:'flex',border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden'}}>
           {GST_RET_TYPES.map(function(r){var on=retType===r.key;return<button key={r.key} onClick={function(){setRetType(r.key);}} style={{padding:'7px 14px',border:'none',background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{r.label}</button>;})}
         </div>
+        <div style={{display:'flex',border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden'}}>
+          {[['enrolled','GST clients'],['gstin','All with GSTIN']].map(function(o){var on=scope===o[0];return<button key={o[0]} onClick={function(){setScope(o[0]);}} title={o[0]==='enrolled'?'Only clients enrolled in a GST work type (you file their GST)':'Any client that has a GSTIN on file'} style={{padding:'7px 12px',border:'none',background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{o[1]}</button>;})}
+        </div>
         <button onClick={function(){setShowGsp(true);}} style={{padding:'7px 14px',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>⚡ Auto-sync (GSP)</button>
       </div>
     </div>
 
     {/* Summary */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10,marginBottom:14}}>
-      {[{l:'GST clients',v:clients.length,c:'#0e2a47'},{l:'Filed',v:totFiled,c:'#22c55e'},{l:'Late-filed',v:totLate,c:'#f59e0b'},{l:'Pending / overdue',v:totPending,c:'#ef4444'}].map(function(k){return<div key={k.l} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:22,fontWeight:800,color:k.c,fontFamily:"'JetBrains Mono',monospace"}}>{k.v}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.l}</div></div>;})}
+      {[{l:scope==='enrolled'?'GST-return clients':'Clients with GSTIN',v:trackable.length,c:'#0e2a47'},{l:'Filed',v:totFiled,c:'#22c55e'},{l:'Late-filed',v:totLate,c:'#f59e0b'},{l:'Pending / overdue',v:totPending,c:'#ef4444'}].map(function(k){return<div key={k.l} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:22,fontWeight:800,color:k.c,fontFamily:"'JetBrains Mono',monospace"}}>{k.v}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.l}</div></div>;})}
     </div>
 
     <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:10,flexWrap:'wrap'}}>
@@ -7590,8 +7606,11 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
       </div>
     </div>
 
+    {missingGstin.length>0&&<div style={{fontSize:12,color:'#b45309',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:9,padding:'9px 12px',marginBottom:10}}>
+      ⚠ {missingGstin.length} GST client{missingGstin.length!==1?'s':''} have no GSTIN on file, so they can't be tracked: <b>{missingGstin.slice(0,6).map(function(c){return c.display_name||c.name;}).join(', ')}</b>{missingGstin.length>6?' +'+(missingGstin.length-6)+' more':''}. Add their GSTIN in Client Master.
+    </div>}
     {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading GST clients…</div>:
-     clients.length===0?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',border:'1px dashed var(--tf-border)',borderRadius:12,fontSize:13}}>No clients have a GSTIN yet. Add GSTINs in Client Master to track their GST filing here.</div>:
+     trackable.length===0?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',border:'1px dashed var(--tf-border)',borderRadius:12,fontSize:13}}>{scope==='enrolled'?'No clients are enrolled in a GST work type (with a GSTIN) yet. Enroll clients in “GST Returns” and add their GSTIN, or switch to “All with GSTIN”.':'No clients have a GSTIN yet. Add GSTINs in Client Master to track GST filing here.'}</div>:
     <div style={{overflowX:'auto',border:'1px solid var(--tf-border)',borderRadius:12}}>
       <table style={{borderCollapse:'collapse',width:'100%',fontSize:12}}>
         <thead><tr style={{background:'rgba(14,42,71,0.05)'}}>
