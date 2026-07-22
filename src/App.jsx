@@ -7489,6 +7489,23 @@ function gstPeriods(fy){
 // Statutory due date (Date) for a period given the return type's dueDay (next month)
 function gstDueDate(p,dueDay){var m=p.calMonth+1,y=p.calYear;if(m>12){m=1;y++;}return new Date(y,m-1,dueDay);}
 function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+var GST_QMONTHS={1:[4,5,6],2:[7,8,9],3:[10,11,12],4:[1,2,3]};
+// Universal GST work-type classifier — recognises the many ways firms name GST
+// work types (GST, GST Returns, GSTR 1, GSTR-3B, GSTR1, R1, 3B, R1(Q), 3B(Q),
+// GSTR-9, CMP-08…) → {isGst, retType, freq}. retType lets the desk match the
+// right return; freq flags QRMP/quarterly.
+function gstClassify(name){
+  var raw=String(name||'').toLowerCase();
+  var n=raw.replace(/[^a-z0-9]/g,'');            // "gstr 1 (q)" -> "gstr1q"
+  var isGst=/gst|gstr/.test(n)||/(^|[^a-z0-9])3b/.test(raw)||/(^|[^a-z0-9])r ?1(\b|q)/.test(raw)||/cmp0?8/.test(n)||/composition/.test(n);
+  var freq=(/\(q\)|qrmp|quarter/.test(raw)||/q$/.test(n))?'quarterly':'monthly';
+  var retType='GST';
+  if(/gstr9|9c|annual/.test(n))retType='GSTR9';
+  else if(/cmp0?8|composition/.test(n))retType='CMP08';
+  else if(/3b/.test(n))retType='GSTR3B';
+  else if(/gstr1|gst1|(^|[^0-9])r1/.test(n))retType='GSTR1';
+  return {isGst:isGst,retType:retType,freq:freq};
+}
 
 function GstDeskModule({org,supabase,cu,workTypeConfigs}){
   var [fy,setFy]=useState(gstDefaultFY());
@@ -7519,16 +7536,25 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
       var cl=rc.data||[];
       var rs=await supabase.from('gst_filing_status').select('*').eq('org_id',org.id).eq('fy',fy).eq('ret_type',retType).limit(20000);
       var map={};(rs.data||[]).forEach(function(r){map[r.client_id+'_'+r.ret_period]=r;});
-      // Internal worksheet rows (assignee + stage) for reconciliation — keyed by client+tax-month.
-      var gstNames={};(workTypeConfigs||[]).forEach(function(c){if(c.desk_type==='gst'||/gst/i.test(c.name||''))gstNames[c.name]=1;});
+      // Internal worksheet rows (assignee + stage) for reconciliation — keyed by
+      // client+tax-month, and bucketed by inferred return type so the GSTR-3B tab
+      // reconciles against 3B rows, GSTR-1 tab against R1 rows. Quarterly (QRMP)
+      // rows are expanded across their quarter's three months.
+      var gstNames={};(workTypeConfigs||[]).forEach(function(c){if(c.desk_type==='gst'||gstClassify(c.name).isGst)gstNames[c.name]=1;});
       var wtNames=Object.keys(gstNames);var intMap={};
       if(wtNames.length){
-        var rws=await supabase.from('worksheets').select('id,work_type,period_month,period_label').eq('org_id',org.id).in('work_type',wtNames).limit(6000);
+        var rws=await supabase.from('worksheets').select('id,work_type,period_month,period_quarter,period_label').eq('org_id',org.id).in('work_type',wtNames).limit(6000);
         var fyStart=gstFyStartYear(fy);var wsById={};var wsIds=[];
         (rws.data||[]).forEach(function(w){var inFy=(w.period_label||'').indexOf(String(fyStart))>=0||(w.period_label||'').indexOf(fy)>=0;if(inFy){wsById[w.id]=w;wsIds.push(w.id);}});
         if(wsIds.length){
           var rrows=await supabase.from('worksheet_rows').select('id,client_id,data,status,current_stage,worksheet_id,due_date').in('worksheet_id',wsIds).limit(10000);
-          (rrows.data||[]).forEach(function(r){var w=wsById[r.worksheet_id];if(!w||!r.client_id||w.period_month==null)return;var key=r.client_id+'_'+w.period_month;if(!intMap[key])intMap[key]={rowId:r.id,status:r.status,current_stage:r.current_stage,work_type:w.work_type,data:r.data||{},due_date:r.due_date};});
+          (rrows.data||[]).forEach(function(r){var w=wsById[r.worksheet_id];if(!w||!r.client_id)return;
+            var cls=gstClassify(w.work_type);
+            var months=(w.period_month!=null)?[w.period_month]:(w.period_quarter!=null?(GST_QMONTHS[w.period_quarter]||[]):[]);
+            if(!months.length)return;
+            var info={rowId:r.id,status:r.status,current_stage:r.current_stage,work_type:w.work_type,data:r.data||{},due_date:r.due_date,retType:cls.retType};
+            months.forEach(function(m){var key=r.client_id+'_'+m;var slot=intMap[key]||(intMap[key]={byType:{}});if(!slot.byType[cls.retType])slot.byType[cls.retType]=info;});
+          });
         }
       }
       var mlist=[];
@@ -7541,7 +7567,13 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
   function memberName(uid){var m=memberMap[uid];return m?(m.name||m.email||'—'):null;}
   function memberInitials(uid){var n=memberName(uid);if(!n)return '?';return n.trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();}
   function lastStageKey(workType){var cfg=(workTypeConfigs||[]).find(function(c){return c.name===workType;});if(cfg&&cfg.stages&&cfg.stages.length)return cfg.stages[cfg.stages.length-1].key;return null;}
-  function internalInfo(clientId,calMonth){return internal[clientId+'_'+calMonth];}
+  function internalInfo(clientId,calMonth){
+    var slot=internal[clientId+'_'+calMonth];if(!slot||!slot.byType)return null;
+    var bt=slot.byType;
+    if(bt[retType])return bt[retType];      // exact return-type match (3B tab → 3B row)
+    if(bt['GST'])return bt['GST'];          // generic "GST Returns" covers either
+    var ks=Object.keys(bt);return ks.length?bt[ks[0]]:null;
+  }
   function internalDone(info){if(!info)return false;var lk=lastStageKey(info.work_type);if(lk)return info.current_stage===lk;return info.status==='completed';}
   function internalAssignee(info){if(!info)return null;var d=info.data||{};if(d.__assignee)return d.__assignee;var ks=Object.keys(d);for(var i=0;i<ks.length;i++){if(ks[i].indexOf('__h_')===0&&d[ks[i]])return d[ks[i]];}return null;}
   // Reconciliation code for a cell: 'missed' (done internally, not filed) | 'board' (filed, task open) | null
@@ -7562,7 +7594,8 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
     showToast('Marked filed on the board');
   }
   // Names of GST work types (a client is a "GST client" only if enrolled in one).
-  var gstWtNames={};(workTypeConfigs||[]).forEach(function(c){if(c.desk_type==='gst'||/gst/i.test(c.name||''))gstWtNames[(c.name||'').trim().toLowerCase()]=1;});
+  // Universal: desk_type tag OR the classifier (catches GSTR1/3B/R1/3B(Q)/CMP-08…).
+  var gstWtNames={};(workTypeConfigs||[]).forEach(function(c){if(c.desk_type==='gst'||gstClassify(c.name).isGst)gstWtNames[(c.name||'').trim().toLowerCase()]=1;});
   function isGstEnrolled(c){
     var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',');
     return wts.some(function(w){return gstWtNames[w.trim().toLowerCase()];});
