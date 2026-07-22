@@ -9081,6 +9081,108 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
 // ANALYTICS DASHBOARD
 // ══════════════════════════════════════════════════════════════════
 
+// GST compliance analytics — surfaced inside the Analytics module. Landing-page
+// aligned visual language (brand gradient, navy ink, soft cards).
+function GstAnalyticsSection({org,supabase,workTypeConfigs,year}){
+  var fy=year+'-'+String(year+1).slice(2);
+  var [loading,setLoading]=useState(true);
+  var [statusMap,setStatusMap]=useState({}); // client+'_'+MMYYYY -> gst_filing_status (GSTR3B)
+  var [gstClients,setGstClients]=useState([]);
+  var [assignByKey,setAssignByKey]=useState({}); // client+'_'+month -> uid
+  var [members,setMembers]=useState([]);
+  useEffect(function(){
+    var alive=true;
+    (async function(){
+      setLoading(true);
+      var rc=await supabase.from('clients').select('id,name,display_name,gstin,custom_fields').eq('org_id',org.id).limit(5000);
+      var gstNamesSet={};(workTypeConfigs||[]).forEach(function(c){if(c.desk_type==='gst'||gstClassify(c.name).isGst)gstNamesSet[(c.name||'').trim().toLowerCase()]=1;});
+      var cls=(rc.data||[]).filter(function(c){if(!(c.gstin||'').trim())return false;var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',');return wts.some(function(w){return gstNamesSet[w.trim().toLowerCase()];});});
+      var rs=await supabase.from('gst_filing_status').select('client_id,ret_type,ret_period,status,filed_date,is_late').eq('org_id',org.id).eq('fy',fy).eq('ret_type','GSTR3B').limit(20000);
+      var sm={};(rs.data||[]).forEach(function(r){sm[r.client_id+'_'+r.ret_period]=r;});
+      var gstNames=Object.keys(gstNamesSet);var aByKey={};var mlist=[];
+      if(gstNames.length){
+        var wtNames=(workTypeConfigs||[]).filter(function(c){return c.desk_type==='gst'||gstClassify(c.name).isGst;}).map(function(c){return c.name;});
+        var rws=await supabase.from('worksheets').select('id,period_month,period_quarter,period_label').eq('org_id',org.id).in('work_type',wtNames).limit(6000);
+        var wsById={};var wsIds=[];(rws.data||[]).forEach(function(w){if((w.period_label||'').indexOf(String(year))>=0){wsById[w.id]=w;wsIds.push(w.id);}});
+        if(wsIds.length){var rr=await supabase.from('worksheet_rows').select('client_id,data,worksheet_id').in('worksheet_id',wsIds).limit(12000);(rr.data||[]).forEach(function(r){var w=wsById[r.worksheet_id];if(!w||!r.client_id)return;var months=w.period_month!=null?[w.period_month]:(w.period_quarter!=null?(GST_QMONTHS[w.period_quarter]||[]):[]);var d=r.data||{};var uid=d.__assignee;if(!uid){var ks=Object.keys(d);for(var i=0;i<ks.length;i++){if(ks[i].indexOf('__h_')===0&&d[ks[i]]){uid=d[ks[i]];break;}}}months.forEach(function(m){if(!aByKey[r.client_id+'_'+m])aByKey[r.client_id+'_'+m]=uid||'__un';});});}
+        try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(400);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(400);mlist=rp.data||[];}}catch(_){}
+      }
+      if(!alive)return;
+      setStatusMap(sm);setGstClients(cls);setAssignByKey(aByKey);setMembers(mlist);setLoading(false);
+    })();
+    return function(){alive=false;};
+    // eslint-disable-next-line
+  },[org.id,year]);
+
+  var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
+  function mName(uid){var m=memberMap[uid];return m?(m.name||m.email||'—'):'—';}
+  function mInit(uid){var n=mName(uid);if(!n||n==='—')return '—';return n.trim().split(/\s+/).map(function(w){return w[0];}).slice(0,2).join('').toUpperCase();}
+  var periods=gstPeriods(fy);var today=new Date();
+  function stateFor(clientId,p){var row=statusMap[clientId+'_'+p.period];var due=gstDueDate(p,20);
+    if(row&&row.status==='Filed')return row.is_late?'late':'ontime';
+    if(row&&row.status==='Not Filed')return 'notfiled';
+    if(today<due)return 'upcoming';return 'pending';}
+  var totF=0,totL=0,totP=0;
+  var monthly=periods.map(function(p){var o=0,l=0,pd=0;gstClients.forEach(function(c){var s=stateFor(c.id,p);if(s==='ontime')o++;else if(s==='late')l++;else if(s==='pending'||s==='notfiled')pd++;});totF+=o+l;totL+=l;totP+=pd;return{mon:p.mon,ontime:o,late:l,pending:pd};});
+  var maxM=Math.max.apply(null,[1].concat(monthly.map(function(m){return m.ontime+m.late+m.pending;})));
+  var totCells=totF+totP;var pct=totCells?Math.round((totF-totL)/totCells*100):0;
+  var byMember={};gstClients.forEach(function(c){periods.forEach(function(p){var s=stateFor(c.id,p);if(s==='upcoming')return;var uid=assignByKey[c.id+'_'+p.calMonth]||'__un';var mm=byMember[uid]||(byMember[uid]={filed:0,late:0,pending:0});if(s==='ontime')mm.filed++;else if(s==='late'){mm.filed++;mm.late++;}else mm.pending++;});});
+  var memRows=Object.keys(byMember).map(function(u){return Object.assign({uid:u},byMember[u]);}).sort(function(a,b){return b.pending-a.pending;});
+  var GRAD='linear-gradient(135deg,#2F6BFF,#14C7C0)';
+  var CARD={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:16,padding:20,boxShadow:'0 1px 3px rgba(14,42,71,0.04)'};
+  var H={fontFamily:"'Plus Jakarta Sans','Geist','Inter',system-ui,sans-serif",fontWeight:800,letterSpacing:'-0.02em'};
+
+  if(loading)return<div style={{textAlign:'center',padding:60,color:'var(--tf-text-sub)'}}>Loading GST compliance…</div>;
+  if(gstClients.length===0)return<div style={{...CARD,textAlign:'center',padding:'48px 24px',color:'var(--tf-text-sub)'}}>No GST clients with a GSTIN enrolled in a GST work type for FY {fy}.</div>;
+  return<div style={{display:'flex',flexDirection:'column',gap:16}}>
+    {/* Hero band */}
+    <div style={{background:GRAD,borderRadius:20,padding:'22px 24px',color:'#fff',position:'relative',overflow:'hidden',boxShadow:'0 12px 30px rgba(47,107,255,0.25)'}}>
+      <div style={{position:'absolute',right:-40,top:-40,width:200,height:200,borderRadius:'50%',background:'rgba(255,255,255,0.12)'}}/>
+      <div style={{position:'relative'}}>
+        <div style={{fontSize:12,fontWeight:800,letterSpacing:'0.1em',textTransform:'uppercase',opacity:0.9}}>GST Compliance · FY {fy}</div>
+        <div style={{display:'flex',alignItems:'baseline',gap:12,marginTop:8,flexWrap:'wrap'}}>
+          <div style={{fontSize:56,lineHeight:1,fontWeight:800,fontFamily:"'JetBrains Mono',monospace"}}>{pct}%</div>
+          <div style={{fontSize:15,opacity:0.92,...H}}>filed on time <span style={{opacity:0.7}}>· GSTR-3B across {gstClients.length} clients</span></div>
+        </div>
+        <div style={{display:'flex',height:12,borderRadius:6,overflow:'hidden',marginTop:16,background:'rgba(255,255,255,0.25)'}}>
+          {[[ '#ffffff',totF-totL],['#fde68a',totL],['rgba(255,255,255,0.25)',totP]].map(function(seg,i){var w=totCells?(seg[1]/totCells*100):0;return w>0?<div key={i} style={{width:w+'%',background:seg[0]}}/>:null;})}
+        </div>
+        <div style={{display:'flex',gap:18,marginTop:12,fontSize:13,flexWrap:'wrap'}}>
+          <span>● On time <b>{totF-totL}</b></span><span style={{opacity:0.95}}>● Late <b>{totL}</b></span><span style={{opacity:0.9}}>● Pending <b>{totP}</b></span>
+        </div>
+      </div>
+    </div>
+    {/* Monthly trend */}
+    <div style={CARD}>
+      <div style={{fontSize:14,color:'#0E2A47',marginBottom:16,...H}}>Filed vs late vs pending — by month</div>
+      <div style={{display:'flex',alignItems:'flex-end',gap:10,height:180}}>
+        {monthly.map(function(m){var h=function(v){return maxM?Math.round(v/maxM*150):0;};return<div key={m.mon} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+          <div style={{display:'flex',flexDirection:'column',justifyContent:'flex-end',height:150,width:'100%',maxWidth:38}}>
+            {m.pending>0&&<div title={m.pending+' pending'} style={{height:h(m.pending),background:'#ef4444',borderRadius:'4px 4px 0 0'}}/>}
+            {m.late>0&&<div title={m.late+' late'} style={{height:h(m.late),background:'#f59e0b'}}/>}
+            {m.ontime>0&&<div title={m.ontime+' on time'} style={{height:h(m.ontime),background:GRAD,borderRadius:m.late||m.pending?0:'4px 4px 0 0'}}/>}
+          </div>
+          <div style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:600}}>{m.mon}</div>
+        </div>;})}
+      </div>
+    </div>
+    {/* Team member */}
+    <div style={CARD}>
+      <div style={{fontSize:14,color:'#0E2A47',marginBottom:14,...H}}>By team member</div>
+      {memRows.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>No GST worksheet owners linked for this year.</div>:
+      <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+        <thead><tr>{['Member','Filed','Late','Pending'].map(function(h,i){return<th key={h} style={{padding:'8px 12px',fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',textAlign:i?'right':'left',borderBottom:'1px solid var(--tf-border)'}}>{h}</th>;})}</tr></thead>
+        <tbody>{memRows.map(function(m){return<tr key={m.uid} style={{borderBottom:'1px solid var(--tf-border)'}}>
+          <td style={{padding:'9px 12px'}}><span style={{display:'inline-flex',alignItems:'center',gap:9}}><span style={{width:26,height:26,borderRadius:'50%',background:m.uid==='__un'?'#94a3b8':GRAD,color:'#fff',fontSize:10,fontWeight:800,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{m.uid==='__un'?'—':mInit(m.uid)}</span>{m.uid==='__un'?'Unassigned':mName(m.uid)}</span></td>
+          <td style={{padding:'9px 12px',textAlign:'right',fontWeight:700,color:'#16a34a'}}>{m.filed}</td>
+          <td style={{padding:'9px 12px',textAlign:'right',color:'#b45309'}}>{m.late}</td>
+          <td style={{padding:'9px 12px',textAlign:'right',fontWeight:m.pending?800:400,color:m.pending?'#ef4444':'var(--tf-text-sub)'}}>{m.pending}</td>
+        </tr>;})}</tbody>
+      </table></div>}
+    </div>
+  </div>;
+}
+
 function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   var _initYear=(function(){var now=new Date();return now.getMonth()>=3?now.getFullYear():now.getFullYear()-1;})();
   var _adc=_analyticsCache[org.id+'_'+_initYear]||{};
@@ -9380,6 +9482,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     {/* Tab bar */}
     <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--tf-border)',marginBottom:16,overflowX:'auto'}}>
       {TAB_BTN('overview','Overview',null)}
+      {TAB_BTN('gst','GST',null)}
       {TAB_BTN('ledger','Client Ledger',null)}
       {TAB_BTN('monthly','Monthly',null)}
       {TAB_BTN('clients','Clients',clientStats.length)}
@@ -9726,6 +9829,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     </div>}
 
     {/* ── OVERDUE TAB ── */}
+    {activeTab==='gst'&&<GstAnalyticsSection org={org} supabase={supabase} workTypeConfigs={workTypeConfigs} year={selectedYear}/>}
     {activeTab==='ledger'&&<ClientLedgerTab org={org} supabase={supabase} clients={clients} initClientId={ledgerInitClient}/>}
 
     {/* ── TEAM WORKLOAD TAB ── */}
