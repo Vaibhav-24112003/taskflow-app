@@ -7620,7 +7620,9 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
   var [rows,setRows]=useState((_gstDeskCache[ck]||{}).rows||{}); // key clientId+'_'+period -> row
   var [internal,setInternal]=useState((_gstDeskCache[ck]||{}).internal||{}); // key clientId+'_'+calMonth -> {rowId,status,current_stage,work_type,data,due_date}
   var [members,setMembers]=useState((_gstDeskCache[ck]||{}).members||[]);
+  var [gstCreds,setGstCreds]=useState((_gstDeskCache[ck]||{}).creds||{}); // client_id -> {username,password} for the GST portal login
   var [mismatchOnly,setMismatchOnly]=useState(false);
+  var [deskView,setDeskView]=useState('grid'); // 'grid' | 'analytics'
   var [search,setSearch]=useState('');
   var [scope,setScope]=useState('enrolled'); // 'enrolled' (do GST returns with us) | 'gstin' (anyone with a GSTIN)
   var [edit,setEdit]=useState(null); // {client, p, row}
@@ -7663,8 +7665,11 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
       }
       var mlist=[];
       try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(400);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(400);mlist=rp.data||[];}}catch(_){}
-      _gstDeskCache[ck]={clients:cl,rows:map,internal:intMap,members:mlist};
-      setClients(cl);setRows(map);setInternal(intMap);setMembers(mlist);
+      // GST portal login credentials from the vault (portal_name mentions GST).
+      var credMap={};
+      try{var rcr=await supabase.from('client_credentials').select('client_id,portal_name,username,password').eq('org_id',org.id).limit(8000);(rcr.data||[]).forEach(function(cr){if(/gst/i.test(cr.portal_name||'')&&!credMap[cr.client_id])credMap[cr.client_id]={username:cr.username||'',password:cr.password||'',portal_name:cr.portal_name};});}catch(_){}
+      _gstDeskCache[ck]={clients:cl,rows:map,internal:intMap,members:mlist,creds:credMap};
+      setClients(cl);setRows(map);setInternal(intMap);setMembers(mlist);setGstCreds(credMap);
     }catch(e){console.error(e);}finally{setLoading(false);}
   }
   var memberMap={};members.forEach(function(m){memberMap[m.id]=m;});
@@ -7734,10 +7739,11 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
     setEdit(null);showToast('Status saved');
   }
 
+  function copyText(t,label){try{if(navigator.clipboard)navigator.clipboard.writeText(t||'');}catch(e){}showToast(label||'Copied');}
   function openPortal(client){
-    try{navigator.clipboard&&navigator.clipboard.writeText(client.gstin||'');}catch(e){}
-    window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');
-    showToast('GSTIN copied — paste it in Search Taxpayer');
+    var cr=gstCreds[client.id];
+    if(cr&&cr.username){copyText(cr.username,'User ID copied — paste in GST login');window.open('https://services.gst.gov.in/services/login','_blank','noopener');}
+    else{copyText(client.gstin||'','GSTIN copied — use Search Taxpayer');window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');}
   }
 
   // Base set by scope: enrolled-in-a-GST-work-type (default) vs anyone with a GSTIN.
@@ -7768,6 +7774,9 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
           {GST_RET_TYPES.map(function(r){var on=retType===r.key;return<button key={r.key} onClick={function(){setRetType(r.key);}} style={{padding:'7px 14px',border:'none',background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{r.label}</button>;})}
         </div>
         <div style={{display:'flex',border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden'}}>
+          {[['grid','▦ Grid'],['analytics','📊 Analytics']].map(function(o){var on=deskView===o[0];return<button key={o[0]} onClick={function(){setDeskView(o[0]);}} style={{padding:'7px 12px',border:'none',background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{o[1]}</button>;})}
+        </div>
+        <div style={{display:'flex',border:'1px solid var(--tf-border)',borderRadius:8,overflow:'hidden'}}>
           {[['enrolled','GST clients'],['gstin','All with GSTIN']].map(function(o){var on=scope===o[0];return<button key={o[0]} onClick={function(){setScope(o[0]);}} title={o[0]==='enrolled'?'Only clients enrolled in a GST work type (you file their GST)':'Any client that has a GSTIN on file'} style={{padding:'7px 12px',border:'none',background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:'inherit'}}>{o[1]}</button>;})}
         </div>
         <button onClick={function(){setShowGsp(true);}} style={{padding:'7px 14px',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:8,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>⚡ Auto-sync (GSP)</button>
@@ -7779,6 +7788,7 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
       {[{l:scope==='enrolled'?'GST-return clients':'Clients with GSTIN',v:trackable.length,c:'#0e2a47'},{l:'Filed',v:totFiled,c:'#22c55e'},{l:'Late-filed',v:totLate,c:'#f59e0b'},{l:'Pending / overdue',v:totPending,c:'#ef4444'},{l:'⚠ Done but not filed',v:totMissed,c:'#dc2626',hl:true}].map(function(k){var alert=k.hl&&k.v>0;return<div key={k.l} onClick={function(){if(k.hl)setMismatchOnly(function(v){return !v;});}} style={{background:alert?'rgba(220,38,38,0.06)':'var(--tf-surface)',border:'1px solid '+(alert?'rgba(220,38,38,0.4)':'var(--tf-border)'),borderRadius:10,padding:'12px 14px',cursor:k.hl?'pointer':'default'}}><div style={{fontSize:22,fontWeight:800,color:k.c,fontFamily:"'JetBrains Mono',monospace"}}>{k.v}</div><div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.l}{k.hl&&k.v>0?(mismatchOnly?' · showing':' · click to filter'):''}</div></div>;})}
     </div>
 
+    {deskView==='grid'&&<>
     <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:10,flexWrap:'wrap'}}>
       <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search client / GSTIN…" style={Object.assign({},INP,{minWidth:220})}/>
       <div style={{display:'flex',gap:12,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
@@ -7818,6 +7828,58 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
         </tbody>
       </table>
     </div>}
+    </>}
+
+    {deskView==='analytics'&&(function(){
+      var monthly=periods.map(function(p){var o=0,l=0,pd=0;searched.forEach(function(c){var s=cellState(c.id,p);if(s.code==='ontime')o++;else if(s.code==='late')l++;else if(s.code==='pending'||s.code==='notfiled')pd++;});return{mon:p.mon,ontime:o,late:l,pending:pd};});
+      var maxM=Math.max.apply(null,[1].concat(monthly.map(function(m){return m.ontime+m.late+m.pending;})));
+      var byMember={};searched.forEach(function(c){periods.forEach(function(p){var s=cellState(c.id,p);if(s.code==='upcoming')return;var info=internalInfo(c.id,p.calMonth);var uid=internalAssignee(info)||'__un';var m=byMember[uid]||(byMember[uid]={filed:0,late:0,pending:0,missed:0});if(s.code==='ontime')m.filed++;else if(s.code==='late'){m.filed++;m.late++;}else m.pending++;if(reconFlag(s,info)==='missed')m.missed++;});});
+      var memRows=Object.keys(byMember).map(function(uid){return Object.assign({uid:uid},byMember[uid]);}).sort(function(a,b){return (b.pending+b.missed)-(a.pending+a.missed);});
+      var overall={filed:totFiled,late:totLate,pending:totPending,total:totFiled+totPending};
+      var pctFiled=overall.total?Math.round((overall.filed-overall.late)/overall.total*100):0;
+      return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:14}}>
+        {/* Compliance rate */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16}}>
+          <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>Compliance rate ({retType})</div>
+          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}><div style={{fontSize:40,fontWeight:800,color:'#0e2a47',fontFamily:"'JetBrains Mono',monospace"}}>{pctFiled}%</div><div style={{fontSize:12,color:'var(--tf-text-sub)'}}>filed on time</div></div>
+          <div style={{display:'flex',height:14,borderRadius:7,overflow:'hidden',border:'1px solid var(--tf-border)'}}>
+            {[['#22c55e',overall.filed-overall.late],['#f59e0b',overall.late],['#ef4444',overall.pending]].map(function(seg,i){var w=overall.total?(seg[1]/overall.total*100):0;return w>0?<div key={i} style={{width:w+'%',background:seg[0]}}/>:null;})}
+          </div>
+          <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
+            <span>🟢 On time {overall.filed-overall.late}</span><span>🟠 Late {overall.late}</span><span>🔴 Pending {overall.pending}</span>{totMissed>0&&<span style={{color:'#dc2626',fontWeight:700}}>⚠ Done-not-filed {totMissed}</span>}
+          </div>
+        </div>
+        {/* Monthly trend */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,gridColumn:'1 / -1'}}>
+          <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:12}}>By month — filed vs late vs pending</div>
+          <div style={{display:'flex',alignItems:'flex-end',gap:8,height:160}}>
+            {monthly.map(function(m){var tot=m.ontime+m.late+m.pending;var h=function(v){return maxM?Math.round(v/maxM*140):0;};return<div key={m.mon} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+              <div style={{display:'flex',flexDirection:'column',justifyContent:'flex-end',height:140,width:'100%',maxWidth:34}}>
+                {m.pending>0&&<div title={m.pending+' pending'} style={{height:h(m.pending),background:'#ef4444',borderRadius:'3px 3px 0 0'}}/>}
+                {m.late>0&&<div title={m.late+' late'} style={{height:h(m.late),background:'#f59e0b'}}/>}
+                {m.ontime>0&&<div title={m.ontime+' on time'} style={{height:h(m.ontime),background:'#22c55e',borderRadius:m.late||m.pending?0:'3px 3px 0 0'}}/>}
+              </div>
+              <div style={{fontSize:9,color:'var(--tf-text-sub)'}}>{m.mon}</div>
+            </div>;})}
+          </div>
+        </div>
+        {/* By team member */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,gridColumn:'1 / -1'}}>
+          <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:12}}>By team member</div>
+          {memRows.length===0?<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>No worksheet owners linked for this period.</div>:
+          <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+            <thead><tr style={{color:'var(--tf-text-sub)',textAlign:'left'}}>{['Member','Filed','Late','Pending','⚠ Done-not-filed'].map(function(h,i){return<th key={h} style={{padding:'6px 10px',fontSize:10,fontWeight:700,textTransform:'uppercase',textAlign:i?'right':'left',borderBottom:'1px solid var(--tf-border)'}}>{h}</th>;})}</tr></thead>
+            <tbody>{memRows.map(function(m){var nm=m.uid==='__un'?'Unassigned':memberName(m.uid)||'—';return<tr key={m.uid} style={{borderBottom:'1px solid var(--tf-border)'}}>
+              <td style={{padding:'7px 10px',display:'flex',alignItems:'center',gap:8}}><span style={{width:22,height:22,borderRadius:'50%',background:m.uid==='__un'?'#94a3b8':'#0e2a47',color:'#fff',fontSize:9,fontWeight:800,display:'inline-flex',alignItems:'center',justifyContent:'center'}}>{m.uid==='__un'?'—':memberInitials(m.uid)}</span>{nm}</td>
+              <td style={{padding:'7px 10px',textAlign:'right',fontWeight:700,color:'#16a34a'}}>{m.filed}</td>
+              <td style={{padding:'7px 10px',textAlign:'right',color:'#b45309'}}>{m.late}</td>
+              <td style={{padding:'7px 10px',textAlign:'right',color:m.pending?'#ef4444':'var(--tf-text-sub)',fontWeight:m.pending?700:400}}>{m.pending}</td>
+              <td style={{padding:'7px 10px',textAlign:'right',color:m.missed?'#dc2626':'var(--tf-text-sub)',fontWeight:m.missed?800:400}}>{m.missed}</td>
+            </tr>;})}</tbody>
+          </table></div>}
+        </div>
+      </div>;
+    })()}
 
     {/* Edit popover */}
     {edit&&<div onClick={function(){setEdit(null);}} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.45)',zIndex:2500,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -7834,6 +7896,22 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
             </div>
             {fl==='missed'&&<div style={{marginTop:8,fontSize:12,color:'#dc2626',background:'rgba(220,38,38,0.08)',border:'1px solid rgba(220,38,38,0.3)',borderRadius:8,padding:'8px 10px'}}>⚠ Marked <b>done</b> on the board, but the return is <b>not filed</b>. Chase the owner before the deadline.</div>}
             {fl==='board'&&<div style={{marginTop:8,fontSize:12,color:'#b45309',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><span>Filed on portal, but the task is still open on the board.</span><button onClick={function(){advanceBoard(info);}} style={{background:'#0e2a47',border:'none',borderRadius:7,padding:'6px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>Mark filed on board →</button></div>}
+          </div>;
+        })()}
+        {(function(){var cr=gstCreds[edit.client.id];
+          return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 12px',marginBottom:12}}>
+            <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>GST portal login</div>
+            {cr&&cr.username?<>
+              <div style={{display:'flex',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                <button onClick={function(){copyText(cr.username,'User ID copied');}} style={{flex:1,minWidth:120,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 User ID<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.username}</div></button>
+                <button onClick={function(){copyText(cr.password,'Password copied');}} style={{flex:1,minWidth:120,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 Password<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.password?'••••••••':'—'}</div></button>
+              </div>
+              <button onClick={function(){window.open('https://services.gst.gov.in/services/login','_blank','noopener');}} style={{width:'100%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:7,padding:'8px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Open GST login ↗</button>
+              <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:6}}>Copy each field, paste on the portal, log in, and read the return status — then record it below.</div>
+            </>:<>
+              <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:8}}>No saved GST login for this client. Use the public Search Taxpayer (GSTIN{edit.client.gstin?' '+edit.client.gstin:''}), or add a login in the Credentials vault.</div>
+              <button onClick={function(){copyText(edit.client.gstin||'','GSTIN copied');window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');}} style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 0',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:700}}>Search Taxpayer ↗ (GSTIN copied)</button>
+            </>}
           </div>;
         })()}
         {(function(){
