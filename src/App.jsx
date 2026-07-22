@@ -3112,7 +3112,6 @@ function OrgSettingsPanel({org,cu,supabase,allWorkspaces}){
           {key:'billing',label:'Billing',desc:'Invoices, proposals, payments and exports.',icon:'💳',defaultOn:true},
           {key:'masterdata_groups',label:'Groups & Teams (Master Data)',desc:'Groups & Teams tab inside Master Data.',icon:'🏷️',defaultOn:true},
           {key:'workzone_itr',label:'ITR Desk (WorkZone tab)',desc:'ITR compilation desk inside WorkZone.',icon:'📋',defaultOn:true},
-          {key:'workzone_gst',label:'GST Desk (WorkZone tab)',desc:'GST return filing-status desk inside WorkZone.',icon:'🧾',defaultOn:true},
           {key:'workzone_bigclients',label:'Big Clients (WorkZone tab)',desc:'Big-client tracking inside WorkZone.',icon:'⭐',defaultOn:true},
           {key:'workzone_board',label:'Board (WorkZone tab)',desc:'Kanban board view inside WorkZone.',icon:'🗂️',defaultOn:true},
           {key:'depts',label:'Departments',desc:'Department structure and dept-level access control.',icon:'🏢',defaultOn:true},
@@ -7851,31 +7850,41 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
       var memRows=Object.keys(byMember).map(function(uid){return Object.assign({uid:uid},byMember[uid]);}).sort(function(a,b){return (b.pending+b.missed)-(a.pending+a.missed);});
       var overall={filed:totFiled,late:totLate,pending:totPending,total:totFiled+totPending};
       var pctFiled=overall.total?Math.round((overall.filed-overall.late)/overall.total*100):0;
-      return<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',gap:14}}>
-        {/* Compliance rate */}
-        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16}}>
-          <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:10}}>Compliance rate ({retType})</div>
-          <div style={{display:'flex',alignItems:'baseline',gap:8,marginBottom:10}}><div style={{fontSize:40,fontWeight:800,color:'#0e2a47',fontFamily:"'JetBrains Mono',monospace"}}>{pctFiled}%</div><div style={{fontSize:12,color:'var(--tf-text-sub)'}}>filed on time</div></div>
-          <div style={{display:'flex',height:14,borderRadius:7,overflow:'hidden',border:'1px solid var(--tf-border)'}}>
-            {[['#22c55e',overall.filed-overall.late],['#f59e0b',overall.late],['#ef4444',overall.pending]].map(function(seg,i){var w=overall.total?(seg[1]/overall.total*100):0;return w>0?<div key={i} style={{width:w+'%',background:seg[0]}}/>:null;})}
-          </div>
-          <div style={{display:'flex',gap:14,marginTop:10,fontSize:11,color:'var(--tf-text-sub)',flexWrap:'wrap'}}>
-            <span>🟢 On time {overall.filed-overall.late}</span><span>🟠 Late {overall.late}</span><span>🔴 Pending {overall.pending}</span>{totMissed>0&&<span style={{color:'#dc2626',fontWeight:700}}>⚠ Done-not-filed {totMissed}</span>}
+      var topDef=searched.map(function(c){var pnd=0,miss=0;periods.forEach(function(p){var s=cellState(c.id,p);if(s.code==='pending'||s.code==='notfiled')pnd++;if(reconFlag(s,internalInfo(c.id,p.calMonth))==='missed')miss++;});return{c:c,pnd:pnd,miss:miss};}).filter(function(x){return x.pnd>0||x.miss>0;}).sort(function(a,b){return (b.pnd+b.miss)-(a.pnd+a.miss);}).slice(0,8);
+      var GRAD='linear-gradient(135deg,#2F6BFF,#14C7C0)';var H={fontFamily:"'Plus Jakarta Sans','Geist','Inter',system-ui,sans-serif",fontWeight:800,letterSpacing:'-0.02em'};var CARD={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:16,padding:18,boxShadow:'0 1px 3px rgba(14,42,71,0.04)'};
+      return<div style={{display:'flex',flexDirection:'column',gap:14}}>
+        {/* Hero */}
+        <div style={{background:GRAD,borderRadius:20,padding:'22px 24px',color:'#fff',position:'relative',overflow:'hidden',boxShadow:'0 12px 30px rgba(47,107,255,0.25)'}}>
+          <div style={{position:'absolute',right:-40,top:-40,width:200,height:200,borderRadius:'50%',background:'rgba(255,255,255,0.12)'}}/>
+          <div style={{position:'relative'}}>
+            <div style={{fontSize:12,fontWeight:800,letterSpacing:'0.1em',textTransform:'uppercase',opacity:0.9}}>GST Compliance · {retType} · FY {fy}</div>
+            <div style={{display:'flex',alignItems:'baseline',gap:12,marginTop:8,flexWrap:'wrap'}}><div style={{fontSize:54,lineHeight:1,fontWeight:800,fontFamily:"'JetBrains Mono',monospace"}}>{pctFiled}%</div><div style={{fontSize:15,opacity:0.92,fontFamily:H.fontFamily,fontWeight:800}}>filed on time <span style={{opacity:0.7}}>· {trackable.length} clients</span></div></div>
+            <div style={{display:'flex',height:12,borderRadius:6,overflow:'hidden',marginTop:16,background:'rgba(255,255,255,0.25)'}}>{[['#ffffff',overall.filed-overall.late],['#fde68a',overall.late],['rgba(255,255,255,0.28)',overall.pending]].map(function(seg,i){var w=overall.total?(seg[1]/overall.total*100):0;return w>0?<div key={i} style={{width:w+'%',background:seg[0]}}/>:null;})}</div>
+            <div style={{display:'flex',gap:18,marginTop:12,fontSize:13,flexWrap:'wrap'}}><span>● On time <b>{overall.filed-overall.late}</b></span><span>● Late <b>{overall.late}</b></span><span>● Pending <b>{overall.pending}</b></span>{totMissed>0&&<span>⚠ Done-not-filed <b>{totMissed}</b></span>}</div>
           </div>
         </div>
-        {/* Monthly trend */}
-        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,gridColumn:'1 / -1'}}>
-          <div style={{fontSize:12,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:12}}>By month — filed vs late vs pending</div>
-          <div style={{display:'flex',alignItems:'flex-end',gap:8,height:160}}>
-            {monthly.map(function(m){var tot=m.ontime+m.late+m.pending;var h=function(v){return maxM?Math.round(v/maxM*140):0;};return<div key={m.mon} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
-              <div style={{display:'flex',flexDirection:'column',justifyContent:'flex-end',height:140,width:'100%',maxWidth:34}}>
-                {m.pending>0&&<div title={m.pending+' pending'} style={{height:h(m.pending),background:'#ef4444',borderRadius:'3px 3px 0 0'}}/>}
+        {/* Monthly */}
+        <div style={CARD}>
+          <div style={{fontSize:14,color:'#0E2A47',marginBottom:16,fontFamily:H.fontFamily,fontWeight:800}}>Filed vs late vs pending — by month</div>
+          <div style={{display:'flex',alignItems:'flex-end',gap:10,height:170}}>
+            {monthly.map(function(m){var h=function(v){return maxM?Math.round(v/maxM*145):0;};return<div key={m.mon} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
+              <div style={{display:'flex',flexDirection:'column',justifyContent:'flex-end',height:145,width:'100%',maxWidth:38}}>
+                {m.pending>0&&<div title={m.pending+' pending'} style={{height:h(m.pending),background:'#ef4444',borderRadius:'4px 4px 0 0'}}/>}
                 {m.late>0&&<div title={m.late+' late'} style={{height:h(m.late),background:'#f59e0b'}}/>}
-                {m.ontime>0&&<div title={m.ontime+' on time'} style={{height:h(m.ontime),background:'#22c55e',borderRadius:m.late||m.pending?0:'3px 3px 0 0'}}/>}
-              </div>
-              <div style={{fontSize:9,color:'var(--tf-text-sub)'}}>{m.mon}</div>
+                {m.ontime>0&&<div title={m.ontime+' on time'} style={{height:h(m.ontime),background:GRAD,borderRadius:m.late||m.pending?0:'4px 4px 0 0'}}/>}
+              </div><div style={{fontSize:10,color:'var(--tf-text-sub)',fontWeight:600}}>{m.mon}</div>
             </div>;})}
           </div>
+        </div>
+        {/* Needs attention */}
+        <div style={CARD}>
+          <div style={{fontSize:14,color:'#0E2A47',marginBottom:12,fontFamily:H.fontFamily,fontWeight:800}}>Needs attention — most pending / missed</div>
+          {topDef.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>All clear — nothing pending. 🎉</div>:
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>{topDef.map(function(x){return<div key={x.c.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--tf-bg)',borderRadius:10}}>
+            <span style={{flex:1,fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{x.c.display_name||x.c.name}</span>
+            {x.pnd>0&&<span style={{fontSize:11,fontWeight:700,color:'#ef4444',background:'rgba(239,68,68,0.1)',borderRadius:8,padding:'2px 8px'}}>{x.pnd} pending</span>}
+            {x.miss>0&&<span style={{fontSize:11,fontWeight:800,color:'#dc2626',background:'rgba(220,38,38,0.1)',borderRadius:8,padding:'2px 8px'}}>⚠ {x.miss} not filed</span>}
+          </div>;})}</div>}
         </div>
         {/* By team member */}
         <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,gridColumn:'1 / -1'}}>
@@ -8595,7 +8604,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
               <span style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',minWidth:30,textAlign:'right'}}>{comp}%</span>
             </div>
             <div style={{flex:'0 0 32px',textAlign:'center'}} onClick={function(e){e.stopPropagation();}}>
-              <button onClick={function(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setItrCopied('');setItrLogin({client:c,left:Math.max(8,r.right-256),top:Math.min(r.bottom+4,window.innerHeight-230)});}} title="Income Tax portal — login helper" style={{background:'rgba(47,107,255,0.08)',border:'1px solid rgba(47,107,255,0.25)',borderRadius:6,padding:'3px 7px',cursor:'pointer',fontSize:12,color:'#2F6BFF'}}>🔑</button>
+              <button onClick={function(e){e.stopPropagation();var r=e.currentTarget.getBoundingClientRect();setItrCopied('');setItrLogin({client:c,left:Math.max(8,r.right-256),top:Math.min(r.bottom+4,window.innerHeight-230)});}} title="Income Tax portal — login helper" style={{background:'rgba(47,107,255,0.08)',border:'1px solid rgba(47,107,255,0.25)',borderRadius:6,padding:'4px 7px',cursor:'pointer',color:'#2F6BFF',display:'inline-flex',alignItems:'center'}}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
             </div>
             <div style={{flex:'0 0 130px',textAlign:'right',cursor:'pointer'}} onClick={function(){setOpenClient(c);}}>
               {rec?<span style={{fontSize:11,fontWeight:700,color:sm[2],background:sm[2]+'1a',border:'1px solid '+sm[2]+'33',borderRadius:20,padding:'3px 11px'}}>{sm[1]}</span>:
@@ -9829,7 +9838,7 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     </div>}
 
     {/* ── OVERDUE TAB ── */}
-    {activeTab==='gst'&&<GstAnalyticsSection org={org} supabase={supabase} workTypeConfigs={workTypeConfigs} year={selectedYear}/>}
+    {activeTab==='gst'&&<GstDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs}/>}
     {activeTab==='ledger'&&<ClientLedgerTab org={org} supabase={supabase} clients={clients} initClientId={ledgerInitClient}/>}
 
     {/* ── TEAM WORKLOAD TAB ── */}
@@ -17960,8 +17969,9 @@ function CredentialsModule({org,supabase,cu}){
                 var cred=(credMap[client.id]||{})[portal];
                 if(cred){
                   return<td key={portal} style={{padding:'5px 8px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',textAlign:'center'}}>
-                    <button onClick={function(){setRevealPw(false);setDetailCell({cred,client});}} style={{background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#3b82f6',fontWeight:600,fontFamily:'inherit',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block',margin:'0 auto'}} title="Click to view/edit">
-                      🔑 {cred.username||'(set)'}
+                    <button onClick={function(){setRevealPw(false);setDetailCell({cred,client});}} style={{background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#3b82f6',fontWeight:600,fontFamily:'inherit',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5,margin:'0 auto'}} title="Click to view/edit">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{cred.username||'(set)'}</span>
                     </button>
                   </td>;
                 } else {
@@ -18893,7 +18903,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var workzoneTabs=[{id:'worksheets',label:'Worksheets'}];
   if(ffOn('workzone_board'))workzoneTabs.push({id:'board',label:'Board'});
   if(ffOn('workzone_itr'))workzoneTabs.push({id:'itr',label:'ITR Desk'});
-  if(ffOn('workzone_gst'))workzoneTabs.push({id:'gst',label:'GST Desk'});
+  // GST Desk lives in the Analytics module (overseer view); doers use the inline GST status on worksheet rows.
   if(ffOn('workzone_bigclients'))workzoneTabs.push({id:'bigclients',label:'Big Clients'});
   workzoneTabs.push({id:'teamview',label:'Team View'});
 
@@ -19034,7 +19044,6 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
-      {orgModule==='workzone'&&tab==='gst'&&<GstDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
