@@ -5156,7 +5156,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     var retPeriod=String(periodMonth).padStart(2,'0')+calY;
     var alive=true;
     (async function(){try{var r=await supabase.from('gst_filing_status').select('client_id,status,filed_date,is_late,arn,ret_type').eq('org_id',org.id).eq('ret_period',retPeriod).eq('ret_type',retType).limit(6000);if(alive&&r.data){var m={};r.data.forEach(function(x){m[x.client_id]=x;});setGstStatusByClient(m);}}catch(e){}})();
-    (async function(){try{var rcr=await supabase.from('client_credentials').select('client_id,portal_name,username,password').eq('org_id',org.id).limit(8000);if(alive){var cm={};(rcr.data||[]).forEach(function(cr){if(/gst/i.test(cr.portal_name||'')&&!cm[cr.client_id])cm[cr.client_id]={username:cr.username||'',password:cr.password||''};});setGstCredsWs(cm);}}catch(e){}})();
+    (async function(){try{var rcr=await supabase.from('client_credentials').select('id,client_id,portal_name,username,password_enc').eq('org_id',org.id).limit(8000);if(alive){var cm={};(rcr.data||[]).forEach(function(cr){if(/gst/i.test(cr.portal_name||'')&&!cm[cr.client_id])cm[cr.client_id]={credId:cr.id,username:cr.username||'',hasPw:!!cr.password_enc};});setGstCredsWs(cm);}}catch(e){}})();
     return function(){alive=false;};
     // eslint-disable-next-line
   },[activeType,periodMonth,periodYear,org.id]);
@@ -7104,7 +7104,7 @@ var [showExportMenu,setShowExportMenu]=useState(false);
               {cr&&cr.username?<>
                 <div style={{display:'flex',gap:8,marginBottom:6,flexWrap:'wrap'}}>
                   <button onClick={function(){cp(cr.username,'User ID copied');}} style={{flex:1,minWidth:110,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 User ID<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.username}</div></button>
-                  <button onClick={function(){cp(cr.password,'Password copied');}} style={{flex:1,minWidth:110,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 Password<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.password?'••••••••':'—'}</div></button>
+                  <button onClick={async function(){if(!cr.hasPw){showToast('No password saved','err');return;}var rr=await supabase.rpc('cred_get_secret',{p_cred_id:cr.credId});if(rr.error){showToast(rr.error.message,'err');return;}try{if(navigator.clipboard)navigator.clipboard.writeText(rr.data||'');}catch(e){}showToast('Password copied');}} style={{flex:1,minWidth:110,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 Password<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.hasPw?'••••••••':'—'}</div></button>
                 </div>
                 <button onClick={function(){window.open('https://services.gst.gov.in/services/login','_blank','noopener');}} style={{width:'100%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:7,padding:'8px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Open GST login ↗</button>
               </>:<button onClick={function(){cp(gstEdit.client.gstin||'','GSTIN copied');window.open('https://services.gst.gov.in/services/searchtp','_blank','noopener');}} style={{width:'100%',background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'8px 0',color:'#0e2a47',cursor:'pointer',fontSize:12,fontWeight:700}}>Search Taxpayer ↗ (GSTIN copied)</button>}
@@ -7680,7 +7680,7 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
       try{var rme=await supabase.from('organization_members').select('user_id').eq('org_id',org.id).limit(400);var uids=(rme.data||[]).map(function(m){return m.user_id;});if(uids.length){var rp=await supabase.from('profiles').select('id,name,email').in('id',uids).limit(400);mlist=rp.data||[];}}catch(_){}
       // GST portal login credentials from the vault (portal_name mentions GST).
       var credMap={};
-      try{var rcr=await supabase.from('client_credentials').select('client_id,portal_name,username,password').eq('org_id',org.id).limit(8000);(rcr.data||[]).forEach(function(cr){if(/gst/i.test(cr.portal_name||'')&&!credMap[cr.client_id])credMap[cr.client_id]={username:cr.username||'',password:cr.password||'',portal_name:cr.portal_name};});}catch(_){}
+      try{var rcr=await supabase.from('client_credentials').select('id,client_id,portal_name,username,password_enc').eq('org_id',org.id).limit(8000);(rcr.data||[]).forEach(function(cr){if(/gst/i.test(cr.portal_name||'')&&!credMap[cr.client_id])credMap[cr.client_id]={credId:cr.id,username:cr.username||'',hasPw:!!cr.password_enc,portal_name:cr.portal_name};});}catch(_){}
       _gstDeskCache[ck]={clients:cl,rows:map,internal:intMap,members:mlist,creds:credMap};
       setClients(cl);setRows(map);setInternal(intMap);setMembers(mlist);setGstCreds(credMap);
     }catch(e){console.error(e);}finally{setLoading(false);}
@@ -7927,7 +7927,7 @@ function GstDeskModule({org,supabase,cu,workTypeConfigs}){
             {cr&&cr.username?<>
               <div style={{display:'flex',gap:8,marginBottom:6,flexWrap:'wrap'}}>
                 <button onClick={function(){copyText(cr.username,'User ID copied');}} style={{flex:1,minWidth:120,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 User ID<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.username}</div></button>
-                <button onClick={function(){copyText(cr.password,'Password copied');}} style={{flex:1,minWidth:120,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 Password<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.password?'••••••••':'—'}</div></button>
+                <button onClick={async function(){if(!cr.hasPw){showToast('No password saved','err');return;}var rr=await supabase.rpc('cred_get_secret',{p_cred_id:cr.credId});if(rr.error){showToast(rr.error.message,'err');return;}try{if(navigator.clipboard)navigator.clipboard.writeText(rr.data||'');}catch(e){}showToast('Password copied');}} style={{flex:1,minWidth:120,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'7px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:'var(--tf-text)',textAlign:'left'}}>📋 Password<div style={{fontFamily:'monospace',fontSize:11,color:'var(--tf-text-sub)',fontWeight:400,marginTop:1}}>{cr.hasPw?'••••••••':'—'}</div></button>
               </div>
               <button onClick={function(){window.open('https://services.gst.gov.in/services/login','_blank','noopener');}} style={{width:'100%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:7,padding:'8px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Open GST login ↗</button>
               <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:6}}>Copy each field, paste on the portal, log in, and read the return status — then record it below.</div>
@@ -8252,7 +8252,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
       setMembers(mlist);
       // Income Tax portal login credentials from the vault (portal_name mentions income/ITR/e-filing).
       var itrCredMap={};
-      try{var rcr=await supabase.from('client_credentials').select('client_id,portal_name,username,password').eq('org_id',org.id).limit(8000);(rcr.data||[]).forEach(function(cr){var pn=(cr.portal_name||'').toLowerCase();if(/income|itr|e-?fil|it ?portal|traces/.test(pn)&&!itrCredMap[cr.client_id])itrCredMap[cr.client_id]={username:cr.username||'',password:cr.password||''};});}catch(_){}
+      try{var rcr=await supabase.from('client_credentials').select('id,client_id,portal_name,username,password_enc').eq('org_id',org.id).limit(8000);(rcr.data||[]).forEach(function(cr){var pn=(cr.portal_name||'').toLowerCase();if(/income|itr|e-?fil|it ?portal|traces/.test(pn)&&!itrCredMap[cr.client_id])itrCredMap[cr.client_id]={credId:cr.id,username:cr.username||'',hasPw:!!cr.password_enc};});}catch(_){}
       setItrCreds(itrCredMap);
       _itrCache[cacheKey]={clients:cl,records:rec,itrEnrolledIds:enrolledIds,allocByClient:alloc,rowIdByClient:rowIds,dueByClient:dueDates,members:mlist};
       // Org form template (silent — falls back to defaults if table/row absent)
@@ -8628,7 +8628,7 @@ function ITRDeskModule({org,supabase,cu,workTypeConfigs,workflowHierarchy}){
         <div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{c.display_name||c.name}</div>
         <div style={{fontSize:11,color:'var(--tf-text-sub)',marginBottom:10}}>Income Tax portal login</div>
         <button onClick={function(){copy(userId,'User ID copied');}} style={BTN}>📋 User ID <span style={{display:'block',fontFamily:'monospace',fontWeight:400,color:'var(--tf-text-sub)',fontSize:11}}>{userId||'— (no PAN)'}</span></button>
-        <button onClick={function(){if(cr.password)copy(cr.password,'Password copied');}} disabled={!cr.password} style={Object.assign({},BTN,{opacity:cr.password?1:0.55,cursor:cr.password?'pointer':'not-allowed'})}>📋 Password <span style={{display:'block',fontFamily:'monospace',fontWeight:400,color:'var(--tf-text-sub)',fontSize:11}}>{cr.password?'••••••••':'not saved in vault'}</span></button>
+        <button onClick={async function(){if(!cr.hasPw)return;var rr=await supabase.rpc('cred_get_secret',{p_cred_id:cr.credId});if(rr.error)return;try{if(navigator.clipboard)navigator.clipboard.writeText(rr.data||'');}catch(e){}setItrCopied('Password copied');setTimeout(function(){setItrCopied('');},1400);}} disabled={!cr.hasPw} style={Object.assign({},BTN,{opacity:cr.hasPw?1:0.55,cursor:cr.hasPw?'pointer':'not-allowed'})}>📋 Password <span style={{display:'block',fontFamily:'monospace',fontWeight:400,color:'var(--tf-text-sub)',fontSize:11}}>{cr.hasPw?'••••••••':'not saved in vault'}</span></button>
         <button onClick={function(){window.open('https://eportal.incometax.gov.in/iec/foservices/#/login','_blank','noopener');}} style={{width:'100%',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',border:'none',borderRadius:7,padding:'9px 0',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}>Open IT portal login ↗</button>
         <div style={{minHeight:16,textAlign:'center',fontSize:11,fontWeight:700,color:'#16a34a',marginTop:6}}>{itrCopied}</div>
         <div style={{fontSize:10,color:'var(--tf-text-sub)',lineHeight:1.5}}>Copy each field, paste on the portal (OTP may be required), open the client's return status, then record it here.</div>
@@ -17850,6 +17850,8 @@ function CredentialsModule({org,supabase,cu}){
   var [toast,setToast]=useState(null);
   var [detailCell,setDetailCell]=useState(null); // {cred, client}
   var [revealPw,setRevealPw]=useState(false);
+  var [revealedPw,setRevealedPw]=useState(null); // decrypted on demand via cred_get_secret
+  async function fetchCredPw(credId){var r=await supabase.rpc('cred_get_secret',{p_cred_id:credId});if(r.error){showToast(r.error.message,'err');return null;}setRevealedPw(r.data||'');return r.data||'';}
   var [showAddPortal,setShowAddPortal]=useState(false);
   var [newPortalName,setNewPortalName]=useState('');
   var [form,setForm]=useState({portal_name:'',username:'',password:'',pan:'',email:'',mobile:'',notes:''});
@@ -17894,10 +17896,16 @@ function CredentialsModule({org,supabase,cu}){
     if(!form.portal_name.trim()){showToast('Portal name required','err');return;}
     if(!formClient){showToast('No client selected','err');return;}
     setSaving(true);
-    var payload={org_id:org.id,client_id:formClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:form.password||null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,updated_at:new Date().toISOString()};
+    // Password is never stored in plaintext — it goes through cred_set_secret (encrypted at rest).
+    var payload={org_id:org.id,client_id:formClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,updated_at:new Date().toISOString()};
     var r=editCred?await supabase.from('client_credentials').update(payload).eq('id',editCred.id).select().single():await supabase.from('client_credentials').insert(payload).select().single();
-    if(r.error){showToast(r.error.message,'err');}
-    else{showToast(editCred?'Updated':'Saved');setShowForm(false);load();}
+    if(r.error){showToast(r.error.message,'err');setSaving(false);return;}
+    // Only (re)encrypt the password when a new one was entered; blank on edit keeps the existing one.
+    if(form.password&&form.password.trim()){
+      var enc=await supabase.rpc('cred_set_secret',{p_cred_id:r.data.id,p_password:form.password});
+      if(enc.error){showToast('Saved, but password encryption failed: '+enc.error.message,'err');}
+    }
+    showToast(editCred?'Updated':'Saved');setShowForm(false);load();
     setSaving(false);
   }
   async function delCred(id){
@@ -17969,7 +17977,7 @@ function CredentialsModule({org,supabase,cu}){
                 var cred=(credMap[client.id]||{})[portal];
                 if(cred){
                   return<td key={portal} style={{padding:'5px 8px',borderBottom:'1px solid var(--tf-border)',borderRight:'1px solid var(--tf-border)',textAlign:'center'}}>
-                    <button onClick={function(){setRevealPw(false);setDetailCell({cred,client});}} style={{background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#3b82f6',fontWeight:600,fontFamily:'inherit',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5,margin:'0 auto'}} title="Click to view/edit">
+                    <button onClick={function(){setRevealPw(false);setRevealedPw(null);setDetailCell({cred,client});}} style={{background:'rgba(59,130,246,0.08)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#3b82f6',fontWeight:600,fontFamily:'inherit',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:5,margin:'0 auto'}} title="Click to view/edit">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                       <span style={{overflow:'hidden',textOverflow:'ellipsis'}}>{cred.username||'(set)'}</span>
                     </button>
@@ -18009,12 +18017,12 @@ function CredentialsModule({org,supabase,cu}){
             <div><div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Login / Username</div><div style={{fontSize:13,color:'var(--tf-text)',fontWeight:600}}>{detailCell.cred.username}</div></div>
             <button onClick={function(){copyText(detailCell.cred.username,'Username');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#0e2a47',fontWeight:600}}>Copy</button>
           </div>}
-          {detailCell.cred.password&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
-            <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>Password</div>
+          {(detailCell.cred.password||detailCell.cred.password_enc)&&<div style={{background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
+            <div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2,display:'flex',alignItems:'center',gap:5}}>Password <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span style={{color:'#16a34a',fontWeight:700}}>encrypted</span></div>
             <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{flex:1,fontFamily:'monospace',fontSize:13,color:'var(--tf-text)',letterSpacing:revealPw?'normal':'0.12em'}}>{revealPw?detailCell.cred.password:'••••••••••'}</span>
-              <button onClick={function(){setRevealPw(function(p){return!p;});}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{revealPw?'Hide':'Show'}</button>
-              <button onClick={function(){copyText(detailCell.cred.password,'Password');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#0e2a47',fontWeight:600}}>Copy</button>
+              <span style={{flex:1,fontFamily:'monospace',fontSize:13,color:'var(--tf-text)',letterSpacing:revealPw?'normal':'0.12em'}}>{revealPw?(revealedPw||''):'••••••••••'}</span>
+              <button onClick={async function(){if(!revealPw){await fetchCredPw(detailCell.cred.id);setRevealPw(true);}else{setRevealPw(false);}}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{revealPw?'Hide':'Show'}</button>
+              <button onClick={async function(){var pw=revealedPw!=null?revealedPw:await fetchCredPw(detailCell.cred.id);copyText(pw,'Password');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#0e2a47',fontWeight:600}}>Copy</button>
             </div>
           </div>}
           {detailCell.cred.pan&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
@@ -18049,8 +18057,8 @@ function CredentialsModule({org,supabase,cu}){
         </div>
         {[{key:'username',label:'Login / Username'},{key:'password',label:'Password',type:'password'},{key:'pan',label:'PAN'},{key:'email',label:'Email'},{key:'mobile',label:'Mobile'}].map(function(f){
           return<div key={f.key} style={{marginBottom:12}}>
-            <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>{f.label}</label>
-            <input type={f.type||'text'} value={form[f.key]} onChange={function(e){var v=e.target.value;setForm(function(p){var n=Object.assign({},p);n[f.key]=v;return n;});}} style={INP}/>
+            <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>{f.label}{f.key==='password'&&<span style={{display:'inline-flex',alignItems:'center',gap:3,marginLeft:6,color:'#16a34a'}}><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>encrypted</span>}</label>
+            <input type={f.type||'text'} value={form[f.key]} placeholder={f.key==='password'&&editCred?'•••••••• (leave blank to keep)':''} onChange={function(e){var v=e.target.value;setForm(function(p){var n=Object.assign({},p);n[f.key]=v;return n;});}} style={INP}/>
           </div>;
         })}
         <div style={{marginBottom:16}}>
