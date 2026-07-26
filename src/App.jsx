@@ -39,6 +39,7 @@ import { handleAuthEvent, bootBlockedCheck } from './lib/authStateListener.js'
 import { useTrialGate } from './lib/useTrialGate.js'
 import TrialBanner, { ModuleLock } from './components/TrialBanner.jsx'
 import TaskflowLogo from './components/TaskflowLogo.jsx'
+import InstallPWAButton from './components/InstallPWAButton.jsx'
 import { BrandLoader } from './components/Loaders.jsx'
 import AppTour from './components/AppTour.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
@@ -1883,6 +1884,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
           </div>}
         </div>;
       })()}
+      {/* Install app (PWA) — only shows when installable and not already installed */}
+      <InstallPWAButton variant="compact"/>
       {/* My Client Portals — if this user's email also has portal access */}
       <MyPortalsButton cu={cu} supabase={supabase}/>
       {/* Admin button — @taskflowco.in only */}

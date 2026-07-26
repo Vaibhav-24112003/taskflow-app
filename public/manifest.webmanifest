@@ -1,0 +1,18 @@
+{
+  "name": "TaskFlowCo — Practice Management",
+  "short_name": "TaskFlowCo",
+  "description": "Run your entire CA / tax practice — worksheets, ITR & GST tracking, clients, team and attendance — in one place.",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B2237",
+  "theme_color": "#2F6BFF",
+  "lang": "en-IN",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/pwa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -11,6 +11,13 @@
     <link rel="apple-touch-icon" sizes="192x192" href="/favicon-192.png" />
     <link rel="mask-icon" href="/favicon.svg" color="#2F6BFF" />
 
+    <!-- PWA: installable app -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TaskFlowCo" />
+
     <!-- Speed up first auth/data round-trips -->
     <link rel="preconnect" href="https://vorxrjekbokqkigfabhr.supabase.co" crossorigin />
 
@@ -152,5 +159,39 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- PWA: capture the install prompt + register the auto-updating service worker -->
+    <script>
+      (function () {
+        window.__tfInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', function (e) {
+          e.preventDefault();
+          window.__tfInstallPrompt = e;
+          window.dispatchEvent(new CustomEvent('tf-installable'));
+        });
+        window.addEventListener('appinstalled', function () {
+          window.__tfInstallPrompt = null;
+          window.dispatchEvent(new CustomEvent('tf-installed'));
+        });
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js').then(function (reg) {
+              reg.addEventListener('updatefound', function () {
+                var nw = reg.installing;
+                if (!nw) return;
+                nw.addEventListener('statechange', function () {
+                  // A new version installed while an old one controls the page → activate it.
+                  if (nw.state === 'installed' && navigator.serviceWorker.controller) nw.postMessage('SKIP_WAITING');
+                });
+              });
+            }).catch(function () {});
+            var refreshing = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+              if (refreshing) return; refreshing = true; window.location.reload();
+            });
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

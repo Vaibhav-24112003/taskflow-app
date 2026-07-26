@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { supabase, signInWithEmailLink } from './lib/supabase'
+import InstallPWAButton from './components/InstallPWAButton.jsx'
 
 // "Watch demo" tour is loaded on demand.
 const LaunchTour = lazy(() => import('./LaunchTour.jsx'))
@@ -380,6 +381,7 @@ export default function LandingPage({ onSignIn, loading }) {
               <span className="sun"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.2" stroke="#F4A52A" strokeWidth="1.9" /><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18" stroke="#F4A52A" strokeWidth="1.9" strokeLinecap="round" /></svg></span>
               <span className="moon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" stroke="#94A3B8" strokeWidth="1.9" strokeLinejoin="round" /></svg></span>
             </button>
+            <InstallPWAButton variant="compact" />
             <a href="#" className="keep" onClick={e => { e.preventDefault(); start() }} style={{ color: 'var(--nav)', fontWeight: 600 }}>Sign in</a>
             <a href="#demo" className="btn btn-primary btn-sm keep" onClick={e => { e.preventDefault(); scrollToId('demo') }}>Book a demo</a>
           </nav>
