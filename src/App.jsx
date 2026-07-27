@@ -1509,6 +1509,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
   })
   const [showCmdBar,setShowCmdBar]=useState(false)
   const [showNotesDrawer,setShowNotesDrawer]=useState(false)
+  const [showPunch,setShowPunch]=useState(false)
   const [orgNavTarget,setOrgNavTarget]=useState(null)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
@@ -1892,6 +1893,8 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
       {isAdminEmail(cu?.email)&&<button onClick={()=>setShowAdminShell(true)} title="Platform Admin Dashboard" style={{padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5}}>🛡 Admin</button>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAdminShell(true)}/>
+      {/* Quick attendance punch — one tap on mobile */}
+      <button onClick={()=>setShowPunch(true)} title="Attendance — check in / out" style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg></button>
       {/* Quick Notes — floating, available on every screen */}
       <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:32,height:32,borderRadius:9,background:showNotesDrawer?'rgba(47,107,255,0.12)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'#2F6BFF':'var(--tf-border)'),color:showNotesDrawer?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
       {/* Support / help icon */}
@@ -1937,6 +1940,12 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
     {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
     {showAdminShell&&isAdminEmail(cu?.email)&&<Suspense fallback={null}><AdminShell cu={cu} onClose={()=>setShowAdminShell(false)}/></Suspense>}
     {/* Quick Notes drawer — slides in from right, available on every screen */}
+    {showPunch&&<div onClick={()=>setShowPunch(false)} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:9000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'70px 16px 16px',overflowY:'auto'}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:420}}>
+        <GeoAttendance org={org} supabase={supabase} cu={cu}/>
+        <button onClick={()=>setShowPunch(false)} style={{width:'100%',marginTop:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 0',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:600}}>Close</button>
+      </div>
+    </div>}
     {showNotesDrawer&&<div onClick={()=>setShowNotesDrawer(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.35)',zIndex:9000,display:'flex',justifyContent:'flex-end'}}>
       <div onClick={e=>e.stopPropagation()} style={{width:420,maxWidth:'92vw',height:'100%',background:'var(--tf-panel)',borderLeft:'1px solid var(--tf-border)',boxShadow:'-10px 0 40px rgba(0,0,0,0.2)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'12px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
@@ -9918,6 +9927,69 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
   </div>;
 }
 
+// ── Geotagged attendance punch (check in / out with GPS) ──
+function GeoAttendance({org,supabase,cu,onPunched}){
+  var [punches,setPunches]=useState([]);
+  var [busy,setBusy]=useState(false);
+  var [err,setErr]=useState('');
+  var [loading,setLoading]=useState(true);
+  var todayStr=new Date().toISOString().slice(0,10);
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id,cu.id]);
+  async function load(){
+    setLoading(true);
+    try{var start=todayStr+'T00:00:00';var end=todayStr+'T23:59:59';
+      var r=await supabase.from('attendance_punches').select('*').eq('org_id',org.id).eq('user_id',cu.id).gte('punched_at',start).lte('punched_at',end).order('punched_at',{ascending:true}).limit(50);
+      setPunches(r.data||[]);
+    }catch(e){}finally{setLoading(false);}
+  }
+  var last=punches[punches.length-1];
+  var checkedIn=last&&last.punch_type==='in';
+  // worked minutes today (sum of in→out pairs; open 'in' counts to now)
+  var workedMin=(function(){var t=0,open=null;punches.forEach(function(p){if(p.punch_type==='in')open=new Date(p.punched_at);else if(p.punch_type==='out'&&open){t+=(new Date(p.punched_at)-open)/60000;open=null;}});if(open)t+=(Date.now()-open)/60000;return Math.round(t);})();
+  function fmtDur(m){var h=Math.floor(m/60);return (h?h+'h ':'')+(m%60)+'m';}
+  function getLoc(){return new Promise(function(res){if(!navigator.geolocation){res(null);return;}navigator.geolocation.getCurrentPosition(function(pos){res({lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:pos.coords.accuracy});},function(){res(null);},{enableHighAccuracy:true,timeout:12000,maximumAge:0});});}
+  async function punch(type,allowNoLoc){
+    setErr('');setBusy(true);
+    var loc=await getLoc();
+    if(!loc&&!allowNoLoc){setBusy(false);setErr('Location unavailable. Enable location, or punch without it.');return;}
+    var payload={org_id:org.id,user_id:cu.id,punch_type:type,punched_at:new Date().toISOString(),lat:loc?loc.lat:null,lng:loc?loc.lng:null,accuracy:loc?loc.accuracy:null};
+    var r=await supabase.from('attendance_punches').insert(payload).select().single();
+    if(r.error){setBusy(false);setErr(r.error.message);return;}
+    // Mark the day present on the monthly sheet (best effort, first check-in).
+    if(type==='in'){try{var ex=await supabase.from('attendance_entries').select('id').eq('org_id',org.id).eq('user_id',cu.id).eq('date',todayStr).maybeSingle();if(!ex.data)await supabase.from('attendance_entries').insert({org_id:org.id,user_id:cu.id,date:todayStr,status:'working'});}catch(_){}}
+    setPunches(function(p){return p.concat([r.data]);});setBusy(false);
+    if(onPunched)onPunched();
+  }
+  var GRAD='linear-gradient(135deg,#2F6BFF,#14C7C0)';
+  return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:16,padding:18,boxShadow:'0 1px 3px rgba(14,42,71,0.04)'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+      <div>
+        <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',fontFamily:"'Plus Jakarta Sans','Inter',system-ui,sans-serif"}}>Attendance</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>{new Date().toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'short'})} · Worked {fmtDur(workedMin)}</div>
+      </div>
+      <span style={{fontSize:11,fontWeight:800,padding:'4px 12px',borderRadius:999,color:checkedIn?'#16a34a':'var(--tf-text-sub)',background:checkedIn?'rgba(34,197,94,0.12)':'var(--tf-bg)',border:'1px solid '+(checkedIn?'rgba(34,197,94,0.3)':'var(--tf-border)')}}>{checkedIn?'● Checked in':'○ Checked out'}</span>
+    </div>
+    <button onClick={function(){punch(checkedIn?'out':'in',false);}} disabled={busy} style={{width:'100%',padding:'16px 0',borderRadius:14,border:'none',cursor:busy?'wait':'pointer',color:'#fff',fontSize:17,fontWeight:800,fontFamily:"'Plus Jakarta Sans','Inter',system-ui,sans-serif",background:busy?'#94a3b8':(checkedIn?'linear-gradient(135deg,#ef4444,#dc2626)':GRAD),boxShadow:'0 8px 22px rgba(47,107,255,0.22)',display:'flex',alignItems:'center',justifyContent:'center',gap:10}}>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+      {busy?'Getting location…':(checkedIn?'Check Out':'Check In')}
+    </button>
+    {err&&<div style={{marginTop:10,fontSize:12,color:'#b45309',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.25)',borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><span>{err}</span><button onClick={function(){punch(checkedIn?'out':'in',true);}} style={{background:'#0e2a47',border:'none',borderRadius:6,padding:'5px 10px',color:'#fff',cursor:'pointer',fontSize:11,fontWeight:700}}>Punch without location</button></div>}
+    {/* Today's punches */}
+    {!loading&&punches.length>0&&<div style={{marginTop:14}}>
+      <div style={{fontSize:10,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.05em',marginBottom:8}}>Today</div>
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {punches.slice().reverse().map(function(p){var isIn=p.punch_type==='in';return<div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--tf-bg)',borderRadius:10}}>
+          <span style={{width:8,height:8,borderRadius:'50%',background:isIn?'#22c55e':'#ef4444',flexShrink:0}}/>
+          <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{isIn?'In':'Out'}</span>
+          <span style={{fontSize:13,color:'var(--tf-text-sub)',fontFamily:"'JetBrains Mono',monospace"}}>{new Date(p.punched_at).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span>
+          <span style={{flex:1}}/>
+          {p.lat!=null?<a href={'https://maps.google.com/?q='+p.lat+','+p.lng} target="_blank" rel="noopener noreferrer" style={{fontSize:11,fontWeight:700,color:'#2F6BFF',textDecoration:'none',display:'inline-flex',alignItems:'center',gap:3}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>Map</a>:<span style={{fontSize:10,color:'var(--tf-text-sub)'}}>no location</span>}
+        </div>;})}
+      </div>
+    </div>}
+  </div>;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // ATTENDANCE MODULE — slim status-only month grid
 // ══════════════════════════════════════════════════════════════════
@@ -10036,6 +10108,9 @@ function AttendanceModule({org,supabase,cu}){
         <button onClick={gotoToday} style={Object.assign({},INP,{cursor:'pointer',fontWeight:700,color:'#0e2a47'})}>Today</button>
       </div>
     </div>
+
+    {/* Geotagged check-in/out — only for your own attendance */}
+    {userId===cu.id&&<div style={{marginBottom:14}}><GeoAttendance org={org} supabase={supabase} cu={cu} onPunched={load}/></div>}
 
     {/* Summary */}
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:8,marginBottom:14}}>
