@@ -1510,6 +1510,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
   const [showCmdBar,setShowCmdBar]=useState(false)
   const [showNotesDrawer,setShowNotesDrawer]=useState(false)
   const [showPunch,setShowPunch]=useState(false)
+  const [showMoreMenu,setShowMoreMenu]=useState(false)
   const [orgNavTarget,setOrgNavTarget]=useState(null)
   // Quick Add One-time Task from Home
   const [showQuickAdd,setShowQuickAdd]=useState(false)
@@ -1889,20 +1890,26 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
       <InstallPWAButton variant="compact"/>
       {/* My Client Portals — if this user's email also has portal access */}
       <MyPortalsButton cu={cu} supabase={supabase}/>
-      {/* Admin button — @taskflowco.in only */}
-      {isAdminEmail(cu?.email)&&<button onClick={()=>setShowAdminShell(true)} title="Platform Admin Dashboard" style={{padding:'5px 12px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:6,color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:700,fontFamily:G.font,flexShrink:0,display:'flex',alignItems:'center',gap:5}}>🛡 Admin</button>}
       {/* Announcements bell — admins see a 'Manage' button inside the dropdown */}
       <AnnouncementsBell cu={cu} onManage={()=>setShowAdminShell(true)}/>
-      {/* Quick attendance punch — one tap on mobile */}
-      <button onClick={()=>setShowPunch(true)} title="Attendance — check in / out" style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg></button>
-      {/* Quick Notes — floating, available on every screen */}
-      <button onClick={()=>setShowNotesDrawer(true)} title="Quick Notes" style={{width:32,height:32,borderRadius:9,background:showNotesDrawer?'rgba(47,107,255,0.12)':'var(--tf-surface)',border:'1px solid '+(showNotesDrawer?'#2F6BFF':'var(--tf-border)'),color:showNotesDrawer?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{if(!showNotesDrawer){e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}}>📝</button>
-      {/* Support / help icon */}
-      <button onClick={()=>{ if(isAdminEmail(cu.email)) setShowSupportAdmin(true); else setShowSupportModal(true); }} title={isAdminEmail(cu.email)?'Support tickets (admin)':'Get help'} style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}>
-        <LifeBuoy size={14}/>
-      </button>
-      {/* Light/dark toggle */}
-      <button onClick={()=>setLightMode(v=>!v)} title={lightMode?'Dark mode':'Light mode'} style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface-hov)'} onMouseLeave={e=>e.currentTarget.style.background='var(--tf-surface)'}>{lightMode?'🌙':'☀️'}</button>
+      {/* Attendance punch — quick, kept visible (daily action) */}
+      {activeOrg&&<button onClick={()=>setShowPunch(true)} title="Attendance — check in / out" style={{width:32,height:32,borderRadius:9,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.background='var(--tf-surface-hov)';e.currentTarget.style.color='#2F6BFF'}} onMouseLeave={e=>{e.currentTarget.style.background='var(--tf-surface)';e.currentTarget.style.color='var(--tf-text-sub)'}}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg></button>}
+      {/* More menu — consolidates Notes, Support, Theme, Admin (declutter) */}
+      <div style={{position:'relative',flexShrink:0}}>
+        <button onClick={()=>setShowMoreMenu(v=>!v)} title="More" style={{width:32,height:32,borderRadius:9,background:showMoreMenu?'rgba(47,107,255,0.12)':'var(--tf-surface)',border:'1px solid '+(showMoreMenu?'#2F6BFF':'var(--tf-border)'),color:showMoreMenu?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
+        {showMoreMenu&&<>
+          <div onClick={()=>setShowMoreMenu(false)} style={{position:'fixed',inset:0,zIndex:290}}/>
+          <div style={{position:'absolute',top:'calc(100% + 8px)',right:0,background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:G.radiusMd,minWidth:210,boxShadow:G.shadowLg,overflow:'hidden',zIndex:300}}>
+            {[
+              {ic:'📝',lb:'Quick Notes',fn:()=>{setShowNotesDrawer(true);setShowMoreMenu(false);}},
+              {ic:'🛟',lb:isAdminEmail(cu.email)?'Support tickets':'Get help',fn:()=>{if(isAdminEmail(cu.email))setShowSupportAdmin(true);else setShowSupportModal(true);setShowMoreMenu(false);}},
+              {ic:lightMode?'🌙':'☀️',lb:lightMode?'Dark mode':'Light mode',fn:()=>{setLightMode(v=>!v);}},
+            ].concat(isAdminEmail(cu?.email)?[{ic:'🛡',lb:'Platform Admin',fn:()=>{setShowAdminShell(true);setShowMoreMenu(false);},danger:true}]:[]).map(function(it,i){
+              return<button key={i} onClick={it.fn} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'none',borderTop:i?'1px solid var(--tf-border)':'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600,color:it.danger?'#ef4444':'var(--tf-text)'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}><span style={{fontSize:15,width:18,textAlign:'center'}}>{it.ic}</span>{it.lb}</button>;
+            })}
+          </div>
+        </>}
+      </div>
       {/* User menu */}
       <div ref={userMenuRef} style={{position:'relative',flexShrink:0}}>
         <div onClick={()=>setShowUserMenu(v=>!v)} style={{cursor:'pointer',borderRadius:'50%',border:'2px solid transparent',background:'linear-gradient(var(--tf-bg),var(--tf-bg)) padding-box, linear-gradient(135deg,#2F6BFF,#14C7C0) border-box',position:'relative'}}>
@@ -1940,9 +1947,9 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
     {adminModule==='orgs' &&isAdminEmail(cu?.email)&&<Suspense fallback={<div style={{padding:32,color:'var(--tf-text-sub)'}}>Loading…</div>}><OrgsAdmin/></Suspense>}
     {showAdminShell&&isAdminEmail(cu?.email)&&<Suspense fallback={null}><AdminShell cu={cu} onClose={()=>setShowAdminShell(false)}/></Suspense>}
     {/* Quick Notes drawer — slides in from right, available on every screen */}
-    {showPunch&&<div onClick={()=>setShowPunch(false)} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:9000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'70px 16px 16px',overflowY:'auto'}}>
+    {showPunch&&activeOrg&&<div onClick={()=>setShowPunch(false)} style={{position:'fixed',inset:0,background:'rgba(6,16,30,0.5)',zIndex:9000,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'70px 16px 16px',overflowY:'auto'}}>
       <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:420}}>
-        <GeoAttendance org={org} supabase={supabase} cu={cu}/>
+        <GeoAttendance org={activeOrg} supabase={supabase} cu={cu}/>
         <button onClick={()=>setShowPunch(false)} style={{width:'100%',marginTop:10,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 0',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,fontWeight:600}}>Close</button>
       </div>
     </div>}
