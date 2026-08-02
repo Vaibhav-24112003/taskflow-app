@@ -18883,6 +18883,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const [wsInitWorkType,setWsInitWorkType]=useState(null);
   const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
   const [sidebarOpen,setSidebarOpen]=useState(true);
+  const [isMobile,setIsMobile]=useState(typeof window!=='undefined'&&window.innerWidth<820);
+  useEffect(function(){function onR(){setIsMobile(window.innerWidth<820);}window.addEventListener('resize',onR);return function(){window.removeEventListener('resize',onR);};},[]);
   var [orgDepts,setOrgDepts]=useState([]);
   var [orgDeptMembers,setOrgDeptMembers]=useState([]);
   var [orgRoles,setOrgRoles]=useState([]);
@@ -19128,7 +19130,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   }
 
   // Module content with left sidebar
-  var sidebarW=sidebarOpen?236:52;
+  var sidebarW=isMobile?0:(sidebarOpen?236:52);
+  function goMod(mod,t){setOrgModule(mod);setTab(t);try{localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}catch(e){}}
   var moduleContent=<>
       {/* Your Diary */}
       {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces} onGoModule={function(m,t){setOrgModule(m);if(t)setTab(t);}}/>}
@@ -19177,8 +19180,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   return<div style={{flex:1,display:'flex',minHeight:0}}>
       {showWizard&&<SetupWizard org={org} cu={cu} supabase={supabase} onClose={closeWizard}/>}
       {showTour&&<CoachmarkTour step={tourStep} setStep={setTourStep} onDone={function(){setShowTour(false);}} navigate={tourNavigate} steps={tourSteps}/>}
-      {/* Left sidebar — dark navy, no separate header row, back button lives here */}
-      <div data-tour="tour-sidebar" style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
+      {/* Left sidebar — dark navy, no separate header row, back button lives here. Hidden on mobile (bottom nav replaces it). */}
+      {!isMobile&&<div data-tour="tour-sidebar" style={{width:sidebarW,flexShrink:0,background:'#0e1929',borderRight:'1px solid rgba(255,255,255,0.06)',display:'flex',flexDirection:'column',transition:'width 0.18s ease',overflow:'hidden'}}>
         <div style={{padding:sidebarOpen?'8px 8px 4px':'8px 6px 4px',display:'flex',alignItems:'center',justifyContent:sidebarOpen?'space-between':'center',gap:4,borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0}}>
           {sidebarOpen&&<button onClick={backToLauncher} style={{background:'none',border:'none',padding:'2px 4px',color:'#8696b3',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit',display:'flex',alignItems:'center',gap:3,whiteSpace:'nowrap',flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis'}} title="Back to modules">
             <span style={{flexShrink:0}}>&#x2190;</span>
@@ -19218,11 +19221,27 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             <span style={{color:'#14C7C0'}}>✨</span> Take a quick tour
           </button>
         </div>}
-      </div>
+      </div>}
       {/* Main content */}
-      <div data-tour={orgModule?'tour-view-'+orgModule:undefined} style={{flex:1,overflow:'auto',padding:'22px 24px 60px',minWidth:0}}>
+      <div data-tour={orgModule?'tour-view-'+orgModule:undefined} style={{flex:1,overflow:'auto',padding:isMobile?'14px 12px 88px':'22px 24px 60px',minWidth:0}}>
         {moduleContent}
       </div>
+      {/* Mobile bottom navigation */}
+      {isMobile&&(function(){
+        var NAV=[
+          {id:'home',label:'Home',active:!orgModule,onClick:backToLauncher,icon:<path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>},
+          {id:'diary',label:'Diary',active:orgModule==='diary',onClick:function(){goMod('diary','home');},icon:<><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v18M8 8h8M8 12h8M8 16h5"/></>},
+          {id:'work',label:'WorkZone',active:orgModule==='workzone',onClick:function(){goMod('workzone','worksheets');},icon:<><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 4v16"/></>},
+          {id:'attend',label:'Attend',active:orgModule==='team',onClick:function(){goMod('team','attendance');},icon:<><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></>},
+          {id:'more',label:'Menu',active:false,onClick:backToLauncher,icon:<><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></>}
+        ];
+        return<nav style={{position:'fixed',bottom:0,left:0,right:0,height:64,background:'var(--tf-panel)',borderTop:'1px solid var(--tf-border)',display:'flex',zIndex:800,boxShadow:'0 -4px 20px rgba(14,42,71,0.08)',paddingBottom:'env(safe-area-inset-bottom)'}}>
+          {NAV.map(function(n){return<button key={n.id} onClick={n.onClick} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',color:n.active?'#2F6BFF':'var(--tf-text-sub)',padding:'6px 0'}}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{n.icon}</svg>
+            <span style={{fontSize:10,fontWeight:n.active?800:600}}>{n.label}</span>
+          </button>;})}
+        </nav>;
+      })()}
       {showAppTour&&<AppTour onClose={function(){setShowAppTour(false);}}/>}
   </div>;
 }
