@@ -42,6 +42,7 @@ import TaskflowLogo from './components/TaskflowLogo.jsx'
 import InstallPWAButton from './components/InstallPWAButton.jsx'
 import { BrandLoader } from './components/Loaders.jsx'
 import AppTour from './components/AppTour.jsx'
+import { CommandPalette } from './components/CommandPalette.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 const AdminShell = lazyWithReload(() => import('./admin/AdminShell.jsx'))
@@ -18876,6 +18877,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var [orgAllMembers,setOrgAllMembers]=useState([]);
   var [myModuleAccess,setMyModuleAccess]=useState(null);
   var [chatUnread,setChatUnread]=useState(0); // unread team-chat messages while not viewing chat
+  var [showCommandPalette,setShowCommandPalette]=useState(false);
   // Realtime: badge the Team Chat nav item when messages arrive in another module.
   // RLS on team_chat_messages ensures only messages the user can see (incl. their DMs) trigger this.
   var orgModuleRef=useRef(orgModule);orgModuleRef.current=orgModule;
@@ -19170,6 +19172,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             <span style={{flexShrink:0}}>&#x2190;</span>
             <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#7fa3c7',fontWeight:700}}>{currentModule?currentModule.label:'Modules'}</span>
           </button>}
+          {sidebarOpen&&<button onClick={function(){setShowCommandPalette(true);}} title="Search clients, work types & actions (Ctrl+K)" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'3px 7px',color:'#7fa3c7',cursor:'pointer',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,flexShrink:0}}>🔍 <span style={{fontSize:10,opacity:0.85,fontFamily:"'JetBrains Mono',monospace"}}>⌘K</span></button>}
           <button onClick={function(){setSidebarOpen(!sidebarOpen);}} title={sidebarOpen?'Minimize sidebar':'Expand sidebar'}
             style={{background:'none',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#8696b3',fontSize:11,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
         </div>
@@ -19226,6 +19229,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
         </nav>;
       })()}
       {showAppTour&&<AppTour onClose={function(){setShowAppTour(false);}}/>}
+      <CommandPalette isOpen={showCommandPalette} onClose={function(){setShowCommandPalette(false);}} onNavigate={function(act){ if(act.type==='open_palette'){setShowCommandPalette(true);return;} if(act.type==='mod'){setOrgModule(act.mod);if(act.tab)setTab(act.tab);} if(act.type==='client'){setOrgModule('masterdata');setTab('clients');} }} clients={(_dashCache[org.id]||{}).clients||[]} workTypeConfigs={activeConfigs} cu={cu}/>
   </div>;
 }
 
