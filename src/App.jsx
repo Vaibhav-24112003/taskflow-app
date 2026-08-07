@@ -42,7 +42,6 @@ import TaskflowLogo from './components/TaskflowLogo.jsx'
 import InstallPWAButton from './components/InstallPWAButton.jsx'
 import { BrandLoader } from './components/Loaders.jsx'
 import AppTour from './components/AppTour.jsx'
-import { CommandPalette } from './components/CommandPalette.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 const AdminShell = lazyWithReload(() => import('./admin/AdminShell.jsx'))
@@ -1256,7 +1255,7 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
     var orgIds=orgs.map(function(o){return o.id;});
     if(orgIds.length===0){setLoaded(true);return;}
     var [rc,rwt,rm]=await Promise.all([
-      supabase.from('clients').select('id,name,gstin,status,org_id').in('org_id',orgIds).order('name').limit(1000),
+      supabase.from('clients').select('id,name,display_name,pan,gstin,status,org_id').in('org_id',orgIds).order('name').limit(1000),
       supabase.from('work_type_configs').select('id,name,org_id,is_active').in('org_id',orgIds),
       supabase.from('organization_members').select('user_id,role,org_id,profiles(full_name,email)').in('org_id',orgIds).limit(300),
     ]);
@@ -1294,12 +1293,25 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
     if(fWs.length)out.push({label:'WORKSPACES',items:fWs.slice(0,5).map(function(w){return{label:w.name,sub:w.description||'Workspace',icon:w.icon||'☐',iconBg:w.color||'#0e2a47',action:function(){onGoWorkspace(w.id);onClose();}};})} );
 
     // CLIENTS
-    var fCl=clients.filter(function(c){return !lq||(c.name.toLowerCase().includes(lq)||(c.gstin||'').toLowerCase().includes(lq));}).slice(0,lq?12:0);
+    var matchClient=function(c){
+      if(!lq)return false;
+      var cn=(c.display_name||c.name||'').toLowerCase();
+      var cp=(c.pan||'').toLowerCase();
+      var cg=(c.gstin||'').toLowerCase();
+      return cn.includes(lq)||cp.includes(lq)||cg.includes(lq);
+    };
+    var fCl=lq?clients.filter(matchClient).slice(0,12):[];
     if(fCl.length){
-      var totalMatch=lq?clients.filter(function(c){return c.name.toLowerCase().includes(lq)||(c.gstin||'').toLowerCase().includes(lq);}).length:0;
-      out.push({label:'CLIENTS'+(lq&&totalMatch>fCl.length?' · '+fCl.length+' of '+totalMatch:''),items:fCl.map(function(c){
+      var totalMatch=clients.filter(matchClient).length;
+      out.push({label:'CLIENTS'+(totalMatch>fCl.length?' · '+fCl.length+' of '+totalMatch:''),items:fCl.map(function(c){
         var org=orgMap[c.org_id];
-        return{label:c.name,sub:(c.gstin?c.gstin+' · ':'')+( c.status||'Active')+(org?' · '+org.name:''),icon:'CL',iconBg:'#1d4670',
+        var nameLabel=c.display_name||c.name;
+        var details=[];
+        if(c.pan)details.push('PAN: '+c.pan);
+        if(c.gstin)details.push('GST: '+c.gstin);
+        details.push(c.status||'Active');
+        if(org)details.push(org.name);
+        return{label:nameLabel,sub:details.join(' · '),icon:'👤',iconBg:'#1d4670',
           action:function(){if(org){onGoOrg(org);onGoOrgModule('masterdata','clients');}onClose();}};
       })});
     }
@@ -19172,7 +19184,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             <span style={{flexShrink:0}}>&#x2190;</span>
             <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#7fa3c7',fontWeight:700}}>{currentModule?currentModule.label:'Modules'}</span>
           </button>}
-          {sidebarOpen&&<button onClick={function(){setShowCommandPalette(true);}} title="Search clients, work types & actions (Ctrl+K)" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'3px 7px',color:'#7fa3c7',cursor:'pointer',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,flexShrink:0}}>🔍 <span style={{fontSize:10,opacity:0.85,fontFamily:"'JetBrains Mono',monospace"}}>⌘K</span></button>}
+          {sidebarOpen&&<button onClick={function(){if(onOpenCommandBar)onOpenCommandBar();}} title="Search clients, work types & actions (Ctrl+K)" style={{background:'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.1)',borderRadius:6,padding:'3px 7px',color:'#7fa3c7',cursor:'pointer',fontSize:11,fontWeight:600,display:'flex',alignItems:'center',gap:4,flexShrink:0}}>🔍 <span style={{fontSize:10,opacity:0.85,fontFamily:"'JetBrains Mono',monospace"}}>⌘K</span></button>}
           <button onClick={function(){setSidebarOpen(!sidebarOpen);}} title={sidebarOpen?'Minimize sidebar':'Expand sidebar'}
             style={{background:'none',border:'1px solid rgba(255,255,255,0.12)',borderRadius:6,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#8696b3',fontSize:11,fontWeight:700,flexShrink:0}}>{sidebarOpen?'◀':'▶'}</button>
         </div>
@@ -19229,7 +19241,6 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
         </nav>;
       })()}
       {showAppTour&&<AppTour onClose={function(){setShowAppTour(false);}}/>}
-      <CommandPalette isOpen={showCommandPalette} onClose={function(){setShowCommandPalette(false);}} onNavigate={function(act){ if(act.type==='open_palette'){setShowCommandPalette(true);return;} if(act.type==='mod'){setOrgModule(act.mod);if(act.tab)setTab(act.tab);} if(act.type==='client'){setOrgModule('masterdata');setTab('clients');} }} clients={(_dashCache[org.id]||{}).clients||[]} workTypeConfigs={activeConfigs} cu={cu}/>
   </div>;
 }
 
