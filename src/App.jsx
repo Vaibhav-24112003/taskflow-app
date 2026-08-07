@@ -1312,7 +1312,7 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
         details.push(c.status||'Active');
         if(org)details.push(org.name);
         return{label:nameLabel,sub:details.join(' · '),icon:'👤',iconBg:'#1d4670',
-          action:function(){if(org){onGoOrg(org);onGoOrgModule('masterdata','clients');}onClose();}};
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('masterdata','clients',null,org);}onClose();}};
       })});
     }
 
@@ -1322,7 +1322,7 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
       if(fWT.length)out.push({label:'WORK TYPES',items:fWT.map(function(wt){
         var org=orgMap[wt.org_id];
         return{label:'View '+wt.name+' Worksheets',sub:(org?org.name+' · ':'')+'WorkZone → Worksheets',icon:'WK',iconBg:'#f59e0b',
-          action:function(){if(org){onGoOrg(org);onGoOrgModule('workzone','worksheets',wt.name);}onClose();}};
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('workzone','worksheets',wt.name,org);}onClose();}};
       })});
     }
 
@@ -1333,12 +1333,12 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
         var mMatch=!lq||m.label.toLowerCase().includes(lq);
         if(mMatch&&orgs.length>0){
           modItems.push({label:m.label,sub:'Module'+(activeOrg?' · '+activeOrg.name:''),icon:'▸',iconBg:'#64748b',
-            action:function(){var o=activeOrg||orgs[0];onGoOrg(o);onGoOrgModule(m.id,m.tabs[0]?m.tabs[0].id:'');onClose();}});
+            action:function(){var o=activeOrg||orgs[0];onGoOrg(o);onGoOrgModule(m.id,m.tabs[0]?m.tabs[0].id:'',null,o);onClose();}});
         }
         if(lq){m.tabs.forEach(function(t){
           if((m.label+' '+t.label).toLowerCase().includes(lq)&&orgs.length>0){
             modItems.push({label:m.label+' → '+t.label,sub:'Tab'+(activeOrg?' · '+activeOrg.name:''),icon:'↳',iconBg:'#475569',
-              action:function(){var o=activeOrg||orgs[0];onGoOrg(o);onGoOrgModule(m.id,t.id);onClose();}});
+              action:function(){var o=activeOrg||orgs[0];onGoOrg(o);onGoOrgModule(m.id,t.id,null,o);onClose();}});
           }
         });}
       });
@@ -1353,7 +1353,7 @@ function CommandBar({orgs,workspaces,tasks,activeOrg,supabase,cu,lightMode,onClo
       if(fMem.length)out.push({label:'MEMBERS',items:fMem.map(function(m){
         var org=orgMap[m.org_id];
         return{label:m.profiles?.full_name||m.profiles?.email||'Member',sub:(m.role||'member')+(org?' · '+org.name:''),icon:(m.profiles?.full_name||'?').charAt(0).toUpperCase(),iconBg:'#8b5cf6',
-          action:function(){if(org){onGoOrg(org);onGoOrgModule('setup','members');}onClose();}};
+          action:function(){if(org){onGoOrg(org);onGoOrgModule('setup','members',null,org);}onClose();}};
       })});
     }
 
@@ -1790,7 +1790,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
       onClose={()=>setShowCmdBar(false)}
       onGoWorkspace={id=>{localStorage.setItem('tf_lastWsId',id);setActiveWsId(id);setActiveOrg(null);}}
       onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);}}
-      onGoOrgModule={(mod,tab,workType)=>{var o=activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab||'');setActiveWsId(null);setOrgNavTarget({module:mod,tab:tab||'',workType:workType||null,ts:Date.now()});}}
+      onGoOrgModule={(mod,tab,workType,targetOrg)=>{var o=targetOrg||activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab||'');setActiveWsId(null);setOrgNavTarget({module:mod,tab:tab||'',workType:workType||null,ts:Date.now()});}}
       onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}
       onOpenTask={t=>{setEditTask(t);if(t.workspace_id&&t.workspace_id!==activeWsId){localStorage.setItem('tf_lastWsId',t.workspace_id);setActiveWsId(t.workspace_id);}}}
       onNewWorkspace={()=>setWsForm('new')}
