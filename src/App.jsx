@@ -5106,8 +5106,10 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     if(hasUnclassified)tabs.push({label:'Unclassified',types:['Unclassified'],isGroup:false,isUnclassified:true});
     return tabs;
   },[allTypes,WS_TYPE_CONFIGS,deptFilter,workTypeConfigs]);
-
-  useEffect(function(){loadClients();loadColPrefs();},[org.id,(workTypeConfigs||[]).length]);
+  // Use a stable key that changes when the actual config names change,
+  // not just their count. This ensures loadClients re-runs when configs arrive.
+  var _wtcKey=useMemo(function(){return (workTypeConfigs||[]).map(function(c){return c.name;}).sort().join(',');},[workTypeConfigs]);
+  useEffect(function(){loadingRef.current=false;loadClients();loadColPrefs();},[org.id,_wtcKey]);
   useEffect(function(){if(activeType)loadWorksheet();},[activeType,periodYear,periodMonth,periodQuarter]);
   useEffect(function(){if(activeType){loadOrgMembers();}},[activeType]);
   useEffect(function(){if(activeType)loadColPrefsForType(activeType);},[activeType]);
@@ -5407,13 +5409,28 @@ var [showExportMenu,setShowExportMenu]=useState(false);
     if(r.data){
       setClients(r.data);
       _worksheetsCache[org&&org.id]={clients:r.data};
+
+      // Build a fresh config lookup directly from the prop to avoid stale memo closure.
+      // On first load, WS_TYPE_CONFIGS may still be DEFAULT_WS_TYPE_CONFIGS because
+      // workTypeConfigs hasn't arrived yet. Using the prop directly guarantees we
+      // recognise all configured work type names immediately.
+      var freshConfigs={};
+      if(workTypeConfigs&&workTypeConfigs.length>0){
+        workTypeConfigs.forEach(function(c){
+          freshConfigs[c.name]={frequency:c.frequency,cols:c.columns||[],due_day:c.due_day,due_month:c.due_month,due_dates:c.due_dates||[],worksheet_group:c.worksheet_group||null,sop_steps:c.sop_steps||[],stages:c.stages||[]};
+        });
+      }else{
+        Object.assign(freshConfigs,DEFAULT_WS_TYPE_CONFIGS);
+      }
+      freshConfigs['Unclassified']={frequency:'once',cols:[],due_dates:[],worksheet_group:null,sop_steps:[],synthetic:true};
+
       // Collect all work types from clients
       var types=new Set();
       r.data.forEach(function(c){
         var wts=((c.custom_fields&&c.custom_fields.work_types)||'').split(',').filter(Boolean);
         wts.forEach(function(t){types.add(t.trim());});
       });
-      var typeArr=Array.from(types).filter(function(t){return WS_TYPE_CONFIGS[t];});
+      var typeArr=Array.from(types).filter(function(t){return freshConfigs[t];});
       // Always check if an Unclassified worksheet exists for this org — if so,
       // surface it as an always-available tab at the end.
       var rwUnc=await supabase.from('worksheets').select('id').eq('org_id',org.id).eq('work_type','Unclassified').limit(1);
@@ -5426,16 +5443,16 @@ var [showExportMenu,setShowExportMenu]=useState(false);
         var preferType=initWorkType&&typeArr.indexOf(initWorkType)>=0?initWorkType:null;
         // Pick first tab from grouped layout
         var groups={};var ungrouped=[];
-        typeArr.forEach(function(t){var c=WS_TYPE_CONFIGS[t];if(c&&c.worksheet_group){if(!groups[c.worksheet_group])groups[c.worksheet_group]=[];groups[c.worksheet_group].push(t);}else ungrouped.push(t);});
+        typeArr.forEach(function(t){var c=freshConfigs[t];if(c&&c.worksheet_group){if(!groups[c.worksheet_group])groups[c.worksheet_group]=[];groups[c.worksheet_group].push(t);}else ungrouped.push(t);});
         var firstGroup=Object.keys(groups)[0];
         var firstType=preferType||(firstGroup?groups[firstGroup][0]:(ungrouped[0]||typeArr[0]));
         setActiveType(firstType);
         // Set group if preferred type is part of a group
         if(preferType){
-          var preferCfg=WS_TYPE_CONFIGS[preferType];
+          var preferCfg=freshConfigs[preferType];
           if(preferCfg&&preferCfg.worksheet_group)setActiveGroup(preferCfg.worksheet_group);
         }else if(firstGroup){setActiveGroup(firstGroup);}
-        var firstCfg=WS_TYPE_CONFIGS[firstType];
+        var firstCfg=freshConfigs[firstType];
         var freq=firstCfg?firstCfg.frequency:'monthly';
         var p=getDefaultPeriod(freq,firstCfg);
         setPeriodYear(p.year);
