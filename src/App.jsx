@@ -2284,24 +2284,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
   </div>
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
-class ErrorBoundary extends React.Component{
-  constructor(p){super(p);this.state={err:null}}
-  static getDerivedStateFromError(e){return{err:e}}
-  render(){
-    if(this.state.err)return(
-      <div style={{minHeight:'100vh',background:'#0b0f1a',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:'system-ui',color:'#e8edf5',padding:24}}>
-        <div style={{maxWidth:480,textAlign:'center'}}>
-          <div style={{fontSize:48,marginBottom:16}}>⚠️</div>
-          <div style={{fontSize:20,fontWeight:700,marginBottom:8}}>Something went wrong</div>
-          <div style={{fontSize:13,color:'#5a6a85',background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.07)',borderRadius:12,padding:'14px 18px',marginBottom:20,textAlign:'left',wordBreak:'break-all'}}>{this.state.err?.message||String(this.state.err)}</div>
-          <button onClick={()=>window.location.reload()} style={{background:'#0e2a47',border:'none',borderRadius:10,padding:'10px 24px',color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer'}}>Reload</button>
-        </div>
-      </div>
-    )
-    return this.props.children
-  }
-}
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 // ── Client Master Data Module ────────────────────────────────────────
 var CLIENT_STATUSES=['active','inactive','prospect'];
 var WORK_TYPES_DEFAULT=['ITR','GST/GSTR','TDS','Accounts','Audit','MIS','Payroll','Other'];
@@ -19134,11 +19117,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   function goMod(mod,t){setOrgModule(mod);setTab(t);try{localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',t);}catch(e){}}
   var moduleContent=<>
       {/* Your Diary */}
-      {orgModule==='diary'&&tab==='home'&&<YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces} onGoModule={function(m,t){setOrgModule(m);if(t)setTab(t);}}/>}
+      {orgModule==='diary'&&tab==='home'&&<ErrorBoundary moduleName="Your Diary"><YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces} onGoModule={function(m,t){setOrgModule(m);if(t)setTab(t);}}/></ErrorBoundary>}
       {orgModule==='diary'&&tab==='notes'&&<NotesModule org={org} cu={cu} mode="full"/>}
       {/* WorkZone */}
-      {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
-      {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
+      {orgModule==='workzone'&&tab==='worksheets'&&<ErrorBoundary moduleName="Worksheets"><WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/></ErrorBoundary>}
+      {orgModule==='workzone'&&tab==='board'&&<ErrorBoundary moduleName="ERP Board"><ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/></ErrorBoundary>}
       {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
@@ -19154,7 +19137,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Team Chat */}
       {orgModule==='chat'&&<TeamChatModule org={org} supabase={supabase} cu={cu}/>}
       {/* Analytics */}
-      {orgModule==='analytics'&&canSeeAnalytics&&<AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} orgDepts={orgDepts}/>}
+      {orgModule==='analytics'&&canSeeAnalytics&&<ErrorBoundary moduleName="Analytics"><AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} orgDepts={orgDepts}/></ErrorBoundary>}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
