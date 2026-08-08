@@ -1978,7 +1978,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
       </div>
     </div>}
     {!adminModule&&!activeWs
-      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate} onOpenCommandBar={()=>setShowCmdBar(true)}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
@@ -18882,7 +18882,7 @@ function SetupWizard({org,cu,supabase,onClose}){
 }
 
 // ── Org Dashboard ──────────────────────────────────────────────────
-function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}){
+function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate,onOpenCommandBar}){
   const hasModule=(m)=>trialGate?.hasModule?.(m)??false;
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
@@ -19149,46 +19149,46 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   var moduleContent=<>
       {/* Your Diary */}
       {orgModule==='diary'&&tab==='home'&&<ErrorBoundary moduleName="Your Diary"><YourDashboardModule org={org} supabase={supabase} cu={cu} workflowHierarchy={org.workflow_hierarchy||[]} workTypeConfigs={activeConfigs} onOpenWorkType={navigateToWorkType} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} onGoToPlan={function(){}} allWorkspaces={allWorkspaces} onGoModule={function(m,t){setOrgModule(m);if(t)setTab(t);}}/></ErrorBoundary>}
-      {orgModule==='diary'&&tab==='notes'&&<NotesModule org={org} cu={cu} mode="full"/>}
+      {orgModule==='diary'&&tab==='notes'&&<ErrorBoundary moduleName="Notes"><NotesModule org={org} cu={cu} mode="full"/></ErrorBoundary>}
       {/* WorkZone */}
       {orgModule==='workzone'&&tab==='worksheets'&&<ErrorBoundary moduleName="Worksheets"><WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/></ErrorBoundary>}
       {orgModule==='workzone'&&tab==='board'&&<ErrorBoundary moduleName="ERP Board"><ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/></ErrorBoundary>}
-      {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
-      {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
-      {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+      {orgModule==='workzone'&&tab==='itr'&&<ErrorBoundary moduleName="ITR Desk"><ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/></ErrorBoundary>}
+      {orgModule==='workzone'&&tab==='bigclients'&&<ErrorBoundary moduleName="Big Clients"><BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/></ErrorBoundary>}
+      {orgModule==='workzone'&&tab==='teamview'&&<ErrorBoundary moduleName="Team Dashboard"><TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/></ErrorBoundary>}
       {/* Library */}
-      {orgModule==='library'&&tab==='credentials'&&<CredentialsModule org={org} supabase={supabase} cu={cu}/>}
-      {orgModule==='library'&&tab==='sops'&&<SOPsLibraryModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='library'&&tab==='tools'&&<ToolsResourcesModule/>}
+      {orgModule==='library'&&tab==='credentials'&&<ErrorBoundary moduleName="Credentials"><CredentialsModule org={org} supabase={supabase} cu={cu}/></ErrorBoundary>}
+      {orgModule==='library'&&tab==='sops'&&<ErrorBoundary moduleName="SOPs Library"><SOPsLibraryModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/></ErrorBoundary>}
+      {orgModule==='library'&&tab==='tools'&&<ErrorBoundary moduleName="Tools & Resources"><ToolsResourcesModule/></ErrorBoundary>}
       {orgModule==='library'&&tab==='study'&&<PlaceholderModule title="Study Resources" desc="Circulars, case laws, study material and reference documents." icon="📚"/>}
       {/* Team */}
-      {orgModule==='team'&&tab==='logs'&&<LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='team'&&tab==='attendance'&&<AttendanceModule org={org} supabase={supabase} cu={cu}/>}
-      {orgModule==='team'&&tab==='leaves'&&<LeavesModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='team'&&tab==='logs'&&<ErrorBoundary moduleName="Time Logs"><LogsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/></ErrorBoundary>}
+      {orgModule==='team'&&tab==='attendance'&&<ErrorBoundary moduleName="Attendance"><AttendanceModule org={org} supabase={supabase} cu={cu}/></ErrorBoundary>}
+      {orgModule==='team'&&tab==='leaves'&&<ErrorBoundary moduleName="Leaves"><LeavesModule org={org} supabase={supabase} cu={cu}/></ErrorBoundary>}
       {/* Team Chat */}
-      {orgModule==='chat'&&<TeamChatModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='chat'&&<ErrorBoundary moduleName="Team Chat"><TeamChatModule org={org} supabase={supabase} cu={cu}/></ErrorBoundary>}
       {/* Analytics */}
       {orgModule==='analytics'&&canSeeAnalytics&&<ErrorBoundary moduleName="Analytics"><AnalyticsDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} orgDepts={orgDepts}/></ErrorBoundary>}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
-        ? <>
+        ? <ErrorBoundary moduleName="Communication">
             {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
             {tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
             {tab==='connect'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
-          </>
+          </ErrorBoundary>
         : <ModuleLock module="comms" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Comms for '+(org?.name||''),'_blank')}/>)}
       {/* Billing — paid module */}
       {orgModule==='billing'&&(hasModule('billing')
-        ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
+        ? <ErrorBoundary moduleName="Billing"><BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/></ErrorBoundary>
         : <ModuleLock module="billing" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Billing for '+(org?.name||''),'_blank')}/>)}
       {/* Master Data */}
-      {orgModule==='masterdata'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
-      {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
-      {orgModule==='masterdata'&&tab==='groups'&&<OrgGroupsPanel org={org} cu={cu} supabase={supabase}/>}
+      {orgModule==='masterdata'&&tab==='clients'&&<ErrorBoundary moduleName="Clients"><ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/></ErrorBoundary>}
+      {orgModule==='masterdata'&&tab==='worktypes'&&<ErrorBoundary moduleName="Work Types"><WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/></ErrorBoundary>}
+      {orgModule==='masterdata'&&tab==='groups'&&<ErrorBoundary moduleName="Client Groups"><OrgGroupsPanel org={org} cu={cu} supabase={supabase}/></ErrorBoundary>}
       {/* Set-up */}
-      {orgModule==='setup'&&tab==='members'&&<OrgMembersPanel org={org} cu={cu} supabase={supabase} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
-      {orgModule==='setup'&&tab==='departments'&&<DepartmentsPanel org={org} cu={cu} supabase={supabase}/>}
-      {orgModule==='setup'&&tab==='settings'&&<OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/>}
+      {orgModule==='setup'&&tab==='members'&&<ErrorBoundary moduleName="Members"><OrgMembersPanel org={org} cu={cu} supabase={supabase} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/></ErrorBoundary>}
+      {orgModule==='setup'&&tab==='departments'&&<ErrorBoundary moduleName="Departments"><DepartmentsPanel org={org} cu={cu} supabase={supabase}/></ErrorBoundary>}
+      {orgModule==='setup'&&tab==='settings'&&<ErrorBoundary moduleName="Settings"><OrgSettingsPanel org={org} cu={cu} supabase={supabase} allWorkspaces={allWorkspaces}/></ErrorBoundary>}
   </>;
 
   return<div style={{flex:1,display:'flex',minHeight:0}}>
