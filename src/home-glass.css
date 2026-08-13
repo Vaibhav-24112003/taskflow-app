@@ -1,8 +1,2 @@
-/* TaskflowCo Home glass refresh */
-body{background:#f5f8ff}
-body.tf-home-waves{background:radial-gradient(900px 520px at 8% 8%,rgba(82,132,255,.16),transparent 62%),radial-gradient(780px 520px at 92% 18%,rgba(164,115,255,.14),transparent 60%),#f5f8ff}
-body.tf-home-waves:before,body.tf-home-waves:after{content:"";position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(2px)}
-body.tf-home-waves:before{width:70vw;height:34vw;left:-18vw;top:8vh;background:rgba(90,135,255,.12)}
-body.tf-home-waves:after{width:65vw;height:30vw;right:-18vw;bottom:-8vh;background:rgba(150,110,255,.10)}
-body.tf-home-waves .tf-home-card{background:rgba(255,255,255,.66)!important;border:1px solid rgba(255,255,255,.78)!important;box-shadow:0 16px 44px rgba(38,72,122,.10)!important;backdrop-filter:blur(18px) saturate(115%);-webkit-backdrop-filter:blur(18px) saturate(115%)}
-body.tf-home-waves .tf-home-card{border-top:0!important}
+body.tf-home-waves #root [style*="border-top"]{border-top:0!important}
+body.tf-home-waves #root [style*="box-shadow"]{background:rgba(255,255,255,.66)!important;border-color:rgba(255,255,255,.78)!important}
