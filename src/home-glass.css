@@ -1,11 +1,105 @@
-body.tf-home-waves{background:radial-gradient(900px 520px at 8% 8%,rgba(82,132,255,.14),transparent 62%),radial-gradient(780px 520px at 92% 18%,rgba(164,115,255,.12),transparent 60%),#f5f8ff!important}
-body.tf-home-waves:before,body.tf-home-waves:after{content:"";position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(2px)}
-body.tf-home-waves:before{width:78vw;height:32vw;left:-20vw;top:8vh;background:rgba(90,135,255,.09);transform:rotate(-8deg)}
-body.tf-home-waves:after{width:72vw;height:30vw;right:-22vw;bottom:-6vh;background:rgba(150,110,255,.08);transform:rotate(8deg)}
-body.tf-home-waves #root{position:relative;z-index:1;background:transparent!important}
-body.tf-home-waves #root [style*="box-shadow"]{background:rgba(255,255,255,.62)!important;border-color:rgba(255,255,255,.76)!important;box-shadow:0 16px 44px rgba(38,72,122,.09)!important;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
-body.tf-home-waves #root [style*="border-top"]{border-top:0!important}
-body.tf-home-waves #root [style*="border-top: 4px"]{border-top:0!important}
-body.tf-home-waves #root [style*="border-top:4px"]{border-top:0!important}
-body.tf-home-waves .tf-home-secondary{opacity:.7;font-size:.82em}
-@media (max-width:800px){body.tf-home-waves:before{width:120vw;height:55vw;left:-35vw}body.tf-home-waves:after{width:110vw;height:52vw;right:-35vw}}
+/* Taskflowco Home — calm glassmorphism entry surface */
+body.tf-home-waves {
+  background:
+    radial-gradient(900px 420px at 6% 0%, rgba(70,125,255,.13), transparent 62%),
+    radial-gradient(820px 460px at 94% 12%, rgba(150,110,255,.12), transparent 60%),
+    linear-gradient(180deg,#f7faff 0%,#f3f7fc 52%,#eef4fb 100%) !important;
+}
+
+body.tf-home-waves::before,
+body.tf-home-waves::after {
+  content:"";
+  position:fixed;
+  pointer-events:none;
+  z-index:0;
+  border-radius:50%;
+  opacity:.75;
+}
+
+body.tf-home-waves::before {
+  width:100vw;
+  height:34vw;
+  left:-24vw;
+  top:8vh;
+  background:linear-gradient(110deg,rgba(82,139,255,.13),rgba(82,139,255,0));
+  transform:rotate(-7deg);
+  filter:blur(3px);
+}
+
+body.tf-home-waves::after {
+  width:92vw;
+  height:32vw;
+  right:-26vw;
+  bottom:-7vh;
+  background:linear-gradient(110deg,rgba(156,111,255,0),rgba(156,111,255,.11));
+  transform:rotate(7deg);
+  filter:blur(3px);
+}
+
+body.tf-home-waves #root {
+  position:relative;
+  z-index:1;
+  background:transparent !important;
+}
+
+/* The actual Home scroll surface */
+body.tf-home-waves .tf-home-root {
+  isolation:isolate;
+  background:transparent !important;
+}
+
+/* Real Home practice cards — no AI-style color strips */
+body.tf-home-waves .tf-home-card {
+  border-top:0 !important;
+  border:1px solid rgba(255,255,255,.82) !important;
+  background:rgba(255,255,255,.68) !important;
+  box-shadow:0 14px 42px rgba(42,72,115,.08) !important;
+  backdrop-filter:blur(18px) saturate(120%);
+  -webkit-backdrop-filter:blur(18px) saturate(120%);
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease;
+}
+
+body.tf-home-waves .tf-home-card:hover {
+  transform:translateY(-2px);
+  background:rgba(255,255,255,.82) !important;
+  box-shadow:0 20px 52px rgba(42,72,115,.12) !important;
+}
+
+/* Remove old colored strips even if a card was not caught by the JS marker. */
+body.tf-home-waves .tf-home-root [style*="border-top"] {
+  border-top:0 !important;
+}
+
+body.tf-home-waves .tf-home-root [style*="borderTop"] {
+  border-top:0 !important;
+}
+
+/* Make the small action chips feel like one quiet control row. */
+body.tf-home-waves .tf-home-card button,
+body.tf-home-waves .tf-home-card [role="button"] {
+  border-color:rgba(82,108,143,.18) !important;
+  background:rgba(255,255,255,.48) !important;
+}
+
+/* De-emphasise utility actions on Home; they remain available elsewhere. */
+body.tf-home-waves .tf-home-secondary {
+  opacity:.72;
+  font-size:.88em;
+}
+
+/* Remove the workspace-switcher clutter from the Home top bar. */
+body.tf-home-waves .tf-home-nav-workspace {
+  display:none !important;
+}
+
+/* Keep the Home header itself clean and white/glass-like. */
+body.tf-home-waves header,
+body.tf-home-waves nav {
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+}
+
+@media (max-width:900px) {
+  body.tf-home-waves::before { width:145vw; height:58vw; left:-45vw; }
+  body.tf-home-waves::after { width:135vw; height:55vw; right:-48vw; }
+}
