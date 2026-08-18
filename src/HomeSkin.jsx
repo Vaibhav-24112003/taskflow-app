@@ -1,126 +1,15 @@
-import { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
+import HomeOverview from './HomeOverview.jsx'
+import { supabase, getMyWorkspaces } from './lib/supabase.js'
 
-const HOME_MARKERS = ['Practice Hub', 'New Practice']
-
-function textOf(el) {
-  return (el?.innerText || el?.textContent || '').trim()
-}
-
-function isHome() {
-  const text = document.body?.innerText || ''
-  return HOME_MARKERS.every((marker) => text.includes(marker))
-}
-
-function findPracticeGrid(root) {
-  return [...root.querySelectorAll('div')].find((el) => {
-    const style = getComputedStyle(el)
-    if (style.display !== 'grid') return false
-    const children = [...el.children]
-    if (children.length === 0 || children.length > 12) return false
-    return children.some((child) => {
-      const t = textOf(child)
-      return t.includes('0 Spaces') && t.includes('Clients') && t.includes('Work Types')
-    })
-  }) || null
-}
-
-function markPracticeCards(root) {
-  const grid = findPracticeGrid(root)
-  if (!grid) return
-
-  grid.classList.add('tf-home-practice-grid')
-  ;[...grid.children].forEach((card) => {
-    if (!textOf(card).includes('0 Spaces')) return
-    card.classList.add('tf-home-practice-card')
-    ;[...card.children].forEach((child) => {
-      const r = child.getBoundingClientRect?.()
-      if (r && r.height <= 8 && r.width >= r.width * 0.7) child.classList.add('tf-home-strip-remove')
-    })
-  })
-}
-
-function markWorkspaceCards(root) {
-  const heading = [...root.querySelectorAll('h2')].find((el) => textOf(el) === 'Workspaces')
-  const pane = heading?.parentElement?.parentElement
-  if (!pane) return
-
-  pane.classList.add('tf-home-workspace-pane')
-  const list = [...pane.querySelectorAll('div')].find((el) => {
-    const style = getComputedStyle(el)
-    if (style.display !== 'flex' || style.flexDirection !== 'column') return false
-    return [...el.children].some((child) => textOf(child).includes('New Workspace'))
-  })
-  if (!list) return
-
-  list.classList.add('tf-home-workspace-list')
-  ;[...list.children].forEach((card) => card.classList.add('tf-home-workspace-card'))
-}
-
-function simplifyTopNav() {
-  const nav = document.querySelector('nav')
-  if (!nav) return
-  const home = isHome()
-  nav.classList.toggle('tf-topnav-home', home)
-
-  if (!home) return
-  // The Home header should not look like a workspace switcher.
-  if (nav.children[2]) nav.children[2].classList.add('tf-home-nav-separator')
-  if (nav.children[3]) nav.children[3].classList.add('tf-home-nav-workspaces')
-
-  nav.querySelectorAll('button, [role="button"]').forEach((el) => {
-    const label = textOf(el).toLowerCase()
-    const title = (el.getAttribute('title') || '').toLowerCase()
-    if (label.includes('install app') || label.includes('client portal') || title.includes('announcements') || title.includes('attendance')) {
-      el.classList.add('tf-home-secondary-action')
-    }
-  })
-}
-
-function apply(root) {
-  const home = isHome()
-  document.body.classList.toggle('tf-home-active', home)
-  root.classList.toggle('tf-home-active-root', home)
-
-  if (!home) {
-    root.querySelectorAll('.tf-home-practice-card, .tf-home-practice-grid, .tf-home-workspace-pane, .tf-home-workspace-list, .tf-home-workspace-card, .tf-home-strip-remove').forEach((el) => {
-      el.classList.remove('tf-home-practice-card', 'tf-home-practice-grid', 'tf-home-workspace-pane', 'tf-home-workspace-list', 'tf-home-workspace-card', 'tf-home-strip-remove')
-    })
-    document.querySelectorAll('.tf-topnav-home').forEach((el) => el.classList.remove('tf-topnav-home'))
-    document.querySelectorAll('.tf-home-secondary-action').forEach((el) => el.classList.remove('tf-home-secondary-action'))
-    return
-  }
-
-  markPracticeCards(root)
-  markWorkspaceCards(root)
-  simplifyTopNav()
-}
-
-export default function HomeSkin() {
-  useEffect(() => {
-    const root = document.getElementById('root')
-    if (!root) return undefined
-
-    let raf = 0
-    const schedule = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => apply(root))
-    }
-
-    const observer = new MutationObserver(schedule)
-    observer.observe(document.body, { childList: true, subtree: true })
-    window.addEventListener('resize', schedule)
-    window.addEventListener('popstate', schedule)
-    window.addEventListener('hashchange', schedule)
-    schedule()
-
-    return () => {
-      cancelAnimationFrame(raf)
-      observer.disconnect()
-      window.removeEventListener('resize', schedule)
-      window.removeEventListener('popstate', schedule)
-      window.removeEventListener('hashchange', schedule)
-    }
-  }, [])
-
-  return null
+function legacyHomeVisible(){const root=document.getElementById('root');if(!root)return false;return [...root.querySelectorAll('h1')].some(el=>(el.textContent||'').trim()==='Practice Hub')}
+function hideLegacyHome(){const root=document.getElementById('root');if(!root)return;const heading=[...root.querySelectorAll('h1')].find(el=>(el.textContent||'').trim()==='Practice Hub');if(!heading)return;let n=heading;while(n&&n.parentElement&&n.parentElement!==root){const s=getComputedStyle(n);if(s.flexGrow==='1'&&s.overflowY==='auto'){n.classList.add('tf-home-legacy');return}n=n.parentElement}}
+function clickOriginalText(text,prefer=''){const root=document.getElementById('root');if(!root)return;const nodes=[...root.querySelectorAll('*')].filter(el=>(el.textContent||'').trim()===text);const node=nodes.find(el=>!prefer||((el.parentElement?.textContent||'').includes(prefer)))||nodes[0];if(node)node.click()}
+export default function HomeSkin(){
+  const [home,setHome]=useState(false),[data,setData]=useState({orgs:[],workspaces:[],profiles:[],user:null})
+  async function loadData(){const auth=await supabase.auth.getUser(),user=auth.data?.user;if(!user){setData({orgs:[],workspaces:[],profiles:[],user:null});return}const [or,wr,pr]=await Promise.all([supabase.from('organizations').select('*').order('name').limit(100),getMyWorkspaces(user.id),supabase.from('profiles').select('id,name,email').limit(500)]);setData({orgs:or.data||[],workspaces:wr.data||[],profiles:pr.data||[],user})}
+  useEffect(()=>{let raf=0;const schedule=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{const h=legacyHomeVisible();setHome(h);if(h)hideLegacyHome()})};const observer=new MutationObserver(schedule);observer.observe(document.body,{childList:true,subtree:true});window.addEventListener('resize',schedule);schedule();loadData();return()=>{cancelAnimationFrame(raf);observer.disconnect();window.removeEventListener('resize',schedule)}},[])
+  useEffect(()=>{if(home){document.body.classList.add('tf-home-active');hideLegacyHome()}else document.body.classList.remove('tf-home-active')},[home])
+  if(!home)return null
+  return <div className="tf-home-overlay"><HomeOverview orgs={data.orgs} workspaces={data.workspaces} allProfiles={data.profiles} supabase={supabase} cu={data.user} onOpenOrg={org=>clickOriginalText(org.name,'Space')} onOpenWorkspace={ws=>clickOriginalText(ws.name,ws.description||'')} onCreateOrg={()=>clickOriginalText('+ New Practice')}/></div>
 }

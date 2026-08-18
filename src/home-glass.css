@@ -1,73 +1,28 @@
-/* Taskflowco Home — restrained glassmorphism + soft waves */
-body.tf-home-active{
-  background:
-    radial-gradient(900px 420px at 4% -8%, rgba(47,107,255,.11), transparent 62%),
-    radial-gradient(820px 440px at 96% 6%, rgba(20,199,192,.08), transparent 60%),
-    linear-gradient(180deg,#f7faff 0%,#eff4f9 55%,#eaf1f8 100%) !important;
-}
-body.tf-home-active::before,
-body.tf-home-active::after{
-  content:"";position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(2px);
-}
-body.tf-home-active::before{
-  width:78vw;height:26vw;left:-23vw;top:13vh;
-  background:linear-gradient(100deg,rgba(47,107,255,.10),rgba(47,107,255,0));
-  transform:rotate(-9deg);
-}
-body.tf-home-active::after{
-  width:72vw;height:24vw;right:-22vw;bottom:-4vh;
-  background:linear-gradient(100deg,rgba(20,199,192,0),rgba(20,199,192,.09));
-  transform:rotate(8deg);
-}
-body.tf-home-active #root{position:relative;z-index:1;background:transparent !important;}
-
-/* Actual practice grid discovered from App.jsx: style the cards, not the whole wrapper. */
-body.tf-home-active .tf-home-practice-grid{background:transparent !important;}
-body.tf-home-active .tf-home-practice-card{
-  position:relative !important;overflow:hidden !important;
-  border:1px solid rgba(255,255,255,.78) !important;
-  border-top:1px solid rgba(255,255,255,.78) !important;
-  background:rgba(255,255,255,.54) !important;
-  box-shadow:0 14px 38px rgba(20,42,70,.075),inset 0 1px 0 rgba(255,255,255,.72) !important;
-  backdrop-filter:blur(18px) saturate(120%) !important;
-  -webkit-backdrop-filter:blur(18px) saturate(120%) !important;
-  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease !important;
-}
-body.tf-home-active .tf-home-practice-card:hover{
-  transform:translateY(-3px) !important;
-  background:rgba(255,255,255,.72) !important;
-  box-shadow:0 22px 48px rgba(20,42,70,.12),inset 0 1px 0 rgba(255,255,255,.82) !important;
-}
-body.tf-home-active .tf-home-strip-remove{display:none !important;height:0 !important;min-height:0 !important;max-height:0 !important;}
-body.tf-home-active .tf-home-practice-card span{
-  border-color:rgba(82,108,143,.14) !important;
-  background:rgba(255,255,255,.34) !important;
-}
-
-/* Workspace cards: no left color rail; identity stays in the icon. */
-body.tf-home-active .tf-home-workspace-pane{background:transparent !important;}
-body.tf-home-active .tf-home-workspace-list{background:transparent !important;}
-body.tf-home-active .tf-home-workspace-card{
-  position:relative !important;overflow:hidden !important;
-  border:1px solid rgba(255,255,255,.72) !important;
-  background:rgba(255,255,255,.46) !important;
-  box-shadow:0 10px 28px rgba(20,42,70,.055),inset 0 1px 0 rgba(255,255,255,.72) !important;
-  backdrop-filter:blur(15px) !important;
-  -webkit-backdrop-filter:blur(15px) !important;
-  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease !important;
-}
-body.tf-home-active .tf-home-workspace-card:hover{
-  transform:translateX(3px) !important;
-  background:rgba(255,255,255,.64) !important;
-  box-shadow:0 16px 34px rgba(20,42,70,.085) !important;
-}
-body.tf-home-active .tf-home-workspace-card > div:first-child + div{}
-
-/* Home top-bar cleanup: keep Logo/Home/Search/Reminders/More/Profile. */
-body.tf-home-active .tf-home-nav-separator,
-body.tf-home-active .tf-home-nav-workspaces,
-body.tf-home-active .tf-home-secondary-action{display:none !important;}
-
-body.tf-home-active nav{background:rgba(255,255,255,.82) !important;backdrop-filter:blur(18px) !important;-webkit-backdrop-filter:blur(18px) !important;}
-
-@media (prefers-reduced-motion: reduce){body.tf-home-active .tf-home-practice-card,body.tf-home-active .tf-home-workspace-card{transition:none !important;}}
+/* TaskFlowCo Home — calm glassmorphism home before entering a Practice */
+body.tf-home-active{background:radial-gradient(900px 420px at 5% -4%,rgba(47,107,255,.12),transparent 62%),radial-gradient(780px 420px at 96% 10%,rgba(20,199,192,.09),transparent 60%),linear-gradient(180deg,#f8fbff 0%,#f1f6fb 52%,#edf3f8 100%) !important}
+body.tf-home-active::before,body.tf-home-active::after{content:"";position:fixed;pointer-events:none;z-index:0;border-radius:48%;filter:blur(2px)}
+body.tf-home-active::before{width:85vw;height:26vw;left:-26vw;top:12vh;background:linear-gradient(105deg,rgba(87,139,255,.10),rgba(87,139,255,0));transform:rotate(-8deg)}
+body.tf-home-active::after{width:78vw;height:24vw;right:-26vw;bottom:-3vh;background:linear-gradient(105deg,rgba(20,199,192,0),rgba(20,199,192,.08));transform:rotate(8deg)}
+body.tf-home-active #root{position:relative;z-index:1;background:transparent !important}
+body.tf-home-active nav{background:rgba(255,255,255,.84) !important;backdrop-filter:blur(18px) saturate(125%) !important;-webkit-backdrop-filter:blur(18px) saturate(125%) !important}
+body.tf-home-active .tf-home-nav-separator,body.tf-home-active .tf-home-nav-workspaces,body.tf-home-active .tf-home-secondary-action{display:none !important}
+.tf-home-legacy{position:absolute !important;left:-10000px !important;top:0 !important;width:1px !important;height:1px !important;overflow:hidden !important}
+.tf-home-overlay{position:relative;z-index:4;display:flex;min-height:0;flex:1}
+.tf-home-overview{font-family:'Inter','Helvetica Neue',system-ui,sans-serif;}
+.tf-home-shell{max-width:1440px;margin:0 auto;width:100%}
+.tf-home-hero{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:26px 28px;border:1px solid rgba(255,255,255,.78);border-radius:22px;background:linear-gradient(135deg,rgba(255,255,255,.66),rgba(238,244,255,.57));box-shadow:0 18px 54px rgba(37,68,108,.08),inset 0 1px 0 rgba(255,255,255,.75);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);position:relative;overflow:hidden}
+.tf-home-hero::after{content:"";position:absolute;inset:auto -12% -70% 35%;height:180px;background:radial-gradient(ellipse,rgba(124,92,255,.10),transparent 68%);pointer-events:none}
+.tf-home-kicker{font-size:10px;font-weight:800;letter-spacing:.13em;color:#5b6f88;margin-bottom:8px}
+.tf-home-hero h1{margin:0;color:#0a1929;font-size:28px;letter-spacing:-.045em;line-height:1.08}.tf-home-hero p{margin:8px 0 0;color:#52667f;font-size:13px;line-height:1.5;max-width:610px}
+.tf-home-focus{position:relative;z-index:1;min-width:240px;display:flex;align-items:center;gap:12px;padding:14px 15px;border:1px solid rgba(255,255,255,.78);border-radius:15px;background:rgba(255,255,255,.68);box-shadow:0 10px 28px rgba(47,73,112,.07);cursor:pointer;text-align:left}.tf-home-focus:hover{background:rgba(255,255,255,.84);transform:translateY(-1px)}
+.tf-focus-icon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(47,107,255,.13),rgba(124,58,237,.16));color:#5d47d8;font-size:22px;flex:0 0 auto}.tf-focus-copy{display:flex;flex-direction:column;gap:3px;min-width:0}.tf-focus-copy b{font-size:12px;color:#15273d}.tf-focus-copy span{font-size:10px;color:#61758d}.tf-focus-arrow{margin-left:auto;font-size:18px;color:#7a8ca2}
+.tf-home-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 27px}.tf-stat{display:flex;align-items:center;gap:12px;padding:15px 16px;border-radius:16px;background:rgba(255,255,255,.56);border:1px solid rgba(255,255,255,.76);box-shadow:0 10px 28px rgba(32,59,93,.055),inset 0 1px 0 rgba(255,255,255,.7);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}.tf-stat-icon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex:0 0 auto;background:rgba(47,107,255,.10);color:#2f6bff}.tf-stat-1 .tf-stat-icon{background:rgba(124,58,237,.10);color:#7c3aed}.tf-stat-2 .tf-stat-icon{background:rgba(245,158,11,.11);color:#d97706}.tf-stat-3 .tf-stat-icon{background:rgba(239,68,68,.10);color:#ef4444}.tf-stat-value{font-size:21px;font-weight:800;letter-spacing:-.035em;color:#0b1c2f;line-height:1}.tf-stat-label{font-size:11px;font-weight:700;color:#223a56;margin-top:4px}.tf-stat-sub{font-size:9px;color:#7a8ca1;margin-top:2px}
+.tf-home-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:20px 3px 11px}.tf-home-section-head h2{margin:0;color:#12263d;font-size:16px;letter-spacing:-.025em}.tf-home-section-head p{margin:3px 0 0;color:#6a7c91;font-size:11px}.tf-home-section-head button{border:1px solid rgba(47,107,255,.18);background:rgba(255,255,255,.58);color:#2f6bff;font-size:11px;font-weight:700;border-radius:10px;padding:7px 11px;cursor:pointer}.tf-home-section-link{font-size:10px;font-weight:700;color:#2f6bff}
+.tf-practice-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.tf-practice-card{position:relative;display:block;text-align:left;padding:15px;border-radius:17px;border:1px solid rgba(255,255,255,.78);background:rgba(255,255,255,.62);box-shadow:0 14px 34px rgba(35,65,100,.065),inset 0 1px 0 rgba(255,255,255,.75);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);cursor:pointer;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease,background .18s ease}.tf-practice-card::before{content:"";position:absolute;left:0;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),rgba(255,255,255,.5));opacity:.8}.tf-practice-card:hover{transform:translateY(-3px);background:rgba(255,255,255,.79);box-shadow:0 20px 44px rgba(35,65,100,.11)}
+.tf-practice-head{display:flex;gap:10px;align-items:center}.tf-practice-avatar{width:39px;height:39px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#f0f5ff;border:1px solid color-mix(in srgb,var(--accent) 22%,white);color:var(--accent);font-size:16px;font-weight:800}.tf-practice-head b{display:block;color:#16283d;font-size:12px;line-height:1.2}.tf-practice-head span{display:block;color:#6b7e93;font-size:9px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:165px}.tf-practice-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:14px}.tf-practice-metrics div{display:flex;flex-direction:column;gap:3px}.tf-practice-metrics strong{font-size:14px;color:#17304b;letter-spacing:-.02em}.tf-practice-metrics span{font-size:8px;color:#7a8ba0;white-space:nowrap}.tf-practice-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid rgba(89,112,139,.10)}.tf-mini-avatars{display:flex;align-items:center}.tf-mini-avatars span,.tf-mini-avatars em{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#dfe8f2;border:2px solid #fff;color:#425973;font-size:8px;font-style:normal;font-weight:800;margin-left:-5px}.tf-mini-avatars span:first-child{margin-left:0}.tf-mini-avatars em{background:#eef2f7;color:#718197}.tf-open-link{font-size:9px;font-weight:800;color:#2f6bff;white-space:nowrap}.tf-open-link b{font-size:12px;margin-left:2px}
+.tf-other-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.tf-other-card{display:flex;align-items:center;gap:10px;text-align:left;padding:12px;border-radius:15px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.48);box-shadow:0 8px 24px rgba(35,65,100,.045);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);cursor:pointer;transition:transform .18s ease,background .18s ease,box-shadow .18s ease}.tf-other-card:hover{transform:translateY(-2px);background:rgba(255,255,255,.72);box-shadow:0 12px 30px rgba(35,65,100,.075)}.tf-other-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#f0f5ff;border:1px solid color-mix(in srgb,var(--accent) 22%,white);color:var(--accent);font-size:15px;flex:0 0 auto}.tf-other-copy{min-width:0;display:flex;flex-direction:column;gap:2px;flex:1}.tf-other-copy b{font-size:11px;color:#20364f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tf-other-copy small{font-size:9px;color:#7a8ca2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tf-other-copy em{font-style:normal;font-size:8px;color:#667b93}.tf-other-card>span:last-child{font-size:17px;color:#91a0b3}
+.tf-home-bottom-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(260px,.55fr);gap:14px;margin-top:4px}.tf-activity-list{border:1px solid rgba(255,255,255,.72);border-radius:15px;overflow:hidden;background:rgba(255,255,255,.45);box-shadow:0 10px 26px rgba(35,65,100,.045);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}.tf-activity-row{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid rgba(89,112,139,.08)}.tf-activity-row:last-child{border-bottom:0}.tf-activity-dot{width:8px;height:8px;border-radius:50%;background:#2f6bff;box-shadow:0 0 0 4px rgba(47,107,255,.08);flex:0 0 auto}.tf-activity-row:nth-child(2) .tf-activity-dot{background:#7c3aed;box-shadow:0 0 0 4px rgba(124,58,237,.08)}.tf-activity-row:nth-child(3) .tf-activity-dot{background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.08)}.tf-activity-row:nth-child(4) .tf-activity-dot{background:#14b8a6;box-shadow:0 0 0 4px rgba(20,184,166,.08)}.tf-activity-row>div{min-width:0;flex:1}.tf-activity-row b{display:block;color:#29405a;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tf-activity-row small{display:block;color:#8291a4;font-size:9px;margin-top:2px}.tf-activity-age{font-size:8px;color:#94a2b2;white-space:nowrap}.tf-desktop-card{border:1px solid rgba(255,255,255,.75);border-radius:17px;padding:18px;background:linear-gradient(135deg,rgba(232,239,255,.75),rgba(244,249,255,.58));box-shadow:0 12px 30px rgba(35,65,100,.06);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px)}.tf-desktop-icon{width:34px;height:34px;border-radius:11px;background:rgba(47,107,255,.10);color:#2f6bff;display:flex;align-items:center;justify-content:center;font-weight:900;margin-bottom:10px}.tf-desktop-card h3{font-size:13px;color:#20364f;margin:0 0 6px}.tf-desktop-card p{font-size:10px;line-height:1.55;color:#6e8095;margin:0 0 14px}.tf-desktop-card button{background:#fff;border:1px solid rgba(47,107,255,.22);color:#2f6bff;border-radius:10px;padding:7px 10px;font-size:10px;font-weight:800;cursor:pointer}
+.tf-home-empty{padding:30px;text-align:center;border:1px dashed rgba(98,123,149,.24);border-radius:16px;background:rgba(255,255,255,.35);display:flex;flex-direction:column;align-items:center;gap:7px;color:#6c7d91}.tf-home-empty b{color:#26405d;font-size:13px}.tf-home-empty span{font-size:11px}.tf-home-empty button{margin-top:4px;border:1px solid rgba(47,107,255,.18);background:#fff;color:#2f6bff;border-radius:9px;padding:7px 11px;font-size:11px;font-weight:700;cursor:pointer}.tf-home-empty.small{padding:24px}
+@media (max-width:1100px){.tf-practice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tf-home-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.tf-other-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tf-home-bottom-grid{grid-template-columns:1fr}}
+@media (max-width:720px){.tf-home-overview{padding:16px 14px 40px !important}.tf-home-hero{padding:20px 18px;flex-direction:column;align-items:flex-start}.tf-home-focus{width:100%;min-width:0}.tf-practice-grid,.tf-other-grid,.tf-home-stats{grid-template-columns:1fr}.tf-home-hero h1{font-size:23px}.tf-practice-card{padding:14px}}
+@media (prefers-reduced-motion:reduce){.tf-practice-card,.tf-other-card,.tf-home-focus{transition:none !important}}
