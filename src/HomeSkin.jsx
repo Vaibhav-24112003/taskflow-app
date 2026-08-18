@@ -83,22 +83,16 @@ function captureNavActions() {
   return { install, portal, announcements, attendance, more }
 }
 
-function applyNav(home, actionRefs) {
+function applyGlobalUtilityNav(actionRefs) {
   const nav = findNav()
   if (!nav) return
-  if (!home) {
-    removeHomeExtraItems()
-    nav.querySelectorAll('.tf-home-nav-separator,.tf-home-nav-workspaces,.tf-home-secondary-action')
-      .forEach((el) => el.classList.remove('tf-home-nav-separator', 'tf-home-nav-workspaces', 'tf-home-secondary-action'))
-    return
-  }
-
-  if (nav.children[2]) nav.children[2].classList.add('tf-home-nav-separator')
-  if (nav.children[3]) nav.children[3].classList.add('tf-home-nav-workspaces')
-
   ;[actionRefs.install, actionRefs.portal, actionRefs.announcements, actionRefs.attendance]
     .filter(Boolean)
     .forEach((el) => el.classList.add('tf-home-secondary-action'))
+}
+
+function restoreGlobalUtilityNav() {
+  document.querySelectorAll('.tf-home-secondary-action').forEach((el) => el.classList.remove('tf-home-secondary-action'))
 }
 
 function clickLegacyCard(text, preferText = '') {
@@ -124,6 +118,24 @@ function clickLegacyCard(text, preferText = '') {
   candidates[0]?.click()
 }
 
+function openWorkspaceDirectly(ws) {
+  if (!ws?.id) return
+  localStorage.setItem('tf_lastWsId', ws.id)
+  localStorage.removeItem('tf_lastOrgId')
+  localStorage.removeItem('tf_lastOrgModule')
+  localStorage.removeItem('tf_lastOrgTab')
+  window.location.reload()
+}
+
+function openPracticeDirectly(org) {
+  if (!org?.id) return
+  localStorage.setItem('tf_lastOrgId', org.id)
+  localStorage.removeItem('tf_lastWsId')
+  localStorage.removeItem('tf_lastOrgModule')
+  localStorage.removeItem('tf_lastOrgTab')
+  window.location.reload()
+}
+
 function clickVisibleHomeButton(text) {
   const overlay = document.querySelector('.tf-home-overlay')
   if (!overlay) return false
@@ -134,7 +146,7 @@ function clickVisibleHomeButton(text) {
   return true
 }
 
-function addHomeMoreItems(actionRefs) {
+function addGlobalMoreItems(actionRefs) {
   const nav = findNav()
   const more = actionRefs.more || nav?.querySelector('button[title="More"]')
   if (!nav || !more) return
@@ -197,11 +209,14 @@ export default function HomeSkin() {
     const schedule = () => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
+        const refs = captureNavActions()
+        navActionsRef.current = refs
+        applyGlobalUtilityNav(refs)
         const h = legacyHomeVisible()
-        if (h) navActionsRef.current = captureNavActions()
         setHome(h)
         if (h) hideLegacyHome()
-        applyNav(h, navActionsRef.current)
+        if (!h) document.body.classList.remove('tf-home-active')
+        else document.body.classList.add('tf-home-active')
       })
     }
 
@@ -211,7 +226,7 @@ export default function HomeSkin() {
     const click = (e) => {
       const b = e.target?.closest?.('button')
       if (!b || (b.getAttribute('title') || '').toLowerCase() !== 'more') return
-      setTimeout(() => addHomeMoreItems(navActionsRef.current), 0)
+      setTimeout(() => addGlobalMoreItems(navActionsRef.current), 0)
     }
 
     document.addEventListener('click', click)
@@ -229,19 +244,9 @@ export default function HomeSkin() {
       window.removeEventListener('popstate', schedule)
       window.removeEventListener('hashchange', schedule)
       removeHomeExtraItems()
+      restoreGlobalUtilityNav()
     }
   }, [])
-
-  useEffect(() => {
-    if (home) {
-      document.body.classList.add('tf-home-active')
-      hideLegacyHome()
-      applyNav(true, navActionsRef.current)
-    } else {
-      document.body.classList.remove('tf-home-active')
-      applyNav(false, navActionsRef.current)
-    }
-  }, [home])
 
   if (!home) return null
 
@@ -253,8 +258,8 @@ export default function HomeSkin() {
         allProfiles={data.profiles}
         supabase={supabase}
         cu={data.user}
-        onOpenOrg={(org) => clickLegacyCard(org.name)}
-        onOpenWorkspace={(ws) => clickLegacyCard(ws.name, ws.description || '')}
+        onOpenOrg={openPracticeDirectly}
+        onOpenWorkspace={openWorkspaceDirectly}
         onCreateOrg={() => {
           if (!clickVisibleHomeButton('+ New Practice')) clickLegacyCard('Create Practice')
         }}
