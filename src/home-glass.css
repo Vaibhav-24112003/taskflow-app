@@ -42,13 +42,11 @@ body.tf-home-waves #root {
   background:transparent !important;
 }
 
-/* The actual Home scroll surface */
 body.tf-home-waves .tf-home-root {
   isolation:isolate;
   background:transparent !important;
 }
 
-/* Real Home practice cards — no AI-style color strips */
 body.tf-home-waves .tf-home-card {
   border-top:0 !important;
   border:1px solid rgba(255,255,255,.82) !important;
@@ -65,7 +63,16 @@ body.tf-home-waves .tf-home-card:hover {
   box-shadow:0 20px 52px rgba(42,72,115,.12) !important;
 }
 
-/* Remove old colored strips even if a card was not caught by the JS marker. */
+/* Explicitly remove the thin accent element detected at the top of each Home card. */
+body.tf-home-waves .tf-home-strip {
+  display:none !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  border:0 !important;
+  background:transparent !important;
+}
+
 body.tf-home-waves .tf-home-root [style*="border-top"] {
   border-top:0 !important;
 }
@@ -74,25 +81,21 @@ body.tf-home-waves .tf-home-root [style*="borderTop"] {
   border-top:0 !important;
 }
 
-/* Make the small action chips feel like one quiet control row. */
 body.tf-home-waves .tf-home-card button,
 body.tf-home-waves .tf-home-card [role="button"] {
   border-color:rgba(82,108,143,.18) !important;
   background:rgba(255,255,255,.48) !important;
 }
 
-/* De-emphasise utility actions on Home; they remain available elsewhere. */
 body.tf-home-waves .tf-home-secondary {
   opacity:.72;
   font-size:.88em;
 }
 
-/* Remove the workspace-switcher clutter from the Home top bar. */
 body.tf-home-waves .tf-home-nav-workspace {
   display:none !important;
 }
 
-/* Keep the Home header itself clean and white/glass-like. */
 body.tf-home-waves header,
 body.tf-home-waves nav {
   backdrop-filter:blur(16px);
