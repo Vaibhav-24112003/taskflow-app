@@ -1,0 +1,11 @@
+body.tf-home-waves{background:radial-gradient(900px 520px at 8% 8%,rgba(82,132,255,.14),transparent 62%),radial-gradient(780px 520px at 92% 18%,rgba(164,115,255,.12),transparent 60%),#f5f8ff!important}
+body.tf-home-waves:before,body.tf-home-waves:after{content:"";position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(2px)}
+body.tf-home-waves:before{width:78vw;height:32vw;left:-20vw;top:8vh;background:rgba(90,135,255,.09);transform:rotate(-8deg)}
+body.tf-home-waves:after{width:72vw;height:30vw;right:-22vw;bottom:-6vh;background:rgba(150,110,255,.08);transform:rotate(8deg)}
+body.tf-home-waves #root{position:relative;z-index:1;background:transparent!important}
+body.tf-home-waves #root [style*="box-shadow"]{background:rgba(255,255,255,.62)!important;border-color:rgba(255,255,255,.76)!important;box-shadow:0 16px 44px rgba(38,72,122,.09)!important;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+body.tf-home-waves #root [style*="border-top"]{border-top:0!important}
+body.tf-home-waves #root [style*="border-top: 4px"]{border-top:0!important}
+body.tf-home-waves #root [style*="border-top:4px"]{border-top:0!important}
+body.tf-home-waves .tf-home-secondary{opacity:.7;font-size:.82em}
+@media (max-width:800px){body.tf-home-waves:before{width:120vw;height:55vw;left:-35vw}body.tf-home-waves:after{width:110vw;height:52vw;right:-35vw}}
