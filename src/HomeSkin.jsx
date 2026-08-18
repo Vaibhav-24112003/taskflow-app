@@ -43,10 +43,6 @@ function findNav() {
   return document.querySelector('nav')
 }
 
-function findNavButton(nav, predicate) {
-  return [...(nav?.querySelectorAll('button,[role="button"]') || [])].find((el) => predicate(textOf(el).toLowerCase(), (el.getAttribute('title') || '').toLowerCase(), el)) || null
-}
-
 function captureNavActions() {
   const nav = findNav()
   if (!nav) return { install: null, portal: null, announcements: null, attendance: null, more: null }
@@ -67,7 +63,6 @@ function captureNavActions() {
 
   const moreIndex = more ? buttons.indexOf(more) : buttons.length
   const portalIndex = portal ? buttons.indexOf(portal) : -1
-  const attendanceIndex = attendance ? buttons.indexOf(attendance) : -1
 
   // Current App header order is Install → Client Portal → Announcements → Attendance → More.
   if (!install && portalIndex > 0) install = buttons[portalIndex - 1]
@@ -91,9 +86,8 @@ function captureNavActions() {
 function applyNav(home, actionRefs) {
   const nav = findNav()
   if (!nav) return
-  removeHomeExtraItems()
-
   if (!home) {
+    removeHomeExtraItems()
     nav.querySelectorAll('.tf-home-nav-separator,.tf-home-nav-workspaces,.tf-home-secondary-action')
       .forEach((el) => el.classList.remove('tf-home-nav-separator', 'tf-home-nav-workspaces', 'tf-home-secondary-action'))
     return
@@ -120,8 +114,7 @@ function clickLegacyCard(text, preferText = '') {
     let cur = node
     for (let i = 0; i < 7 && cur && cur !== root; i += 1, cur = cur.parentElement) {
       if ((preferText && !textOf(cur).includes(preferText)) && i > 0) continue
-      const s = getComputedStyle(cur)
-      if (s.cursor === 'pointer') {
+      if (getComputedStyle(cur).cursor === 'pointer') {
         cur.click()
         return
       }
@@ -133,9 +126,12 @@ function clickLegacyCard(text, preferText = '') {
 
 function clickVisibleHomeButton(text) {
   const overlay = document.querySelector('.tf-home-overlay')
-  if (!overlay) return
+  if (!overlay) return false
   const nodes = [...overlay.querySelectorAll('button,[role="button"]')].filter((el) => textOf(el).includes(text))
-  nodes.find(isVisible)?.click()
+  const target = nodes.find(isVisible)
+  if (!target) return false
+  target.click()
+  return true
 }
 
 function addHomeMoreItems(actionRefs) {
@@ -259,7 +255,9 @@ export default function HomeSkin() {
         cu={data.user}
         onOpenOrg={(org) => clickLegacyCard(org.name)}
         onOpenWorkspace={(ws) => clickLegacyCard(ws.name, ws.description || '')}
-        onCreateOrg={() => clickVisibleHomeButton('+ New Practice') || clickLegacyCard('Create Practice')}
+        onCreateOrg={() => {
+          if (!clickVisibleHomeButton('+ New Practice')) clickLegacyCard('Create Practice')
+        }}
       />
     </div>
   )
