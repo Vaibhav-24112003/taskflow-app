@@ -10,34 +10,57 @@ function textOf(el) {
   return (el?.innerText || el?.textContent || '').trim()
 }
 
-function findHomeRoot() {
-  const heading = [...document.querySelectorAll('h1,h2,h3')].find((el) => textOf(el) === 'Practice Hub')
-  if (!heading) return null
-  return heading.parentElement?.parentElement?.parentElement?.parentElement || null
+function isHomePage() {
+  const text = document.body.innerText || ''
+  return text.includes('Practice Hub') && text.includes('New Practice')
 }
 
 function markCards(root) {
   if (!root) return
-  root.querySelectorAll('.tf-home-card').forEach((el) => el.classList.remove('tf-home-card'))
 
-  ;[...root.querySelectorAll('div')].forEach((el) => {
+  root.querySelectorAll('.tf-home-card').forEach((el) => el.classList.remove('tf-home-card'))
+  root.querySelectorAll('.tf-home-strip').forEach((el) => el.classList.remove('tf-home-strip'))
+
+  const candidates = [...root.querySelectorAll('div')].filter((el) => {
     const t = textOf(el)
-    if (!t || t.length > 500 || !t.includes('0 Spaces') || !t.includes('Clients') || !t.includes('Work Types')) return
-    let node = el
-    for (let i = 0; i < 5 && node && node !== root; i++, node = node.parentElement) {
-      if (node.style?.borderTop || node.style?.boxShadow || node.style?.border) {
-        node.classList.add('tf-home-card')
+    return t && t.length <= 500 && t.includes('0 Spaces') && t.includes('Clients') && t.includes('Work Types')
+  })
+
+  candidates.forEach((el) => {
+    let card = el
+    for (let i = 0; i < 6 && card && card !== root; i++, card = card.parentElement) {
+      const rect = card.getBoundingClientRect?.()
+      if (rect && rect.width > 220 && rect.height > 100) {
+        card.classList.add('tf-home-card')
         break
       }
     }
   })
+
+  root.querySelectorAll('.tf-home-card').forEach((card) => {
+    ;[...card.children].forEach((child) => {
+      const rect = child.getBoundingClientRect?.()
+      if (!rect) return
+      if (rect.height <= 8 && rect.width >= card.getBoundingClientRect().width * 0.7) {
+        child.classList.add('tf-home-strip')
+      }
+    })
+  })
 }
 
 function markHomeElements() {
-  const root = findHomeRoot()
-  const home = !!root
+  const home = isHomePage()
   document.body.classList.toggle('tf-home-waves', home)
-  if (!home) return
+
+  const root = document.getElementById('root')
+  if (!root) return
+
+  if (!home) {
+    root.classList.remove('tf-home-root')
+    root.querySelectorAll('.tf-home-card, .tf-home-strip, .tf-home-secondary, .tf-home-nav-workspace')
+      .forEach((el) => el.classList.remove('tf-home-card', 'tf-home-strip', 'tf-home-secondary', 'tf-home-nav-workspace'))
+    return
+  }
 
   root.classList.add('tf-home-root')
   markCards(root)
@@ -51,6 +74,8 @@ function markHomeElements() {
     }
     if (HOME_WORKSPACE_TABS.includes(label)) {
       el.classList.add('tf-home-nav-workspace')
+    } else {
+      el.classList.remove('tf-home-nav-workspace')
     }
   })
 }
