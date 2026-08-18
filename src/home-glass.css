@@ -5,7 +5,9 @@ body.tf-home-active::before{width:85vw;height:26vw;left:-26vw;top:12vh;backgroun
 body.tf-home-active::after{width:78vw;height:24vw;right:-26vw;bottom:-3vh;background:linear-gradient(105deg,rgba(20,199,192,0),rgba(20,199,192,.08));transform:rotate(8deg)}
 body.tf-home-active #root{position:relative;z-index:1;background:transparent !important}
 body.tf-home-active nav{background:rgba(255,255,255,.84) !important;backdrop-filter:blur(18px) saturate(125%) !important;-webkit-backdrop-filter:blur(18px) saturate(125%) !important}
-body.tf-home-active .tf-home-nav-separator,body.tf-home-active .tf-home-nav-workspaces,body.tf-home-active .tf-home-secondary-action{display:none !important}
+/* Utility actions are intentionally hidden from the top bar on every screen. They remain available in More. */
+.tf-home-secondary-action{display:none !important}
+body.tf-home-active .tf-home-nav-separator,body.tf-home-active .tf-home-nav-workspaces{display:none !important}
 .tf-home-legacy{display:none !important}
 .tf-home-overlay{position:fixed;top:52px;right:0;bottom:0;left:0;z-index:4;overflow:auto;display:block;padding:0 0 38px;box-sizing:border-box}
 .tf-home-overview{font-family:'Inter','Helvetica Neue',system-ui,sans-serif;min-height:100%;box-sizing:border-box;padding:28px 30px 56px}
