@@ -1,108 +1,73 @@
-/* Taskflowco Home — calm glassmorphism entry surface */
-body.tf-home-waves {
+/* Taskflowco Home — restrained glassmorphism + soft waves */
+body.tf-home-active{
   background:
-    radial-gradient(900px 420px at 6% 0%, rgba(70,125,255,.13), transparent 62%),
-    radial-gradient(820px 460px at 94% 12%, rgba(150,110,255,.12), transparent 60%),
-    linear-gradient(180deg,#f7faff 0%,#f3f7fc 52%,#eef4fb 100%) !important;
+    radial-gradient(900px 420px at 4% -8%, rgba(47,107,255,.11), transparent 62%),
+    radial-gradient(820px 440px at 96% 6%, rgba(20,199,192,.08), transparent 60%),
+    linear-gradient(180deg,#f7faff 0%,#eff4f9 55%,#eaf1f8 100%) !important;
+}
+body.tf-home-active::before,
+body.tf-home-active::after{
+  content:"";position:fixed;pointer-events:none;z-index:0;border-radius:50%;filter:blur(2px);
+}
+body.tf-home-active::before{
+  width:78vw;height:26vw;left:-23vw;top:13vh;
+  background:linear-gradient(100deg,rgba(47,107,255,.10),rgba(47,107,255,0));
+  transform:rotate(-9deg);
+}
+body.tf-home-active::after{
+  width:72vw;height:24vw;right:-22vw;bottom:-4vh;
+  background:linear-gradient(100deg,rgba(20,199,192,0),rgba(20,199,192,.09));
+  transform:rotate(8deg);
+}
+body.tf-home-active #root{position:relative;z-index:1;background:transparent !important;}
+
+/* Actual practice grid discovered from App.jsx: style the cards, not the whole wrapper. */
+body.tf-home-active .tf-home-practice-grid{background:transparent !important;}
+body.tf-home-active .tf-home-practice-card{
+  position:relative !important;overflow:hidden !important;
+  border:1px solid rgba(255,255,255,.78) !important;
+  border-top:1px solid rgba(255,255,255,.78) !important;
+  background:rgba(255,255,255,.54) !important;
+  box-shadow:0 14px 38px rgba(20,42,70,.075),inset 0 1px 0 rgba(255,255,255,.72) !important;
+  backdrop-filter:blur(18px) saturate(120%) !important;
+  -webkit-backdrop-filter:blur(18px) saturate(120%) !important;
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease !important;
+}
+body.tf-home-active .tf-home-practice-card:hover{
+  transform:translateY(-3px) !important;
+  background:rgba(255,255,255,.72) !important;
+  box-shadow:0 22px 48px rgba(20,42,70,.12),inset 0 1px 0 rgba(255,255,255,.82) !important;
+}
+body.tf-home-active .tf-home-strip-remove{display:none !important;height:0 !important;min-height:0 !important;max-height:0 !important;}
+body.tf-home-active .tf-home-practice-card span{
+  border-color:rgba(82,108,143,.14) !important;
+  background:rgba(255,255,255,.34) !important;
 }
 
-body.tf-home-waves::before,
-body.tf-home-waves::after {
-  content:"";
-  position:fixed;
-  pointer-events:none;
-  z-index:0;
-  border-radius:50%;
-  opacity:.75;
+/* Workspace cards: no left color rail; identity stays in the icon. */
+body.tf-home-active .tf-home-workspace-pane{background:transparent !important;}
+body.tf-home-active .tf-home-workspace-list{background:transparent !important;}
+body.tf-home-active .tf-home-workspace-card{
+  position:relative !important;overflow:hidden !important;
+  border:1px solid rgba(255,255,255,.72) !important;
+  background:rgba(255,255,255,.46) !important;
+  box-shadow:0 10px 28px rgba(20,42,70,.055),inset 0 1px 0 rgba(255,255,255,.72) !important;
+  backdrop-filter:blur(15px) !important;
+  -webkit-backdrop-filter:blur(15px) !important;
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease !important;
 }
+body.tf-home-active .tf-home-workspace-card:hover{
+  transform:translateX(3px) !important;
+  background:rgba(255,255,255,.64) !important;
+  box-shadow:0 16px 34px rgba(20,42,70,.085) !important;
+}
+body.tf-home-active .tf-home-workspace-card > div:first-child + div{}
 
-body.tf-home-waves::before {
-  width:100vw;
-  height:34vw;
-  left:-24vw;
-  top:8vh;
-  background:linear-gradient(110deg,rgba(82,139,255,.13),rgba(82,139,255,0));
-  transform:rotate(-7deg);
-  filter:blur(3px);
-}
+/* Home top-bar cleanup: keep Logo/Home/Search/Reminders/More/Profile. */
+body.tf-home-active .tf-home-nav-separator,
+body.tf-home-active .tf-home-nav-workspaces,
+body.tf-home-active .tf-home-secondary-action{display:none !important;}
 
-body.tf-home-waves::after {
-  width:92vw;
-  height:32vw;
-  right:-26vw;
-  bottom:-7vh;
-  background:linear-gradient(110deg,rgba(156,111,255,0),rgba(156,111,255,.11));
-  transform:rotate(7deg);
-  filter:blur(3px);
-}
+body.tf-home-active nav{background:rgba(255,255,255,.82) !important;backdrop-filter:blur(18px) !important;-webkit-backdrop-filter:blur(18px) !important;}
 
-body.tf-home-waves #root {
-  position:relative;
-  z-index:1;
-  background:transparent !important;
-}
-
-body.tf-home-waves .tf-home-root {
-  isolation:isolate;
-  background:transparent !important;
-}
-
-body.tf-home-waves .tf-home-card {
-  border-top:0 !important;
-  border:1px solid rgba(255,255,255,.82) !important;
-  background:rgba(255,255,255,.68) !important;
-  box-shadow:0 14px 42px rgba(42,72,115,.08) !important;
-  backdrop-filter:blur(18px) saturate(120%);
-  -webkit-backdrop-filter:blur(18px) saturate(120%);
-  transition:transform .18s ease,box-shadow .18s ease,background .18s ease;
-}
-
-body.tf-home-waves .tf-home-card:hover {
-  transform:translateY(-2px);
-  background:rgba(255,255,255,.82) !important;
-  box-shadow:0 20px 52px rgba(42,72,115,.12) !important;
-}
-
-/* Explicitly remove the thin accent element detected at the top of each Home card. */
-body.tf-home-waves .tf-home-strip {
-  display:none !important;
-  height:0 !important;
-  min-height:0 !important;
-  max-height:0 !important;
-  border:0 !important;
-  background:transparent !important;
-}
-
-body.tf-home-waves .tf-home-root [style*="border-top"] {
-  border-top:0 !important;
-}
-
-body.tf-home-waves .tf-home-root [style*="borderTop"] {
-  border-top:0 !important;
-}
-
-body.tf-home-waves .tf-home-card button,
-body.tf-home-waves .tf-home-card [role="button"] {
-  border-color:rgba(82,108,143,.18) !important;
-  background:rgba(255,255,255,.48) !important;
-}
-
-body.tf-home-waves .tf-home-secondary {
-  opacity:.72;
-  font-size:.88em;
-}
-
-body.tf-home-waves .tf-home-nav-workspace {
-  display:none !important;
-}
-
-body.tf-home-waves header,
-body.tf-home-waves nav {
-  backdrop-filter:blur(16px);
-  -webkit-backdrop-filter:blur(16px);
-}
-
-@media (max-width:900px) {
-  body.tf-home-waves::before { width:145vw; height:58vw; left:-45vw; }
-  body.tf-home-waves::after { width:135vw; height:55vw; right:-48vw; }
-}
+@media (prefers-reduced-motion: reduce){body.tf-home-active .tf-home-practice-card,body.tf-home-active .tf-home-workspace-card{transition:none !important;}}
