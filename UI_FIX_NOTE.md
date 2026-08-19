@@ -1,0 +1,1 @@
+Home fixes: create-practice action now reaches the original React createOrg flow; utility actions stay grouped in More on all themes/routes; Home receives a dedicated dark theme treatment.
