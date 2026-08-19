@@ -1,1 +1,0 @@
-Home UI refinement: sharper typography, Lucide icons, premium glass cards, restrained motion, hover/press states, improved spacing, and responsive polish. No data/schema changes.
