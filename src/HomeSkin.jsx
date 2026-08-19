@@ -63,8 +63,6 @@ function captureNavActions() {
 
   const moreIndex = more ? buttons.indexOf(more) : buttons.length
   const portalIndex = portal ? buttons.indexOf(portal) : -1
-
-  // Current App header order is Install → Client Portal → Announcements → Attendance → More.
   if (!install && portalIndex > 0) install = buttons[portalIndex - 1]
   if (!portal && install) {
     const i = buttons.indexOf(install)
@@ -79,7 +77,6 @@ function captureNavActions() {
     const candidate = buttons[i + 1]
     if (candidate && buttons.indexOf(candidate) < moreIndex) attendance = candidate
   }
-
   return { install, portal, announcements, attendance, more }
 }
 
@@ -93,29 +90,6 @@ function applyGlobalUtilityNav(actionRefs) {
 
 function restoreGlobalUtilityNav() {
   document.querySelectorAll('.tf-home-secondary-action').forEach((el) => el.classList.remove('tf-home-secondary-action'))
-}
-
-function clickLegacyCard(text, preferText = '') {
-  const root = document.getElementById('root')
-  if (!root) return
-  const candidates = [...root.querySelectorAll('*')].filter((el) => {
-    if (textOf(el) !== text) return false
-    if (el.closest('.tf-home-overlay')) return false
-    return true
-  })
-
-  for (const node of candidates) {
-    let cur = node
-    for (let i = 0; i < 7 && cur && cur !== root; i += 1, cur = cur.parentElement) {
-      if ((preferText && !textOf(cur).includes(preferText)) && i > 0) continue
-      if (getComputedStyle(cur).cursor === 'pointer') {
-        cur.click()
-        return
-      }
-    }
-  }
-
-  candidates[0]?.click()
 }
 
 function openWorkspaceDirectly(ws) {
@@ -136,11 +110,33 @@ function openPracticeDirectly(org) {
   window.location.reload()
 }
 
+function clickLegacyCard(text, preferText = '') {
+  const root = document.getElementById('root')
+  if (!root) return
+  const candidates = [...root.querySelectorAll('*')].filter((el) => {
+    if (textOf(el) !== text) return false
+    if (el.closest('.tf-home-overlay')) return false
+    return true
+  })
+  for (const node of candidates) {
+    let cur = node
+    for (let i = 0; i < 7 && cur && cur !== root; i += 1, cur = cur.parentElement) {
+      if ((preferText && !textOf(cur).includes(preferText)) && i > 0) continue
+      if (getComputedStyle(cur).cursor === 'pointer') {
+        cur.click()
+        return
+      }
+    }
+  }
+  candidates[0]?.click()
+}
+
 function clickVisibleHomeButton(text) {
   const overlay = document.querySelector('.tf-home-overlay')
   if (!overlay) return false
-  const nodes = [...overlay.querySelectorAll('button,[role="button"]')].filter((el) => textOf(el).includes(text))
-  const target = nodes.find(isVisible)
+  const target = [...overlay.querySelectorAll('button,[role="button"]')]
+    .filter((el) => textOf(el).toLowerCase().includes(text.toLowerCase()))
+    .find(isVisible)
   if (!target) return false
   target.click()
   return true
@@ -150,12 +146,11 @@ function addGlobalMoreItems(actionRefs) {
   const nav = findNav()
   const more = actionRefs.more || nav?.querySelector('button[title="More"]')
   if (!nav || !more) return
-
   const wrapper = more.parentElement
   const menu = [...(wrapper?.querySelectorAll('div') || [])].find((el) => {
-    const t = textOf(el)
+    const t = textOf(el).toLowerCase()
     const s = getComputedStyle(el)
-    return s.position === 'absolute' && t.includes('Quick Notes') && t.includes('Get help') && t.includes('Dark mode')
+    return s.position === 'absolute' && t.includes('quick notes') && t.includes('get help') && (t.includes('dark mode') || t.includes('light mode'))
   })
   if (!menu || menu.querySelector('[data-tf-home-extra]')) return
 
@@ -219,23 +214,19 @@ export default function HomeSkin() {
         else document.body.classList.add('tf-home-active')
       })
     }
-
     const observer = new MutationObserver(schedule)
     observer.observe(document.body, { childList: true, subtree: true })
-
     const click = (e) => {
       const b = e.target?.closest?.('button')
       if (!b || (b.getAttribute('title') || '').toLowerCase() !== 'more') return
       setTimeout(() => addGlobalMoreItems(navActionsRef.current), 0)
     }
-
     document.addEventListener('click', click)
     window.addEventListener('resize', schedule)
     window.addEventListener('popstate', schedule)
     window.addEventListener('hashchange', schedule)
     schedule()
     loadData()
-
     return () => {
       cancelAnimationFrame(raf)
       observer.disconnect()
@@ -261,7 +252,10 @@ export default function HomeSkin() {
         onOpenOrg={openPracticeDirectly}
         onOpenWorkspace={openWorkspaceDirectly}
         onCreateOrg={() => {
-          if (!clickVisibleHomeButton('+ New Practice')) clickLegacyCard('Create Practice')
+          if (!clickVisibleHomeButton('New Practice')) {
+            clickLegacyCard('+ New Practice')
+            clickLegacyCard('Create Practice')
+          }
         }}
       />
     </div>
