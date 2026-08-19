@@ -1,1 +1,0 @@
-Fix create practice trigger on Home by targeting the hidden legacy Create Practice action, not the Home button itself.
