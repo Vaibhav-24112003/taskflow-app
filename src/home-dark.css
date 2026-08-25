@@ -4,61 +4,87 @@ html[data-theme="dark"] body.tf-home-active::before{background:linear-gradient(1
 html[data-theme="dark"] body.tf-home-active::after{background:linear-gradient(105deg,rgba(20,184,166,0),rgba(124,92,255,.13))}
 html[data-theme="dark"] body.tf-home-active nav{background:rgba(10,17,27,.82) !important;border-color:rgba(148,163,184,.12) !important;box-shadow:0 1px 0 rgba(148,163,184,.10),0 10px 28px rgba(0,0,0,.24) !important}
 html[data-theme="dark"] .tf-home-overview{color:#e7eef7}
+
+/* Hero */
 html[data-theme="dark"] .tf-home-hero{background:linear-gradient(135deg,rgba(18,29,43,.90),rgba(16,27,42,.72));border-color:rgba(148,163,184,.16);box-shadow:0 24px 70px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.05)}
 html[data-theme="dark"] .tf-home-hero::after{background:radial-gradient(circle,rgba(124,92,255,.18),transparent 67%)}
 html[data-theme="dark"] .tf-home-kicker{color:#8ea0b8}
 html[data-theme="dark"] .tf-home-kicker::before{background:#69a0ff;box-shadow:0 0 0 3px rgba(105,160,255,.10)}
 html[data-theme="dark"] .tf-home-hero h1{color:#f5f8fc}
 html[data-theme="dark"] .tf-home-hero p{color:#9aaabd}
+html[data-theme="dark"] .tf-hero-accent{color:#78a7ff}
+html[data-theme="dark"] .tf-hero-alert{color:#f87171}
+html[data-theme="dark"] .tf-hero-overdue-badge{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.25);color:#f87171}
 html[data-theme="dark"] .tf-home-focus{background:rgba(24,37,54,.82);border-color:rgba(148,163,184,.14);box-shadow:0 16px 34px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.05);color:#a7b4c5}
 html[data-theme="dark"] .tf-home-focus:hover{background:rgba(30,45,64,.92);box-shadow:0 20px 44px rgba(0,0,0,.30)}
 html[data-theme="dark"] .tf-focus-icon{background:linear-gradient(135deg,rgba(47,107,255,.18),rgba(124,58,237,.20));color:#9ea8ff}
 html[data-theme="dark"] .tf-focus-copy b{color:#edf3fa}
 html[data-theme="dark"] .tf-focus-copy span{color:#9aaabd}
 html[data-theme="dark"] .tf-home-focus>svg{color:#8998ac}
+
+/* Stats */
 html[data-theme="dark"] .tf-stat{background:rgba(20,32,47,.72);border-color:rgba(148,163,184,.14);box-shadow:0 14px 34px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.04)}
 html[data-theme="dark"] .tf-stat::after{background:radial-gradient(circle,rgba(255,255,255,.06),transparent 67%)}
 html[data-theme="dark"] .tf-stat-copy strong{color:#f5f8fc}
 html[data-theme="dark"] .tf-stat-copy b{color:#c1cedc}
 html[data-theme="dark"] .tf-stat-copy small{color:#8393a7}
+html[data-theme="dark"] .tf-stat-badge{background:rgba(239,68,68,.15)}
+html[data-theme="dark"] .tf-stat-amber .tf-stat-badge{background:rgba(245,158,11,.15)}
+
+/* Section heads */
 html[data-theme="dark"] .tf-home-section-head h2{color:#edf3fa}
-html[data-theme="dark"] .tf-home-section-head p,.tf-section-eyebrow{color:#8999ad}
+html[data-theme="dark"] .tf-home-section-head p{color:#8999ad}
+html[data-theme="dark"] .tf-section-eyebrow{color:#8999ad}
 html[data-theme="dark"] .tf-section-action{background:rgba(18,32,49,.72);border-color:rgba(91,143,255,.25);color:#78a7ff;box-shadow:0 8px 22px rgba(0,0,0,.18)}
 html[data-theme="dark"] .tf-section-action:hover{background:rgba(26,43,64,.92)}
-html[data-theme="dark"] .tf-home-section-link{color:#78a7ff}
+html[data-theme="dark"] .tf-home-section-link-btn{color:#78a7ff}
+
+/* Practice cards */
 html[data-theme="dark"] .tf-practice-card{background:rgba(18,30,45,.74);border-color:rgba(148,163,184,.14);box-shadow:0 18px 42px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.04)}
 html[data-theme="dark"] .tf-practice-card:hover{background:rgba(24,39,57,.90);border-color:rgba(148,163,184,.20);box-shadow:0 26px 56px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.05)}
 html[data-theme="dark"] .tf-practice-avatar{background:color-mix(in srgb,var(--accent) 14%,#132238);border-color:color-mix(in srgb,var(--accent) 30%,#1a2a3d);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
 html[data-theme="dark"] .tf-practice-title b{color:#eff4fa}
 html[data-theme="dark"] .tf-practice-title span{color:#8798ad}
 html[data-theme="dark"] .tf-card-arrow{color:#7e8ea2;background:rgba(255,255,255,.04);border-color:rgba(148,163,184,.10)}
-html[data-theme="dark"] .tf-practice-metrics,.tf-practice-foot{border-color:rgba(148,163,184,.12)}
-html[data-theme="dark"] .tf-practice-metrics strong{color:#dbe5ef}
-html[data-theme="dark"] .tf-practice-metrics span{color:#8191a4}
+
+/* Metrics */
+html[data-theme="dark"] .tf-practice-metrics{border-color:rgba(148,163,184,.12)}
+html[data-theme="dark"] .tf-metric-item strong{color:#dbe5ef}
+html[data-theme="dark"] .tf-metric-item span{color:#8191a4}
+html[data-theme="dark"] .tf-metric-amber{color:#fbbf24 !important}
+html[data-theme="dark"] .tf-metric-red{color:#f87171 !important}
+html[data-theme="dark"] .tf-practice-foot{border-color:rgba(148,163,184,.10)}
 html[data-theme="dark"] .tf-mini-avatars span,html[data-theme="dark"] .tf-mini-avatars em{background:#223246;border-color:#162333;color:#cbd6e2;box-shadow:0 2px 8px rgba(0,0,0,.24)}
 html[data-theme="dark"] .tf-open-link{color:#78a7ff}
+
+/* Other workspaces */
 html[data-theme="dark"] .tf-other-card{background:rgba(17,29,43,.66);border-color:rgba(148,163,184,.13);box-shadow:0 12px 30px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.04)}
 html[data-theme="dark"] .tf-other-card:hover{background:rgba(24,40,58,.86);box-shadow:0 18px 38px rgba(0,0,0,.28)}
 html[data-theme="dark"] .tf-other-icon{background:color-mix(in srgb,var(--accent) 13%,#132238);border-color:color-mix(in srgb,var(--accent) 24%,#1a2a3d)}
 html[data-theme="dark"] .tf-other-copy b{color:#e5edf6}
 html[data-theme="dark"] .tf-other-copy small{color:#8798ad}
 html[data-theme="dark"] .tf-other-copy em{color:#8292a6}
-html[data-theme="dark"] .tf-other-card>svg{color:#7e8ea2}
+html[data-theme="dark"] .tf-other-arrow{color:#7e8ea2}
+
+/* Activity */
 html[data-theme="dark"] .tf-activity-list{background:rgba(17,29,43,.64);border-color:rgba(148,163,184,.12);box-shadow:0 12px 30px rgba(0,0,0,.20)}
 html[data-theme="dark"] .tf-activity-row{border-color:rgba(148,163,184,.09)}
+html[data-theme="dark"] .tf-activity-row:hover{background:rgba(255,255,255,.03)}
 html[data-theme="dark"] .tf-activity-icon{background:rgba(255,255,255,.04);color:#91a2b6}
 html[data-theme="dark"] .tf-activity-row b{color:#dbe5ef}
 html[data-theme="dark"] .tf-activity-row small{color:#8091a5}
 html[data-theme="dark"] .tf-activity-age{color:#718196}
+
+/* Desktop card */
 html[data-theme="dark"] .tf-desktop-card{background:linear-gradient(135deg,rgba(24,40,61,.82),rgba(16,30,47,.74));border-color:rgba(148,163,184,.13);box-shadow:0 16px 38px rgba(0,0,0,.22)}
 html[data-theme="dark"] .tf-desktop-icon{background:rgba(47,107,255,.14);color:#7cadff}
-html[data-theme="dark"] .tf-desktop-badge{background:rgba(124,92,255,.12);border-color:rgba(160,146,255,.18);color:#b4aaff}
+html[data-theme="dark"] .tf-desktop-badge{color:#b4aaff}
 html[data-theme="dark"] .tf-desktop-card h3{color:#edf3fa}
 html[data-theme="dark"] .tf-desktop-card p{color:#8ea0b4}
 html[data-theme="dark"] .tf-desktop-card button{background:#17283d;border-color:rgba(91,143,255,.24);color:#7eacff}
+html[data-theme="dark"] .tf-desktop-stat-row{border-color:rgba(148,163,184,.10);color:#7b8da3}
+
+/* Empty states */
 html[data-theme="dark"] .tf-home-empty{background:rgba(18,30,45,.52);border-color:rgba(148,163,184,.18);color:#8999ad}
 html[data-theme="dark"] .tf-home-empty b{color:#dce6f0}
-html[data-theme="dark"] .tf-home-empty button{background:#17283d;border-color:rgba(91,143,255,.24);color:#7eacff}
-html[data-theme="dark"] .tf-home-secondary-action{color:var(--tf-text)!important}
-html[data-theme="dark"] [data-tf-home-extra]{color:var(--tf-text)!important}
-@media (prefers-reduced-motion:reduce){html[data-theme="dark"] .tf-home-hero,html[data-theme="dark"] .tf-stat,html[data-theme="dark"] .tf-home-section,html[data-theme="dark"] .tf-practice-card,html[data-theme="dark"] .tf-other-card{animation:none!important}}
+html[data-theme="dark"] .tf-home-empty button{background:#17283d;border-color:rgba(91,143,255,.22);color:#78a7ff}
