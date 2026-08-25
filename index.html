@@ -18,13 +18,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TaskFlowCo" />
 
-    <!-- Speed up first auth/data round-trips -->
-    <link rel="preconnect" href="https://vorxrjekbokqkigfabhr.supabase.co" crossorigin />
-
-    <!-- Wordmark font (design round 9) + design-refresh families (Plus Jakarta Sans / JetBrains Mono) -->
+    <!-- Perf: preconnect to font CDN only; Supabase preconnect deferred to JS after auth intent -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+
+    <!-- Fonts: only weights actually used; Geist dropped (wordmark falls back to system bold) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" />
 
     <!-- Design refresh: honor prefers-reduced-motion globally. The app already
          guards its loaders/logo/board cards; this covers the landing hero and
@@ -154,6 +153,22 @@
         }
       ]
     }
+    </script>
+
+    <!-- Perf: defer Supabase connection until user initiates auth -->
+    <script>
+      (function() {
+        function addSupabasePreconnect() {
+          var l = document.createElement('link');
+          l.rel = 'preconnect';
+          l.href = 'https://vorxrjekbokqkigfabhr.supabase.co';
+          l.crossOrigin = 'anonymous';
+          document.head.appendChild(l);
+        }
+        ['click','touchstart','keydown'].forEach(function(ev) {
+          document.addEventListener(ev, addSupabasePreconnect, { once: true, passive: true });
+        });
+      })();
     </script>
   </head>
   <body>
