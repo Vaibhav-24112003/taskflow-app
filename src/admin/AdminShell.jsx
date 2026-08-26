@@ -5,6 +5,7 @@ const UsersAdmin         = lazy(() => import('./UsersAdmin.jsx'))
 const OrgsAdmin          = lazy(() => import('./OrgsAdmin.jsx'))
 const SupportAdminView   = lazy(() => import('../SupportAdminView.jsx'))
 const AnnouncementsAdmin = lazy(() => import('../AnnouncementsAdmin.jsx'))
+const BillingAdmin       = lazy(() => import('./BillingAdmin.jsx'))
 
 const NAV = [
   { id: 'overview',       label: 'Overview',       icon: '◈',  color: '#6b8cad' },
@@ -13,6 +14,7 @@ const NAV = [
   { id: 'demoreqs',       label: 'Demo Requests',   icon: '📋',  color: '#10b981' },
   { id: 'support',        label: 'Support Tickets', icon: '🆘',  color: '#6366f1' },
   { id: 'announcements',  label: 'Announcements',   icon: '📣',  color: '#0e2a47' },
+  { id: 'billing',        label: 'Billing & Plans',  icon: '💳',  color: '#10b981' },
 ]
 
 function StatCard({ icon, label, value, sub, color }) {
