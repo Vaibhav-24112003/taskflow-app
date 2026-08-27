@@ -220,7 +220,7 @@ export default function BillingAdmin() {
     const [pr, sr, ir] = await Promise.all([
       supabase.from('plans').select('*').order('sort_order'),
       supabase.from('admin_billing_overview').select('*').order('created_at', { ascending:false }),
-      supabase.from('invoices').select('*, organizations(name,email)').order('created_at', { ascending:false }).limit(60)
+      supabase.from('subscription_invoices').select('*, organizations(name,email)').order('created_at', { ascending:false }).limit(60)
     ])
     const pl = pr.data || []
     const sb = sr.data || []
