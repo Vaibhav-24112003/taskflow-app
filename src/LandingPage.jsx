@@ -1,6 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { supabase, signInWithEmailLink } from './lib/supabase'
 import InstallPWAButton from './components/InstallPWAButton.jsx'
+import CheckoutButton from './components/CheckoutButton.jsx'
 
 // "Watch demo" tour is loaded on demand.
 const LaunchTour = lazy(() => import('./LaunchTour.jsx'))
@@ -338,6 +339,85 @@ function AuthModal({ open, onClose, onGoogle, googleBusy }) {
   )
 }
 
+
+// ── Upgrade modal — shown after sign-in when user clicked a plan CTA ──
+function UpgradeModal({ planId, billing, orgId, onClose }) {
+  const [done, setDone] = React.useState(false)
+  const planName   = planId === 'pro' ? 'Pro' : 'Starter'
+  const monthlyAmt = planId === 'pro' ? '1,499' : '999'
+  const yearlyAmt  = planId === 'pro' ? '1,249' : '833'
+  const yearlyTotal= planId === 'pro' ? '14,990' : '9,990'
+
+  if (done) return (
+    <div style={{ position:'fixed',inset:0,background:'rgba(10,20,40,.62)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
+      <div style={{ background:'var(--surface)',borderRadius:20,padding:'36px 32px',maxWidth:400,width:'100%',textAlign:'center',border:'1px solid var(--border)',boxShadow:'0 24px 64px rgba(10,20,40,.18)' }}>
+        <div style={{ fontSize:48,marginBottom:12 }}>🎉</div>
+        <h3 style={{ margin:'0 0 8px',fontSize:20,fontWeight:800,color:'var(--text)' }}>You're all set!</h3>
+        <p style={{ color:'var(--text-2)',fontSize:14,margin:'0 0 22px',lineHeight:1.6 }}>Your {planName} plan is active. The GST invoice will arrive in your inbox shortly via Zoho Books.</p>
+        <button onClick={onClose} style={{ background:'var(--grad)',color:'#fff',border:'none',borderRadius:11,padding:'12px 28px',fontSize:14,fontWeight:800,cursor:'pointer',width:'100%' }}>Go to dashboard →</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ position:'fixed',inset:0,background:'rgba(10,20,40,.62)',backdropFilter:'blur(6px)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
+      <div style={{ background:'var(--surface)',borderRadius:20,padding:'32px 28px',maxWidth:440,width:'100%',border:'1px solid var(--border)',boxShadow:'0 24px 64px rgba(10,20,40,.18)',position:'relative' }}>
+        <button onClick={onClose} style={{ position:'absolute',top:16,right:18,background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--muted)' }}>×</button>
+        <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:20 }}>
+          <span style={{ fontSize:28 }}>⚡</span>
+          <div>
+            <h3 style={{ margin:0,fontSize:18,fontWeight:800,color:'var(--text)' }}>Upgrade to {planName}</h3>
+            <p style={{ margin:0,fontSize:12,color:'var(--text-2)' }}>You're one step away from unlocking your full practice.</p>
+          </div>
+        </div>
+
+        {/* Price recap */}
+        <div style={{ background:'linear-gradient(135deg,rgba(47,107,255,.07),rgba(20,199,192,.06))',border:'1px solid rgba(47,107,255,.14)',borderRadius:13,padding:'16px 18px',marginBottom:20 }}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline' }}>
+            <span style={{ fontSize:13,color:'var(--text-2)' }}>{planName} · {billing === 'yearly' ? 'Yearly' : 'Monthly'}</span>
+            <span style={{ fontSize:24,fontWeight:800,color:'var(--blue)' }}>₹{billing === 'yearly' ? yearlyAmt : monthlyAmt}<span style={{ fontSize:12,fontWeight:500,color:'var(--text-2)' }}>/mo</span></span>
+          </div>
+          {billing === 'yearly' && (
+            <div style={{ fontSize:11,color:'var(--text-2)',marginTop:4 }}>Billed ₹{yearlyTotal}/year · 2 months free</div>
+          )}
+          <div style={{ fontSize:11,color:'var(--muted)',marginTop:6 }}>+ 18% GST · Cancel anytime · Invoice sent automatically</div>
+        </div>
+
+        {/* What you get */}
+        <ul style={{ margin:'0 0 22px',padding:'0 0 0 18px',color:'var(--text-2)',fontSize:13,lineHeight:1.9 }}>
+          {planId === 'pro' ? <>
+            <li>Unlimited clients &amp; up to 15 team members</li>
+            <li>Practice Hub — GST, ITR, TDS worksheet management</li>
+            <li>Client portal, reminders &amp; time tracking</li>
+            <li>Analytics, on-time reports &amp; workload view</li>
+          </> : <>
+            <li>Up to 3 users &amp; 50 clients</li>
+            <li>GST worksheets, ITR tracking, task management</li>
+            <li>All core compliance tools</li>
+          </>}
+        </ul>
+
+        {/* CheckoutButton — full Razorpay flow */}
+        {orgId ? (
+          <CheckoutButton
+            orgId={orgId}
+            planId={planId}
+            billingCycle={billing}
+            label={`Pay & activate ${planName} →`}
+            onSuccess={() => setDone(true)}
+          />
+        ) : (
+          <p style={{ fontSize:12,color:'var(--muted)',textAlign:'center' }}>Sign in first to complete checkout.</p>
+        )}
+
+        <p style={{ fontSize:11,color:'var(--muted)',textAlign:'center',marginTop:14 }}>
+          🔒 Payments secured by Razorpay · PCI-DSS compliant · UPI / cards / net banking
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function LandingPage({ onSignIn, loading }) {
   const [dark, setDark] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -352,16 +432,44 @@ export default function LandingPage({ onSignIn, loading }) {
   useEffect(() => { try { localStorage.setItem('tfc-theme', dark ? 'dark' : 'light') } catch (_) {} }, [dark])
   const [launchOpen, setLaunchOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
-  const [billing, setBilling] = useState('yearly') // 'monthly' | 'yearly' — yearly is the default (best value)
-  // Trial / sign-in CTAs open the auth modal (Google + email link, incl. admin
-  // / domain mailboxes) rather than jumping straight into Google.
+  const [billing, setBilling] = useState('yearly')
+  const [upgradeModal, setUpgradeModal] = useState(null) // null | 'pro' | 'starter'
+  const [currentOrgId, setCurrentOrgId] = useState(null)
+
+  // After sign-in, fetch user's first org so CheckoutButton has an orgId
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return
+      supabase.from('organization_members').select('org_id').eq('user_id', user.id).limit(1).single()
+        .then(({ data }) => { if (data?.org_id) setCurrentOrgId(data.org_id) })
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      if (!session?.user) return
+      supabase.from('organization_members').select('org_id').eq('user_id', session.user.id).limit(1).single()
+        .then(({ data }) => { if (data?.org_id) setCurrentOrgId(data.org_id) })
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
   const start = () => setAuthOpen(true)
+  const buyPlan = (planId) => {
+    if (!currentOrgId) { setAuthOpen(true); return }
+    setUpgradeModal(planId)
+  }
 
   return (
     <div className="lp2" data-theme={dark ? 'dark' : 'light'}>
       <style>{CSS}</style>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onGoogle={onSignIn} googleBusy={loading} />
+      {upgradeModal && (
+        <UpgradeModal
+          planId={upgradeModal}
+          billing={billing}
+          orgId={currentOrgId}
+          onClose={() => setUpgradeModal(null)}
+        />
+      )}
       {launchOpen && (
         <Suspense fallback={null}>
           <LaunchTour open={launchOpen} onClose={() => setLaunchOpen(false)} />
@@ -602,7 +710,12 @@ export default function LandingPage({ onSignIn, loading }) {
             <div className="amt">₹0<small>/mo</small></div>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For an individual practitioner starting out.</p>
             <ul><li>{check}Up to 25 clients</li><li>{check}Workspaces — Kanban boards <b style={{color:'#0EA5A0'}}>(free for life)</b></li><li>{check}WorkZone + Stages board</li><li>{check}Compliance calendar &amp; My Work planner</li></ul>
-            <button className="btn btn-ghost" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started free</button>
+            <button className="btn btn-ghost" onClick={start} style={{ width: '100%', justifyContent: 'center', marginBottom: 8 }}>Get started free</button>
+            {currentOrgId && (
+              <button onClick={() => buyPlan('starter')} style={{ width:'100%', background:'none', border:'1px solid var(--border)', borderRadius:10, padding:'9px 0', fontSize:12.5, fontWeight:700, color:'var(--text-2)', cursor:'pointer', fontFamily:'inherit' }}>
+                Or buy Starter ₹{billing === 'yearly' ? '833' : '999'}/mo →
+              </button>
+            )}
           </div>
           <div className="plan featured">
             <span className="tag">Most popular</span>
@@ -611,7 +724,12 @@ export default function LandingPage({ onSignIn, loading }) {
             <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹14,990/year — 2 months free' : 'Billed monthly · switch to yearly to save'}</p>
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For a growing firm running work as a team.</p>
             <ul><li>{check}Everything in Free</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Practice Hub <b style={{color:'#0EA5A0'}}>(free for 6 months)</b></li><li>{check}Communication &amp; Billing <span style={{color:'var(--muted)'}}>— paid add-ons</span></li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
-            <button className="btn btn-primary" onClick={start} style={{ width: '100%', justifyContent: 'center' }}>Get started</button>
+            <button className="btn btn-primary" onClick={() => buyPlan('pro')} style={{ width: '100%', justifyContent: 'center' }}>
+              {currentOrgId ? '⚡ Buy Pro' : 'Get started →'}
+            </button>
+            <p style={{ textAlign:'center', fontSize:11, color:'var(--muted)', margin:'8px 0 0' }}>
+              {currentOrgId ? 'Instant activation · Invoice emailed automatically' : 'Sign in, then complete checkout'}
+            </p>
           </div>
           <div className="plan">
             <h3>Max</h3>
