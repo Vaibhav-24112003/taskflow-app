@@ -45,6 +45,7 @@ import AppTour from './components/AppTour.jsx'
 const UsersAdmin = lazyWithReload(() => import('./admin/UsersAdmin.jsx'))
 const OrgsAdmin  = lazyWithReload(() => import('./admin/OrgsAdmin.jsx'))
 const AdminShell = lazyWithReload(() => import('./admin/AdminShell.jsx'))
+const UpgradePlansModule = lazyWithReload(() => import('./components/UpgradePlansModule.jsx'))
 
 // ── Module-level data cache ────────────────────────────────────────────────────
 // Survives component unmount/remount (navigation away and back).
@@ -19023,6 +19024,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   }
   if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Everything client-facing in one place — email your clients, the login-based Client Portal, and request/campaign link forms.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'mailing',label:'Mail'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]});
   if(ffOn('billing'))MODULES.push({id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]});
+  MODULES.push({id:'upgrade',label:'Plans & Billing',icon:CreditCard,desc:'Manage your subscription, upgrade plan and view invoices.',gradient:'linear-gradient(135deg,#2F6BFF,#14C7C0)',tabs:[]});
   MODULES.push({id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:masterdataTabs});
   MODULES.push({id:'setup',label:'Set-up',icon:Settings,desc:'Members, departments, access control and organisation settings.',gradient:'linear-gradient(135deg,#64748b,#475569)',tabs:setupTabs});
   var DEFAULT_MEMBER_MODULES=['diary','workzone','library','chat'];
@@ -19167,6 +19169,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='billing'&&(hasModule('billing')
         ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
         : <ModuleLock module="billing" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Billing for '+(org?.name||''),'_blank')}/>)}
+      {/* Upgrade & Plans */}
+      {orgModule==='upgrade'&&<Suspense fallback={null}><UpgradePlansModule org={org} supabase={supabase} cu={cu} onUpgraded={function(){setOrgModule('diary');setTab('home');}}/></Suspense>}
       {/* Master Data */}
       {orgModule==='masterdata'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
