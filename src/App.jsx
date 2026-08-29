@@ -24,7 +24,7 @@ const MyTicketsView      = lazyWithReload(() => import('./MyTicketsView.jsx'))
 const AnnouncementsAdmin = lazyWithReload(() => import('./AnnouncementsAdmin.jsx'))
 const LandingPage        = lazyWithReload(() => import('./LandingPage.jsx'))
 import { isAdminEmail } from './lib/supabase'
-import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare, Search, ExternalLink, Download } from 'lucide-react'
+import { LayoutDashboard, BookUser, BarChart2, Globe, Mail, Users, Receipt, Settings, BookOpen, Briefcase, Library, Database, Key, HelpCircle, LifeBuoy, List, Kanban, Calendar, LayoutGrid, Zap, MessageSquare, Search, ExternalLink, Download, CreditCard } from 'lucide-react'
 import {
   supabase, signInWithGoogle, signOut, upsertProfile,
   getMyWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace,
