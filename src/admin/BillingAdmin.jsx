@@ -29,7 +29,7 @@ const inp = { background:'var(--tf-bg)', border:'1px solid var(--tf-border)', bo
 // ══════════════════════════════════════════════════════════════════
 function PlanModal({ plan, onSave, onClose }) {
   const isNew = !plan?.id
-  const [form, setForm] = useState(plan || {
+  const [form, setForm] = useState(plan ? {...plan, price_monthly: plan.price_monthly, price_yearly: plan.price_yearly} : {
     id:'', name:'', category:'core', description:'',
     price_monthly:0, price_yearly:0,
     features:[], limits:{}, badge:'', offer_label:'',
@@ -74,8 +74,18 @@ function PlanModal({ plan, onSave, onClose }) {
             </select>
           </Field>
           <Field label="Sort Order"><input style={inp} type="number" value={form.sort_order} onChange={e=>s('sort_order',+e.target.value)} /></Field>
-          <Field label="Monthly Price (₹)"><input style={inp} type="number" value={form.price_monthly/100||''} onChange={e=>s('price_monthly',+e.target.value*100)} placeholder="1999" /></Field>
-          <Field label="Yearly Price (₹ total)"><input style={inp} type="number" value={form.price_yearly/100||''} onChange={e=>s('price_yearly',+e.target.value*100)} placeholder="19990" /></Field>
+          <Field label="Monthly Price (₹)">
+            <input style={inp} type="number"
+              value={form.price_monthly > 10000 ? Math.round(form.price_monthly/100) : (form.price_monthly||'')}
+              onChange={e=>s('price_monthly', Math.round(+e.target.value * 100))}
+              placeholder="1999" />
+          </Field>
+          <Field label="Yearly Price (₹ total)">
+            <input style={inp} type="number"
+              value={form.price_yearly > 100000 ? Math.round(form.price_yearly/100) : (form.price_yearly||'')}
+              onChange={e=>s('price_yearly', Math.round(+e.target.value * 100))}
+              placeholder="19990" />
+          </Field>
           <div style={{ gridColumn:'1/-1' }}>
             <Field label="Description"><input style={inp} value={form.description||''} onChange={e=>s('description',e.target.value)} /></Field>
           </div>
@@ -131,18 +141,35 @@ function OverrideModal({ sub, plans, onSave, onClose }) {
 
   async function save() {
     setSaving(true)
-    await supabase.from('subscriptions').update({
-      plan_id:             form.plan_id,
-      billing_cycle:       form.billing_cycle,
-      status:              form.status,
-      override_price:      form.override_price !== '' ? Math.round(+form.override_price * 100) : null,
-      discount_pct:        +form.discount_pct,
-      discount_label:      form.discount_label,
-      discount_expires_at: form.discount_expires_at || null,
-      trial_ends_at:       form.trial_ends_at || null,
-      notes:               form.notes,
-      updated_at:          new Date().toISOString()
-    }).eq('subscription_id', sub.subscription_id)
+    // upsert in case org has no subscription row yet
+    const { data: existing } = await supabase.from('subscriptions').select('id').eq('org_id', sub.org_id).maybeSingle()
+    if (existing?.id) {
+      await supabase.from('subscriptions').update({
+        plan_id:             form.plan_id,
+        billing_cycle:       form.billing_cycle,
+        status:              form.status,
+        override_price:      form.override_price !== '' ? Math.round(+form.override_price * 100) : null,
+        discount_pct:        +form.discount_pct,
+        discount_label:      form.discount_label || null,
+        discount_expires_at: form.discount_expires_at || null,
+        trial_ends_at:       form.trial_ends_at || null,
+        notes:               form.notes || null,
+        updated_at:          new Date().toISOString()
+      }).eq('id', existing.id)
+    } else {
+      await supabase.from('subscriptions').insert({
+        org_id:              sub.org_id,
+        plan_id:             form.plan_id,
+        billing_cycle:       form.billing_cycle,
+        status:              form.status,
+        override_price:      form.override_price !== '' ? Math.round(+form.override_price * 100) : null,
+        discount_pct:        +form.discount_pct,
+        discount_label:      form.discount_label || null,
+        discount_expires_at: form.discount_expires_at || null,
+        trial_ends_at:       form.trial_ends_at || null,
+        notes:               form.notes || null
+      })
+    }
     setSaving(false)
     onSave()
   }
@@ -151,7 +178,7 @@ function OverrideModal({ sub, plans, onSave, onClose }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', backdropFilter:'blur(4px)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ background:'var(--tf-panel)', borderRadius:18, padding:28, width:'100%', maxWidth:520, border:'1px solid var(--tf-border)', boxShadow:'0 32px 80px rgba(0,0,0,.32)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Override — {sub.org_name}</h3>
+          <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Override — {sub.org_name || sub.org_id?.slice(0,8)}</h3>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--tf-text-sub)' }}><X size={18} /></button>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
@@ -219,7 +246,7 @@ export default function BillingAdmin() {
     setLoading(true)
     const [pr, sr, ir] = await Promise.all([
       supabase.from('plans').select('*').order('sort_order'),
-      supabase.from('admin_billing_overview').select('*').order('created_at', { ascending:false }),
+      supabase.from('admin_billing_overview').select('*').order('created_at', { ascending:false }).throwOnError().catch(()=>supabase.from('subscriptions').select('*, organizations(name,email), plans(name)').order('created_at',{ascending:false})),
       supabase.from('subscription_invoices').select('*, organizations(name,email)').order('created_at', { ascending:false }).limit(60)
     ])
     const pl = pr.data || []
