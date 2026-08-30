@@ -6,7 +6,7 @@ import CheckoutButton from './CheckoutButton.jsx'
 const fmt = p => '₹' + ((p || 0) / 100).toLocaleString('en-IN')
 const fmtDate = d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
-export default function UpgradePlansModule({ org, supabase, cu, onUpgraded }) {
+export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defaultPlanId }) {
   const [plans, setPlans]   = useState([])
   const [sub,   setSub]     = useState(null)
   const [invs,  setInvs]    = useState([])
@@ -55,8 +55,15 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded }) {
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 800, color: 'var(--tf-text)' }}>Plans & Billing</h2>
         <p style={{ margin: 0, color: 'var(--tf-text-sub)', fontSize: 13 }}>
-          Manage your TaskFlowCo subscription. Payments via Razorpay · Invoices via Zoho Books.
+          Manage your TaskFlowCo subscription · Payments via Razorpay · Invoices via Zoho Books.
         </p>
+        {defaultPlanId && (
+          <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.2)',
+            borderRadius: 10, padding: '8px 14px', fontSize: 13, color: '#059669', fontWeight: 600 }}>
+            <span>✓</span> You selected the <b style={{textTransform:'capitalize'}}>{defaultPlanId}</b> plan — complete your purchase below
+          </div>
+        )}
       </div>
 
       {/* Current subscription */}
@@ -109,9 +116,9 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded }) {
 
               return (
                 <div key={plan.id} style={{
-                  border: `${isFeatured ? 2 : 1}px solid ${isFeatured ? '#2F6BFF' : 'var(--tf-border)'}`,
+                  border: `${(defaultPlanId === plan.id || isFeatured) ? 2 : 1}px solid ${defaultPlanId === plan.id ? '#10b981' : isFeatured ? '#2F6BFF' : 'var(--tf-border)'}`,
                   borderRadius: 18, padding: 24, background: 'var(--tf-panel)', position: 'relative',
-                  boxShadow: isFeatured ? '0 8px 32px rgba(47,107,255,.12)' : 'none'
+                  boxShadow: defaultPlanId === plan.id ? '0 8px 32px rgba(16,185,129,.18)' : isFeatured ? '0 8px 32px rgba(47,107,255,.12)' : 'none'
                 }}>
                   {isFeatured && <div style={{ position: 'absolute', top: -12, left: 24, background: 'linear-gradient(135deg,#2F6BFF,#14C7C0)', color: '#fff', borderRadius: 20, padding: '3px 14px', fontSize: 10, fontWeight: 800 }}>⭐ Most Popular</div>}
                   {plan.badge && <div style={{ position: 'absolute', top: isFeatured ? 20 : -12, right: 20, background: '#f59e0b', color: '#fff', borderRadius: 20, padding: '3px 12px', fontSize: 10, fontWeight: 800 }}>{plan.badge}</div>}
