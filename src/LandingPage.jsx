@@ -392,7 +392,7 @@ function PurchaseModal({ planId, billing, onClose, supabase }) {
         else if (orgList.length > 1) setStep('org')
         else {
           // User exists but no orgs — go straight to pay, create org on success
-          setSelectedOrg({ id: null, name: name + ''s Practice' })
+          setSelectedOrg({ id: null, name: name + "'s Practice" })
           setStep('pay')
         }
       } else {
@@ -596,7 +596,7 @@ function PurchaseModal({ planId, billing, onClose, supabase }) {
             <div style={{ background:'linear-gradient(135deg,rgba(47,107,255,.07),rgba(20,199,192,.05))',
               border:'1px solid rgba(47,107,255,.15)', borderRadius:13, padding:'16px 18px', marginBottom:20 }}>
               <div style={{ fontSize:11, color:'var(--muted)', marginBottom:6 }}>Upgrading</div>
-              <div style={{ fontWeight:800, color:'var(--text)', fontSize:15 }}>{selectedOrg?.name || name + "'s Practice"}</div>
+              <div style={{ fontWeight:800, color:'var(--text)', fontSize:15 }}>{selectedOrg?.name || name + "'s Practice"}ractice"}</div>
               <div style={{ fontSize:12, color:'var(--muted)', marginTop:4 }}>
                 {planName} · {billing} · ₹{billedAmt.toLocaleString('en-IN')} {billing === 'yearly' ? '/year' : '/month'} + GST
               </div>
