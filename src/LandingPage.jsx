@@ -2,7 +2,6 @@ import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { supabase, signInWithEmailLink } from './lib/supabase'
 import InstallPWAButton from './components/InstallPWAButton.jsx'
 import CheckoutButton from './components/CheckoutButton.jsx'
-import { supabase } from './lib/supabase.js'
 
 // "Watch demo" tour is loaded on demand.
 const LaunchTour = lazy(() => import('./LaunchTour.jsx'))
