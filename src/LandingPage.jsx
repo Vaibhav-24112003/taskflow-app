@@ -491,21 +491,28 @@ function PurchaseModal({ planId, billing, onClose, supabase }) {
           border:'none', cursor:'pointer', fontSize:22, color:'var(--muted)', lineHeight:1 }}>×</button>
 
         {/* Plan recap header */}
-        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:22 }}>
-          <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,#2F6BFF22,#14C7C022)',
-            display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>⚡</div>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:14, marginBottom:22, paddingBottom:18, borderBottom:'1px solid var(--border)' }}>
+          <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
+            display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:'0 4px 14px rgba(47,107,255,.3)' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
           <div>
-            <div style={{ fontSize:11, fontWeight:700, color:'#2F6BFF', textTransform:'uppercase', letterSpacing:'.08em' }}>
-              TaskFlowCo {planName}
+            <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:'#2F6BFF', textTransform:'uppercase', letterSpacing:'.1em' }}>
+                TaskFlowCo
+              </div>
+              <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', letterSpacing:'-.02em', lineHeight:1 }}>
+                {planName} Plan
+              </div>
             </div>
-            <div style={{ fontSize:22, fontWeight:800, color:'var(--text)', letterSpacing:'-.03em' }}>
-              ₹{displayAmt.toLocaleString('en-IN')}<span style={{ fontSize:12, fontWeight:500, color:'var(--muted)' }}>/mo</span>
+            <div style={{ marginTop:2 }}>
+              <span style={{ fontSize:26, fontWeight:800, color:'#2F6BFF', letterSpacing:'-.03em' }}>₹{displayAmt.toLocaleString('en-IN')}</span>
+              <span style={{ fontSize:12, fontWeight:500, color:'var(--muted)' }}>/mo</span>
             </div>
-            <div style={{ fontSize:11, color:'var(--muted)' }}>
-              {billing === 'yearly'
-                ? `Billed ₹${yearlyRs.toLocaleString('en-IN')}/year · 2 months free`
-                : 'Billed monthly · cancel anytime'}
-              {' · +18% GST'}
+            <div style={{ fontSize:11, color:'var(--muted)', marginTop:1 }}>
+              {billing === 'yearly' ? `Billed ₹${yearlyRs.toLocaleString('en-IN')}/year · 2 months free` : 'Billed monthly · cancel anytime'} · +18% GST
             </div>
           </div>
         </div>
