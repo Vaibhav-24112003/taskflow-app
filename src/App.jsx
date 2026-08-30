@@ -1777,7 +1777,18 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
       supabase={supabase} cu={cu} lightMode={lightMode}
       onClose={()=>setShowCmdBar(false)}
       onGoWorkspace={id=>{localStorage.setItem('tf_lastWsId',id);setActiveWsId(id);setActiveOrg(null);}}
-      onGoOrg={org=>{setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);}}
+      onUpgradeIntent={function(org){setActiveOrg(org);localStorage.setItem('tf_lastOrgId',org.id);setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()});}}
+      onGoOrg={org=>{
+        setActiveOrg(org);setActiveWsId(null);localStorage.setItem('tf_lastOrgId',org.id);
+        // If upgrade intent is set, navigate to upgrade module
+        const upgradePlan = localStorage.getItem('tf_upgrade_plan');
+        if (upgradePlan) {
+          localStorage.removeItem('tf_upgrade_plan');
+          setTimeout(() => {
+            localStorage.setItem('tf_lastOrgModule','upgrade');
+          }, 100);
+        }
+      }}
       onGoOrgModule={(mod,tab,workType)=>{var o=activeOrg||orgs[0];if(o){setActiveOrg(o);localStorage.setItem('tf_lastOrgId',o.id);}localStorage.setItem('tf_lastOrgModule',mod);localStorage.setItem('tf_lastOrgTab',tab||'');setActiveWsId(null);setOrgNavTarget({module:mod,tab:tab||'',workType:workType||null,ts:Date.now()});}}
       onGoHome={()=>{setActiveWsId(null);setActiveOrg(null);setAdminModule(null);localStorage.removeItem('tf_lastOrgId');localStorage.removeItem('tf_lastOrgModule');localStorage.removeItem('tf_lastOrgTab');localStorage.removeItem('tf_lastWsId');}}
       onOpenTask={t=>{setEditTask(t);if(t.workspace_id&&t.workspace_id!==activeWsId){localStorage.setItem('tf_lastWsId',t.workspace_id);setActiveWsId(t.workspace_id);}}}
@@ -1966,7 +1977,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
       </div>
     </div>}
     {!adminModule&&!activeWs
-      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>window.open('mailto:sales@taskflowco.in?subject=Renew '+activeOrg.name,'_blank')}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
+      ?activeOrg?<><TrialBanner gate={trialGate} org={activeOrg} onRenew={()=>{setActiveOrg(activeOrg||orgs[0]);if(activeOrg)localStorage.setItem('tf_lastOrgId',activeOrg.id);setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()});}}/><OrgDashboard org={activeOrg} supabase={supabase} cu={cu} allWorkspaces={workspaces} onBack={handleOrgBack} navTarget={orgNavTarget} trialGate={trialGate}/></>:<div style={{flex:1,padding:'28px 32px',position:'relative',zIndex:1,overflowY:'auto'}}>
         {/* Pending invites banner on home screen */}
         <InviteBanner invites={pendingInvites} onAccept={acceptInv} onDecline={declineInv}/>
         <OrgInviteBanner cu={cu} supabase={supabase} onAccepted={async function(){var r=await supabase.from('organizations').select('*').order('name').limit(100);if(r.data)setOrgs(r.data);}}/>
@@ -19170,7 +19181,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
         ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
         : <ModuleLock module="billing" onBack={()=>setOrgModule(null)} onContactSales={()=>window.open('mailto:sales@taskflowco.in?subject=Activate Billing for '+(org?.name||''),'_blank')}/>)}
       {/* Upgrade & Plans */}
-      {orgModule==='upgrade'&&<Suspense fallback={null}><UpgradePlansModule org={org} supabase={supabase} cu={cu} onUpgraded={function(){setOrgModule('diary');setTab('home');}}/></Suspense>}
+      {orgModule==='upgrade'&&<Suspense fallback={null}><UpgradePlansModule org={org} supabase={supabase} cu={cu}
+        defaultPlanId={function(){try{return localStorage.getItem('tf_upgrade_plan')||null}catch(e){return null}}()}
+        onUpgraded={function(){try{localStorage.removeItem('tf_upgrade_plan')}catch(e){}setOrgModule('diary');setTab('home');}}/></Suspense>}
       {/* Master Data */}
       {orgModule==='masterdata'&&tab==='clients'&&<ClientsModule cu={cu} orgId={org.id} supabase={supabase} allWorkspaces={allWorkspaces} workTypeNames={workTypeNames.length>0?workTypeNames:undefined} workTypeConfigs={activeConfigs}/>}
       {orgModule==='masterdata'&&tab==='worktypes'&&<WorkTypeConfigPanel org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} onReload={loadWTC}/>}
@@ -20882,6 +20895,16 @@ export default function App(){
       }
       // Load pending invitations for this user
       await refreshInvites(user.email)
+      // ── Upgrade intent: if user came from landing page "Buy Plan" button ──
+      try {
+        const intent = localStorage.getItem('tfc-upgrade-intent')
+        if (intent) {
+          localStorage.removeItem('tfc-upgrade-intent')
+          // Set org module so first org they open goes straight to upgrade
+          localStorage.setItem('tf_lastOrgModule', 'upgrade')
+          localStorage.setItem('tf_upgrade_plan',  intent)
+        }
+      } catch(_) {}
     }catch(e){console.error(e)}finally{setLoading(false);initRef.current=true}
   }
 
