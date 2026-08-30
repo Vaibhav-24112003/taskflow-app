@@ -341,317 +341,6 @@ function AuthModal({ open, onClose, onGoogle, googleBusy }) {
 
 
 
-// ── PurchaseModal — works for visitors AND signed-in users ──────────
-// Collects email → looks up orgs → lets user pick org → Razorpay checkout
-function PurchaseModal({ planId, billing, onClose, supabase }) {
-  const [step, setStep]       = React.useState('details')  // details | org | pay | success
-  const [email, setEmail]     = React.useState('')
-  const [phone, setPhone]     = React.useState('')
-  const [name,  setName]      = React.useState('')
-  const [orgs,  setOrgs]      = React.useState([])
-  const [selectedOrg, setSelectedOrg] = React.useState(null)
-  const [busy,  setBusy]      = React.useState(false)
-  const [error, setError]     = React.useState('')
-  const [rzpLoaded, setRzpLoaded] = React.useState(false)
-
-  const planName    = planId === 'pro' ? 'Pro' : 'Starter'
-  const monthlyRs   = planId === 'pro' ? 1999  : 999
-  const yearlyRs    = planId === 'pro' ? 19990 : 9990
-  const monthlyEquiv= planId === 'pro' ? 1666  : 833
-  const displayAmt  = billing === 'yearly' ? monthlyEquiv : monthlyRs
-  const billedAmt   = billing === 'yearly' ? yearlyRs     : monthlyRs
-
-  // Load Razorpay script early
-  React.useEffect(() => {
-    if (window.Razorpay) { setRzpLoaded(true); return }
-    const s = document.createElement('script')
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
-    s.onload = () => setRzpLoaded(true)
-    document.head.appendChild(s)
-  }, [])
-
-  async function lookupOrgs() {
-    if (!email.trim() || !name.trim() || !phone.trim()) { setError('Please fill in all fields'); return }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Enter a valid email address'); return }
-    if (!/^[6-9]\d{9}$/.test(phone.replace(/\s/g,''))) { setError('Enter a valid 10-digit Indian mobile number'); return }
-    setBusy(true); setError('')
-    try {
-      // Sign in with OTP / magic link to get user context
-      // First check if user exists by trying to find their orgs via email lookup
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user && user.email === email) {
-        // Already signed in — fetch their orgs directly
-        const { data: members } = await supabase
-          .from('organization_members')
-          .select('org_id, role, organizations(id, name, description)')
-          .eq('user_id', user.id)
-        const orgList = (members || []).map(m => m.organizations).filter(Boolean)
-        setOrgs(orgList)
-        if (orgList.length === 1) { setSelectedOrg(orgList[0]); setStep('pay') }
-        else if (orgList.length > 1) setStep('org')
-        else {
-          // User exists but no orgs — go straight to pay, create org on success
-          setSelectedOrg({ id: null, name: name + "'s Practice" })
-          setStep('pay')
-        }
-      } else {
-        // Send magic link / OTP
-        const { error: otpErr } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-          options: { emailRedirectTo: window.location.href }
-        })
-        if (otpErr) throw otpErr
-        setStep('otp')
-      }
-    } catch (e) { setError(e.message || 'Something went wrong') }
-    finally { setBusy(false) }
-  }
-
-  async function proceedAsGuest() {
-    // Allow checkout without signing in — we'll create/link account after payment
-    setSelectedOrg({ id: null, name: name + "'s Practice" })
-    setStep('pay')
-  }
-
-  async function startPayment() {
-    if (!rzpLoaded) { setError('Payment gateway loading, please wait...'); return }
-    setBusy(true); setError('')
-    try {
-      let orgId = selectedOrg?.id
-
-      // If no org yet, sign up user and create org
-      if (!orgId) {
-        // Sign up / get session
-        const { data: authData, error: signErr } = await supabase.auth.signInWithOtp({
-          email: email.trim(),
-          options: { shouldCreateUser: true }
-        })
-        // Continue with guest checkout — org will be created post-payment via webhook
-        // Pass email+name in Razorpay notes for post-payment org creation
-      }
-
-      // Call create-order edge function
-      const { data: { session } } = await supabase.auth.getSession()
-      const headers = { 'Content-Type': 'application/json' }
-      if (session?.access_token) headers['Authorization'] = 'Bearer ' + session.access_token
-
-      let orderData
-      if (orgId && session?.access_token) {
-        // Signed-in user with org
-        const res = await fetch(
-          `${supabase.supabaseUrl}/functions/v1/create-order`,
-          { method: 'POST', headers, body: JSON.stringify({ org_id: orgId, plan_id: planId, billing_cycle: billing }) }
-        )
-        orderData = await res.json()
-        if (!orderData.order_id) throw new Error(orderData.error || orderData.detail || 'Order creation failed')
-      } else {
-        // Guest — create order via guest-order function
-        const res = await fetch(
-          `${supabase.supabaseUrl}/functions/v1/create-guest-order`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan_id: planId, billing_cycle: billing, email: email.trim(), name: name.trim(), phone: phone.trim() }) }
-        )
-        orderData = await res.json()
-        if (!orderData.order_id) throw new Error(orderData.error || orderData.detail || 'Order creation failed')
-      }
-
-      // Open Razorpay
-      const rzp = new window.Razorpay({
-        key:         orderData.key_id,
-        order_id:    orderData.order_id,
-        amount:      orderData.amount,
-        currency:    orderData.currency || 'INR',
-        name:        'TaskFlowCo',
-        description: `${planName} Plan — ${billing}`,
-        prefill:     { name: name.trim(), email: email.trim(), contact: phone.trim() },
-        theme:       { color: '#2F6BFF' },
-        handler: () => { setBusy(false); setStep('success') },
-        modal: { ondismiss: () => setBusy(false) }
-      })
-      rzp.on('payment.failed', (r) => { setError(r?.error?.description || 'Payment failed'); setBusy(false) })
-      rzp.open()
-    } catch (e) { setError(e.message || 'Something went wrong'); setBusy(false) }
-  }
-
-  const inp = { width:'100%', padding:'11px 13px', border:'1px solid var(--border)', borderRadius:10,
-    background:'var(--surface)', color:'var(--text)', fontSize:14, fontFamily:'inherit',
-    outline:'none', boxSizing:'border-box' }
-  const lbl = { display:'block', fontSize:11, fontWeight:700, color:'var(--text-2)',
-    textTransform:'uppercase', letterSpacing:'.07em', marginBottom:5 }
-
-  return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(10,20,40,.65)', backdropFilter:'blur(6px)',
-      zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'var(--surface)', borderRadius:22, padding:'32px 28px', width:'100%',
-        maxWidth:460, border:'1px solid var(--border)', boxShadow:'0 32px 80px rgba(10,20,40,.22)',
-        position:'relative', maxHeight:'90vh', overflowY:'auto' }}>
-
-        {/* Close */}
-        <button onClick={onClose} style={{ position:'absolute', top:16, right:18, background:'none',
-          border:'none', cursor:'pointer', fontSize:22, color:'var(--muted)', lineHeight:1 }}>×</button>
-
-        {/* Plan recap header */}
-        <div style={{ display:'flex', alignItems:'flex-start', gap:14, marginBottom:22, paddingBottom:18, borderBottom:'1px solid var(--border)' }}>
-          <div style={{ width:44, height:44, borderRadius:13, background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
-            display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, boxShadow:'0 4px 14px rgba(47,107,255,.3)' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:'#2F6BFF', textTransform:'uppercase', letterSpacing:'.1em' }}>
-                TaskFlowCo
-              </div>
-              <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', letterSpacing:'-.02em', lineHeight:1 }}>
-                {planName} Plan
-              </div>
-            </div>
-            <div style={{ marginTop:2 }}>
-              <span style={{ fontSize:26, fontWeight:800, color:'#2F6BFF', letterSpacing:'-.03em' }}>₹{displayAmt.toLocaleString('en-IN')}</span>
-              <span style={{ fontSize:12, fontWeight:500, color:'var(--muted)' }}>/mo</span>
-            </div>
-            <div style={{ fontSize:11, color:'var(--muted)', marginTop:1 }}>
-              {billing === 'yearly' ? `Billed ₹${yearlyRs.toLocaleString('en-IN')}/year · 2 months free` : 'Billed monthly · cancel anytime'} · +18% GST
-            </div>
-          </div>
-        </div>
-
-        {/* ── STEP: details ── */}
-        {step === 'details' && (
-          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-            <div>
-              <label style={lbl}>Full Name</label>
-              <input style={inp} placeholder="CA Ramesh Sharma" value={name} onChange={e=>setName(e.target.value)} />
-            </div>
-            <div>
-              <label style={lbl}>Work Email</label>
-              <input style={inp} type="email" placeholder="ramesh@sharmaandco.in" value={email} onChange={e=>setEmail(e.target.value)} />
-            </div>
-            <div>
-              <label style={lbl}>Mobile Number</label>
-              <div style={{ display:'flex', gap:8 }}>
-                <span style={{ ...inp, width:'auto', padding:'11px 12px', color:'var(--muted)', flexShrink:0, background:'var(--card)' }}>🇮🇳 +91</span>
-                <input style={{ ...inp, flex:1 }} type="tel" placeholder="9876543210" value={phone}
-                  onChange={e=>setPhone(e.target.value.replace(/\D/g,'').slice(0,10))} />
-              </div>
-            </div>
-            {error && <div style={{ fontSize:12, color:'#ef4444', background:'rgba(239,68,68,.08)', padding:'8px 12px', borderRadius:8 }}>⚠ {error}</div>}
-            <button onClick={lookupOrgs} disabled={busy} style={{ background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
-              color:'#fff', border:'none', borderRadius:11, padding:'13px', fontSize:14,
-              fontWeight:800, cursor:busy?'not-allowed':'pointer', fontFamily:'inherit', marginTop:4 }}>
-              {busy ? 'Looking up your account…' : 'Continue →'}
-            </button>
-            <button onClick={proceedAsGuest} style={{ background:'none', border:'none', color:'var(--muted)',
-              fontSize:12, cursor:'pointer', fontFamily:'inherit', textDecoration:'underline' }}>
-              Continue without signing in
-            </button>
-            <p style={{ fontSize:10.5, color:'var(--muted)', textAlign:'center', margin:0 }}>
-              🔒 Payments secured by Razorpay · PCI-DSS compliant
-            </p>
-          </div>
-        )}
-
-        {/* ── STEP: otp (magic link sent) ── */}
-        {step === 'otp' && (
-          <div style={{ textAlign:'center', padding:'12px 0' }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>📧</div>
-            <h3 style={{ margin:'0 0 10px', color:'var(--text)', fontWeight:800 }}>Check your email</h3>
-            <p style={{ color:'var(--muted)', fontSize:13, marginBottom:20 }}>
-              We sent a sign-in link to <b>{email}</b>. Click it and come back here to complete checkout.
-            </p>
-            <p style={{ color:'var(--muted)', fontSize:12 }}>Or —</p>
-            <button onClick={proceedAsGuest} style={{ marginTop:8, background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
-              color:'#fff', border:'none', borderRadius:11, padding:'12px 24px', fontSize:13,
-              fontWeight:800, cursor:'pointer', fontFamily:'inherit' }}>
-              Skip & pay now →
-            </button>
-          </div>
-        )}
-
-        {/* ── STEP: org selection ── */}
-        {step === 'org' && (
-          <div>
-            <h3 style={{ margin:'0 0 6px', color:'var(--text)', fontWeight:800, fontSize:16 }}>Select your practice</h3>
-            <p style={{ margin:'0 0 16px', color:'var(--muted)', fontSize:13 }}>Which practice would you like to upgrade?</p>
-            <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
-              {orgs.map(org => (
-                <button key={org.id} onClick={() => { setSelectedOrg(org); setStep('pay') }}
-                  style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px',
-                    border:`2px solid ${selectedOrg?.id===org.id ? '#2F6BFF' : 'var(--border)'}`,
-                    borderRadius:12, background:'var(--card)', cursor:'pointer', textAlign:'left',
-                    transition:'border-color .15s' }}>
-                  <div style={{ width:38, height:38, borderRadius:11, background:'linear-gradient(135deg,#2F6BFF22,#14C7C022)',
-                    display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, color:'#2F6BFF', flexShrink:0 }}>
-                    {(org.name||'?').slice(0,2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight:700, fontSize:13, color:'var(--text)' }}>{org.name}</div>
-                    {org.description && <div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{org.description}</div>}
-                  </div>
-                </button>
-              ))}
-            </div>
-            {error && <div style={{ fontSize:12, color:'#ef4444', marginBottom:12 }}>⚠ {error}</div>}
-          </div>
-        )}
-
-        {/* ── STEP: pay ── */}
-        {step === 'pay' && (
-          <div>
-            <div style={{ background:'linear-gradient(135deg,rgba(47,107,255,.07),rgba(20,199,192,.05))',
-              border:'1px solid rgba(47,107,255,.15)', borderRadius:13, padding:'16px 18px', marginBottom:20 }}>
-              <div style={{ fontSize:11, color:'var(--muted)', marginBottom:6 }}>Upgrading</div>
-              <div style={{ fontWeight:800, color:'var(--text)', fontSize:15 }}>{selectedOrg?.name || name + "'s Practice"}ractice"}</div>
-              <div style={{ fontSize:12, color:'var(--muted)', marginTop:4 }}>
-                {planName} · {billing} · ₹{billedAmt.toLocaleString('en-IN')} {billing === 'yearly' ? '/year' : '/month'} + GST
-              </div>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
-              {[
-                planId === 'pro'
-                  ? ['Unlimited clients & 15 users', 'GST, ITR, TDS worksheets', 'Client portal & reminders', 'Priority support']
-                  : ['Up to 3 users & 50 clients', 'GST worksheets & ITR tracking', 'Task management', 'Email support']
-              ][0].map((f,i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, color:'var(--text-2)' }}>
-                  <span style={{ color:'#10b981', fontWeight:700 }}>✓</span>{f}
-                </div>
-              ))}
-            </div>
-            {error && <div style={{ fontSize:12, color:'#ef4444', background:'rgba(239,68,68,.08)', padding:'8px 12px', borderRadius:8, marginBottom:12 }}>⚠ {error}</div>}
-            <button onClick={startPayment} disabled={busy} style={{ width:'100%', background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
-              color:'#fff', border:'none', borderRadius:11, padding:'14px', fontSize:14,
-              fontWeight:800, cursor:busy?'not-allowed':'pointer', fontFamily:'inherit' }}>
-              {busy ? 'Opening payment…' : `Pay ₹${billedAmt.toLocaleString('en-IN')} + GST →`}
-            </button>
-            <p style={{ fontSize:10.5, color:'var(--muted)', textAlign:'center', marginTop:10 }}>
-              🔒 Secured by Razorpay · UPI / Cards / Net Banking · Cancel anytime
-            </p>
-          </div>
-        )}
-
-        {/* ── STEP: success ── */}
-        {step === 'success' && (
-          <div style={{ textAlign:'center', padding:'12px 0' }}>
-            <div style={{ fontSize:52, marginBottom:12 }}>🎉</div>
-            <h3 style={{ margin:'0 0 8px', color:'var(--text)', fontWeight:800, fontSize:20 }}>Payment received!</h3>
-            <p style={{ color:'var(--muted)', fontSize:13, marginBottom:6 }}>
-              Your TaskFlowCo <b>{planName}</b> plan is being activated.
-            </p>
-            <p style={{ color:'var(--muted)', fontSize:13, marginBottom:24 }}>
-              A GST invoice will be emailed to <b>{email}</b> within a few minutes.
-            </p>
-            <button onClick={onClose} style={{ background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',
-              color:'#fff', border:'none', borderRadius:11, padding:'13px 28px', fontSize:14,
-              fontWeight:800, cursor:'pointer', fontFamily:'inherit', width:'100%' }}>
-              Go to dashboard →
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ── Upgrade modal — shown after sign-in when user clicked a plan CTA ──
 function UpgradeModal({ planId, billing, orgId, onClose }) {
@@ -747,7 +436,6 @@ export default function LandingPage({ onSignIn, loading }) {
   const [authOpen, setAuthOpen] = useState(false)
   const [billing, setBilling] = useState('yearly')
   const [upgradeModal, setUpgradeModal] = useState(null) // null | 'pro' | 'starter'
-  const [purchaseModal, setPurchaseModal] = useState(null) // null | 'pro' | 'starter'
   const [currentOrgId, setCurrentOrgId] = useState(null)
 
   // After sign-in, fetch user's first org so CheckoutButton has an orgId
@@ -768,9 +456,17 @@ export default function LandingPage({ onSignIn, loading }) {
   const start = () => setAuthOpen(true)
   const buyPlan = (planId) => {
     if (currentOrgId) {
-      setUpgradeModal(planId)  // signed-in: use UpgradeModal with org pre-loaded
+      // Already signed in with an org — go to in-app billing module
+      // Store intent so the app can open billing on load
+      try { localStorage.setItem('tfc-upgrade-intent', planId) } catch(_) {}
+      // Open auth modal which will redirect to app after sign-in
+      // Since they're already signed in (currentOrgId exists), open UpgradeModal
+      setUpgradeModal(planId)
     } else {
-      setPurchaseModal(planId) // visitor: use PurchaseModal with details form
+      // Not signed in — store intent and open sign-in modal
+      // After sign-in, app reads tfc-upgrade-intent and navigates to billing
+      try { localStorage.setItem('tfc-upgrade-intent', planId) } catch(_) {}
+      setAuthOpen(true)
     }
   }
 
@@ -779,14 +475,6 @@ export default function LandingPage({ onSignIn, loading }) {
       <style>{CSS}</style>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onGoogle={onSignIn} googleBusy={loading} />
-      {purchaseModal && (
-        <PurchaseModal
-          planId={purchaseModal}
-          billing={billing}
-          supabase={supabase}
-          onClose={() => setPurchaseModal(null)}
-        />
-      )}
       {upgradeModal && (
         <UpgradeModal
           planId={upgradeModal}
@@ -1050,7 +738,7 @@ export default function LandingPage({ onSignIn, loading }) {
             <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For a growing firm running work as a team.</p>
             <ul><li>{check}Everything in Free</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Practice Hub <b style={{color:'#0EA5A0'}}>(free for 6 months)</b></li><li>{check}Communication &amp; Billing <span style={{color:'var(--muted)'}}>— paid add-ons</span></li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
             <button className="btn btn-primary" onClick={() => buyPlan('pro')} style={{ width: '100%', justifyContent: 'center' }}>
-              {currentOrgId ? '⚡ Upgrade to Pro' : '⚡ Buy Pro — ₹' + (billing === 'yearly' ? '1,666' : '1,999') + '/mo'}
+              {currentOrgId ? '⚡ Upgrade to Pro' : 'Get started — sign in to buy'}
             </button>
             <p style={{ textAlign:'center', fontSize:11, color:'var(--muted)', margin:'8px 0 0' }}>
               {currentOrgId ? 'Instant activation · Invoice emailed automatically' : 'Sign in, then complete checkout'}
