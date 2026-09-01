@@ -223,6 +223,7 @@ export default function AdminShell({ cu, onClose }) {
       case 'orgs':          return <Suspense fallback={<Loader />}><OrgsAdmin /></Suspense>
       case 'demoreqs':      return <DemoRequestsAdmin />
       case 'support':       return <Suspense fallback={<Loader />}><SupportAdminView onClose={() => setSection('overview')} embedded /></Suspense>
+      case 'billing':       return <Suspense fallback={<Loader />}><BillingAdmin /></Suspense>
       case 'announcements': return <Suspense fallback={<Loader />}><AnnouncementsAdmin cu={cu} onClose={() => setSection('overview')} embedded /></Suspense>
       default:              return null
     }
