@@ -423,7 +423,7 @@ export default function BillingAdmin() {
 
       const ownerMap = {}
       ;(members||[]).forEach(m => {
-        ownerMap[m.org_id] = (m.profiles as {name:string,email:string}) || {}
+        ownerMap[m.org_id] = m.profiles || {}
       })
 
       // Merge subs with org data and owner email
