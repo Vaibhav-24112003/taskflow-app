@@ -402,66 +402,73 @@ export default function BillingAdmin() {
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      // Plans
+      // 1. Plans
       const { data: pl, error: pe } = await supabase.from('plans').select('*').order('sort_order')
-      if (pe) throw pe
+      if (pe) throw new Error('Plans: ' + pe.message)
 
-      // Orgs with subscription status
-      const { data: orgList } = await supabase.from('organizations')
-        .select('id, name, subscription_status, paid_modules, trial_expires_at')
-        .order('name')
+      // 2. Orgs
+      const { data: orgList, error: oe } = await supabase.from('organizations')
+        .select('id, name, subscription_status, paid_modules, trial_expires_at').order('name')
+      if (oe) throw new Error('Orgs: ' + oe.message)
 
-      // Subscriptions joined with org name
-      const { data: subs } = await supabase.from('subscriptions')
-        .select('*, plans(name, price_monthly, price_yearly)')
-        .order('created_at', { ascending: false })
+      // 3. Subscriptions (no join — fetch plans separately)
+      const { data: subs, error: se } = await supabase.from('subscriptions')
+        .select('*').order('created_at', { ascending: false })
+      if (se) throw new Error('Subs: ' + se.message)
 
-      // Get owner emails from profiles
-      const { data: members } = await supabase.from('organization_members')
-        .select('org_id, profiles(name, email)')
-        .eq('role', 'owner')
+      // 4. Owner profiles — separate query, join manually
+      const { data: ownerMembers } = await supabase.from('organization_members')
+        .select('org_id, user_id').eq('role', 'owner')
 
+      const userIds = [...new Set((ownerMembers||[]).map(m => m.user_id).filter(Boolean))]
+      let profileMap = {}
+      if (userIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles')
+          .select('id, name, email').in('id', userIds)
+        ;(profiles||[]).forEach(p => { profileMap[p.id] = p })
+      }
       const ownerMap = {}
-      ;(members||[]).forEach(m => {
-        ownerMap[m.org_id] = m.profiles || {}
+      ;(ownerMembers||[]).forEach(m => {
+        ownerMap[m.org_id] = profileMap[m.user_id] || {}
       })
 
-      // Merge subs with org data and owner email
+      // 5. Plan lookup map
+      const planMap = Object.fromEntries((pl||[]).map(p => [p.id, p]))
+
+      // 6. Merge subs
       const enriched = (subs||[]).map(s => {
         const org   = (orgList||[]).find(o => o.id === s.org_id) || {}
         const owner = ownerMap[s.org_id] || {}
+        const plan  = planMap[s.plan_id] || {}
         return {
           ...s,
-          org_name:   org.name || s.org_id?.slice(0,8) || '—',
-          owner_name: owner.name  || '—',
-          owner_email:owner.email || '—',
-          org_status: org.subscription_status || '—',
-          sub_status: s.status,
-          paid_modules: org.paid_modules || [],
+          plans:       plan,
+          org_name:    org.name    || s.org_id?.slice(0,8) || '—',
+          owner_name:  owner.name  || '—',
+          owner_email: owner.email || '—',
+          org_status:  org.subscription_status || '—',
+          sub_status:  s.status,
+          paid_modules:org.paid_modules || [],
         }
       })
 
-      // Invoices
+      // 7. Invoices
       const { data: invs } = await supabase.from('subscription_invoices')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100)
-
-      // Get org names for invoices
-      const { data: orgNames } = await supabase.from('organizations').select('id, name')
-      const orgNameMap = Object.fromEntries((orgNames||[]).map(o => [o.id, o.name]))
-
+        .select('*').order('created_at', { ascending: false }).limit(100)
+      const orgNameMap = Object.fromEntries((orgList||[]).map(o => [o.id, o.name]))
       const enrichedInvs = (invs||[]).map(i => ({
-        ...i,
-        org_name: orgNameMap[i.org_id] || i.org_id?.slice(0,8) || '—'
+        ...i, org_name: orgNameMap[i.org_id] || i.org_id?.slice(0,8) || '—'
       }))
 
-      // Stats
+      // 8. Stats
       const active   = enriched.filter(s => s.sub_status === 'active')
-      const trialing = (orgList||[]).filter(o => o.subscription_status === 'trial' || o.subscription_status === 'trialing')
-      const mrr      = active.reduce((n,s) => {
-        const price = s.override_price ?? (s.billing_cycle==='yearly' ? Math.round((s.plans?.price_yearly||0)/12) : (s.plans?.price_monthly||0))
-        const disc  = s.discount_pct > 0 ? (100-s.discount_pct)/100 : 1
+      const trialing = (orgList||[]).filter(o => ['trial','trialing'].includes(o.subscription_status))
+      const mrr = active.reduce((n,s) => {
+        const basePrice = s.billing_cycle==='yearly'
+          ? Math.round((s.plans?.price_yearly||0)/12)
+          : (s.plans?.price_monthly||0)
+        const price = s.override_price != null ? Math.round(s.override_price / (s.billing_cycle==='yearly'?12:1)) : basePrice
+        const disc  = s.discount_pct > 0 ? (100 - s.discount_pct) / 100 : 1
         return n + Math.round(price * disc)
       }, 0)
 
@@ -479,7 +486,8 @@ export default function BillingAdmin() {
         invoices: enrichedInvs.length,
       })
     } catch(e) {
-      setError(e.message || 'Failed to load billing data')
+      console.error('BillingAdmin load error:', e)
+      setError(e.message || 'Failed to load billing data. Check console for details.')
     }
     setLoading(false)
   }, [])
