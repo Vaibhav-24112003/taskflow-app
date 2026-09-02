@@ -435,7 +435,15 @@ export default function BillingAdmin() {
       // 5. Plan lookup map
       const planMap = Object.fromEntries((pl||[]).map(p => [p.id, p]))
 
-      // 6. Merge subs
+      // 6. Total paid per org from payment_events — must be before enriched map
+      const { data: payments } = await supabase.from('payment_events')
+        .select('org_id, amount').eq('status', 'captured')
+      const totalPaidMap = {}
+      ;(payments||[]).forEach(p => {
+        totalPaidMap[p.org_id] = (totalPaidMap[p.org_id] || 0) + (p.amount || 0)
+      })
+
+      // 7. Merge subs
       const enriched = (subs||[]).map(s => {
         const org   = (orgList||[]).find(o => o.id === s.org_id) || {}
         const owner = ownerMap[s.org_id] || {}
@@ -451,14 +459,6 @@ export default function BillingAdmin() {
           paid_modules:org.paid_modules || [],
           total_paid:  totalPaidMap[s.org_id] || 0,
         }
-      })
-
-      // 7. Total paid per org from payment_events (source of truth)
-      const { data: payments } = await supabase.from('payment_events')
-        .select('org_id, amount').eq('status', 'captured')
-      const totalPaidMap = {}
-      ;(payments||[]).forEach(p => {
-        totalPaidMap[p.org_id] = (totalPaidMap[p.org_id] || 0) + (p.amount || 0)
       })
 
       // 8. Invoices
