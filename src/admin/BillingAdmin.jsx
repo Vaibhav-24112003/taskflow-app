@@ -449,10 +449,19 @@ export default function BillingAdmin() {
           org_status:  org.subscription_status || '—',
           sub_status:  s.status,
           paid_modules:org.paid_modules || [],
+          total_paid:  totalPaidMap[s.org_id] || 0,
         }
       })
 
-      // 7. Invoices
+      // 7. Total paid per org from payment_events (source of truth)
+      const { data: payments } = await supabase.from('payment_events')
+        .select('org_id, amount').eq('status', 'captured')
+      const totalPaidMap = {}
+      ;(payments||[]).forEach(p => {
+        totalPaidMap[p.org_id] = (totalPaidMap[p.org_id] || 0) + (p.amount || 0)
+      })
+
+      // 8. Invoices
       const { data: invs } = await supabase.from('subscription_invoices')
         .select('*').order('created_at', { ascending: false }).limit(100)
       const orgNameMap = Object.fromEntries((orgList||[]).map(o => [o.id, o.name]))
@@ -460,10 +469,11 @@ export default function BillingAdmin() {
         ...i, org_name: orgNameMap[i.org_id] || i.org_id?.slice(0,8) || '—'
       }))
 
-      // 8. Stats
+      // 9. Stats
       const active   = enriched.filter(s => s.sub_status === 'active')
       const trialing = (orgList||[]).filter(o => ['trial','trialing'].includes(o.subscription_status))
       const mrr = active.reduce((n,s) => {
+        if (s.billing_cycle === 'manual') return n  // free access, skip
         const basePrice = s.billing_cycle==='yearly'
           ? Math.round((s.plans?.price_yearly||0)/12)
           : (s.plans?.price_monthly||0)
