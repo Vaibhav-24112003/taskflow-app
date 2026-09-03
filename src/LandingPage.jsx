@@ -111,7 +111,7 @@ const CSS = `
 .lp2 .quote{background:var(--grad);border-radius:24px;padding:56px;color:#fff;text-align:center}
 .lp2 .quote p{font-size:clamp(20px,2.4vw,28px);font-weight:700;line-height:1.4;max-width:24ch;margin:0 auto 22px;letter-spacing:-.01em}
 .lp2 .quote .who{font-size:14px;opacity:.85;font-weight:600}
-.lp2 .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.lp2 .price-grid{display:grid;grid-template-columns:repeat(4,minmax(200px,1fr));gap:16px}
 .lp2 .plan{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:28px}
 .lp2 .plan.featured{border:2px solid var(--blue);box-shadow:var(--shadow-card);position:relative}
 .lp2 .plan .tag{position:absolute;top:-12px;left:28px;background:var(--grad);color:#fff;font-size:11px;font-weight:800;padding:4px 11px;border-radius:99px}
@@ -435,7 +435,15 @@ export default function LandingPage({ onSignIn, loading }) {
   const [launchOpen, setLaunchOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
   const [billing, setBilling] = useState('yearly')
-  const [upgradeModal, setUpgradeModal] = useState(null) // null | 'pro' | 'starter'
+  const [upgradeModal, setUpgradeModal] = useState(null)
+  const [plans, setPlans] = useState([])
+  const [plansLoading, setPlansLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('plans').select('*').eq('is_active', true).order('sort_order')
+      .then(({ data }) => { setPlans(data || []); setPlansLoading(false) })
+      .catch(() => setPlansLoading(false))
+  }, []) // null | 'pro' | 'starter'
   const [currentOrgId, setCurrentOrgId] = useState(null)
 
   // After sign-in, fetch user's first org so CheckoutButton has an orgId
@@ -718,40 +726,71 @@ export default function LandingPage({ onSignIn, loading }) {
           </div>
         </div>
         <div className="price-grid">
-          <div className="plan">
-            <h3>Free</h3>
-            <div className="amt">₹0<small>/mo</small></div>
-            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For an individual practitioner starting out.</p>
-            <ul><li>{check}Up to 25 clients</li><li>{check}Workspaces — Kanban boards <b style={{color:'#0EA5A0'}}>(free for life)</b></li><li>{check}WorkZone + Stages board</li><li>{check}Compliance calendar &amp; My Work planner</li></ul>
-            <button className="btn btn-ghost" onClick={start} style={{ width: '100%', justifyContent: 'center', marginBottom: 8 }}>Get started free</button>
-            {currentOrgId && (
-              <button onClick={() => buyPlan('starter')} style={{ width:'100%', background:'none', border:'1px solid var(--border)', borderRadius:10, padding:'9px 0', fontSize:12.5, fontWeight:700, color:'var(--text-2)', cursor:'pointer', fontFamily:'inherit' }}>
-                Or buy Starter ₹{billing === 'yearly' ? '833' : '999'}/mo →
-              </button>
-            )}
-          </div>
-          <div className="plan featured">
-            <span className="tag">Most popular</span>
-            <h3>Pro</h3>
-            <div className="amt">₹{billing === 'yearly' ? '1,249' : '1,499'}<small>/mo</small></div>
-            <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>{billing === 'yearly' ? 'Billed ₹14,990/year — 2 months free' : 'Billed monthly · switch to yearly to save'}</p>
-            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For a growing firm running work as a team.</p>
-            <ul><li>{check}Everything in Free</li><li>{check}Unlimited clients &amp; up to 15 team members</li><li>{check}Practice Hub <b style={{color:'#0EA5A0'}}>(free for 6 months)</b></li><li>{check}Communication &amp; Billing <span style={{color:'var(--muted)'}}>— paid add-ons</span></li><li>{check}Analytics &amp; on-time reports</li><li>{check}Automated work reminders</li><li>{check}Rolling assignments &amp; time tracking</li></ul>
-            <button className="btn btn-primary" onClick={() => buyPlan('pro')} style={{ width: '100%', justifyContent: 'center' }}>
-              {currentOrgId ? '⚡ Upgrade to Pro' : 'Get started — sign in to buy'}
-            </button>
-            <p style={{ textAlign:'center', fontSize:11, color:'var(--muted)', margin:'8px 0 0' }}>
-              {currentOrgId ? 'Instant activation · Invoice emailed automatically' : 'Sign in, then complete checkout'}
-            </p>
-          </div>
-          <div className="plan">
-            <h3>Max</h3>
-            <div className="amt">Custom</div>
-            <p style={{ color: 'var(--text-2)', fontSize: 12.5, margin: '0 0 2px', minHeight: 18 }}>Tailored to your firm's size &amp; branches</p>
-            <p style={{ color: 'var(--text-2)', fontSize: 13.5, margin: 0 }}>For multi-branch practices &amp; advisory groups.</p>
-            <ul><li>{check}Everything in Pro</li><li>{check}Unlimited team members</li><li>{check}Multiple branches / offices</li><li>{check}SSO &amp; advanced roles</li><li>{check}Priority support &amp; onboarding</li></ul>
-            <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width: '100%', justifyContent: 'center' }}>Talk to sales</button>
-          </div>
+          {plansLoading
+            ? [1,2,3,4].map(i => (
+                <div key={i} className="plan" style={{ opacity:.5, minHeight:320 }}>
+                  <div style={{ height:18, background:'var(--card-border)', borderRadius:6, width:'55%', marginBottom:14 }}/>
+                  <div style={{ height:40, background:'var(--card-border)', borderRadius:6, width:'75%', marginBottom:16 }}/>
+                  <div style={{ height:120, background:'var(--card-border)', borderRadius:6 }}/>
+                </div>
+              ))
+            : plans.map(plan => {
+                const monthlyPrice  = plan.price_monthly / 100
+                const yearlyTotal   = plan.price_yearly  / 100
+                const yearlyMonthly = monthlyPrice > 0 ? Math.round(yearlyTotal / 12) : 0
+                const displayPrice  = billing === 'yearly' ? yearlyMonthly : monthlyPrice
+                const savePct       = monthlyPrice > 0 && yearlyTotal > 0
+                  ? Math.round((1 - yearlyTotal / (monthlyPrice * 12)) * 100) : 0
+                const isFree        = plan.id === 'free' || monthlyPrice === 0
+                const isEnterprise  = plan.id === 'enterprise' || plan.category === 'enterprise'
+                const isFeatured    = plan.is_featured
+                const features      = plan.features || []
+                return (
+                  <div key={plan.id} className={`plan${isFeatured ? ' featured' : ''}`}>
+                    {isFeatured && <span className="tag">⭐ Most popular</span>}
+                    {plan.badge && !isFeatured && (
+                      <span style={{ display:'inline-block', fontSize:10, fontWeight:800, background:'var(--grad)', color:'#fff', borderRadius:99, padding:'3px 10px', marginBottom:8 }}>{plan.badge}</span>
+                    )}
+                    <h3>{plan.name}</h3>
+                    {isEnterprise
+                      ? <div className="amt">Custom</div>
+                      : <div className="amt">₹{displayPrice.toLocaleString('en-IN')}<small>/mo</small></div>
+                    }
+                    {!isEnterprise && !isFree && (
+                      <p style={{ color:'var(--text-2)', fontSize:12, margin:'0 0 4px', minHeight:16 }}>
+                        {billing === 'yearly' && savePct > 0
+                          ? `Billed ₹${yearlyTotal.toLocaleString('en-IN')}/yr · saves ${savePct}%`
+                          : 'Billed monthly · switch to yearly to save'}
+                      </p>
+                    )}
+                    {isFree && <p style={{ fontSize:11, color:'var(--muted)', margin:'0 0 4px' }}>No credit card required</p>}
+                    <p style={{ color:'var(--text-2)', fontSize:13, margin:'4px 0 0' }}>{plan.description}</p>
+                    {plan.offer_label && new Date(plan.offer_expires_at) > new Date() && (
+                      <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.25)', color:'#D97706', borderRadius:7, padding:'3px 9px', fontSize:11, fontWeight:700, margin:'8px 0 0' }}>
+                        🏷 {plan.offer_label}
+                      </div>
+                    )}
+                    <ul>
+                      {features.slice(0, 6).map((f, i) => <li key={i}>{check}{f}</li>)}
+                      {features.length > 6 && <li style={{ color:'var(--blue)', fontSize:12 }}>+{features.length - 6} more</li>}
+                    </ul>
+                    {isFree
+                      ? <button className="btn btn-ghost" onClick={start} style={{ width:'100%', justifyContent:'center' }}>Get started free →</button>
+                      : isEnterprise
+                        ? <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width:'100%', justifyContent:'center' }}>Talk to sales →</button>
+                        : <>
+                            <button className="btn btn-primary" onClick={() => buyPlan(plan.id)} style={{ width:'100%', justifyContent:'center' }}>
+                              {currentOrgId ? `⚡ Upgrade to ${plan.name}` : `Get ${plan.name} — sign in to buy`}
+                            </button>
+                            <p style={{ textAlign:'center', fontSize:10.5, color:'var(--muted)', margin:'7px 0 0' }}>
+                              {currentOrgId ? 'Instant · GST invoice auto-emailed' : 'Sign in first, then complete checkout'}
+                            </p>
+                          </>
+                    }
+                  </div>
+                )
+              })
+          }
         </div>
         {/* Practice Hub promo + onboarding help */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 28 }}>
