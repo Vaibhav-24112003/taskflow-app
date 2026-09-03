@@ -42,49 +42,117 @@ export default function TrialBanner({ gate, org, onRenew }) {
   );
 }
 
-export function ModuleLock({ module, onContactSales, onBack }) {
-  const cfg = {
-    comms:   { title: "Comms", tagline: "Reach 1,000 clients in one go." },
-    billing: { title: "Billing", tagline: "GST-ready invoicing your accountant won't curse at." },
-    portal:  { title: "Client Portal", tagline: "Let clients see status and upload documents themselves." },
-  }[module] ?? { title: module, tagline: "Paid add-on for TaskFlow." };
+export function ModuleLock({ module: moduleName, gate, onUpgrade, onContactSales, onBack }) {
+  // Which plan unlocks this module
+  const PLAN_UNLOCK = {
+    library:   { plan: 'Starter', id: 'starter', color: '#2563eb' },
+    team:      { plan: 'Starter', id: 'starter', color: '#2563eb' },
+    chat:      { plan: 'Starter', id: 'starter', color: '#2563eb' },
+    analytics: { plan: 'Pro',     id: 'pro',     color: '#7c3aed' },
+    comms:     { plan: 'Pro',     id: 'pro',     color: '#7c3aed' },
+    billing:   { plan: 'Pro',     id: 'pro',     color: '#7c3aed' },
+    portal:    { plan: 'Enterprise', id: 'enterprise', color: '#0891b2' },
+  }
+  const unlock = PLAN_UNLOCK[moduleName] || { plan: 'Pro', id: 'pro', color: '#7c3aed' }
+
+  const MODULE_INFO = {
+    library:   { icon: '📚', title: 'Library',        tagline: 'Store credentials, SOPs and firm resources.' },
+    team:      { icon: '👥', title: 'Team',            tagline: 'Attendance, logs and leave management.' },
+    chat:      { icon: '💬', title: 'Team Chat',       tagline: 'Group messaging and threads for your team.' },
+    analytics: { icon: '📊', title: 'Analytics',       tagline: 'Firm-wide performance and on-time reports.' },
+    comms:     { icon: '📨', title: 'Communication',   tagline: 'Reach 1,000 clients in one go via email & WhatsApp.' },
+    billing:   { icon: '🧾', title: 'Billing',         tagline: 'GST-ready invoicing your accountant won\'t curse at.' },
+    portal:    { icon: '🌐', title: 'Client Portal',   tagline: 'Let clients see status and upload documents.' },
+  }
+  const info = MODULE_INFO[moduleName] || { icon: '🔒', title: moduleName, tagline: 'Upgrade to access this module.' }
+
+  const isPaid = gate?.status === 'paid'
+  // If paid but module not included — they need a higher plan
+  // If not paid — they need to subscribe
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "var(--tf-overlay)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 900 }}
-      onClick={(e) => { if (e.target === e.currentTarget) onBack?.(); }}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', backdropFilter:'blur(6px)',
+        display:'flex', alignItems:'center', justifyContent:'center', zIndex:900, padding:16 }}
+      onClick={e => { if (e.target === e.currentTarget) onBack?.() }}
     >
-      <div style={{ width: 520, maxWidth: "calc(100vw - 32px)", background: "var(--tf-panel)", border: "1px solid var(--tf-border-hov)", borderRadius: 16, padding: "28px 32px", boxShadow: "0 24px 64px var(--tf-shadow-lg)" }}>
-        {/* Header row with back button */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-          <div>
-            <div className="mono" style={{ fontSize: 11, color: "var(--tf-accent)", letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700 }}>{cfg.title} · paid module</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 6, color: "var(--tf-text)" }}>{cfg.tagline}</div>
+      <div style={{ width:500, maxWidth:'calc(100vw - 32px)', background:'var(--tf-panel)',
+        border:'1px solid var(--tf-border-hov)', borderRadius:20, padding:'32px 30px',
+        boxShadow:'0 24px 64px rgba(0,0,0,.28)' }}>
+
+        {/* Close */}
+        {onBack && (
+          <button onClick={onBack} style={{ position:'absolute', marginLeft:430, marginTop:-10,
+            background:'transparent', border:'none', fontSize:20, color:'var(--tf-text-sub)', cursor:'pointer' }}>✕</button>
+        )}
+
+        {/* Icon + title */}
+        <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:20 }}>
+          <div style={{ width:52, height:52, borderRadius:14, background:`${unlock.color}18`,
+            border:`1px solid ${unlock.color}30`, display:'flex', alignItems:'center',
+            justifyContent:'center', fontSize:24, flexShrink:0 }}>
+            {info.icon}
           </div>
+          <div>
+            <div style={{ fontSize:10, fontWeight:800, color:unlock.color, textTransform:'uppercase',
+              letterSpacing:'.1em', marginBottom:3 }}>
+              {info.title} · {unlock.plan} plan
+            </div>
+            <div style={{ fontSize:18, fontWeight:800, color:'var(--tf-text)', lineHeight:1.2 }}>
+              {info.tagline}
+            </div>
+          </div>
+        </div>
+
+        {/* Plan requirement badge */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px',
+          background:`${unlock.color}0e`, border:`1px solid ${unlock.color}25`,
+          borderRadius:12, marginBottom:18 }}>
+          <span style={{ fontSize:18 }}>🔒</span>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:'var(--tf-text)' }}>
+              {isPaid
+                ? `${info.title} is included in the ${unlock.plan} plan and above`
+                : `Upgrade to ${unlock.plan} to unlock ${info.title}`}
+            </div>
+            <div style={{ fontSize:11, color:'var(--tf-text-sub)', marginTop:2 }}>
+              {isPaid
+                ? `Your current plan doesn't include this module. Upgrade to ${unlock.plan} to continue.`
+                : 'Start your subscription to unlock this and other powerful modules.'}
+            </div>
+          </div>
+        </div>
+
+        {/* What's included */}
+        <div style={{ fontSize:11, color:'var(--tf-text-sub)', marginBottom:16 }}>
+          {unlock.plan === 'Starter' && '✓ Library  ✓ Team management  ✓ Team Chat'}
+          {unlock.plan === 'Pro' && '✓ Everything in Starter  ✓ Analytics  ✓ Communication  ✓ Billing'}
+          {unlock.plan === 'Enterprise' && '✓ Everything in Pro  ✓ Client Portal  ✓ Unlimited users  ✓ Custom integrations'}
+        </div>
+
+        {/* CTAs */}
+        <div style={{ display:'flex', gap:10 }}>
           {onBack && (
-            <button onClick={onBack}
-              style={{ flexShrink: 0, marginLeft: 16, padding: "6px 10px", fontSize: 18, lineHeight: 1, background: "transparent", color: "var(--tf-text-sub)", border: "1px solid var(--tf-border)", borderRadius: 8, cursor: "pointer" }}
-              title="Go back">
-              ✕
+            <button onClick={onBack} style={{ padding:'11px 16px', fontSize:13, fontWeight:600,
+              background:'transparent', color:'var(--tf-text-sub)', border:'1px solid var(--tf-border)',
+              borderRadius:9, cursor:'pointer', flexShrink:0 }}>
+              ← Back
             </button>
           )}
-        </div>
-        <div style={{ fontSize: 14, color: "var(--tf-text-sub)", lineHeight: 1.6, marginBottom: 20 }}>
-          This module isn't included in your current plan. Talk to our team and we'll have you up in 24 hours.
-        </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          {onBack && (
-            <button onClick={onBack}
-              style={{ padding: "11px 18px", fontSize: 13, fontWeight: 600, background: "transparent", color: "var(--tf-text-sub)", border: "1px solid var(--tf-border)", borderRadius: 9, cursor: "pointer" }}>
-              ← Go back
-            </button>
-          )}
-          <button onClick={onContactSales}
-            style={{ flex: 1, padding: "11px 18px", fontSize: 13, fontWeight: 700, background: "var(--tf-accent)", color: "#fff", border: 0, borderRadius: 9, cursor: "pointer" }}>
-            Talk to sales · 15 min call
+          <button
+            onClick={() => onUpgrade ? onUpgrade(unlock.id) : onContactSales?.()}
+            style={{ flex:1, padding:'12px 18px', fontSize:13, fontWeight:800,
+              background:`linear-gradient(135deg,${unlock.color},${unlock.color}cc)`,
+              color:'#fff', border:0, borderRadius:9, cursor:'pointer',
+              boxShadow:`0 6px 20px ${unlock.color}40` }}>
+            {onUpgrade ? `⚡ Upgrade to ${unlock.plan}` : 'Contact sales'}
           </button>
         </div>
+
+        <p style={{ textAlign:'center', fontSize:10.5, color:'var(--tf-text-sub)', margin:'12px 0 0' }}>
+          Plans start at ₹999/mo · Cancel anytime · GST invoice auto-emailed
+        </p>
       </div>
     </div>
-  );
+  )
 }
