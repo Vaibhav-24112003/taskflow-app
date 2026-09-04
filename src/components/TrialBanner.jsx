@@ -61,7 +61,7 @@ export function ModuleLock({ module: moduleName, gate, onUpgrade, onContactSales
     chat:      { icon: '💬', title: 'Team Chat',       tagline: 'Group messaging and threads for your team.' },
     analytics: { icon: '📊', title: 'Analytics',       tagline: 'Firm-wide performance and on-time reports.' },
     comms:     { icon: '📨', title: 'Communication',   tagline: 'Reach 1,000 clients in one go via email & WhatsApp.' },
-    billing:   { icon: '🧾', title: 'Billing',         tagline: 'GST-ready invoicing your accountant won\'t curse at.' },
+    billing:   { icon: '🧾', title: 'Billing',         tagline: 'GST-ready invoicing your accountant will love.' },
     portal:    { icon: '🌐', title: 'Client Portal',   tagline: 'Let clients see status and upload documents.' },
   }
   const info = MODULE_INFO[moduleName] || { icon: '🔒', title: moduleName, tagline: 'Upgrade to access this module.' }
