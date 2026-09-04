@@ -19175,11 +19175,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             {tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
             {tab==='connect'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
           </>
-        : <ModuleLock module="comms" gate={gate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId)}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()})}}/>)}
+        : <ModuleLock module="comms" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId)}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()})}}/>)}
       {/* Billing — paid module */}
       {orgModule==='billing'&&(hasModule('billing')
         ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
-        : <ModuleLock module="billing" gate={gate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId)}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()})}}/>)}
+        : <ModuleLock module="billing" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId)}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()})}}/>)}
       {/* Upgrade & Plans */}
       {orgModule==='upgrade'&&<Suspense fallback={null}><UpgradePlansModule org={org} supabase={supabase} cu={cu}
         defaultPlanId={function(){try{return localStorage.getItem('tf_upgrade_plan')||null}catch(e){return null}}()}
