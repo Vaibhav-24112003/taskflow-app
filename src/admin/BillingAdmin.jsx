@@ -2,6 +2,7 @@
 // Full admin panel: Plans, Offers, Subscribers, Manual Access, Invoices
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
+import InvoicePDF from '../components/InvoicePDF.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────
 const fmt     = p  => '₹' + ((p||0)/100).toLocaleString('en-IN', { minimumFractionDigits: 2 })
@@ -394,10 +395,36 @@ export default function BillingAdmin() {
   const [stats,       setStats]       = useState({})
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
+  const [viewInvoice, setViewInvoice] = useState(null) // invoice_number to preview
   const [planModal,   setPlanModal]   = useState(null)   // null | 'new' | plan obj
   const [subModal,    setSubModal]    = useState(null)   // null | row
   const [manualModal, setManualModal] = useState(false)
   const [search,      setSearch]      = useState('')
+
+
+  function exportCSV() {
+    const rows = [
+      ['Invoice #','Organisation','Owner Email','Plan','Billing Cycle','Amount (₹)','Email Status','Date','Razorpay Ref','Zoho Invoice'],
+      ...invoices.map(inv => [
+        inv.invoice_number,
+        inv.org_name,
+        '',
+        inv.plan_id,
+        inv.billing_cycle,
+        (inv.amount/100).toFixed(2),
+        inv.email_status,
+        new Date(inv.created_at).toLocaleDateString('en-IN'),
+        '',
+        inv.zoho_invoice_id || ''
+      ])
+    ]
+    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type:'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `taskflowco-invoices-${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -531,6 +558,8 @@ export default function BillingAdmin() {
   return (
     <div style={{ padding:'24px 28px', fontFamily:'Inter,system-ui,sans-serif', color:'var(--tf-text,#e8edf5)', maxWidth:1400, minHeight:600 }}>
 
+      {/* Invoice PDF viewer */}
+      {viewInvoice && <InvoicePDF invoiceNumber={viewInvoice} onClose={() => setViewInvoice(null)} />}
       {/* Modals */}
       {planModal !== null && (
         <PlanModal plan={planModal==='new'?null:planModal} onSave={()=>{setPlanModal(null);load()}} onClose={()=>setPlanModal(null)} />
@@ -710,11 +739,17 @@ export default function BillingAdmin() {
 
       {/* ── INVOICES TAB ── */}
       {tab === 'invoices' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>
+            <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', background:'rgba(255,255,255,.06)', border:'1px solid var(--tf-border)', borderRadius:9, color:'var(--tf-text-sub)', cursor:'pointer', fontSize:12, fontWeight:700 }}>
+              ⬇ Export CSV
+            </button>
+          </div>
         <div style={{ overflowX:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr>
-                {['Invoice #','Organisation','Plan','Billing','Amount','Email','Zoho Invoice','Date'].map(h => (
+                {['Invoice #','Organisation','Plan','Billing','Amount','Email','Date','Actions'].map(h => (
                   <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:700, fontSize:9, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--tf-text-sub,#7a8aa0)', borderBottom:'1px solid var(--tf-border,rgba(255,255,255,.08))', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -727,17 +762,19 @@ export default function BillingAdmin() {
                   : invoices.map(inv => (
                     <tr key={inv.id} style={{ borderBottom:'1px solid var(--tf-border,rgba(255,255,255,.06))' }}>
                       <td style={{ padding:'11px 12px' }}><code style={{ fontSize:11, color:'#93c5fd' }}>{inv.invoice_number}</code></td>
-                      <td style={{ padding:'11px 12px', fontWeight:700 }}>{inv.org_name}</td>
-                      <td style={{ padding:'11px 12px' }}>{inv.plan_id}</td>
-                      <td style={{ padding:'11px 12px' }}>{inv.billing_cycle}</td>
-                      <td style={{ padding:'11px 12px', fontWeight:700, color:'#10b981' }}>{fmt(inv.amount||0)}</td>
-                      <td style={{ padding:'11px 12px' }}><span style={pill(inv.email_status==='sent'?'active':inv.email_status==='failed'?'past_due':'trialing')}>{inv.email_status}</span></td>
                       <td style={{ padding:'11px 12px' }}>
-                        {inv.zoho_invoice_url
-                          ? <a href={inv.zoho_invoice_url} target="_blank" rel="noopener noreferrer" style={{ color:'#93bbff', fontSize:11, fontWeight:700 }}>View PDF ↗</a>
-                          : <span style={{ color:'var(--tf-text-sub,#7a8aa0)' }}>{inv.zoho_invoice_id || '—'}</span>}
+                        <div style={{ fontWeight:700, fontSize:12 }}>{inv.org_name}</div>
                       </td>
-                      <td style={{ padding:'11px 12px', fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', whiteSpace:'nowrap' }}>{fmtDT(inv.created_at)}</td>
+                      <td style={{ padding:'11px 12px', fontSize:12 }}>{inv.plan_id === 'trial' ? <span style={{ color:'#f59e0b', fontWeight:700 }}>trial*</span> : inv.plan_id}</td>
+                      <td style={{ padding:'11px 12px', fontSize:12 }}>{inv.billing_cycle}</td>
+                      <td style={{ padding:'11px 12px', fontWeight:700, color:'#10b981' }}>{fmt(inv.amount||0)}</td>
+                      <td style={{ padding:'11px 12px' }}><span style={pill(inv.email_status==='sent'?'active':inv.email_status==='failed'?'past_due':'trialing')}>{inv.email_status||'—'}</span></td>
+                      <td style={{ padding:'11px 12px', fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', whiteSpace:'nowrap' }}>{fmtDate(inv.created_at)}</td>
+                      <td style={{ padding:'11px 12px' }}>
+                        <button onClick={() => setViewInvoice(inv.invoice_number)} style={{ padding:'5px 11px', background:'rgba(47,107,255,.12)', border:'1px solid rgba(47,107,255,.25)', borderRadius:7, color:'#93bbff', cursor:'pointer', fontSize:11, fontWeight:700 }}>
+                          📄 View
+                        </button>
+                      </td>
                     </tr>
                   ))
               }
