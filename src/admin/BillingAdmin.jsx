@@ -308,7 +308,7 @@ function ManualAccessModal({ orgs, plans, onSave, onClose }) {
       override_price:      0,
       current_period_start:new Date().toISOString(),
       current_period_end:  periodEnd.toISOString(),
-      notes:               `Manual access granted. Reason: ${reason}`,
+      notes:               'Manual access granted. Reason: ' + reason,
       updated_at:          new Date().toISOString(),
     }
     const { error: subErr } = existing?.id
@@ -537,7 +537,7 @@ export default function BillingAdmin() {
   )
 
   async function deletePlan(id) {
-    if (!confirm(`Delete plan "${id}"? Existing subscribers won't be affected.`)) return
+    if (!confirm('Delete plan ' + id + '? Existing subscribers won\'t be affected.')) return
     await supabase.from('plans').delete().eq('id', id)
     load()
   }
@@ -617,7 +617,7 @@ export default function BillingAdmin() {
             : plans.map(plan => {
               const saving = Math.round((1 - plan.price_yearly/(plan.price_monthly*12))*100)
               return (
-                <div key={plan.id} style={{ ...card, position:'relative', opacity:plan.is_active?1:.55, border:`1px solid ${plan.is_featured?'rgba(47,107,255,.45)':'rgba(255,255,255,.08)'}` }}>
+                <div key={plan.id} style={{ ...card, position:'relative', opacity:plan.is_active?1:.55, border: plan.is_featured ? '2px solid rgba(47,107,255,.45)' : '1px solid rgba(255,255,255,.08)' }}>
                   {plan.is_featured && <div style={{ position:'absolute', top:-10, left:16, background:'linear-gradient(135deg,#2F6BFF,#14C7C0)', color:'#fff', borderRadius:20, padding:'2px 12px', fontSize:9, fontWeight:800 }}>⭐ FEATURED</div>}
                   {plan.badge && <div style={{ position:'absolute', top:plan.is_featured?14:-10, right:14, background:'#f59e0b', color:'#fff', borderRadius:20, padding:'2px 10px', fontSize:9, fontWeight:800 }}>{plan.badge}</div>}
 
