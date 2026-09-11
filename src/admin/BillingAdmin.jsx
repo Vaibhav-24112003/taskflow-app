@@ -403,27 +403,27 @@ export default function BillingAdmin() {
 
 
   function exportCSV() {
-    const rows = [
-      ['Invoice #','Organisation','Owner Email','Plan','Billing Cycle','Amount (₹)','Email Status','Date','Razorpay Ref','Zoho Invoice'],
-      ...invoices.map(inv => [
-        inv.invoice_number,
-        inv.org_name,
-        '',
-        inv.plan_id,
-        inv.billing_cycle,
-        (inv.amount/100).toFixed(2),
-        inv.email_status,
-        new Date(inv.created_at).toLocaleDateString('en-IN'),
-        '',
-        inv.zoho_invoice_id || ''
-      ])
-    ]
-    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type:'text/csv' })
+    const header = 'Invoice #,Organisation,Plan,Billing Cycle,Amount (Rs),Email Status,Date,Zoho Invoice'
+    const esc = (v) => '"' + String(v || '').replace(/"/g, '""') + '"'
+    const rows = invoices.map(inv => [
+      esc(inv.invoice_number),
+      esc(inv.org_name),
+      esc(inv.plan_id),
+      esc(inv.billing_cycle),
+      esc((inv.amount/100).toFixed(2)),
+      esc(inv.email_status),
+      esc(new Date(inv.created_at).toLocaleDateString('en-IN')),
+      esc(inv.zoho_invoice_id || '')
+    ].join(','))
+    const csv  = [header, ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
-    a.href = url; a.download = `taskflowco-invoices-${new Date().toISOString().slice(0,10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+    const date = new Date().toISOString().slice(0, 10)
+    a.href = url
+    a.download = 'taskflowco-invoices-' + date + '.csv'
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const load = useCallback(async () => {
