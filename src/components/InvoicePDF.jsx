@@ -117,7 +117,7 @@ export default function InvoicePDF({ invoiceNumber, onClose }) {
           {/* Header */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:32, paddingBottom:24, borderBottom:'2px solid #e2e8f0' }}>
             <div>
-              <div style={{ fontSize:28, fontWeight:900, background:'linear-gradient(135deg,#2F6BFF,#14C7C0)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', marginBottom:4 }}>Taskflow/co</div>
+              <div style={{ fontSize:28, fontWeight:900, color:'#2F6BFF', marginBottom:4 }}>Taskflow/co</div>
               <div style={{ fontSize:12, color:'#64748b', lineHeight:1.6 }}>
                 Practice Management Software<br/>
                 Pune, Maharashtra, India<br/>
