@@ -1,7 +1,8 @@
 // src/admin/BillingAdmin.jsx
 // Full admin panel: Plans, Offers, Subscribers, Manual Access, Invoices
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
 import { supabase } from '../lib/supabase.js'
+const InvoicePDF = lazy(() => import('../components/InvoicePDF.jsx'))
 import InvoicePDF from '../components/InvoicePDF.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -101,7 +102,7 @@ function PlanModal({ plan, onSave, onClose }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(4px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ ...card, width:'100%', maxWidth:640, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 32px 80px rgba(0,0,0,.5)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:'var(--tf-text,#e8edf5)' }}>{isNew ? '+ New Plan' : ('Edit — ' + plan.name)}</h3>
+          <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:'var(--tf-text,#e8edf5)' }}>{isNew ? '+ New Plan' : `Edit — ${plan.name}`}</h3>
           <button onClick={onClose} style={{ ...btn('transparent','var(--tf-text-sub,#7a8aa0)'), padding:'4px 8px', fontSize:18 }}>×</button>
         </div>
 
@@ -132,7 +133,7 @@ function PlanModal({ plan, onSave, onClose }) {
           <F label="Modules included in this plan">
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, padding:'10px 0' }}>
               {ALL_MODULES.map(m => (
-                <label key={m} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color:'var(--tf-text,#e8edf5)', background:f.modules.includes(m)?'rgba(47,107,255,.15)':'rgba(255,255,255,.04)', border: f.modules.includes(m) ? '1px solid #2F6BFF' : '1px solid rgba(255,255,255,.1)', borderRadius:8, padding:'5px 12px' }}>
+                <label key={m} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color:'var(--tf-text,#e8edf5)', background:f.modules.includes(m)?'rgba(47,107,255,.15)':'rgba(255,255,255,.04)', border:`1px solid ${f.modules.includes(m)?'#2F6BFF':'rgba(255,255,255,.1)'}`, borderRadius:8, padding:'5px 12px' }}>
                   <input type="checkbox" checked={f.modules.includes(m)} onChange={()=>toggleModule(m)} style={{ accentColor:'#2F6BFF' }} />
                   {m}
                 </label>
@@ -308,7 +309,7 @@ function ManualAccessModal({ orgs, plans, onSave, onClose }) {
       override_price:      0,
       current_period_start:new Date().toISOString(),
       current_period_end:  periodEnd.toISOString(),
-      notes:               'Manual access granted. Reason: ' + reason,
+      notes:               `Manual access granted. Reason: ${reason}`,
       updated_at:          new Date().toISOString(),
     }
     const { error: subErr } = existing?.id
@@ -395,6 +396,7 @@ export default function BillingAdmin() {
   const [stats,       setStats]       = useState({})
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
+  const [viewInvoice, setViewInvoice] = useState(null)
   const [viewInvoice, setViewInvoice] = useState(null) // invoice_number to preview
   const [planModal,   setPlanModal]   = useState(null)   // null | 'new' | plan obj
   const [subModal,    setSubModal]    = useState(null)   // null | row
@@ -403,27 +405,27 @@ export default function BillingAdmin() {
 
 
   function exportCSV() {
-    const header = 'Invoice #,Organisation,Plan,Billing Cycle,Amount (Rs),Email Status,Date,Zoho Invoice'
-    const esc = (v) => { const s = String(v || ''); return '"' + s.split('"').join('""') + '"' }
-    const rows = invoices.map(inv => [
-      esc(inv.invoice_number),
-      esc(inv.org_name),
-      esc(inv.plan_id),
-      esc(inv.billing_cycle),
-      esc((inv.amount/100).toFixed(2)),
-      esc(inv.email_status),
-      esc(new Date(inv.created_at).toLocaleDateString('en-IN')),
-      esc(inv.zoho_invoice_id || '')
-    ].join(','))
-    const csv  = [header, ...rows].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
+    const rows = [
+      ['Invoice #','Organisation','Owner Email','Plan','Billing Cycle','Amount (₹)','Email Status','Date','Razorpay Ref','Zoho Invoice'],
+      ...invoices.map(inv => [
+        inv.invoice_number,
+        inv.org_name,
+        '',
+        inv.plan_id,
+        inv.billing_cycle,
+        (inv.amount/100).toFixed(2),
+        inv.email_status,
+        new Date(inv.created_at).toLocaleDateString('en-IN'),
+        '',
+        inv.zoho_invoice_id || ''
+      ])
+    ]
+    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type:'text/csv' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
-    const date = new Date().toISOString().slice(0, 10)
-    a.href = url
-    a.download = 'taskflowco-invoices-' + date + '.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+    a.href = url; a.download = `taskflowco-invoices-${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
   }
 
   const load = useCallback(async () => {
@@ -537,7 +539,7 @@ export default function BillingAdmin() {
   )
 
   async function deletePlan(id) {
-    if (!confirm('Delete plan ' + id + '? Existing subscribers won\'t be affected.')) return
+    if (!confirm(`Delete plan "${id}"? Existing subscribers won't be affected.`)) return
     await supabase.from('plans').delete().eq('id', id)
     load()
   }
@@ -560,6 +562,7 @@ export default function BillingAdmin() {
 
       {/* Invoice PDF viewer */}
       {viewInvoice && <InvoicePDF invoiceNumber={viewInvoice} onClose={() => setViewInvoice(null)} />}
+      {viewInvoice && <Suspense fallback={null}><InvoicePDF invoiceNumber={viewInvoice} onClose={() => setViewInvoice(null)} /></Suspense>}
       {/* Modals */}
       {planModal !== null && (
         <PlanModal plan={planModal==='new'?null:planModal} onSave={()=>{setPlanModal(null);load()}} onClose={()=>setPlanModal(null)} />
@@ -617,7 +620,7 @@ export default function BillingAdmin() {
             : plans.map(plan => {
               const saving = Math.round((1 - plan.price_yearly/(plan.price_monthly*12))*100)
               return (
-                <div key={plan.id} style={{ ...card, position:'relative', opacity:plan.is_active?1:.55, border: plan.is_featured ? '2px solid rgba(47,107,255,.45)' : '1px solid rgba(255,255,255,.08)' }}>
+                <div key={plan.id} style={{ ...card, position:'relative', opacity:plan.is_active?1:.55, border:`1px solid ${plan.is_featured?'rgba(47,107,255,.45)':'rgba(255,255,255,.08)'}` }}>
                   {plan.is_featured && <div style={{ position:'absolute', top:-10, left:16, background:'linear-gradient(135deg,#2F6BFF,#14C7C0)', color:'#fff', borderRadius:20, padding:'2px 12px', fontSize:9, fontWeight:800 }}>⭐ FEATURED</div>}
                   {plan.badge && <div style={{ position:'absolute', top:plan.is_featured?14:-10, right:14, background:'#f59e0b', color:'#fff', borderRadius:20, padding:'2px 10px', fontSize:9, fontWeight:800 }}>{plan.badge}</div>}
 
