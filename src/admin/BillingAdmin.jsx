@@ -404,7 +404,7 @@ export default function BillingAdmin() {
 
   function exportCSV() {
     const header = 'Invoice #,Organisation,Plan,Billing Cycle,Amount (Rs),Email Status,Date,Zoho Invoice'
-    const esc = (v) => '"' + String(v || '').replace(/"/g, '""') + '"'
+    const esc = (v) => { const s = String(v || ''); return '"' + s.split('"').join('""') + '"' }
     const rows = invoices.map(inv => [
       esc(inv.invoice_number),
       esc(inv.org_name),
