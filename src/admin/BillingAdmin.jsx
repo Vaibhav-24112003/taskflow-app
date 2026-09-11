@@ -101,7 +101,7 @@ function PlanModal({ plan, onSave, onClose }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(4px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ ...card, width:'100%', maxWidth:640, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 32px 80px rgba(0,0,0,.5)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
-          <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:'var(--tf-text,#e8edf5)' }}>{isNew ? '+ New Plan' : `Edit — ${plan.name}`}</h3>
+          <h3 style={{ margin:0, fontSize:16, fontWeight:800, color:'var(--tf-text,#e8edf5)' }}>{isNew ? '+ New Plan' : ('Edit — ' + plan.name)}</h3>
           <button onClick={onClose} style={{ ...btn('transparent','var(--tf-text-sub,#7a8aa0)'), padding:'4px 8px', fontSize:18 }}>×</button>
         </div>
 
@@ -132,7 +132,7 @@ function PlanModal({ plan, onSave, onClose }) {
           <F label="Modules included in this plan">
             <div style={{ display:'flex', flexWrap:'wrap', gap:8, padding:'10px 0' }}>
               {ALL_MODULES.map(m => (
-                <label key={m} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color:'var(--tf-text,#e8edf5)', background:f.modules.includes(m)?'rgba(47,107,255,.15)':'rgba(255,255,255,.04)', border:`1px solid ${f.modules.includes(m)?'#2F6BFF':'rgba(255,255,255,.1)'}`, borderRadius:8, padding:'5px 12px' }}>
+                <label key={m} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12, color:'var(--tf-text,#e8edf5)', background:f.modules.includes(m)?'rgba(47,107,255,.15)':'rgba(255,255,255,.04)', border: f.modules.includes(m) ? '1px solid #2F6BFF' : '1px solid rgba(255,255,255,.1)', borderRadius:8, padding:'5px 12px' }}>
                   <input type="checkbox" checked={f.modules.includes(m)} onChange={()=>toggleModule(m)} style={{ accentColor:'#2F6BFF' }} />
                   {m}
                 </label>
