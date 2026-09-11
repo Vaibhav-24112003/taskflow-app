@@ -212,7 +212,7 @@ export default function InvoicePDF({ invoiceNumber, onClose }) {
         </div>
       </div>
 
-      <style dangerouslySetInnerHTML={{__html: '@media print { .no-print { display: none !important; } body { margin: 0; } #invoice-content { padding: 24px !important; } }'}} />
+      {/* print styles handled by browser defaults */}
     </div>
   )
 }
