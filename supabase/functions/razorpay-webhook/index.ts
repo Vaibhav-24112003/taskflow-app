@@ -42,16 +42,28 @@ serve(async (req) => {
   const org_id   = payment.notes?.org_id
   const billing  = payment.notes?.billing_cycle || 'monthly'
 
-  // 2. Resolve plan_id — never use 'trial', fallback to org subscription / starter
-  let plan_id = payment.notes?.plan_id || 'starter'
-  if (!plan_id || plan_id === 'trial' || plan_id === 'free') {
+  // 2. Resolve plan_id — HONOUR the plan actually paid for (from the order notes).
+  //    create-order only issues orders for real active plans, so notes.plan_id is
+  //    authoritative (including 'trial'/'free'). Validate it against the plans
+  //    table; only fall back to the org's current sub / 'starter' if it's missing
+  //    or unknown. (Do NOT rewrite 'trial' → 'starter' — that mislabels the
+  //    invoice and wrongly unlocks paid modules for a ₹1 trial payment.)
+  let plan_id = (payment.notes?.plan_id || '').trim()
+  let planData: { modules?: string[] } | null = null
+  if (plan_id) {
+    const { data } = await supabase.from('plans').select('modules').eq('id', plan_id).maybeSingle()
+    planData = data
+  }
+  if (!plan_id || !planData) {
     if (org_id) {
       const { data: sub } = await supabase
         .from('subscriptions').select('plan_id').eq('org_id', org_id).maybeSingle()
-      plan_id = sub?.plan_id && sub.plan_id !== 'trial' ? sub.plan_id : 'starter'
+      plan_id = sub?.plan_id || 'starter'
     } else {
       plan_id = 'starter'
     }
+    const { data } = await supabase.from('plans').select('modules').eq('id', plan_id).maybeSingle()
+    planData = data
   }
 
   // 3. Log event — idempotent via unique razorpay_payment_id
@@ -77,9 +89,7 @@ serve(async (req) => {
     const periodEnd = new Date(now)
     periodEnd.setMonth(periodEnd.getMonth() + (billing === 'yearly' ? 12 : 1))
 
-    // Fetch modules from plans table (respects admin changes)
-    const { data: planData } = await supabase
-      .from('plans').select('modules').eq('id', plan_id).maybeSingle()
+    // Modules from the resolved plan (planData fetched above; respects admin changes)
     const modules = planData?.modules || PLAN_MODULES[plan_id] || PLAN_MODULES['starter']
 
     // Update subscriptions

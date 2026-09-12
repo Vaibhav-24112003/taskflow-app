@@ -2,6 +2,7 @@
 // In-app Plans & Billing page — shown when signed-in user navigates to "Plans & Billing"
 import { useEffect, useState } from 'react'
 import CheckoutButton from './CheckoutButton.jsx'
+import InvoiceDocument, { printInvoice } from './InvoiceDocument.jsx'
 
 const fmt = p => '₹' + ((p || 0) / 100).toLocaleString('en-IN')
 const fmtDate = d => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
@@ -13,20 +14,28 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
   const [billing, setBilling] = useState('yearly')
   const [loading, setLoading] = useState(true)
   const [success, setSuccess] = useState(false)
+  const [viewInv, setViewInv] = useState(null)
 
   useEffect(() => { load() }, [org?.id])
 
   async function load() {
     setLoading(true)
-    const [pr, sr, ir] = await Promise.all([
+    const [pr, sr, ir, per] = await Promise.all([
       supabase.from('plans').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('subscriptions').select('*, plans(name,price_monthly,price_yearly)').eq('org_id', org.id).maybeSingle(),
-      supabase.from('subscription_invoices').select('*').eq('org_id', org.id).order('created_at', { ascending: false }).limit(10)
+      supabase.from('subscription_invoices').select('*').eq('org_id', org.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('payment_events').select('id, razorpay_payment_id').eq('org_id', org.id)
     ])
+    const payRef = Object.fromEntries((per.data || []).map(p => [p.id, p.razorpay_payment_id]))
     setPlans(pr.data || [])
     setSub(sr.data)
-    setInvs(ir.data || [])
+    setInvs((ir.data || []).map(i => ({ ...i, payment_ref: payRef[i.payment_event_id] || '' })))
     setLoading(false)
+  }
+
+  function openInvoice(inv) {
+    const plan = plans.find(p => p.id === inv.plan_id)
+    setViewInv({ ...inv, plan_name: plan?.name || inv.plan_id })
   }
 
   const check = <span style={{ color: '#10b981', marginRight: 6 }}>✓</span>
@@ -166,17 +175,16 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
         <div>
           <h3 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 800, color: 'var(--tf-text)' }}>Invoice History</h3>
           <div style={{ border: '1px solid var(--tf-border)', borderRadius: 12, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '10px 16px', background: 'var(--tf-surface)', borderBottom: '1px solid var(--tf-border)', fontSize: 10, fontWeight: 800, color: 'var(--tf-text-sub)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              <div>Invoice</div><div>Plan</div><div>Amount</div><div>Date</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 80px', padding: '10px 16px', background: 'var(--tf-surface)', borderBottom: '1px solid var(--tf-border)', fontSize: 10, fontWeight: 800, color: 'var(--tf-text-sub)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              <div>Invoice</div><div>Plan</div><div>Amount</div><div>Date</div><div></div>
             </div>
             {invs.map(inv => (
-              <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '12px 16px', borderBottom: '1px solid var(--tf-border)', fontSize: 13, alignItems: 'center' }}>
+              <div key={inv.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 80px', padding: '12px 16px', borderBottom: '1px solid var(--tf-border)', fontSize: 13, alignItems: 'center' }}>
                 <div style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--tf-text)' }}>{inv.invoice_number}</div>
                 <div style={{ color: 'var(--tf-text-sub)' }}>{inv.plan_id} · {inv.billing_cycle}</div>
                 <div style={{ fontWeight: 700, color: 'var(--tf-text)' }}>{fmt(inv.amount)}</div>
-                <div style={{ color: 'var(--tf-text-sub)', fontSize: 11 }}>
-                  {fmtDate(inv.created_at)}
-                </div>
+                <div style={{ color: 'var(--tf-text-sub)', fontSize: 11 }}>{fmtDate(inv.created_at)}</div>
+                <button onClick={() => openInvoice(inv)} style={{ padding: '5px 10px', background: 'rgba(47,107,255,.1)', border: '1px solid rgba(47,107,255,.3)', borderRadius: 8, color: '#2F6BFF', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>View</button>
               </div>
             ))}
           </div>
@@ -187,8 +195,20 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
       )}
 
       <p style={{ fontSize: 11, color: 'var(--tf-text-sub)', marginTop: 24, textAlign: 'center' }}>
-        All prices in ₹, exclude 18% GST · Payments secured by Razorpay · Cancel anytime
+        All prices in ₹ · Payments secured by Razorpay · Cancel anytime
       </p>
+
+      {viewInv && (
+        <div onClick={() => setViewInv(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(4px)', zIndex: 300, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 16, overflowY: 'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 800, margin: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 10 }}>
+              <button onClick={() => printInvoice('Invoice ' + (viewInv.invoice_number || ''))} style={{ padding: '9px 16px', background: '#2F6BFF', border: 'none', borderRadius: 9, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>🖨 Print / Save as PDF</button>
+              <button onClick={() => setViewInv(null)} style={{ padding: '9px 16px', background: 'rgba(255,255,255,.14)', border: '1px solid rgba(255,255,255,.25)', borderRadius: 9, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Close</button>
+            </div>
+            <InvoiceDocument invoice={viewInv} org={{ name: org?.name, address: org?.address || '' }} owner={{ name: cu?.name || cu?.user_metadata?.full_name || '' }} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

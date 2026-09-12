@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase.js'
 import {
   exportBillingWorkbook, exportCustomersCSV, exportInvoicesCSV, exportPaymentsCSV,
 } from './billingExport.js'
+import InvoiceDocument, { printInvoice } from '../components/InvoiceDocument.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────
 const fmt     = p  => '₹' + ((p||0)/100).toLocaleString('en-IN', { minimumFractionDigits: 2 })
@@ -491,6 +492,7 @@ export default function BillingAdmin() {
         return {
           org_id:      o.id,
           org_name:    o.name || '—',
+          owner_name:  owner.name || '',
           owner_email: owner.email || '',
           address:     o.address || '',
           gstin:       o.gstin || '',
@@ -573,38 +575,25 @@ export default function BillingAdmin() {
   return (
     <div style={{ padding:'24px 28px', fontFamily:'Inter,system-ui,sans-serif', color:'var(--tf-text,#e8edf5)', maxWidth:1400, minHeight:600 }}>
 
-      {/* Invoice PDF viewer */}
-      {viewInvoice && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(4px)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={()=>setViewInvoice(null)}>
-          <div onClick={e=>e.stopPropagation()} style={{ ...card, width:'100%', maxWidth:560, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 32px 80px rgba(0,0,0,.5)' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:18 }}>
-              <div>
-                <div style={{ fontSize:18, fontWeight:800, letterSpacing:'-.02em' }}>TaskFlowCo</div>
-                <div style={{ fontSize:11, color:'var(--tf-text-sub,#7a8aa0)' }}>Tax Invoice / Payment Receipt</div>
+      {/* Invoice document viewer */}
+      {viewInvoice && (() => {
+        const cust = customers.find(c => c.org_id === viewInvoice.org_id) || {}
+        const planObj = plans.find(p => p.id === viewInvoice.plan_id) || {}
+        const invDoc = { ...viewInvoice, plan_name: planObj.name || viewInvoice.plan_id }
+        const orgObj = { name: viewInvoice.org_name, address: cust.address || '' }
+        const ownerObj = { name: cust.owner_name || '' }
+        return (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.7)', backdropFilter:'blur(4px)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:16, overflowY:'auto' }} onClick={()=>setViewInvoice(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{ width:'100%', maxWidth:800, margin:'auto' }}>
+              <div style={{ display:'flex', justifyContent:'flex-end', gap:10, marginBottom:10 }}>
+                <button onClick={()=>printInvoice('Invoice ' + (viewInvoice.invoice_number||''))} style={{ padding:'9px 16px', background:'#2F6BFF', border:'none', borderRadius:9, color:'#fff', cursor:'pointer', fontSize:12, fontWeight:700 }}>🖨 Print / Save as PDF</button>
+                <button onClick={()=>setViewInvoice(null)} style={{ padding:'9px 16px', background:'rgba(255,255,255,.14)', border:'1px solid rgba(255,255,255,.25)', borderRadius:9, color:'#fff', cursor:'pointer', fontSize:12, fontWeight:700 }}>Close</button>
               </div>
-              <div style={{ textAlign:'right' }}>
-                <code style={{ fontSize:13, color:'#93c5fd', fontWeight:700 }}>{viewInvoice.invoice_number}</code>
-                <div style={{ fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', marginTop:2 }}>{fmtDate(viewInvoice.created_at)}</div>
-              </div>
-            </div>
-            <div style={{ borderTop:'1px solid var(--tf-border,rgba(255,255,255,.08))', paddingTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px 18px', fontSize:13 }}>
-              <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Billed To</div>{viewInvoice.org_name}</div>
-              <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Plan</div>{viewInvoice.plan_id==='trial' ? <span style={{ color:'#f59e0b', fontWeight:700 }}>trial</span> : viewInvoice.plan_id}</div>
-              <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Billing Cycle</div>{viewInvoice.billing_cycle||'—'}</div>
-              <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Email Status</div><span style={pill(viewInvoice.email_status==='sent'?'active':viewInvoice.email_status==='failed'?'past_due':'trialing')}>{viewInvoice.email_status||'—'}</span></div>
-              {viewInvoice.payment_ref && <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Payment Ref</div><span style={{ fontFamily:'monospace', fontSize:11 }}>{viewInvoice.payment_ref}</span></div>}
-            </div>
-            <div style={{ marginTop:18, borderTop:'1px solid var(--tf-border,rgba(255,255,255,.08))', paddingTop:14, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <span style={{ fontSize:12, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)' }}>Amount Paid</span>
-              <span style={{ fontSize:24, fontWeight:800, color:'#10b981' }}>{fmt(viewInvoice.amount||0)}</span>
-            </div>
-            <div style={{ marginTop:20, display:'flex', justifyContent:'flex-end', gap:10 }}>
-              <button onClick={()=>window.print()} style={{ padding:'9px 16px', background:'rgba(255,255,255,.06)', border:'1px solid var(--tf-border,rgba(255,255,255,.12))', borderRadius:9, color:'var(--tf-text,#e8edf5)', cursor:'pointer', fontSize:12, fontWeight:700 }}>🖨 Print</button>
-              <button onClick={()=>setViewInvoice(null)} style={{ padding:'9px 16px', background:'#2F6BFF', border:'none', borderRadius:9, color:'#fff', cursor:'pointer', fontSize:12, fontWeight:700 }}>Close</button>
+              <InvoiceDocument invoice={invDoc} org={orgObj} owner={ownerObj} />
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Modals */}
       {planModal !== null && (
