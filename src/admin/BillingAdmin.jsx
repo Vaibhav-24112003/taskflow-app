@@ -2,6 +2,9 @@
 // Full admin panel: Plans, Offers, Subscribers, Manual Access, Invoices
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
+import {
+  exportBillingWorkbook, exportCustomersCSV, exportInvoicesCSV, exportPaymentsCSV,
+} from './billingExport.js'
 
 // ── helpers ──────────────────────────────────────────────────────────
 const fmt     = p  => '₹' + ((p||0)/100).toLocaleString('en-IN', { minimumFractionDigits: 2 })
@@ -32,6 +35,8 @@ const inp  = { width:'100%', padding:'9px 11px', border:'1px solid var(--tf-bord
 const lbl  = { display:'block', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:5 }
 const btn  = (bg='#2F6BFF',color='#fff') => ({ background:bg, color, border:'none', borderRadius:9, padding:'9px 16px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit', display:'inline-flex', alignItems:'center', gap:6, whiteSpace:'nowrap' })
 const pill = (status) => { const c = STATUS_COLOR[status]||STATUS_COLOR.free; return { fontSize:10, fontWeight:800, borderRadius:20, padding:'2px 10px', background:c.bg, color:c.text } }
+const exportItem = { display:'flex', flexDirection:'column', alignItems:'flex-start', gap:1, width:'100%', textAlign:'left', padding:'9px 14px', background:'transparent', border:'none', color:'var(--tf-text,#e8edf5)', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit' }
+const exportSub  = { fontSize:10, fontWeight:500, color:'var(--tf-text-sub,#7a8aa0)', marginLeft:0 }
 
 // ── Field wrapper ─────────────────────────────────────────────────────
 function F({ label, children, half }) {
@@ -390,6 +395,8 @@ export default function BillingAdmin() {
   const [plans,       setPlans]       = useState([])
   const [subscribers, setSubscribers] = useState([])
   const [invoices,    setInvoices]    = useState([])
+  const [payments,    setPayments]    = useState([])
+  const [customers,   setCustomers]   = useState([])
   const [orgs,        setOrgs]        = useState([])
   const [stats,       setStats]       = useState({})
   const [loading,     setLoading]     = useState(true)
@@ -401,29 +408,7 @@ export default function BillingAdmin() {
   const [search,      setSearch]      = useState('')
 
 
-  function exportCSV() {
-    const rows = [
-      ['Invoice #','Organisation','Owner Email','Plan','Billing Cycle','Amount (₹)','Email Status','Date','Razorpay Ref','Zoho Invoice'],
-      ...invoices.map(inv => [
-        inv.invoice_number,
-        inv.org_name,
-        '',
-        inv.plan_id,
-        inv.billing_cycle,
-        (inv.amount/100).toFixed(2),
-        inv.email_status,
-        new Date(inv.created_at).toLocaleDateString('en-IN'),
-        '',
-        inv.zoho_invoice_id || ''
-      ])
-    ]
-    const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type:'text/csv' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = `taskflowco-invoices-${new Date().toISOString().slice(0,10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
-  }
+  const [exportMenu, setExportMenu] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -434,7 +419,7 @@ export default function BillingAdmin() {
 
       // 2. Orgs
       const { data: orgList, error: oe } = await supabase.from('organizations')
-        .select('id, name, subscription_status, paid_modules, trial_expires_at').order('name')
+        .select('id, name, subscription_status, paid_modules, trial_expires_at, address, gstin, created_at').order('name')
       if (oe) throw new Error('Orgs: ' + oe.message)
 
       // 3. Subscriptions (no join — fetch plans separately)
@@ -461,13 +446,15 @@ export default function BillingAdmin() {
       // 5. Plan lookup map
       const planMap = Object.fromEntries((pl||[]).map(p => [p.id, p]))
 
-      // 6. Total paid per org from payment_events — must be before enriched map
-      const { data: payments } = await supabase.from('payment_events')
-        .select('org_id, amount').eq('status', 'captured')
+      // 6. Payment events (full) — used for total-paid, payments export + invoice refs
+      const { data: allPayments } = await supabase.from('payment_events')
+        .select('id, org_id, razorpay_payment_id, razorpay_order_id, amount, currency, status, event_type, failure_reason, created_at')
+        .order('created_at', { ascending: false }).limit(5000)
       const totalPaidMap = {}
-      ;(payments||[]).forEach(p => {
-        totalPaidMap[p.org_id] = (totalPaidMap[p.org_id] || 0) + (p.amount || 0)
+      ;(allPayments||[]).forEach(p => {
+        if (p.status === 'captured') totalPaidMap[p.org_id] = (totalPaidMap[p.org_id] || 0) + (p.amount || 0)
       })
+      const payEventById = Object.fromEntries((allPayments||[]).map(p => [p.id, p]))
 
       // 7. Merge subs
       const enriched = (subs||[]).map(s => {
@@ -489,10 +476,37 @@ export default function BillingAdmin() {
 
       // 8. Invoices
       const { data: invs } = await supabase.from('subscription_invoices')
-        .select('*').order('created_at', { ascending: false }).limit(100)
+        .select('*').order('created_at', { ascending: false }).limit(5000)
       const orgNameMap = Object.fromEntries((orgList||[]).map(o => [o.id, o.name]))
       const enrichedInvs = (invs||[]).map(i => ({
-        ...i, org_name: orgNameMap[i.org_id] || i.org_id?.slice(0,8) || '—'
+        ...i,
+        org_name:    orgNameMap[i.org_id] || i.org_id?.slice(0,8) || '—',
+        payment_ref: payEventById[i.payment_event_id]?.razorpay_payment_id || '',
+      }))
+
+      // 8b. Customers (org + owner + billing details) for accounting export
+      const custList = (orgList||[]).map(o => {
+        const owner = ownerMap[o.id] || {}
+        const sub   = (subs||[]).find(s => s.org_id === o.id) || {}
+        return {
+          org_id:      o.id,
+          org_name:    o.name || '—',
+          owner_email: owner.email || '',
+          address:     o.address || '',
+          gstin:       o.gstin || '',
+          plan_id:     sub.plan_id || '',
+          status:      o.subscription_status || '',
+          created_at:  o.created_at,
+        }
+      })
+
+      // 8c. Payments (each captured/failed event, linked to its invoice) for export
+      const invByPayEvent = {}
+      ;(invs||[]).forEach(i => { if (i.payment_event_id) invByPayEvent[i.payment_event_id] = i.invoice_number })
+      const enrichedPayments = (allPayments||[]).map(p => ({
+        ...p,
+        org_name:       orgNameMap[p.org_id] || p.org_id?.slice(0,8) || '—',
+        invoice_number: invByPayEvent[p.id] || '',
       }))
 
       // 9. Stats
@@ -512,6 +526,8 @@ export default function BillingAdmin() {
       setOrgs(orgList || [])
       setSubscribers(enriched)
       setInvoices(enrichedInvs)
+      setPayments(enrichedPayments)
+      setCustomers(custList)
       setStats({
         active:   active.length,
         trialing: trialing.length,
@@ -576,7 +592,7 @@ export default function BillingAdmin() {
               <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Plan</div>{viewInvoice.plan_id==='trial' ? <span style={{ color:'#f59e0b', fontWeight:700 }}>trial</span> : viewInvoice.plan_id}</div>
               <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Billing Cycle</div>{viewInvoice.billing_cycle||'—'}</div>
               <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Email Status</div><span style={pill(viewInvoice.email_status==='sent'?'active':viewInvoice.email_status==='failed'?'past_due':'trialing')}>{viewInvoice.email_status||'—'}</span></div>
-              {viewInvoice.zoho_invoice_id && <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Zoho Ref</div>{viewInvoice.zoho_invoice_id}</div>}
+              {viewInvoice.payment_ref && <div><div style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)', marginBottom:2 }}>Payment Ref</div><span style={{ fontFamily:'monospace', fontSize:11 }}>{viewInvoice.payment_ref}</span></div>}
             </div>
             <div style={{ marginTop:18, borderTop:'1px solid var(--tf-border,rgba(255,255,255,.08))', paddingTop:14, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <span style={{ fontSize:12, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)' }}>Amount Paid</span>
@@ -770,10 +786,37 @@ export default function BillingAdmin() {
       {/* ── INVOICES TAB ── */}
       {tab === 'invoices' && (
         <div>
-          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>
-            <button onClick={exportCSV} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', background:'rgba(255,255,255,.06)', border:'1px solid var(--tf-border)', borderRadius:9, color:'var(--tf-text-sub)', cursor:'pointer', fontSize:12, fontWeight:700 }}>
-              ⬇ Export CSV
-            </button>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, gap:12, flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, color:'var(--tf-text-sub,#7a8aa0)' }}>
+              {invoices.length} invoices · {payments.length} payments · {customers.length} customers
+            </span>
+            <div style={{ position:'relative' }}>
+              <button onClick={() => setExportMenu(v => !v)} style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', background:'rgba(255,255,255,.06)', border:'1px solid var(--tf-border)', borderRadius:9, color:'var(--tf-text-sub)', cursor:'pointer', fontSize:12, fontWeight:700 }}>
+                ⬇ Export for accounting ▾
+              </button>
+              {exportMenu && (
+                <>
+                  <div onClick={() => setExportMenu(false)} style={{ position:'fixed', inset:0, zIndex:150 }} />
+                  <div style={{ position:'absolute', right:0, top:'calc(100% + 6px)', zIndex:151, minWidth:280, background:'var(--tf-panel,#1e2533)', border:'1px solid var(--tf-border,rgba(255,255,255,.12))', borderRadius:12, boxShadow:'0 20px 50px rgba(0,0,0,.45)', overflow:'hidden' }}>
+                    <div style={{ padding:'10px 14px 6px', fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)' }}>Excel workbook</div>
+                    <button onClick={() => { exportBillingWorkbook(invoices, customers, payments); setExportMenu(false) }} style={exportItem}>
+                      📗 All data (Invoices · Customers · Payments)
+                      <span style={exportSub}>Single .xls, 3 tabs — for review</span>
+                    </button>
+                    <div style={{ padding:'10px 14px 6px', borderTop:'1px solid var(--tf-border,rgba(255,255,255,.08))', fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.08em', color:'var(--tf-text-sub,#7a8aa0)' }}>Zoho Books CSV (import per module)</div>
+                    <button onClick={() => { exportInvoicesCSV(invoices); setExportMenu(false) }} style={exportItem}>
+                      🧾 Invoices <span style={exportSub}>→ Zoho “Invoices” import</span>
+                    </button>
+                    <button onClick={() => { exportCustomersCSV(customers); setExportMenu(false) }} style={exportItem}>
+                      👥 Customers <span style={exportSub}>→ Zoho “Contacts” import</span>
+                    </button>
+                    <button onClick={() => { exportPaymentsCSV(payments); setExportMenu(false) }} style={exportItem}>
+                      💳 Payments <span style={exportSub}>→ Zoho “Customer Payments” import</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         <div style={{ overflowX:'auto' }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
