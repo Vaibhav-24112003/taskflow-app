@@ -1,8 +1,7 @@
 // src/admin/BillingAdmin.jsx
 // Full admin panel: Plans, Offers, Subscribers, Manual Access, Invoices
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
-const InvoicePDF = lazy(() => import('../components/InvoicePDF.jsx'))
 import InvoicePDF from '../components/InvoicePDF.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -396,7 +395,6 @@ export default function BillingAdmin() {
   const [stats,       setStats]       = useState({})
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
-  const [viewInvoice, setViewInvoice] = useState(null)
   const [viewInvoice, setViewInvoice] = useState(null) // invoice_number to preview
   const [planModal,   setPlanModal]   = useState(null)   // null | 'new' | plan obj
   const [subModal,    setSubModal]    = useState(null)   // null | row
@@ -562,7 +560,6 @@ export default function BillingAdmin() {
 
       {/* Invoice PDF viewer */}
       {viewInvoice && <InvoicePDF invoiceNumber={viewInvoice} onClose={() => setViewInvoice(null)} />}
-      {viewInvoice && <Suspense fallback={null}><InvoicePDF invoiceNumber={viewInvoice} onClose={() => setViewInvoice(null)} /></Suspense>}
       {/* Modals */}
       {planModal !== null && (
         <PlanModal plan={planModal==='new'?null:planModal} onSave={()=>{setPlanModal(null);load()}} onClose={()=>setPlanModal(null)} />
