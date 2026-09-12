@@ -2,7 +2,6 @@
 // Full admin panel: Plans, Offers, Subscribers, Manual Access, Invoices
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase.js'
-import InvoicePDF from '../components/InvoicePDF.jsx'
 
 // ── helpers ──────────────────────────────────────────────────────────
 const fmt     = p  => '₹' + ((p||0)/100).toLocaleString('en-IN', { minimumFractionDigits: 2 })
@@ -395,7 +394,6 @@ export default function BillingAdmin() {
   const [stats,       setStats]       = useState({})
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
-  const [viewInvoice, setViewInvoice] = useState(null) // invoice_number to preview
   const [planModal,   setPlanModal]   = useState(null)   // null | 'new' | plan obj
   const [subModal,    setSubModal]    = useState(null)   // null | row
   const [manualModal, setManualModal] = useState(false)
@@ -559,7 +557,6 @@ export default function BillingAdmin() {
     <div style={{ padding:'24px 28px', fontFamily:'Inter,system-ui,sans-serif', color:'var(--tf-text,#e8edf5)', maxWidth:1400, minHeight:600 }}>
 
       {/* Invoice PDF viewer */}
-      {viewInvoice && <InvoicePDF invoiceNumber={viewInvoice} onClose={() => setViewInvoice(null)} />}
       {/* Modals */}
       {planModal !== null && (
         <PlanModal plan={planModal==='new'?null:planModal} onSave={()=>{setPlanModal(null);load()}} onClose={()=>setPlanModal(null)} />
@@ -771,7 +768,6 @@ export default function BillingAdmin() {
                       <td style={{ padding:'11px 12px' }}><span style={pill(inv.email_status==='sent'?'active':inv.email_status==='failed'?'past_due':'trialing')}>{inv.email_status||'—'}</span></td>
                       <td style={{ padding:'11px 12px', fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', whiteSpace:'nowrap' }}>{fmtDate(inv.created_at)}</td>
                       <td style={{ padding:'11px 12px' }}>
-                        <button onClick={() => setViewInvoice(inv.invoice_number)} style={{ padding:'5px 11px', background:'rgba(47,107,255,.12)', border:'1px solid rgba(47,107,255,.25)', borderRadius:7, color:'#93bbff', cursor:'pointer', fontSize:11, fontWeight:700 }}>
                           📄 View
                         </button>
                       </td>
