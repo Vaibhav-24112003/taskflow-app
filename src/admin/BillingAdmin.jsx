@@ -375,7 +375,7 @@ function ManualAccessModal({ orgs, plans, onSave, onClose }) {
         {error && <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(239,68,68,.1)', border:'1px solid rgba(239,68,68,.25)', borderRadius:8, color:'#f87171', fontSize:12 }}>⚠ {error}</div>}
 
         <div style={{ marginTop:16, padding:'12px 14px', background:'rgba(59,130,246,.08)', border:'1px solid rgba(59,130,246,.2)', borderRadius:8, fontSize:12, color:'#93c5fd' }}>
-          💡 This does NOT create a payment record or Zoho invoice. It directly sets subscription_status = paid on the org.
+          💡 This does NOT create a payment record or invoice. It directly sets subscription_status = paid on the org.
         </div>
 
         <div style={{ display:'flex', gap:10, marginTop:20, justifyContent:'flex-end' }}>

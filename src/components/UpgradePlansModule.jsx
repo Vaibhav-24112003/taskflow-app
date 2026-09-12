@@ -39,7 +39,7 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
       <div style={{ fontSize: 52, marginBottom: 16 }}>🎉</div>
       <h2 style={{ margin: '0 0 10px', color: 'var(--tf-text)', fontWeight: 800 }}>You're all set!</h2>
       <p style={{ color: 'var(--tf-text-sub)', fontSize: 14, marginBottom: 24 }}>
-        Your plan is now active. A GST invoice has been sent to your registered email via Zoho Books.
+        Your plan is now active. A payment receipt has been sent to your registered email.
       </p>
       <button onClick={() => { load(); setSuccess(false); onUpgraded?.() }}
         style={{ background: 'linear-gradient(135deg,#2F6BFF,#14C7C0)', color: '#fff', border: 'none', borderRadius: 12, padding: '13px 28px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>
@@ -55,7 +55,7 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 800, color: 'var(--tf-text)' }}>Plans & Billing</h2>
         <p style={{ margin: 0, color: 'var(--tf-text-sub)', fontSize: 13 }}>
-          Manage your TaskFlowCo subscription · Payments via Razorpay · Invoices via Zoho Books.
+          Manage your TaskFlowCo subscription · Payments via Razorpay · Receipts by email.
         </p>
         {defaultPlanId && (
           <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -176,13 +176,12 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
                 <div style={{ fontWeight: 700, color: 'var(--tf-text)' }}>{fmt(inv.amount)}</div>
                 <div style={{ color: 'var(--tf-text-sub)', fontSize: 11 }}>
                   {fmtDate(inv.created_at)}
-                  {inv.zoho_invoice_url && <a href={inv.zoho_invoice_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 10, color: '#2F6BFF', fontWeight: 700, fontSize: 10 }}>View →</a>}
                 </div>
               </div>
             ))}
           </div>
           <p style={{ fontSize: 11, color: 'var(--tf-text-sub)', marginTop: 10 }}>
-            Full GST invoices with your firm's details are sent automatically to your registered email via Zoho Books.
+            A payment receipt is sent automatically to your registered email after every payment.
           </p>
         </div>
       )}

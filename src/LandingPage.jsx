@@ -355,7 +355,7 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
       <div style={{ background:'var(--surface)',borderRadius:20,padding:'36px 32px',maxWidth:400,width:'100%',textAlign:'center',border:'1px solid var(--border)',boxShadow:'0 24px 64px rgba(10,20,40,.18)' }}>
         <div style={{ fontSize:48,marginBottom:12 }}>🎉</div>
         <h3 style={{ margin:'0 0 8px',fontSize:20,fontWeight:800,color:'var(--text)' }}>You're all set!</h3>
-        <p style={{ color:'var(--text-2)',fontSize:14,margin:'0 0 22px',lineHeight:1.6 }}>Your {planName} plan is active. The GST invoice will arrive in your inbox shortly via Zoho Books.</p>
+        <p style={{ color:'var(--text-2)',fontSize:14,margin:'0 0 22px',lineHeight:1.6 }}>Your {planName} plan is active. Your payment receipt will arrive in your inbox shortly.</p>
         <button onClick={onClose} style={{ background:'var(--grad)',color:'#fff',border:'none',borderRadius:11,padding:'12px 28px',fontSize:14,fontWeight:800,cursor:'pointer',width:'100%' }}>Go to dashboard →</button>
       </div>
     </div>

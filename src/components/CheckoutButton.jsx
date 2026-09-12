@@ -49,7 +49,7 @@ export default function CheckoutButton({
         prefill:     {},
         handler: function () {
           // Payment captured on Razorpay's side.
-          // Webhook (razorpay-webhook) handles DB update + Zoho invoice automatically.
+          // Webhook (razorpay-webhook) handles DB update + invoice email automatically.
           // Just show success UI — don't update DB from here.
           setLoading(false)
           onSuccess?.()
