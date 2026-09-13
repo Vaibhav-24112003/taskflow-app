@@ -91,6 +91,15 @@ const CSS = `
 .lp2 .feature .ico{width:46px;height:46px;border-radius:13px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg);margin-bottom:16px}
 .lp2 .feature h3{font-size:17px;margin-bottom:8px}
 .lp2 .feature p{margin:0;font-size:14px;line-height:1.6;color:var(--text-2)}
+.lp2 .feat-grouplabel{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--teal-fg);margin:0 0 14px;display:flex;align-items:center;gap:10px}
+.lp2 .feat-grouplabel::after{content:"";flex:1;height:1px;background:var(--border)}
+.lp2 .modstrip{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:20px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:var(--shadow-card)}
+.lp2 .modstrip .eyebrow{white-space:nowrap}
+.lp2 .modchips{display:flex;flex-wrap:wrap;gap:8px;flex:1}
+.lp2 .modchip{font-size:13px;font-weight:700;color:var(--text);background:var(--field);border:1px solid var(--card-border);border-radius:999px;padding:7px 14px}
+.lp2 .modchip:nth-child(3n+1){color:var(--blue)}
+.lp2 .modchip:nth-child(3n+2){color:var(--teal-fg)}
+@media(max-width:620px){.lp2 .modstrip{flex-direction:column;align-items:flex-start;gap:12px}}
 .lp2 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
 .lp2 .step{position:relative;padding-top:14px}
 .lp2 .step .num{width:34px;height:34px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;margin-bottom:14px}
@@ -269,14 +278,29 @@ function FAQItem({ q, a, defaultOpen }) {
   )
 }
 
-const FEATURES = [
-  { p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></>, h: 'Never miss a due date', d: 'Every GST, ITR and ROC deadline tracked automatically, with reminders that escalate as the date nears.' },
-  { p: <><rect x="4" y="7" width="16" height="12" rx="2" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /></>, h: 'WorkZone board', d: 'See every client task move from pending to filed. Assign, review and close work without a single spreadsheet.' },
-  { p: <><circle cx="9" cy="9" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0" /><path d="M16 6.5a3 3 0 0 1 0 5.8M20.5 19a5.5 5.5 0 0 0-4-5.3" /></>, h: 'Team workload', d: "Balance work across articles and staff. Know who's overloaded before deadlines pile up." },
-  { p: <><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></>, h: 'Smart reminders', d: 'Nudge clients for documents and payments automatically over email — no more manual follow-ups.' },
-  { p: <path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" />, h: 'Practice analytics', d: 'Revenue, realization and pending work at a glance. Understand the health of your firm in seconds.' },
-  { p: <><path d="M6 4h9l4 4v12H6z" /><path d="M14 4v5h5M9 13h6M9 16h4" /></>, h: 'Notes & documents', d: 'Keep every worksheet, note and file attached to the client and task it belongs to.' },
+const FEATURE_GROUPS = [
+  { group: 'Compliance & filing', items: [
+    { p: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6M9 16l1.6 1.6L14 14.5" /></>, h: 'GST Desk', d: 'Track every GSTR return by stage and reconcile your internal status against the GST portal — so nothing is filed twice or slips through.' },
+    { p: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h4" /></>, h: 'ITR Desk', d: 'Per-client income-tax compilation with a completeness checklist and a reusable, firm-wide ITR template.' },
+    { p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></>, h: 'Deadline engine', d: 'GST, ITR, TDS and ROC due dates auto-populate for every client and work type, with reminders that escalate as the date nears.' },
+  ] },
+  { group: 'Workflow', items: [
+    { p: <><rect x="3" y="4" width="4" height="16" rx="1" /><rect x="10" y="4" width="4" height="11" rx="1" /><rect x="17" y="4" width="4" height="14" rx="1" /></>, h: 'WorkZone board', d: 'Every client task moves pending → in progress → review → filed, with stage-based workflows tailored per work type.' },
+    { p: <><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></>, h: 'Auto-generated worksheets', d: 'Recurring monthly and quarterly filings are created for you each cycle — no manual setup, nothing forgotten.' },
+    { p: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>, h: 'Aging & time tracking', d: 'See how long work has sat in a stage, plus actual hours vs. estimate on every task.' },
+  ] },
+  { group: 'Clients', items: [
+    { p: <><path d="M6 16a4 4 0 0 1 1-7.9A5 5 0 0 1 17 8a3.5 3.5 0 0 1 1 6.9" /><path d="M12 11v6m0-6-2 2m2-2 2 2" /></>, h: 'Client Portal', d: 'Request documents and collect them from clients directly — each upload linked to the right task.' },
+    { p: <><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>, h: 'Credential vault', d: 'Store client portal logins encrypted, with one-click copy-and-open to the GST and Income-Tax portals.' },
+    { p: <><rect x="4" y="6" width="16" height="12" rx="2" /><path d="m5 8 7 5 7-5" /></>, h: 'Automated reminders', d: 'Chase upcoming and overdue work by email — bulk from your firm’s Gmail, or fully automatic every cycle.' },
+  ] },
+  { group: 'Firm operations', items: [
+    { p: <><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10Z" /><circle cx="12" cy="11" r="2.2" /></>, h: 'Attendance & time', d: 'Geotagged GPS check-in / check-out and daily time logging for your whole team.' },
+    { p: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></>, h: 'Billing & exports', d: 'Invoices, proposals, payments and statements — with one-click export to Tally and Zoho Books.' },
+    { p: <path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" />, h: 'Analytics & workload', d: 'Revenue, on-time %, pending work and who’s overloaded — the health of your firm at a glance.' },
+  ] },
 ]
+const MODULES = ['Practice Hub', 'WorkZone', 'GST Desk', 'ITR Desk', 'Client Portal', 'Communications', 'Billing', 'Attendance', 'Analytics', 'Team']
 const fico = paths => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
 
 // ── Sign-in modal: Google + email magic link. The email link is how domain /
@@ -382,7 +406,7 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
           {billing === 'yearly' && (
             <div style={{ fontSize:11,color:'var(--text-2)',marginTop:4 }}>Billed ₹{yearlyTotal}/year · 2 months free</div>
           )}
-          <div style={{ fontSize:11,color:'var(--muted)',marginTop:6 }}>+ 18% GST · Cancel anytime · Invoice sent automatically</div>
+          <div style={{ fontSize:11,color:'var(--muted)',marginTop:6 }}>Cancel anytime · Receipt emailed automatically</div>
         </div>
 
         {/* What you get */}
@@ -523,7 +547,7 @@ export default function LandingPage({ onSignIn, loading }) {
           <div className="hero-copy">
             <span className="badge">● Built for CA · CS · CMA &amp; tax firms</span>
             <h1>Stop juggling. <span className="grad-text">Start flowing.</span></h1>
-            <p className="lede">Run your entire practice with total clarity — worksheets, returns, reminders and team workload in one source of truth that never lets a deadline slip.</p>
+            <p className="lede">The operating system for your CA practice — GST &amp; ITR desks, WorkZone, client portal, billing, attendance and your whole team in one place that never lets a deadline slip.</p>
             <div className="cta-row">
               <button className="btn btn-primary" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Get started free'}</button>
               <button className="btn btn-ghost" onClick={() => setLaunchOpen(true)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 6.5v11l9-5.5z" fill="#2F6BFF" /></svg>Watch demo</button>
@@ -550,21 +574,37 @@ export default function LandingPage({ onSignIn, loading }) {
         </div>
       </section>
 
+      {/* MODULES STRIP */}
+      <section className="wrap" style={{ paddingTop: 40 }}>
+        <div className="modstrip">
+          <span className="eyebrow">One platform, every module</span>
+          <div className="modchips">
+            {MODULES.map(m => <span className="modchip" key={m}>{m}</span>)}
+          </div>
+        </div>
+      </section>
+
       {/* FEATURES */}
       <section className="section wrap" id="features">
         <div style={{ textAlign: 'center', marginBottom: 46 }}>
           <span className="eyebrow">Everything in one place</span>
           <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Built for the way practices actually work</h2>
+          <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '56ch', marginInline: 'auto', lineHeight: 1.6 }}>From GST &amp; ITR desks to the client portal, attendance and billing — the whole firm runs in one place, not twelve spreadsheets and a WhatsApp group.</p>
         </div>
-        <div className="grid cols-3">
-          {FEATURES.map((f, i) => (
-            <div className="feature" key={i}>
-              <div className="ico">{fico(f.p)}</div>
-              <h3>{f.h}</h3>
-              <p>{f.d}</p>
+        {FEATURE_GROUPS.map((grp) => (
+          <div key={grp.group} style={{ marginBottom: 34 }}>
+            <div className="feat-grouplabel">{grp.group}</div>
+            <div className="grid cols-3">
+              {grp.items.map((f, i) => (
+                <div className="feature" key={i}>
+                  <div className="ico">{fico(f.p)}</div>
+                  <h3>{f.h}</h3>
+                  <p>{f.d}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </section>
 
       {/* WORKFLOW */}
@@ -655,6 +695,21 @@ export default function LandingPage({ onSignIn, loading }) {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, fontSize: 11.5, color: 'var(--text-2)' }}><span>Work filed this month</span><span style={{ fontWeight: 800, color: 'var(--text)' }}>128</span></div>
           </div>
+          <div className="preview-card">
+            <div className="ph"><span className="ico">{fico(<><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6M9 16l1.6 1.6L14 14.5" /></>)}</span><h3>GST Desk · Reconciliation</h3></div>
+            <div className="mini" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Milind Rathod · GSTR-3B</div><div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 3 }}>Internal: Reviewed</div></div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--success)', background: 'var(--badge-bg)', padding: '3px 8px', borderRadius: 99 }}>Portal: Filed ✓</span></div>
+            <div className="mini" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Omkar Mane · GSTR-1</div><div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 3 }}>Internal: Filed</div></div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warning)', background: 'rgba(244,165,42,.14)', padding: '3px 8px', borderRadius: 99 }}>Portal: Pending</span></div>
+          </div>
+          <div className="preview-card">
+            <div className="ph"><span className="ico">{fico(<><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10Z" /><circle cx="12" cy="11" r="2.2" /></>)}</span><h3>Attendance &amp; Time</h3></div>
+            <div className="mini" style={{ display: 'flex', alignItems: 'center', gap: 9 }}><span style={{ width: 26, height: 26, borderRadius: '50%', background: '#14C7C0', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, flexShrink: 0 }}>PN</span><div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Priya N. · Punched in</div><div style={{ fontSize: 10.5, color: 'var(--muted)' }}>📍 Office · 9:12 AM</div></div></div>
+            <div className="mini" style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Logged today</span><span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>6h 20m</span></div>
+          </div>
+          <div className="preview-card">
+            <div className="ph"><span className="ico">{fico(<><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></>)}</span><h3>Automations</h3></div>
+            <div className="mini"><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Recurring worksheets generated</div><div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 4 }}>Sep GSTR-3B · 24 clients · auto-created</div></div>
+            <div className="mini"><div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Client reminders sent</span><span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>9:30 AM</span></div><div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 4 }}>18 clients · upcoming & overdue work</div></div>
+          </div>
         </div>
       </section>
 
@@ -696,6 +751,9 @@ export default function LandingPage({ onSignIn, loading }) {
         <FAQItem q="Is my client data secure?" a="Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. The Max plan adds SSO." />
         <FAQItem q="Can clients upload documents themselves?" a="Yes — the Client Portal lets clients respond to document requests and approvals directly, so you stop chasing paperwork over email and WhatsApp." />
         <FAQItem q="What's free and what's paid?" a="Workspaces (Kanban boards), the WorkZone board and the compliance calendar are free for life. The Practice Hub is free for your first 6 months. Communication (client email & portal) and Billing (invoices & payments) are paid add-ons." />
+        <FAQItem q="Does it reconcile with the GST portal?" a="Yes. The GST Desk tracks each return by internal stage and lets you reconcile it against the portal's filing status, so you can instantly see what's actually filed versus what's still pending." />
+        <FAQItem q="Can I export to Tally or Zoho Books?" a="Yes. Billing exports your invoices, payments and statements as import-ready files for Tally and Zoho Books (plus Excel) — no manual re-entry between systems." />
+        <FAQItem q="Is there a mobile app?" a="TaskFlowCo installs as an app on your phone and desktop (PWA), with a mobile-optimised layout and geotagged attendance — no app store needed." />
         <FAQItem q="Will you help me get set up?" a="Yes — onboarding is free. Our team imports your client list, configures your work types and gets your first period live with you. Book a slot from the 'Get onboarding help' button in pricing or the demo section." />
       </section>
 
@@ -783,7 +841,7 @@ export default function LandingPage({ onSignIn, loading }) {
                               {currentOrgId ? `⚡ Upgrade to ${plan.name}` : `Get ${plan.name} — sign in to buy`}
                             </button>
                             <p style={{ textAlign:'center', fontSize:10.5, color:'var(--muted)', margin:'7px 0 0' }}>
-                              {currentOrgId ? 'Instant · GST invoice auto-emailed' : 'Sign in first, then complete checkout'}
+                              {currentOrgId ? 'Instant · Receipt auto-emailed' : 'Sign in first, then complete checkout'}
                             </p>
                           </>
                     }
@@ -810,7 +868,7 @@ export default function LandingPage({ onSignIn, loading }) {
             </div>
           </div>
         </div>
-        <p style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 12, marginTop: 22 }}>All prices in ₹, exclude 18% GST · Cancel anytime · Your data stays yours</p>
+        <p style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 12, marginTop: 22 }}>All prices in ₹ · Cancel anytime · Your data stays yours</p>
       </section>
 
       {/* CTA BAND */}
