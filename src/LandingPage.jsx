@@ -175,6 +175,58 @@ const CSS = `
   .lp2 .nav .links .keep{display:inline-flex}
 }
 @media(prefers-reduced-motion:reduce){.lp2 *{animation:none!important;transition:none!important}}
+
+/* ── Radial module hub ── */
+.lp2 .hub{position:relative;width:100%;max-width:720px;margin:8px auto 0;aspect-ratio:1/.9}
+.lp2 .hub-ring{position:absolute;inset:6%;border:1px dashed var(--border);border-radius:50%}
+.lp2 .hub-ring.two{inset:20%;opacity:.6}
+.lp2 .hub-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:14px 20px;box-shadow:var(--shadow-panel);z-index:3;white-space:nowrap}
+.lp2 .hub-center .tile{width:38px;height:38px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lp2 .hub-center b{font-size:19px;font-weight:800;color:var(--text);letter-spacing:-.02em}
+.lp2 .hub-node{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;width:112px;text-align:center;z-index:2}
+.lp2 .hub-ico{width:50px;height:50px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--card-border);box-shadow:var(--shadow-card);transition:transform .2s ease}
+.lp2 .hub-node:hover .hub-ico{transform:translateY(-3px) scale(1.06)}
+.lp2 .hub-node span{font-size:12px;font-weight:700;color:var(--text);line-height:1.25}
+.lp2 .hub-glow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:44%;height:44%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.9),transparent 68%);z-index:1}
+.lp2[data-theme="dark"] .hub-glow{background:radial-gradient(circle,rgba(47,107,255,.18),transparent 68%)}
+
+/* ── Device showcase (laptop + phone) with rotating slides ── */
+.lp2 .devwrap{display:flex;align-items:flex-end;justify-content:center;position:relative}
+.lp2 .laptop{width:min(860px,100%)}
+.lp2 .laptop-screen{background:var(--canvas);border:12px solid #0E2A47;border-bottom:none;border-radius:18px 18px 0 0;overflow:hidden;box-shadow:var(--shadow-panel)}
+.lp2[data-theme="dark"] .laptop-screen{border-color:#081627}
+.lp2 .laptop-base{height:14px;width:min(940px,112%);margin:0 auto;background:linear-gradient(180deg,#cbd5e1,#94a3b8);border-radius:0 0 14px 14px;position:relative}
+.lp2[data-theme="dark"] .laptop-base{background:linear-gradient(180deg,#334155,#1e293b)}
+.lp2 .laptop-base::after{content:"";position:absolute;left:50%;top:0;transform:translateX(-50%);width:120px;height:5px;border-radius:0 0 8px 8px;background:rgba(14,42,71,.18)}
+.lp2 .appchrome{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.lp2 .appchrome .dots{display:flex;gap:5px}
+.lp2 .appchrome .dots i{width:9px;height:9px;border-radius:50%;background:var(--seg)}
+.lp2 .appchrome .addr{flex:1;font-size:11px;color:var(--muted);background:var(--field);border:1px solid var(--card-border);border-radius:7px;padding:4px 10px;text-align:center}
+.lp2 .slidebody{position:relative;background:var(--canvas);padding:16px;min-height:330px}
+.lp2 .slide{animation:lp2-fade .45s ease}
+@keyframes lp2-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.lp2 .rec-row{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--card-border);border-radius:10px;padding:11px 13px}
+.lp2 .rec-row+.rec-row{margin-top:9px}
+.lp2 .pill-ok{font-size:10.5px;font-weight:700;color:var(--success);background:var(--badge-bg);padding:3px 9px;border-radius:99px}
+.lp2 .pill-wait{font-size:10.5px;font-weight:700;color:var(--warning);background:rgba(244,165,42,.14);padding:3px 9px;border-radius:99px}
+.lp2 .phone{width:158px;flex-shrink:0;border:8px solid #0E2A47;border-radius:26px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow-panel);margin:0 0 22px -44px;position:relative;z-index:4}
+.lp2[data-theme="dark"] .phone{border-color:#081627}
+.lp2 .phone-notch{height:18px;background:#0E2A47;position:relative}
+.lp2 .phone-notch::after{content:"";position:absolute;left:50%;top:5px;transform:translateX(-50%);width:46px;height:5px;border-radius:99px;background:rgba(255,255,255,.25)}
+.lp2 .phone-body{padding:11px;background:var(--canvas);min-height:300px}
+.lp2 .mrow{background:var(--card);border:1px solid var(--card-border);border-radius:9px;padding:9px 10px;margin-bottom:8px}
+@media(max-width:820px){.lp2 .phone{display:none}.lp2 .slidebody{min-height:300px}}
+
+/* ── Hero floating toasts (many) + hub responsive toggle ── */
+.lp2 .float-toast{position:absolute;display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:9px 13px;font-size:12px;font-weight:700;color:var(--text);box-shadow:var(--shadow-card);z-index:3;white-space:nowrap}
+.lp2 .float-toast b{font-weight:800}
+.lp2 .ft-a{right:26px;top:150px;animation:lp2-floaty 5.5s ease-in-out infinite}
+.lp2 .ft-b{right:255px;top:58px;animation:lp2-floaty 6.5s ease-in-out .4s infinite}
+.lp2 .ft-c{right:445px;top:250px;animation:lp2-floaty 6s ease-in-out .8s infinite}
+.lp2 .hub-wrap{display:block}
+.lp2 .modstrip-sm{display:none}
+@media(max-width:1000px){.lp2 .float-toast{display:none}}
+@media(max-width:760px){.lp2 .hub-wrap{display:none}.lp2 .modstrip-sm{display:flex}}
 `
 
 // ── Reusable wordmark: gradient tile + "Taskflo v[check] co" (reads "Taskflowco") ──
@@ -305,6 +357,134 @@ const FEATURE_GROUPS = [
 ]
 const MODULES = ['Practice Hub', 'WorkZone', 'GST Desk', 'ITR Desk', 'Client Portal', 'Communications', 'Billing', 'Attendance', 'Analytics', 'Team']
 const fico = paths => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
+
+// ── Radial "everything in one place" hub ──
+const HUB_NODES = [
+  { l: 'Worksheets & Filings', c: '#2F6BFF', p: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" /></> },
+  { l: 'Analytics', c: '#7C3AED', p: <path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" /> },
+  { l: 'Team Workload', c: '#14C7C0', p: <><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M16 5.5a3 3 0 0 1 0 5.5M17 14.5a5 5 0 0 1 3 5.5" /></> },
+  { l: 'Billing & Invoices', c: '#EC4899', p: <><path d="M6 3h9l3 3v15H6z" /><path d="M9 9h6M9 13h6M9 17h4" /></> },
+  { l: 'Time Tracking', c: '#F4A52A', p: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
+  { l: 'Client Portal', c: '#0EA5E9', p: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></> },
+  { l: 'Team Chat', c: '#2F6BFF', p: <path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4z" /> },
+  { l: 'Bulk Email', c: '#7C3AED', p: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></> },
+  { l: 'Documents', c: '#14C7C0', p: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> },
+  { l: 'Kanban Boards', c: '#2F6BFF', p: <><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="5" height="13" rx="1" /></> },
+  { l: 'Auto Reminders', c: '#EF4444', p: <><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></> },
+  { l: 'Compliance Calendar', c: '#F4A52A', p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></> },
+]
+function RadialHub() {
+  const n = HUB_NODES.length, Rx = 45, Ry = 46
+  return (
+    <div className="hub" aria-hidden="true">
+      <div className="hub-ring" /><div className="hub-ring two" /><div className="hub-glow" />
+      <div className="hub-center"><span className="tile"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg></span><b>Taskflow<span className="grad-text">co</span></b></div>
+      {HUB_NODES.map((nd, i) => {
+        const a = (-90 + i * (360 / n)) * Math.PI / 180
+        const left = 50 + Rx * Math.cos(a), top = 50 + Ry * Math.sin(a)
+        return (
+          <div className="hub-node" key={nd.l} style={{ left: left + '%', top: top + '%' }}>
+            <span className="hub-ico" style={{ background: nd.c + '18', color: nd.c, borderColor: nd.c + '33' }}>{fico(nd.p)}</span>
+            <span>{nd.l}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Device showcase: laptop + phone, auto-rotating module slides ──
+const SHOW_TABS = ['WorkZone', 'GST Desk', 'Client Portal', 'Billing', 'Analytics']
+function ShowSlide({ tab }) {
+  if (tab === 'GST Desk') return (
+    <div className="slide" key="gst">
+      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 12 }}>GST Desk · Reconciliation — Sep 2026</div>
+      {[['Milind Rathod', 'GSTR-3B', 'Reviewed', 'ok', 'Filed'], ['Omkar Mane', 'GSTR-1', 'Filed', 'wait', 'Pending'], ['OM & Associates', 'GSTR-3B', 'Reviewed', 'ok', 'Filed'], ['Raj Bhoite', 'GSTR-1', 'In progress', 'wait', 'Not filed']].map((r, i) => (
+        <div className="rec-row" key={i}><div><div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[0]} · {r[1]}</div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Internal: {r[2]}</div></div><span className={r[3] === 'ok' ? 'pill-ok' : 'pill-wait'}>Portal: {r[4]}</span></div>
+      ))}
+    </div>
+  )
+  if (tab === 'Client Portal') return (
+    <div className="slide" key="portal">
+      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 12 }}>Client Portal · Document requests</div>
+      {[['Sandip Kale', 'Bank statements FY25-26', 'ok', 'Received'], ['Milind Rathod', 'Form 16 · FY24-25', 'ok', 'Approved'], ['Raj Bhoite', 'Purchase invoices — Aug', 'wait', '3 pending'], ['OM & Associates', 'Aadhaar + PAN', 'wait', 'Requested']].map((r, i) => (
+      <div className="rec-row" key={i}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--badge-bg)', color: 'var(--teal-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{fico(<><path d="M12 16V5m0 0L8 9m4-4 4 4" /><path d="M5 17v2h14v-2" /></>)}</span><div><div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[1]}</div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>{r[0]}</div></div></div><span className={r[2] === 'ok' ? 'pill-ok' : 'pill-wait'}>{r[3]}</span></div>
+      ))}
+    </div>
+  )
+  if (tab === 'Billing') return (
+    <div className="slide" key="billing">
+      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 12 }}>Billing · Invoices &amp; payments</div>
+      {[['#INV-2041', 'Rathod · Filing fee', '₹12,000', 'ok', 'Paid'], ['#INV-2038', 'OM & Assoc · Advisory', '₹8,500', 'wait', 'Sent'], ['#INV-2044', 'Kale · ITR filing', '₹4,000', 'ok', 'Paid']].map((r, i) => (
+        <div className="rec-row" key={i}><div><div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[0]} · {r[1]}</div></div><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span className="mono" style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[2]}</span><span className={r[3] === 'ok' ? 'pill-ok' : 'pill-wait'}>{r[4]}</span></div></div>
+      ))}
+      <div className="rec-row" style={{ marginTop: 12, background: 'var(--field)' }}><span style={{ fontWeight: 800, fontSize: 12.5, color: 'var(--text)' }}>Export to Tally / Zoho Books</span><span className="pill-ok">Ready</span></div>
+    </div>
+  )
+  if (tab === 'Analytics') return (
+    <div className="slide" key="an">
+      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 14 }}>Analytics · Practice health</div>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+        {[['On-time %', '96%'], ['Filed · month', '128'], ['Outstanding', '₹20.5k']].map((s, i) => (
+          <div key={i} style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 12, padding: '12px 14px' }}><div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 600 }}>{s[0]}</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginTop: 3 }}>{s[1]}</div></div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 12, padding: 16 }}>
+        {['45%', '68%', '55%', '90%', '72%', '84%'].map((h, i) => <div key={i} style={{ flex: 1, height: h, borderRadius: '6px 6px 0 0', background: i === 3 ? 'var(--grad)' : 'var(--seg)' }} />)}
+      </div>
+    </div>
+  )
+  // WorkZone board (default)
+  const col = (dot, name, count, cards) => (
+    <div className="column"><div className="head"><span className="dot" style={{ background: dot }} />{name}<span className="count" style={{ color: dot }}>{count}</span></div>{cards}</div>
+  )
+  const card = (b, chip, meta, mc) => <div className="card" style={{ borderLeftColor: b }}><div className="name">{chip[0]}</div><div style={{ marginTop: 7 }}><span className="chip">{chip[1]}</span></div><div className={'meta' + (mc ? ' mono' : '')} style={mc ? { color: mc } : undefined}>{meta}</div></div>
+  return (
+    <div className="slide board" key="wz">
+      {col('var(--muted)', 'Pending', 24, <>{card('var(--danger)', ['Milind Rathod', 'GSTR Returns'], '⚠ 2026-02-11', 'var(--danger)')}{card('var(--danger)', ['Raj Bhoite', 'GSTR 3B'], '⚠ 2026-04-20', 'var(--danger)')}</>)}
+      {col('var(--progress)', 'In Progress', 1, card('var(--progress)', ['Milind Rathod', 'GSTR Returns'], 'Priya N.'))}
+      {col('var(--warning)', 'Under Review', 2, card('var(--warning)', ['Sandip Kale', 'ITR Filing'], 'Aarti S.'))}
+      {col('var(--success)', 'Completed', 9, card('var(--success)', ['OM & Associates', 'Income Tax Return'], 'Filed · 2026-06-28', 'var(--success)'))}
+    </div>
+  )
+}
+function Showcase() {
+  const [active, setActive] = useState(0)
+  const [paused, setPaused] = useState(false)
+  useEffect(() => {
+    if (paused) return
+    const t = setInterval(() => setActive(a => (a + 1) % SHOW_TABS.length), 3400)
+    return () => clearInterval(t)
+  }, [paused])
+  const tab = SHOW_TABS[active]
+  return (
+    <div className="devwrap" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      <div className="laptop">
+        <div className="laptop-screen">
+          <div className="appchrome"><span className="dots"><i /><i /><i /></span><span className="addr">app.taskflowco.in</span></div>
+          <div className="app-tabs" style={{ margin: 0, padding: '12px 14px', border: 'none', borderBottom: '1px solid var(--border)' }}>
+            {SHOW_TABS.map((t, i) => (
+              <button key={t} className={'app-tab' + (i === active ? ' on' : '')} onClick={() => setActive(i)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{t}</button>
+            ))}
+          </div>
+          <div className="slidebody"><ShowSlide tab={tab} /></div>
+        </div>
+        <div className="laptop-base" />
+      </div>
+      <div className="phone" aria-hidden="true">
+        <div className="phone-notch" />
+        <div className="phone-body">
+          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Good morning, Raj</div>
+          <div style={{ fontSize: 9, color: 'var(--muted)', marginBottom: 10 }}>3 due today · 1 overdue</div>
+          <div className="mrow"><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>GSTR-3B · Rathod</div><div className="mono" style={{ fontSize: 9, color: 'var(--danger)', marginTop: 3, fontWeight: 600 }}>⚠ Due in 3 days</div></div>
+          <div className="mrow"><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>Docs received · Kale</div><div style={{ fontSize: 9, color: 'var(--text-2)', marginTop: 3 }}>via Client Portal</div></div>
+          <div className="mrow"><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>Payment · ₹12,000</div><div className="mono" style={{ fontSize: 9, color: 'var(--success)', marginTop: 3, fontWeight: 600 }}>INV-2041 paid</div></div>
+          <div style={{ textAlign: 'center', fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>📍 Punched in · 9:12 AM</div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── Sign-in modal: Google + email magic link. The email link is how domain /
 // admin mailboxes (e.g. name@taskflowco.in) that aren't Google accounts sign in.
@@ -581,13 +761,19 @@ export default function LandingPage({ onSignIn, loading }) {
               <div className="mono" style={{ marginTop: 6, fontSize: 10.5, color: 'var(--success)', fontWeight: 600 }}>INV-2041 · marked paid</div>
             </div>
           </div>
+          <div className="float-toast ft-a" aria-hidden="true"><b style={{ color: 'var(--success)' }}>✓</b> GSTR-3B filed · Rathod</div>
+          <div className="float-toast ft-b" aria-hidden="true"><b style={{ color: 'var(--blue)' }}>🔔</b> Reminders sent · 18 clients</div>
+          <div className="float-toast ft-c" aria-hidden="true"><b style={{ color: '#0EA5E9' }}>📥</b> Docs received · Kale</div>
         </div>
       </section>
 
-      {/* MODULES STRIP */}
-      <section className="wrap" style={{ paddingTop: 40 }}>
-        <div className="modstrip">
-          <span className="eyebrow">One platform, every module</span>
+      {/* MODULES HUB */}
+      <section className="wrap" style={{ paddingTop: 44 }}>
+        <div style={{ textAlign: 'center', marginBottom: 6 }}>
+          <span className="eyebrow">One workspace · everything your practice runs on</span>
+        </div>
+        <div className="hub-wrap"><RadialHub /></div>
+        <div className="modstrip modstrip-sm">
           <div className="modchips">
             {MODULES.map(m => <span className="modchip" key={m}>{m}</span>)}
           </div>
@@ -642,32 +828,7 @@ export default function LandingPage({ onSignIn, loading }) {
           <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>One workspace for the whole firm</h2>
           <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '52ch', marginInline: 'auto', lineHeight: 1.6 }}>The WorkZone board is just one view. Switch between worksheets, the GST &amp; ITR desks, the client portal, billing and analytics — all on the same data.</p>
         </div>
-        <div className="showcase">
-          <div className="app-tabs">
-            {['WorkZone','Worksheets','GST Desk','ITR Desk','Client Portal','Billing','Analytics'].map((t,i) => (
-              <span key={t} className={'app-tab' + (i===0 ? ' on' : '')}>{t}</span>
-            ))}
-          </div>
-          <div className="board">
-            <div className="column">
-              <div className="head"><span className="dot" style={{ background: 'var(--muted)' }} />Pending<span className="count" style={{ color: 'var(--muted)' }}>24</span></div>
-              <div className="card" style={{ borderLeftColor: 'var(--danger)' }}><div className="name">Milind Rathod</div><div style={{ marginTop: 7 }}><span className="chip">GSTR Returns</span></div><div className="meta mono">⚠ 2026‑02‑11</div></div>
-              <div className="card" style={{ borderLeftColor: 'var(--danger)' }}><div className="name">Raj Bhoite</div><div style={{ marginTop: 7 }}><span className="chip">GSTR 3B</span></div><div className="meta mono">⚠ 2026‑04‑20</div></div>
-            </div>
-            <div className="column">
-              <div className="head"><span className="dot" style={{ background: 'var(--progress)' }} />In Progress<span className="count" style={{ color: 'var(--progress)' }}>1</span></div>
-              <div className="card" style={{ borderLeftColor: 'var(--progress)' }}><div className="name">Milind Rathod</div><div style={{ marginTop: 7 }}><span className="chip">GSTR Returns</span></div><div className="meta">Priya N. · <span className="mono" style={{ color: 'var(--danger)', fontWeight: 700 }}>2026‑04‑11</span></div><div className="bar"><i style={{ width: '62%' }} /></div></div>
-            </div>
-            <div className="column">
-              <div className="head"><span className="dot" style={{ background: 'var(--warning)' }} />Under Review<span className="count" style={{ color: 'var(--warning)' }}>2</span></div>
-              <div className="card" style={{ borderLeftColor: 'var(--warning)' }}><div className="name">Sandip Kale</div><div style={{ marginTop: 7 }}><span className="chip">ITR Filing</span></div><div className="meta">Aarti S. · <span className="mono">2026‑07‑31</span></div></div>
-            </div>
-            <div className="column">
-              <div className="head"><span className="dot" style={{ background: 'var(--success)' }} />Completed<span className="count" style={{ color: 'var(--success)' }}>9</span></div>
-              <div className="card" style={{ borderLeftColor: 'var(--success)', opacity: .92 }}><div className="name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>OM &amp; Associates <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#1FA971" /><path d="M7.5 12.5 11 16 16.5 8.5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></div><div style={{ marginTop: 7 }}><span className="chip">Income Tax Return</span></div><div className="meta mono">Filed · 2026‑06‑28</div></div>
-            </div>
-          </div>
-        </div>
+        <Showcase />
       </section>
 
       {/* IN-APP PREVIEWS */}
