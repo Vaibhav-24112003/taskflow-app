@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { supabase, signInWithEmailLink } from './lib/supabase'
 import InstallPWAButton from './components/InstallPWAButton.jsx'
 import CheckoutButton from './components/CheckoutButton.jsx'
@@ -231,7 +231,29 @@ const CSS = `
 .lp2 .ft-b{right:255px;top:58px;animation:lp2-floaty 6.5s ease-in-out .4s infinite}
 .lp2 .ft-c{right:445px;top:250px;animation:lp2-floaty 6s ease-in-out .8s infinite}
 .lp2 .modstrip-sm{display:none}
-@media(max-width:1024px){.lp2 .hero-inner{flex-direction:column;align-items:flex-start;gap:8px}.lp2 .hero-hub{display:none}.lp2 .modstrip-sm{display:flex;margin-top:4px}}
+
+/* ── Hero object-animation stage (analytics window + floating chips + parallax) ── */
+@keyframes lp2-aurora{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(26px,-22px) scale(1.12)}}
+@keyframes lp2-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+.lp2 .haurora{position:absolute;border-radius:50%;filter:blur(34px);pointer-events:none;z-index:0}
+.lp2 .hstage{flex:1.15;min-width:0;position:relative;align-self:stretch;min-height:520px;perspective:1600px;z-index:1}
+.lp2 .hscene{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .12s ease-out;will-change:transform}
+.lp2 .hwin{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);width:min(560px,96%);border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--card-border);box-shadow:0 60px 120px -40px rgba(14,42,71,.45)}
+.lp2 .hwin-head{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--canvas);border-bottom:1px solid var(--border)}
+.lp2 .hwin-head i{width:10px;height:10px;border-radius:50%}
+.lp2 .hwin-addr{flex:1;max-width:230px;margin:0 auto;text-align:center;font-size:11px;color:var(--muted);background:var(--field);border:1px solid var(--card-border);border-radius:7px;padding:4px 10px}
+.lp2 .hwin-body{padding:16px;background:var(--surface)}
+.lp2 .hcell{background:var(--field);border-radius:11px;padding:10px 12px}
+.lp2 .hcell .k{font-size:9.5px;color:var(--muted);font-weight:700}
+.lp2 .hcell .v{font-size:19px;font-weight:800;margin-top:2px}
+.lp2 .hrow{display:grid;grid-template-columns:1.4fr .6fr .6fr .8fr 1.1fr;gap:8px;align-items:center;font-size:11.5px;padding:9px 0;border-bottom:1px solid var(--border2)}
+.lp2 .hbar{width:56px;height:6px;border-radius:99px;background:var(--seg);overflow:hidden}
+.lp2 .hbar>i{display:block;height:100%}
+.lp2 .hchip{position:absolute}
+.lp2 .hchip>span{display:inline-flex;align-items:center;gap:8px;background:var(--card);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--card-border);border-radius:999px;padding:8px 14px;white-space:nowrap;box-shadow:0 22px 44px -18px rgba(14,42,71,.4)}
+.lp2 .hchip .ic{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lp2 .hchip b{font-size:12px;font-weight:700;color:var(--text)}
+@media(max-width:1024px){.lp2 .hero-inner{flex-direction:column;align-items:flex-start;gap:8px}.lp2 .hero-hub,.lp2 .hstage{display:none}.lp2 .modstrip-sm{display:flex;margin-top:4px}}
 `
 
 // ── Reusable wordmark: gradient tile + "Taskflo v[check] co" (reads "Taskflowco") ──
@@ -394,6 +416,80 @@ function RadialHub() {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Hero object-animation stage: analytics window + floating chips + mouse parallax ──
+const HERO_CHIPS = [
+  { l: 'Compliance Calendar', c: '#F4A52A', s: { left: '32%', top: '1%' }, d: '.6s', p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></> },
+  { l: 'GST Desk', c: '#2F6BFF', s: { left: '0%', top: '13%' }, d: '0s', p: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6" /></> },
+  { l: 'ITR Desk', c: '#7C3AED', s: { right: '1%', top: '7%' }, d: '.3s', p: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h4" /></> },
+  { l: 'Client Portal', c: '#0EA5E9', s: { left: '-1%', top: '46%' }, d: '.8s', p: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></> },
+  { l: 'Auto Reminders', c: '#EF4444', s: { right: '-1%', top: '33%' }, d: '1.1s', p: <><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></> },
+  { l: 'Billing & Invoices', c: '#EC4899', s: { right: '-3%', bottom: '22%' }, d: '.2s', txt: '₹' },
+  { l: 'Team Chat', c: '#14C7C0', s: { left: '3%', bottom: '5%' }, d: '.9s', p: <path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4z" /> },
+]
+const AROW = [
+  ['GSTR-1', 120, 22, 18, 73, '#2F6BFF'], ['GST Returns', 40, 8, 12, 67, '#2F6BFF'],
+  ['ITR', 88, 14, 6, 81, '#14C7C0'], ['TDS', 32, 6, 5, 74, '#2F6BFF'], ['ROC', 18, 3, 0, 100, '#1FA971'],
+]
+function HeroStage() {
+  const stageRef = useRef(null), sceneRef = useRef(null)
+  useEffect(() => {
+    const stage = stageRef.current, scene = sceneRef.current
+    if (!stage || !scene) return
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      scene.style.transform = 'rotateX(4deg) rotateY(-12deg)'; return
+    }
+    const m = { x: 0, y: 0, tx: 0, ty: 0 }; let raf
+    const move = e => { const r = stage.getBoundingClientRect(); m.tx = ((e.clientX - r.left) / r.width - 0.5) * 2; m.ty = ((e.clientY - r.top) / r.height - 0.5) * 2 }
+    const leave = () => { m.tx = 0; m.ty = 0 }
+    stage.addEventListener('mousemove', move); stage.addEventListener('mouseleave', leave)
+    const loop = () => {
+      m.x += (m.tx - m.x) * 0.06; m.y += (m.ty - m.y) * 0.06
+      scene.style.transform = `rotateX(${(5 - m.y * 8).toFixed(2)}deg) rotateY(${(-13 + m.x * 10).toFixed(2)}deg)`
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => { cancelAnimationFrame(raf); stage.removeEventListener('mousemove', move); stage.removeEventListener('mouseleave', leave) }
+  }, [])
+  const sico = p => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{p}</svg>
+  return (
+    <div className="hstage" ref={stageRef} aria-hidden="true">
+      <div className="hscene" ref={sceneRef}>
+        <div className="hwin">
+          <div className="hwin-head"><i style={{ background: '#E2626B' }} /><i style={{ background: '#F4C04E' }} /><i style={{ background: '#5FCE8E' }} /><span className="hwin-addr">app.taskflowco.in/analytics</span></div>
+          <div className="hwin-body">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Analytics · Work performed</div><div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 600 }}>231 tasks · 5 work types</div></div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
+              <div className="hcell"><div className="k">TOTAL</div><div className="v" style={{ color: 'var(--text)' }}>231</div></div>
+              <div className="hcell"><div className="k">DONE</div><div className="v" style={{ color: 'var(--success)' }}>168</div></div>
+              <div className="hcell"><div className="k">OVERDUE</div><div className="v" style={{ color: 'var(--danger)' }}>41</div></div>
+            </div>
+            <div className="hcell" style={{ padding: '4px 14px 10px' }}>
+              <div className="hrow" style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.05em', color: 'var(--muted)' }}><span>WORK TYPE</span><span style={{ textAlign: 'center' }}>DONE</span><span style={{ textAlign: 'center' }}>PEND</span><span style={{ textAlign: 'center' }}>OVERDUE</span><span style={{ textAlign: 'right' }}>COMPLETE</span></div>
+              {AROW.map((r, i) => (
+                <div className="hrow" key={r[0]} style={i === AROW.length - 1 ? { borderBottom: 'none' } : undefined}>
+                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>{r[0]}</span>
+                  <span style={{ textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>{r[1]}</span>
+                  <span style={{ textAlign: 'center', color: 'var(--muted)' }}>{r[2]}</span>
+                  <span style={{ textAlign: 'center', color: r[3] ? 'var(--danger)' : 'var(--muted)', fontWeight: r[3] ? 700 : 400 }}>{r[3]}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, justifyContent: 'flex-end' }}><span className="hbar"><i style={{ width: r[4] + '%', background: r[5] }} /></span><span style={{ fontSize: 10, color: r[4] === 100 ? 'var(--success)' : 'var(--muted)', fontWeight: 700 }}>{r[4]}%</span></span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        {HERO_CHIPS.map((ch, i) => (
+          <div className="hchip" key={ch.l} style={{ ...ch.s, transform: `translateZ(${70 + i * 6}px)` }}>
+            <span style={{ animation: `lp2-bob ${6 + i * 0.4}s ease-in-out ${ch.d} infinite`, display: 'inline-flex' }}>
+              <span className="ic" style={{ background: ch.c + '22', color: ch.c, fontSize: ch.txt ? 14 : undefined, fontWeight: ch.txt ? 800 : undefined }}>{ch.txt || sico(ch.p)}</span>
+              <b>{ch.l}</b>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -732,6 +828,9 @@ export default function LandingPage({ onSignIn, loading }) {
       {/* HERO */}
       <section className="hero wrap">
         <div className="hero-inner">
+          <div className="haurora" style={{ left: '58%', top: '-14%', width: 420, height: 420, background: 'radial-gradient(circle,rgba(47,107,255,.28),transparent 66%)', animation: 'lp2-aurora 16s ease-in-out infinite' }} />
+          <div className="haurora" style={{ left: '74%', top: '30%', width: 360, height: 360, background: 'radial-gradient(circle,rgba(20,199,192,.26),transparent 66%)', animation: 'lp2-aurora 20s ease-in-out infinite reverse' }} />
+          <div className="haurora" style={{ left: '2%', top: '54%', width: 300, height: 300, background: 'radial-gradient(circle,rgba(124,58,237,.16),transparent 66%)', animation: 'lp2-aurora 18s ease-in-out infinite' }} />
           <div className="hero-copy">
             <span className="badge">● Built for CA · CS · CMA &amp; tax firms</span>
             <h1>Stop juggling. <span className="grad-text">Start flowing.</span></h1>
@@ -745,7 +844,7 @@ export default function LandingPage({ onSignIn, loading }) {
               Trusted by firms and their teams
             </div>
           </div>
-          <div className="hero-hub"><RadialHub /></div>
+          <HeroStage />
         </div>
       </section>
 
