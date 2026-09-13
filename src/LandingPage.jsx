@@ -100,12 +100,15 @@ const CSS = `
 .lp2 .modchip:nth-child(3n+1){color:var(--blue)}
 .lp2 .modchip:nth-child(3n+2){color:var(--teal-fg)}
 @media(max-width:620px){.lp2 .modstrip{flex-direction:column;align-items:flex-start;gap:12px}}
-.lp2 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px}
+.lp2 .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:20px}
 .lp2 .step{position:relative;padding-top:14px}
 .lp2 .step .num{width:34px;height:34px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;margin-bottom:14px}
 .lp2 .step h3{font-size:16px;margin-bottom:6px}
 .lp2 .step p{margin:0;font-size:13.5px;line-height:1.55;color:var(--text-2)}
 .lp2 .showcase{background:var(--canvas);border:1px solid var(--border);border-radius:22px;padding:22px;box-shadow:var(--shadow-panel)}
+.lp2 .app-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.lp2 .app-tab{font-size:12.5px;font-weight:700;color:var(--text-2);background:var(--surface);border:1px solid var(--card-border);border-radius:9px;padding:7px 13px}
+.lp2 .app-tab.on{background:var(--grad);color:#fff;border-color:transparent}
 .lp2 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .lp2 .column{background:var(--col);border-radius:14px;padding:13px}
 .lp2 .column .head{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-weight:800;font-size:13px}
@@ -558,17 +561,24 @@ export default function LandingPage({ onSignIn, loading }) {
             </div>
           </div>
           <div className="preview" aria-hidden="true">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}><h4>WorkZone · Board</h4><span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>FY 2025‑26</span></div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><span className="chip">Pending 24</span><span className="chip" style={{ background: 'rgba(47,107,255,.16)', color: '#5B9BFF' }}>In Progress 1</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}><h4>Your practice · Today</h4><span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>Sat, 12 Sep</span></div>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              <span className="chip" style={{ background: 'var(--grad)', color: '#fff' }}>WorkZone</span>
+              <span className="chip">GST Desk</span>
+              <span className="chip">Client Portal</span>
+              <span className="chip">Billing</span>
+            </div>
             <div className="task" style={{ borderLeft: '3px solid var(--danger)' }}>
-              <div className="name">Milind Rathod</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6 }}><span className="chip">GSTR Returns</span><span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>Jan 2026</span></div>
-              <div className="mono" style={{ marginTop: 7, fontSize: 10.5, color: 'var(--danger)', fontWeight: 600 }}>⚠ Due 2026‑02‑11</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ fontSize: 13 }}>📋</span><span className="name">GSTR-3B · Milind Rathod</span></div>
+              <div className="mono" style={{ marginTop: 6, fontSize: 10.5, color: 'var(--danger)', fontWeight: 600 }}>⚠ Due in 3 days · assigned to Priya</div>
             </div>
             <div className="task" style={{ borderLeft: '3px solid var(--teal)' }}>
-              <div className="name">Omkar Mane</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 6 }}><span className="chip" style={{ background: 'var(--badge-bg)', color: 'var(--teal-fg)' }}>Income Tax Return</span></div>
-              <div className="mono" style={{ marginTop: 7, fontSize: 10.5, color: 'var(--success)', fontWeight: 600 }}>On track · 2026‑07‑31</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ fontSize: 13 }}>📁</span><span className="name">Documents received · Sandip Kale</span></div>
+              <div style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-2)' }}>Bank statements FY25‑26 · via Client Portal</div>
+            </div>
+            <div className="task" style={{ borderLeft: '3px solid var(--success)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ fontSize: 13 }}>💸</span><span className="name">Payment received · ₹12,000</span></div>
+              <div className="mono" style={{ marginTop: 6, fontSize: 10.5, color: 'var(--success)', fontWeight: 600 }}>INV-2041 · marked paid</div>
             </div>
           </div>
         </div>
@@ -610,14 +620,16 @@ export default function LandingPage({ onSignIn, loading }) {
       {/* WORKFLOW */}
       <section className="section wrap" id="workflow" style={{ background: 'var(--canvas)', borderRadius: 28 }}>
         <div style={{ textAlign: 'center', marginBottom: 46 }}>
-          <span className="eyebrow">From onboarding to filed</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Your practice, in flow</h2>
+          <span className="eyebrow">From first login to filed &amp; paid</span>
+          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Your whole practice, end to end</h2>
+          <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '52ch', marginInline: 'auto', lineHeight: 1.6 }}>Not just a board — the full journey, from onboarding a client to getting the work done, filed and billed.</p>
         </div>
         <div className="steps">
-          {[['1', 'Import clients', 'Bring your client list from Excel — columns map automatically.'],
-            ['2', 'Auto-build calendar', 'Compliance due dates populate for every client and work type.'],
-            ['3', 'Assign & track', 'Push work to the team and watch it move across the board.'],
-            ['4', 'Review & file', 'Approve, mark filed, and keep a clean audit trail of everything.']].map(s => (
+          {[['1', 'Onboard in minutes', 'Import your client list from Excel — columns map automatically.'],
+            ['2', 'Auto-built compliance', 'GST, ITR, TDS & ROC calendars and recurring worksheets generate for every client.'],
+            ['3', 'Collect from clients', 'Request and receive documents through the Client Portal — no more email chasing.'],
+            ['4', 'Do the work', 'Assign, track and move work through stages with your team on WorkZone.'],
+            ['5', 'File & get paid', 'Mark filed with a clean audit trail, then invoice and collect payment.']].map(s => (
             <div className="step" key={s[0]}><div className="num">{s[0]}</div><h3>{s[1]}</h3><p>{s[2]}</p></div>
           ))}
         </div>
@@ -627,9 +639,15 @@ export default function LandingPage({ onSignIn, loading }) {
       <section className="section wrap">
         <div style={{ textAlign: 'center', marginBottom: 38 }}>
           <span className="eyebrow">In-app preview</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>One board for the whole firm</h2>
+          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>One workspace for the whole firm</h2>
+          <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '52ch', marginInline: 'auto', lineHeight: 1.6 }}>The WorkZone board is just one view. Switch between worksheets, the GST &amp; ITR desks, the client portal, billing and analytics — all on the same data.</p>
         </div>
         <div className="showcase">
+          <div className="app-tabs">
+            {['WorkZone','Worksheets','GST Desk','ITR Desk','Client Portal','Billing','Analytics'].map((t,i) => (
+              <span key={t} className={'app-tab' + (i===0 ? ' on' : '')}>{t}</span>
+            ))}
+          </div>
           <div className="board">
             <div className="column">
               <div className="head"><span className="dot" style={{ background: 'var(--muted)' }} />Pending<span className="count" style={{ color: 'var(--muted)' }}>24</span></div>
@@ -792,7 +810,7 @@ export default function LandingPage({ onSignIn, loading }) {
                   <div style={{ height:120, background:'var(--card-border)', borderRadius:6 }}/>
                 </div>
               ))
-            : plans.map(plan => {
+            : plans.filter(plan => !/^trial/i.test(plan.id) && !/^trial/i.test(plan.name || '')).map(plan => {
                 const monthlyPrice  = plan.price_monthly / 100
                 const yearlyTotal   = plan.price_yearly  / 100
                 const yearlyMonthly = monthlyPrice > 0 ? Math.round(yearlyTotal / 12) : 0
