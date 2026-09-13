@@ -202,12 +202,29 @@ export default function HomeSkin() {
       setData({ orgs: [], workspaces: [], profiles: [], user: null })
       return
     }
-    const [or, wr, pr] = await Promise.all([
+    const [or, wr] = await Promise.all([
       supabase.from('organizations').select('*').order('name').limit(100),
       getMyWorkspaces(user.id),
-      supabase.from('profiles').select('id,name,email').limit(500),
     ])
-    setData({ orgs: or.data || [], workspaces: wr.data || [], profiles: pr.data || [], user })
+    const orgs = or.data || []
+    const orgIds = orgs.map(o => o.id)
+    // Only load profiles for co-members of the user's own organisations —
+    // never the whole profiles table (that leaked other orgs' members).
+    let profiles = []
+    try {
+      if (orgIds.length) {
+        const mr = await supabase.from('organization_members').select('user_id').in('org_id', orgIds).limit(2000)
+        const ids = [...new Set([...(mr.data || []).map(m => m.user_id).filter(Boolean), user.id])]
+        if (ids.length) {
+          const pr = await supabase.from('profiles').select('id,name,email').in('id', ids).limit(500)
+          profiles = pr.data || []
+        }
+      } else {
+        const pr = await supabase.from('profiles').select('id,name,email').eq('id', user.id)
+        profiles = pr.data || []
+      }
+    } catch { profiles = [] }
+    setData({ orgs, workspaces: wr.data || [], profiles, user })
   }
 
   useEffect(() => {

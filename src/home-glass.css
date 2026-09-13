@@ -6,7 +6,11 @@ body.tf-home-active::after{width:74vw;height:22vw;right:-24vw;bottom:-2vh;backgr
 body.tf-home-active #root{position:relative;z-index:1;background:transparent !important}
 body.tf-home-active nav{background:rgba(255,255,255,.82) !important;backdrop-filter:blur(20px) saturate(130%) !important;-webkit-backdrop-filter:blur(20px) saturate(130%) !important;box-shadow:0 1px 0 rgba(20,42,70,.06),0 8px 24px rgba(20,42,70,.035) !important}
 .tf-home-secondary-action{display:none !important}
-body.tf-home-active .tf-home-nav-separator,body.tf-home-active .tf-home-nav-workspaces{display:none !important}
+body.tf-home-active .tf-home-nav-separator{display:none !important}
+/* Keep the workspace strip as an empty flex:1 spacer on Home so the right-side
+   nav actions (search, more, avatar) stay right-aligned; just hide its tabs. */
+body.tf-home-active .tf-home-nav-workspaces>*{display:none !important}
+body.tf-home-active .tf-home-nav-workspaces{overflow:hidden !important}
 .tf-home-legacy{display:none !important}
 .tf-home-overlay{position:fixed;top:52px;right:0;bottom:0;left:0;z-index:4;overflow:auto;display:block;box-sizing:border-box;padding:0 0 44px;scroll-behavior:smooth}
 

@@ -127,7 +127,26 @@ export default function HomeOverview({ orgs, workspaces, allProfiles = [], supab
     return out.slice(0, 4)
   }, [datedTasks, weekEndIso, laterHorizon])
 
-  const team = (allProfiles || []).slice(0, 5)
+  // Team = real co-members of the orgs the CURRENT user belongs to (never the
+  // whole profiles table). Guard on cu.id ∈ memberIds so we never surface people
+  // from organisations the signed-in user isn't a member of.
+  const team = useMemo(() => {
+    const byId = Object.fromEntries((allProfiles || []).map(p => [p.id, p]))
+    const ids = []
+    const seen = new Set()
+    if (cu?.id) { ids.push(cu.id); seen.add(cu.id) }
+    Object.values(meta).forEach(m => {
+      const mem = m.memberIds || []
+      if (!cu?.id || !mem.includes(cu.id)) return   // only orgs the user is in
+      mem.forEach(id => { if (id && !seen.has(id)) { seen.add(id); ids.push(id) } })
+    })
+    return ids
+      .map(id => byId[id] || (id === cu?.id
+        ? { id, name: cu?.name || cu?.user_metadata?.full_name || (cu?.email || '').split('@')[0], email: cu?.email }
+        : null))
+      .filter(p => p && (p.name || p.email))
+      .slice(0, 6)
+  }, [meta, allProfiles, cu])
   const firstWs = (workspaces || [])[0]
 
   const openCommand = () => {
