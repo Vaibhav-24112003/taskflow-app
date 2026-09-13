@@ -66,7 +66,14 @@ const CSS = `
 .lp2[data-theme="dark"] .theme-toggle .sun{background:transparent}
 .lp2[data-theme="dark"] .theme-toggle .moon{background:var(--grad)}
 .lp2 .hero{position:relative;overflow:hidden}
-.lp2 .hero-inner{position:relative;background:var(--hero-bg);border-radius:28px;margin-top:26px;padding:64px 56px;min-height:560px;overflow:hidden;transition:background .4s ease}
+.lp2 .hero-inner{position:relative;background:var(--hero-bg);border-radius:28px;margin-top:26px;padding:56px 56px;min-height:560px;overflow:hidden;transition:background .4s ease;display:flex;align-items:center;gap:28px}
+.lp2 .hero-hub{flex:1;min-width:0;display:flex;justify-content:center;align-items:center}
+.lp2 .hero-hub .hub{margin:0;max-width:500px}
+.lp2 .hero-hub .hub-node{width:98px}
+.lp2 .hero-hub .hub-node span{font-size:11px}
+.lp2 .hero-hub .hub-ico{width:44px;height:44px;border-radius:13px}
+.lp2 .hero-hub .hub-center{padding:11px 16px}
+.lp2 .hero-hub .hub-center b{font-size:16px}
 .lp2 .badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--badge-fg);background:var(--badge-bg);padding:6px 12px;border-radius:999px}
 .lp2 .hero h1{font-size:clamp(34px,4.4vw,50px);line-height:1.04;letter-spacing:-.028em;margin:18px 0 14px;max-width:15ch}
 .lp2 .hero .lede{font-size:16.5px;line-height:1.6;color:var(--text-2);max-width:44ch;margin:0 0 28px}
@@ -76,7 +83,7 @@ const CSS = `
 .lp2 .avatars span{width:26px;height:26px;border-radius:50%;border:2px solid #F7FAFD}
 .lp2 .avatars span+span{margin-left:-8px}
 .lp2 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.lp2 .hero-copy{max-width:460px;position:relative;z-index:2}
+.lp2 .hero-copy{flex:0 1 460px;max-width:460px;position:relative;z-index:2}
 .lp2 .preview{position:absolute;right:-24px;bottom:-16px;width:400px;border-radius:18px 18px 0 0;background:var(--card);border:1px solid var(--card-border);box-shadow:var(--shadow-panel);padding:16px;animation:lp2-floaty 6s ease-in-out infinite}
 .lp2 .preview h4{margin:0;font-size:13px;font-weight:800;color:var(--text)}
 .lp2 .task{border:1px solid var(--inner-border);background:var(--inner);border-radius:10px;padding:11px 12px}
@@ -223,10 +230,8 @@ const CSS = `
 .lp2 .ft-a{right:26px;top:150px;animation:lp2-floaty 5.5s ease-in-out infinite}
 .lp2 .ft-b{right:255px;top:58px;animation:lp2-floaty 6.5s ease-in-out .4s infinite}
 .lp2 .ft-c{right:445px;top:250px;animation:lp2-floaty 6s ease-in-out .8s infinite}
-.lp2 .hub-wrap{display:block}
 .lp2 .modstrip-sm{display:none}
-@media(max-width:1000px){.lp2 .float-toast{display:none}}
-@media(max-width:760px){.lp2 .hub-wrap{display:none}.lp2 .modstrip-sm{display:flex}}
+@media(max-width:1024px){.lp2 .hero-inner{flex-direction:column;align-items:flex-start;gap:8px}.lp2 .hero-hub{display:none}.lp2 .modstrip-sm{display:flex;margin-top:4px}}
 `
 
 // ── Reusable wordmark: gradient tile + "Taskflo v[check] co" (reads "Taskflowco") ──
@@ -236,12 +241,12 @@ function Logo({ footer }) {
       <span className="tile">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </span>
-      <span>Taskflo<span className="mark">v
+      <span>TaskFlo<span className="mark">v
         <svg className="leg" viewBox="0 0 72 92">
           <defs><linearGradient id="lp2tk" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#2F6BFF" /><stop offset="1" stopColor="#14C7C0" /></linearGradient></defs>
           <path d="M4 56 24 78 68 8" fill="none" stroke="url(#lp2tk)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <span className="co">co</span>
+        <span className="co">Co</span>
       </span></span>
     </span>
   )
@@ -374,11 +379,11 @@ const HUB_NODES = [
   { l: 'Compliance Calendar', c: '#F4A52A', p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></> },
 ]
 function RadialHub() {
-  const n = HUB_NODES.length, Rx = 45, Ry = 46
+  const n = HUB_NODES.length, Rx = 40, Ry = 42
   return (
     <div className="hub" aria-hidden="true">
       <div className="hub-ring" /><div className="hub-ring two" /><div className="hub-glow" />
-      <div className="hub-center"><span className="tile"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg></span><b>Taskflow<span className="grad-text">co</span></b></div>
+      <div className="hub-center"><span className="tile"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg></span><b>TaskFlow<span className="grad-text">Co</span></b></div>
       {HUB_NODES.map((nd, i) => {
         const a = (-90 + i * (360 / n)) * Math.PI / 180
         const left = 50 + Rx * Math.cos(a), top = 50 + Ry * Math.sin(a)
@@ -453,7 +458,7 @@ function Showcase() {
   const [paused, setPaused] = useState(false)
   useEffect(() => {
     if (paused) return
-    const t = setInterval(() => setActive(a => (a + 1) % SHOW_TABS.length), 3400)
+    const t = setInterval(() => setActive(a => (a + 1) % SHOW_TABS.length), 2200)
     return () => clearInterval(t)
   }, [paused])
   const tab = SHOW_TABS[active]
@@ -740,39 +745,12 @@ export default function LandingPage({ onSignIn, loading }) {
               Trusted by firms and their teams
             </div>
           </div>
-          <div className="preview" aria-hidden="true">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}><h4>Your practice · Today</h4><span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>Sat, 12 Sep</span></div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-              <span className="chip" style={{ background: 'var(--grad)', color: '#fff' }}>WorkZone</span>
-              <span className="chip">GST Desk</span>
-              <span className="chip">Client Portal</span>
-              <span className="chip">Billing</span>
-            </div>
-            <div className="task" style={{ borderLeft: '3px solid var(--danger)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ fontSize: 13 }}>📋</span><span className="name">GSTR-3B · Milind Rathod</span></div>
-              <div className="mono" style={{ marginTop: 6, fontSize: 10.5, color: 'var(--danger)', fontWeight: 600 }}>⚠ Due in 3 days · assigned to Priya</div>
-            </div>
-            <div className="task" style={{ borderLeft: '3px solid var(--teal)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ fontSize: 13 }}>📁</span><span className="name">Documents received · Sandip Kale</span></div>
-              <div style={{ marginTop: 6, fontSize: 10.5, color: 'var(--text-2)' }}>Bank statements FY25‑26 · via Client Portal</div>
-            </div>
-            <div className="task" style={{ borderLeft: '3px solid var(--success)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ fontSize: 13 }}>💸</span><span className="name">Payment received · ₹12,000</span></div>
-              <div className="mono" style={{ marginTop: 6, fontSize: 10.5, color: 'var(--success)', fontWeight: 600 }}>INV-2041 · marked paid</div>
-            </div>
-          </div>
-          <div className="float-toast ft-a" aria-hidden="true"><b style={{ color: 'var(--success)' }}>✓</b> GSTR-3B filed · Rathod</div>
-          <div className="float-toast ft-b" aria-hidden="true"><b style={{ color: 'var(--blue)' }}>🔔</b> Reminders sent · 18 clients</div>
-          <div className="float-toast ft-c" aria-hidden="true"><b style={{ color: '#0EA5E9' }}>📥</b> Docs received · Kale</div>
+          <div className="hero-hub"><RadialHub /></div>
         </div>
       </section>
 
-      {/* MODULES HUB */}
-      <section className="wrap" style={{ paddingTop: 44 }}>
-        <div style={{ textAlign: 'center', marginBottom: 6 }}>
-          <span className="eyebrow">One workspace · everything your practice runs on</span>
-        </div>
-        <div className="hub-wrap"><RadialHub /></div>
+      {/* MODULES — mobile-only chip fallback (radial hub lives in the hero) */}
+      <section className="wrap" style={{ paddingTop: 24 }}>
         <div className="modstrip modstrip-sm">
           <div className="modchips">
             {MODULES.map(m => <span className="modchip" key={m}>{m}</span>)}

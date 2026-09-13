@@ -102,7 +102,7 @@ export default function TaskflowLogo({
     >
       {/* "Taskflo" + a full-size "v" whose right leg is completed by the tick,
           so the pair reads as the "w" in Taskflow — matching the design mockup. */}
-      <span>Taskflo</span>
+      <span>TaskFlo</span>
       <span style={{ position: "relative", display: "inline-block" }}>
         v
         <span
@@ -119,7 +119,7 @@ export default function TaskflowLogo({
           <CheckMark dark={dark} animate={animate} drawOnce={drawOnce} gradId={gradId} />
         </span>
       </span>
-      {showCo && <span style={{ marginLeft: "0.62em" }}>co</span>}
+      {showCo && <span style={{ marginLeft: "0.62em" }}>Co</span>}
     </span>
   );
 }
