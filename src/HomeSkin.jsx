@@ -257,6 +257,12 @@ export default function HomeSkin() {
             clickLegacyCard('Create Practice')
           }
         }}
+        onNewWorkspace={() => {
+          if (!clickVisibleHomeButton('New Workspace')) {
+            clickLegacyCard('+ New Workspace')
+            clickLegacyCard('New Workspace')
+          }
+        }}
       />
     </div>
   )
