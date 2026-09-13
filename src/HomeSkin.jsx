@@ -131,6 +131,17 @@ function clickLegacyCard(text, preferText = '') {
   candidates[0]?.click()
 }
 
+// Click a real app trigger (outside the overlay) by its data-tf-action hook.
+// Works even when the element is hidden — element.click() still fires React's
+// delegated handler. Returns true if a target was found.
+function clickAction(name) {
+  const el = [...document.querySelectorAll(`[data-tf-action="${name}"]`)]
+    .find((n) => !n.closest('.tf-home-overlay'))
+  if (!el) return false
+  el.click()
+  return true
+}
+
 function clickVisibleHomeButton(text) {
   const overlay = document.querySelector('.tf-home-overlay')
   if (!overlay) return false
@@ -252,13 +263,13 @@ export default function HomeSkin() {
         onOpenOrg={openPracticeDirectly}
         onOpenWorkspace={openWorkspaceDirectly}
         onCreateOrg={() => {
-          if (!clickVisibleHomeButton('New Practice')) {
+          if (!clickAction('new-practice')) {
             clickLegacyCard('+ New Practice')
             clickLegacyCard('Create Practice')
           }
         }}
         onNewWorkspace={() => {
-          if (!clickVisibleHomeButton('New Workspace')) {
+          if (!clickAction('new-workspace')) {
             clickLegacyCard('+ New Workspace')
             clickLegacyCard('New Workspace')
           }

@@ -169,7 +169,6 @@ export default function HomeOverview({ orgs, workspaces, allProfiles = [], supab
             </div>
             <div className="tf1b-head-actions">
               <button className="tf1b-pill" onClick={onCreateOrg}>{IcPlus(13)} New Practice</button>
-              {onNewWorkspace && <button className="tf1b-pill" onClick={onNewWorkspace}>{IcPlus(13)} New Workspace</button>}
             </div>
           </div>
 
@@ -199,7 +198,7 @@ export default function HomeOverview({ orgs, workspaces, allProfiles = [], supab
             <div className="tf1b-card tf1b-kanban">
               <div className="tf1b-kanban-head">
                 <div className="tf1b-eyebrow" style={{ margin: 0 }}>{IcKanban(13)} Kanban Workspaces</div>
-                {onNewWorkspace && <button className="tf1b-link" onClick={onNewWorkspace}>+ New</button>}
+                <button className="tf1b-pill tf1b-pill-sm" onClick={onNewWorkspace}>{IcPlus(12)} New Workspace</button>
               </div>
               {(workspaces || []).length === 0
                 ? <div className="tf1b-kanban-empty">No workspaces yet</div>

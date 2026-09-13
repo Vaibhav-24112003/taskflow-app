@@ -289,3 +289,4 @@ body.tf-home-active .tf-home-nav-separator,body.tf-home-active .tf-home-nav-work
   .tf1b-hero-copy h1{font-size:22px}
   .tf1b-week-grid{grid-template-columns:repeat(7,minmax(64px,1fr));overflow-x:auto}
 }
+.tf1b-pill-sm{padding:5px 9px;font-size:11px;gap:4px}
