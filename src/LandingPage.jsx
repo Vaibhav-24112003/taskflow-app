@@ -258,14 +258,11 @@ const CSS = `
   .lp2 .hero-copy{flex:none;max-width:none}
   .lp2 .hero-hub{display:none}
   .lp2 .modstrip-sm{display:flex;margin-top:4px}
-  /* Keep the analytics preview visible on mobile — flatten the 3D stage into a
-     normal flowing block and show the window full-width. Absolute floating
-     chips are dropped here (their nowrap labels overflow a phone); the module
-     chip strip below the hero carries them on small screens. */
-  .lp2 .hstage{flex:none;width:100%;min-height:0;align-self:auto;perspective:none}
-  .lp2 .hscene{position:relative;inset:auto;transform:none!important;transform-style:flat}
-  .lp2 .hwin{position:relative;left:auto;top:auto;transform:none;width:100%;margin:0 auto;box-shadow:0 30px 60px -30px rgba(14,42,71,.4)}
-  .lp2 .hchip{display:none}
+  /* Mobile: keep the FULL desktop hero composition (analytics window + floating
+     module chips) but scale it down to fit the viewport — HeroStage measures the
+     width and sets the scale via JS. flex:none + width:100% + overflow visible so
+     the scaled scene (positioned absolutely, height set inline by JS) fits. */
+  .lp2 .hstage{flex:none;width:100%;min-width:0;align-self:auto;min-height:0;perspective:none;overflow:visible}
 }
 `
 
@@ -452,20 +449,63 @@ function HeroStage() {
   useEffect(() => {
     const stage = stageRef.current, scene = sceneRef.current
     if (!stage || !scene) return
-    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      scene.style.transform = 'rotateX(4deg) rotateY(-12deg)'; return
+    // Design size of the desktop composition — the scene is authored at this size
+    // and, on narrow screens, scaled down uniformly so mobile shows the exact
+    // desktop layout (window + floating chips) in miniature.
+    const DW = 660, DH = 520
+    const mq = window.matchMedia('(max-width:1024px)')
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    let raf = 0
+
+    function fitMobile() {
+      const w = stage.clientWidth || DW
+      const s = Math.min(1, w / DW)
+      scene.style.position = 'absolute'
+      scene.style.inset = '0'
+      scene.style.width = DW + 'px'
+      scene.style.height = DH + 'px'
+      scene.style.transformOrigin = 'top left'
+      scene.style.transform = 'scale(' + s + ')'
+      stage.style.height = (DH * s) + 'px'
     }
-    const m = { x: 0, y: 0, tx: 0, ty: 0 }; let raf
+    function clearMobile() {
+      scene.style.position = ''; scene.style.inset = ''
+      scene.style.width = ''; scene.style.height = ''
+      scene.style.transformOrigin = ''; scene.style.transform = ''
+      stage.style.height = ''
+    }
+
+    const m = { x: 0, y: 0, tx: 0, ty: 0 }
     const move = e => { const r = stage.getBoundingClientRect(); m.tx = ((e.clientX - r.left) / r.width - 0.5) * 2; m.ty = ((e.clientY - r.top) / r.height - 0.5) * 2 }
     const leave = () => { m.tx = 0; m.ty = 0 }
-    stage.addEventListener('mousemove', move); stage.addEventListener('mouseleave', leave)
     const loop = () => {
       m.x += (m.tx - m.x) * 0.06; m.y += (m.ty - m.y) * 0.06
       scene.style.transform = `rotateX(${(5 - m.y * 8).toFixed(2)}deg) rotateY(${(-13 + m.x * 10).toFixed(2)}deg)`
       raf = requestAnimationFrame(loop)
     }
-    raf = requestAnimationFrame(loop)
-    return () => { cancelAnimationFrame(raf); stage.removeEventListener('mousemove', move); stage.removeEventListener('mouseleave', leave) }
+    function startDesktop() {
+      clearMobile()
+      if (reduce) { scene.style.transform = 'rotateX(4deg) rotateY(-12deg)'; return }
+      stage.addEventListener('mousemove', move); stage.addEventListener('mouseleave', leave)
+      raf = requestAnimationFrame(loop)
+    }
+    function stopDesktop() {
+      cancelAnimationFrame(raf); raf = 0
+      stage.removeEventListener('mousemove', move); stage.removeEventListener('mouseleave', leave)
+    }
+    function setup() {
+      if (mq.matches) { stopDesktop(); fitMobile() }
+      else { startDesktop() }
+    }
+    setup()
+    const onResize = () => { if (mq.matches) fitMobile() }
+    window.addEventListener('resize', onResize)
+    if (mq.addEventListener) mq.addEventListener('change', setup); else if (mq.addListener) mq.addListener(setup)
+    return () => {
+      stopDesktop()
+      window.removeEventListener('resize', onResize)
+      if (mq.removeEventListener) mq.removeEventListener('change', setup); else if (mq.removeListener) mq.removeListener(setup)
+    }
   }, [])
   const sico = p => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{p}</svg>
   return (
