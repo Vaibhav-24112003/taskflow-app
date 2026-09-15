@@ -159,10 +159,12 @@ const D = {
 
 function shouldShowMobile() {
   if (typeof window === 'undefined') return false
-  if (sessionStorage.getItem('tf_mobile_off') === '1') return false
-  const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
-  const iosStandalone = window.navigator && window.navigator.standalone
-  return standalone || iosStandalone || window.innerWidth < 820
+  try { if (sessionStorage.getItem('tf_mobile_off') === '1') return false } catch {}
+  // Phone form-factor only. Gate on viewport width, NOT display-mode:standalone —
+  // a *desktop* PWA install also reports standalone, and must keep the full
+  // desktop app. An installed phone PWA has a narrow viewport, so it still gets
+  // the mobile UI here.
+  return window.innerWidth < 820
 }
 
 export default function MobileApp() {
