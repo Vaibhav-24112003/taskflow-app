@@ -106,6 +106,23 @@ function todoStatus(ws) {
   return 'Todo'
 }
 
+const PROG_RE = /progress|doing|review|ongoing|wip/i
+function statusMeta(status) {
+  const s = String(status || 'Todo')
+  if (DONE_RE.test(s)) return { label: s, color: '#0d9488' }
+  if (PROG_RE.test(s)) return { label: s, color: '#D97706' }
+  return { label: s || 'Todo', color: '#6b7c93' }
+}
+// Ordered, de-duplicated status columns for a board.
+function boardColumns(tasks, ws) {
+  const order = []
+  const push = n => { if (n && !order.includes(n)) order.push(n) }
+  if (ws && Array.isArray(ws.custom_statuses)) ws.custom_statuses.forEach(s => push(s.name || s.label || s))
+  tasks.forEach(t => push(t.status || 'Todo'))
+  if (!order.length) order.push('Todo')
+  return order
+}
+
 // ── inline icon ─────────────────────────────────────────────────────────────
 function Ic({ d, size = 20, sw = 1.9, stroke = 'currentColor' }) {
   return (
@@ -191,6 +208,8 @@ function Shell({ user }) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [filter, setFilter] = useState('All')
+  const [taskWs, setTaskWs] = useState('')          // '' = all workspaces in the practice
+  const [tasksView, setTasksView] = useState('list') // 'list' | 'board'
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
 
   // data
@@ -400,8 +419,8 @@ function Shell({ user }) {
           : orgs.length === 0
             ? <Empty t={t} title="No practice found" sub="You're not a member of any organisation yet." />
             : <>
-                {curScreen === 'home' && <HomeScreen {...{ t, views, stats, d, wsColor, orgName, loading, setScreen, setDetailId }} />}
-                {curScreen === 'tasks' && <TasksScreen {...{ t, views, filter, setFilter, setDetailId, toggleDone }} />}
+                {curScreen === 'home' && <HomeScreen {...{ t, views, stats, d, wsColor, orgName, loading, setScreen, setDetailId, setTaskWs }} />}
+                {curScreen === 'tasks' && <TasksScreen {...{ t, views, workspaces: d.workspaces, wsById, wsColor, taskWs, setTaskWs, tasksView, setTasksView, filter, setFilter, setDetailId, toggleDone }} />}
                 {curScreen === 'detail' && detail && <DetailScreen {...{ t, v: detail, profiles: d.profiles, toggleStep }} />}
                 {curScreen === 'calendar' && <CalendarScreen {...{ t, views, calMonth, setCalMonth, setDetailId, setScreen }} />}
                 {curScreen === 'team' && <TeamScreen {...{ t, members: d.members, profiles: d.profiles, views, uid, org }} />}
@@ -428,7 +447,7 @@ function Shell({ user }) {
         <Sheet t={t} title="Switch practice" onClose={() => setSwitcherOpen(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {orgs.map((o, i) => (
-              <button key={o.id} onClick={() => { setOrgId(o.id); setSwitcherOpen(false); setScreen('home'); setFilter('All') }}
+              <button key={o.id} onClick={() => { setOrgId(o.id); setSwitcherOpen(false); setScreen('home'); setFilter('All'); setTaskWs('') }}
                 style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 14px', borderRadius: 15, border: `1px solid ${t.glassBd}`, background: t.glass, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                 <span style={{ width: 44, height: 44, flex: '0 0 auto', borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${PALETTE[i % PALETTE.length]} 14%,white)`, color: PALETTE[i % PALETTE.length], fontWeight: 800, fontSize: 14 }}>{initials(o.name)}</span>
                 <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14, fontWeight: 760, color: t.ink2 }}>{o.name}</b><small style={{ fontSize: 11, color: t.sub2 }}>{o.subscription_status || 'Practice'}</small></span>
@@ -523,7 +542,7 @@ function Empty({ t, title, sub }) {
 }
 
 // ── HOME ─────────────────────────────────────────────────────────────────────
-function HomeScreen({ t, views, stats, d, wsColor, setScreen, setDetailId, loading }) {
+function HomeScreen({ t, views, stats, d, wsColor, setScreen, setDetailId, setTaskWs, loading }) {
   const focus = views.find(v => v.overdue) || views.find(v => v.today && !v.done) || views.find(v => !v.done) || null
   const statCards = [
     { label: 'Active', value: stats.active, ink: ACCENT, bg: 'rgba(47,107,255,.10)', d: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
@@ -561,14 +580,14 @@ function HomeScreen({ t, views, stats, d, wsColor, setScreen, setDetailId, loadi
         ))}
       </div>
 
-      <SectionHead t={t} eyebrow="Workspaces" title="Your practices" />
+      <SectionHead t={t} eyebrow="In this practice" title="Workspaces" />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {d.workspaces.length === 0
           ? <div style={{ padding: 20, borderRadius: 16, background: t.glass, border: `1px solid ${t.glassBd}`, fontSize: 12.5, color: t.sub2, textAlign: 'center' }}>No workspaces in this practice yet.</div>
           : d.workspaces.map(w => {
               const c = wsColor[w.id]
               return (
-                <button key={w.id} onClick={() => setScreen('tasks')} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '15px 16px', borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.glass, cursor: 'pointer', boxShadow: '0 10px 26px rgba(35,65,100,.05)', fontFamily: 'inherit' }}>
+                <button key={w.id} onClick={() => { setTaskWs(w.id); setScreen('tasks') }} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '15px 16px', borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.glass, cursor: 'pointer', boxShadow: '0 10px 26px rgba(35,65,100,.05)', fontFamily: 'inherit' }}>
                   <span style={{ width: 44, height: 44, borderRadius: 13, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${c} 13%,white)`, color: c, border: `1px solid color-mix(in srgb,${c} 24%,white)`, fontWeight: 800 }}>{initials(w.name)}</span>
                   <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <b style={{ fontSize: 14, fontWeight: 760, color: t.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</b>
@@ -612,37 +631,106 @@ function SectionHead({ t, eyebrow, title }) {
   )
 }
 
-// ── TASKS ────────────────────────────────────────────────────────────────────
-function TasksScreen({ t, views, filter, setFilter, setDetailId, toggleDone }) {
+// ── TASKS (workspace-scoped, List + Board views) ─────────────────────────────
+function TasksScreen({ t, views, workspaces, wsById, wsColor, taskWs, setTaskWs, tasksView, setTasksView, filter, setFilter, setDetailId, toggleDone }) {
   const filters = ['All', 'Today', 'Overdue', 'Mine']
-  const vis = views.filter(v => filter === 'All' ? true : filter === 'Today' ? v.today : filter === 'Overdue' ? v.overdue : v.mine)
+  // 1) scope to the chosen workspace within the practice
+  const scoped = taskWs ? views.filter(v => v.workspace_id === taskWs) : views
+  // 2) apply the quick filter (list view only; board shows the full workspace)
+  const vis = scoped.filter(v => filter === 'All' ? true : filter === 'Today' ? v.today : filter === 'Overdue' ? v.overdue : v.mine)
+  const scopeWs = taskWs ? wsById[taskWs] : null
+  const showWsChip = !taskWs
+
+  const chip = (on, color) => ({ flex: '0 0 auto', padding: '9px 15px', borderRadius: 12, border: `1px solid ${on ? (color || ACCENT) : (t === DARK ? 'rgba(140,165,200,.18)' : 'rgba(20,42,70,.1)')}`, background: on ? (color || ACCENT) : t.glass, color: on ? '#fff' : t.sub, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 750, cursor: 'pointer', whiteSpace: 'nowrap' })
+
   return (
-    <section style={{ padding: '2px 18px 8px', animation: 'tfmIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
-      <div className="tfm-x" style={{ display: 'flex', gap: 8, margin: '0 0 16px', overflowX: 'auto' }}>
-        {filters.map(name => {
-          const on = filter === name
-          return <button key={name} onClick={() => setFilter(name)} style={{ flex: '0 0 auto', padding: '9px 16px', borderRadius: 12, border: `1px solid ${on ? ACCENT : (t === DARK ? 'rgba(140,165,200,.18)' : 'rgba(20,42,70,.1)')}`, background: on ? ACCENT : t.glass, color: on ? '#fff' : t.sub, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 750, cursor: 'pointer' }}>{name}</button>
-        })}
+    <section style={{ padding: '2px 0 8px', animation: 'tfmIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
+      {/* workspace scope — separates the practice's boards */}
+      <div className="tfm-x" style={{ display: 'flex', gap: 8, padding: '0 18px 12px', overflowX: 'auto' }}>
+        <button onClick={() => setTaskWs('')} style={chip(!taskWs)}>All workspaces</button>
+        {workspaces.map(w => <button key={w.id} onClick={() => setTaskWs(w.id)} style={chip(taskWs === w.id, wsColor[w.id])}>{w.name}</button>)}
       </div>
-      {vis.length === 0
-        ? <Empty t={t} title="Nothing here" sub={filter === 'All' ? 'No tasks in this practice yet.' : `No ${filter.toLowerCase()} tasks.`} />
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-            {vis.map(v => <TaskCard key={v.id} t={t} v={v} onOpen={() => setDetailId(v.id)} onToggle={() => toggleDone(v)} />)}
-          </div>}
+
+      {/* view toggle + (list) filters */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', flex: '0 0 auto', padding: 3, borderRadius: 11, background: t.glass, border: `1px solid ${t.glassBd}` }}>
+          {[['list', D.list], ['board', 'M4 4h6v16H4zM14 4h6v10h-6z']].map(([mode, d]) => {
+            const on = tasksView === mode
+            return <button key={mode} onClick={() => setTasksView(mode)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: 'none', background: on ? (t === DARK ? '#22344e' : '#fff') : 'transparent', color: on ? ACCENT : t.sub2, fontFamily: 'inherit', fontSize: 12, fontWeight: 750, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(20,42,70,.08)' : 'none', textTransform: 'capitalize' }}><Ic d={d} size={15} sw={2} />{mode}</button>
+          })}
+        </div>
+        {tasksView === 'list' && (
+          <div className="tfm-x" style={{ display: 'flex', gap: 7, overflowX: 'auto', flex: 1, minWidth: 0 }}>
+            {filters.map(name => <button key={name} onClick={() => setFilter(name)} style={chip(filter === name)}>{name}</button>)}
+          </div>
+        )}
+      </div>
+
+      {tasksView === 'board'
+        ? <BoardView t={t} tasks={scoped} ws={scopeWs} showWsChip={showWsChip} setDetailId={setDetailId} toggleDone={toggleDone} />
+        : vis.length === 0
+          ? <Empty t={t} title="Nothing here" sub={filter === 'All' ? 'No tasks in this workspace yet.' : `No ${filter.toLowerCase()} tasks.`} />
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: '0 18px' }}>
+              {vis.map(v => <TaskCard key={v.id} t={t} v={v} showWsChip={showWsChip} onOpen={() => setDetailId(v.id)} onToggle={() => toggleDone(v)} />)}
+            </div>}
     </section>
   )
 }
-function TaskCard({ t, v, onOpen, onToggle }) {
+
+function BoardView({ t, tasks, ws, showWsChip, setDetailId, toggleDone }) {
+  const cols = boardColumns(tasks, ws)
+  if (tasks.length === 0) return <Empty t={t} title="Empty board" sub="No tasks in this workspace yet." />
+  return (
+    <div className="tfm-x" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 18px 4px', alignItems: 'flex-start', scrollSnapType: 'x proximity' }}>
+      {cols.map(col => {
+        const meta = statusMeta(col)
+        const items = tasks.filter(v => (v.status || 'Todo') === col)
+        return (
+          <div key={col} style={{ flex: '0 0 auto', width: 268, scrollSnapAlign: 'start', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color }} />
+              <b style={{ fontSize: 12.5, fontWeight: 800, color: t.ink2, letterSpacing: '-.01em', textTransform: 'capitalize' }}>{meta.label}</b>
+              <span style={{ fontSize: 11, fontWeight: 800, color: t.sub2, background: t.glass, border: `1px solid ${t.glassBd}`, borderRadius: 999, padding: '1px 8px' }}>{items.length}</span>
+            </div>
+            {items.length === 0
+              ? <div style={{ padding: 16, borderRadius: 14, border: `1px dashed ${t.cardBd}`, background: 'transparent', fontSize: 11.5, color: t.sub2, textAlign: 'center' }}>No tasks</div>
+              : items.map(v => <BoardCard key={v.id} t={t} v={v} meta={meta} showWsChip={showWsChip} onOpen={() => setDetailId(v.id)} onToggle={() => toggleDone(v)} />)}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function BoardCard({ t, v, meta, showWsChip, onOpen, onToggle }) {
+  const priColor = PRI[v.pri]
+  return (
+    <div onClick={onOpen} style={{ padding: 13, borderRadius: 14, border: `1px solid ${t.glassBd}`, background: t.card, boxShadow: '0 8px 20px rgba(35,65,100,.05)', cursor: 'pointer', borderLeft: `3px solid ${v.color}` }}>
+      {showWsChip && <span style={{ display: 'inline-block', padding: '2px 7px', borderRadius: 6, background: `color-mix(in srgb,${v.color} 13%,white)`, color: v.color, fontSize: 9, fontWeight: 800, marginBottom: 7, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.wsName}</span>}
+      <b style={{ fontSize: 13, fontWeight: 750, color: v.done ? '#9aa8b8' : t.ink2, lineHeight: 1.32, textDecoration: v.done ? 'line-through' : 'none', display: 'block' }}>{v.title}</b>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
+        <span style={{ padding: '2px 7px', borderRadius: 6, background: priColor + '18', color: priColor, fontSize: 9, fontWeight: 800 }}>{v.pri}</span>
+        {v.steps > 0 && <span style={{ fontSize: 10, color: t.sub2, fontWeight: 700 }}>{v.doneSteps}/{v.steps}</span>}
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 10, fontWeight: 750, color: v.dueColor }}>{v.due}</span>
+      </div>
+    </div>
+  )
+}
+
+function TaskCard({ t, v, showWsChip, onOpen, onToggle }) {
   const priColor = PRI[v.pri]
   const priBg = v.pri === 'High' ? 'rgba(220,38,38,.09)' : v.pri === 'Medium' ? 'rgba(217,119,6,.11)' : 'rgba(13,148,136,.11)'
+  const sm = statusMeta(v.status)
   return (
     <div onClick={onOpen} style={{ display: 'flex', gap: 12, padding: 15, borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.card, boxShadow: '0 12px 28px rgba(35,65,100,.055)', cursor: 'pointer', animation: 'tfmIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
       <button onClick={(e) => { e.stopPropagation(); onToggle() }} style={{ width: 24, height: 24, flex: '0 0 auto', marginTop: 1, borderRadius: 8, border: `2px solid ${v.done ? ACCENT : 'rgba(93,120,150,.35)'}`, background: v.done ? ACCENT : (t === DARK ? 'transparent' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
         {v.done && <Ic d={D.check2} size={14} sw={3.4} stroke="#fff" />}
       </button>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-          <span style={{ padding: '3px 8px', borderRadius: 7, background: `color-mix(in srgb,${v.color} 13%,white)`, color: v.color, fontSize: 9.5, fontWeight: 800, letterSpacing: '.03em', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.wsName}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6, flexWrap: 'wrap' }}>
+          {showWsChip && <span style={{ padding: '3px 8px', borderRadius: 7, background: `color-mix(in srgb,${v.color} 13%,white)`, color: v.color, fontSize: 9.5, fontWeight: 800, letterSpacing: '.03em', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.wsName}</span>}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 7, background: sm.color + '16', color: sm.color, fontSize: 9.5, fontWeight: 800, textTransform: 'capitalize' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: sm.color }} />{sm.label}</span>
           <span style={{ padding: '3px 8px', borderRadius: 7, background: priBg, color: priColor, fontSize: 9.5, fontWeight: 800 }}>{v.pri}</span>
         </div>
         <b style={{ fontSize: 14, fontWeight: 750, color: v.done ? '#9aa8b8' : t.ink2, lineHeight: 1.3, textDecoration: v.done ? 'line-through' : 'none', display: 'block' }}>{v.title}</b>

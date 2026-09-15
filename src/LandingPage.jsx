@@ -253,7 +253,20 @@ const CSS = `
 .lp2 .hchip>span{display:inline-flex;align-items:center;gap:8px;background:var(--card);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--card-border);border-radius:999px;padding:8px 14px;white-space:nowrap;box-shadow:0 22px 44px -18px rgba(14,42,71,.4)}
 .lp2 .hchip .ic{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .lp2 .hchip b{font-size:12px;font-weight:700;color:var(--text)}
-@media(max-width:1024px){.lp2 .hero-inner{flex-direction:column;align-items:flex-start;gap:8px}.lp2 .hero-hub,.lp2 .hstage{display:none}.lp2 .modstrip-sm{display:flex;margin-top:4px}}
+@media(max-width:1024px){
+  .lp2 .hero-inner{flex-direction:column;align-items:stretch;gap:22px}
+  .lp2 .hero-copy{flex:none;max-width:none}
+  .lp2 .hero-hub{display:none}
+  .lp2 .modstrip-sm{display:flex;margin-top:4px}
+  /* Keep the analytics preview visible on mobile — flatten the 3D stage into a
+     normal flowing block and show the window full-width. Absolute floating
+     chips are dropped here (their nowrap labels overflow a phone); the module
+     chip strip below the hero carries them on small screens. */
+  .lp2 .hstage{flex:none;width:100%;min-height:0;align-self:auto;perspective:none}
+  .lp2 .hscene{position:relative;inset:auto;transform:none!important;transform-style:flat}
+  .lp2 .hwin{position:relative;left:auto;top:auto;transform:none;width:100%;margin:0 auto;box-shadow:0 30px 60px -30px rgba(14,42,71,.4)}
+  .lp2 .hchip{display:none}
+}
 `
 
 // ── Reusable wordmark: gradient tile + "Taskflo v[check] co" (reads "Taskflowco") ──
