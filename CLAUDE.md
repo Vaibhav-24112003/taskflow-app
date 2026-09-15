@@ -4,377 +4,89 @@
 - **Repo**: `Vaibhav-24112003/taskflow-app` (public)
 - **Live URL**: `taskflowco.in` (Vercel auto-deploys `main`)
 - **Vercel**: team `team_JrnZNzGZg5cK3lNierDv1nZd`, project `prj_bkkNRdJwlz4HkqqlB2Pdf0H8RnUK`
-- **Supabase**: **LIVE = `vorxrjekbokqkigfabhr` (ap-south-1)** — this is the project `taskflowco.in` actually connects to (`VITE_SUPABASE_URL` in Vercel). The MCP connector is bound to it and can run DDL via `apply_migration`. `vkpglkblfkehvncnrdtg` is an old/secondary project — do NOT migrate against it.
-- **Dev branch**: `claude/reference-last-conversation-ff5tF`
+- **Supabase**: **LIVE = `vorxrjekbokqkigfabhr` (ap-south-1)** — the project `taskflowco.in` connects to (`VITE_SUPABASE_URL`). The MCP connector is bound to it and can run DDL via `apply_migration`. `vkpglkblfkehvncnrdtg` is an old/secondary project — do NOT migrate against it.
 
-> **⚠ Before running ANY migration, verify the live DB — don't trust the label above blindly:**
-> 1. `list_projects` on the Supabase connector → the project it returns is the one the token can actually reach. If `apply_migration` ever errors "You do not have permission", it's a **wrong/inaccessible project ID**, not a read-only token — the connector CAN do DDL.
-> 2. Confirm it's the live one: the deployed bundle preconnects to `https://<ref>.supabase.co`. Fetch the live deployment HTML (Vercel connector `web_fetch_vercel_url` if `taskflowco.in` 403s) and grep the `<link rel="preconnect" ... supabase.co>` — that `<ref>` is the real live DB.
-> 3. Only migrate against the project that satisfies both. As of last check that is `vorxrjekbokqkigfabhr`.
+> **⚠ Before ANY migration, verify the live DB — don't trust the label blindly:**
+> 1. `list_projects` → the project the token can reach. A "You do not have permission" error on `apply_migration` means a wrong/inaccessible project ID, not a read-only token.
+> 2. Confirm it's live: the deployed bundle preconnects to `https://<ref>.supabase.co`. Grep the live HTML's `<link rel="preconnect" ... supabase.co>` — that `<ref>` is the real live DB.
+> 3. Migrate only against the project satisfying both (currently `vorxrjekbokqkigfabhr`).
 
 ## Stack
-- **Frontend**: React + Vite SPA (`src/App.jsx` ~14k lines, all modules inline, `var` + hooks, no TypeScript)
-- **Backend**: Supabase (Postgres + Auth + Storage)
-- **Deploy**: Vercel auto-deploys from `main` branch
-- All styles inline; design tokens via CSS vars: `--tf-bg`, `--tf-panel`, `--tf-surface`, `--tf-border`, `--tf-text`, `--tf-text-sub`
-- Accent: `#6b8cad` / `#5e8bb0` (slate-blue). Numbers: `'JetBrains Mono',monospace`
-- Font: Geist → Inter → system-ui
+- **Frontend**: React + Vite SPA. `src/App.jsx` (~19k lines) holds nearly all modules inline (`var` + hooks, no TypeScript). All styles inline.
+- **Backend**: Supabase (Postgres + Auth + Storage + Edge Functions + pg_cron).
+- **Deploy**: Vercel auto-deploys from `main`.
+- **Brand** (design refresh, live): primary `#2F6BFF`, teal `#14C7C0`, gradient `linear-gradient(135deg,#2F6BFF,#14C7C0)`, navy ink `#0E2A47`. Font: Plus Jakarta Sans (Geist/Inter fallback); JetBrains Mono for dates/numbers. In-app theme via `data-theme` + `localStorage tfc-theme`; CSS vars `--tf-bg/-panel/-surface/-border/-text/-text-sub`.
 
 ## Key Files
 | File | Purpose |
 |---|---|
-| `src/App.jsx` | Entire app — all modules, components, logic |
-| `src/LandingPage.jsx` | Public landing page |
-| `src/ITRTour.jsx` | ITR season animated tour (50s, light mode) |
-| `src/components/TaskflowLogo.jsx` | Wordmark component — use `<TaskflowLogo size={N} />` |
-| `src/lib/supabase.js` | Supabase client + helper functions |
-| `src/lib/authStateListener.js` | Auth state + block check |
-| `src/admin/AdminShell.jsx` | Platform admin dashboard (Overview, Users, Orgs, Demos, Support, Announcements) |
-| `src/admin/UsersAdmin.jsx` | User management — reads `admin_user_overview` view |
-| `src/admin/OrgsAdmin.jsx` | Org management — reads `admin_org_overview` view, trial/module controls |
-| `src/SupportAdminView.jsx` | Support tickets admin (183 lines) |
-| `src/AnnouncementsAdmin.jsx` | Announcements CRUD (223 lines) |
-| `supabase/migrations/` | SQL migration files for DB changes |
+| `src/App.jsx` | Entire desktop app — all modules, components, logic. `OrgDashboard` (~18884) is the per-org shell. |
+| `src/MobileApp.jsx` | Native mobile app — full-screen overlay, renders when viewport < 820px. WorkZone + Kanban + Team/Attendance/Time + Chat, wired to real data. |
+| `src/HomeSkin.jsx` / `src/HomeOverview.jsx` | Post-login "Practice Home" overlay (separate React root in `main.jsx`). |
+| `src/LandingPage.jsx` | Public landing (`.lp2`-scoped design system). |
+| `src/lib/supabase.js` | Supabase client + helper functions. |
+| `src/lib/useTrialGate.js` | Plan/trial gating — `status`, `writesAllowed`, `hasModule(m)`. |
+| `src/admin/AdminShell.jsx` | Platform admin dashboard (`@taskflowco.in` only). |
+| `supabase/migrations/` | SQL migrations. |
 
 ## Git / Push Flow — DIRECT TO MAIN
-**Always commit and push directly to `main`.** Vercel auto-deploys on every push, so this is instant promotion with no PR branch drift or merge conflicts.
-
-> **STANDING ORDER (user, 2026-07): auto-deploy every change to `main` without asking, until the user explicitly says to stop.** For each change: commit → push to `main` → verify a `target:production` deploy is queued/READY via Vercel MCP `list_deployments` → report. No confirmation prompts.
+**Standing order (user):** auto-deploy every change to `main` without asking. Per change: commit → push `main` → verify a `target:production` READY/QUEUED deploy exists via Vercel `list_deployments` → report.
 
 ```bash
-# Commit and push directly to main (PAT — never hardcode):
 git add <files>
 git config user.email noreply@anthropic.com && git config user.name Claude
 git commit -m "description"
 git commit --amend --no-edit --reset-author   # fix committer email for stop hook
-git push https://<YOUR_PAT>@github.com/Vaibhav-24112003/taskflow-app.git main
+# push (a session dev branch is also set; push there too when required by the harness)
 ```
-> Rotate PAT at https://github.com/settings/tokens — never commit the literal token.
-
-**No PRs needed.** Direct push to main = instant Vercel deploy = live on `taskflowco.in` in ~60s.
-
-> Old squash-merge PR pattern caused branch drift on every merge — avoid it.
+- Vercel sometimes builds a near-simultaneous push only as a branch preview and skips the production build — always confirm a `target:production`/`ref:main` deploy exists for your commit (`list_deployments`, filter with `since`). If missing, push an empty commit to re-trigger.
+- git push in this remote env may be proxy-blocked (403); a user-provided short-lived PAT is the workaround. Never commit the literal token.
+- Stop-hook "Unverified commits" (GPG) warning is cosmetic — do NOT rewrite/force-push to fix it.
 
 ## Key Database Tables
 | Table | Purpose |
 |---|---|
-| `worksheet_rows` | ERP tasks — `org_id`, `worksheet_id`, `client_id`, `status`, `due_date`, `data` JSONB |
+| `worksheet_rows` | ERP tasks — `org_id`, `worksheet_id`, `client_id`, `status`, `current_stage`, `due_date`, `completed`, `data` JSONB |
 | `worksheets` | `work_type`, `period_label`, `frequency`, `org_id` |
-| `daily_plans` | Plan My Day entries (full PlanMyDayView tab) |
-| `attendance_time_logs` | Time logs — `org_id`, `user_id`, `date`, `client_id`, `work_type`, `hours`, `minutes`, `notes` |
-| `tasks` | Personal Kanban tasks (Workspaces) |
-| `clients` | `id`, `name`, `display_name`, `pan`, `org_id` |
+| `work_type_configs` | Per-org work types — `stages`, `is_itr_worktype`, `estimated_hours` |
+| `daily_plans` | Plan My Day entries |
+| `attendance_time_logs` | Time logs — `org_id`, `user_id`, `date`, `client_id`, `work_type`, `hours`, `minutes`, `worksheet_row_id` |
+| `attendance_punches` / `attendance_entries` / `leave_requests` | Attendance module |
+| `tasks` | Personal Kanban tasks (Workspaces) — `workspace_id`, `status`, `priority`, `checklist` |
+| `workspaces` / `workspace_members` | Kanban boards + membership |
+| `clients` | `id`, `name`, `display_name`, `pan`, `gstin`, `org_id` |
+| `client_credentials` | Encrypted credential vault — secrets via `cred_get_secret`/`cred_set_secret` (pgp_sym) |
+| `client_portal_access` / `client_requests` | Client portal (custom auth via `client_portal_*` RPCs) |
 | `organization_members` | `user_id`, `role`, `org_id` |
 | `profiles` | `id`, `name`, `email` |
-| `demo_requests` | Landing page "Book a Demo" form — `name`, `email`, `phone`, `firm_name`, `team_size`, `message`, `status` (new/contacted/converted/declined) |
-| `org_cloud_storage` | Per-org cloud/integration tokens — `provider`, `access_token`, `is_active` |
-| `itr_compilation` | ITR Desk per-client compilation — `org_id`, `client_id`, `assessment_year`, `status`, `completeness`, `client_data`/`internal_data` JSONB |
-| `itr_templates` | One org-wide ITR form template — `org_id` PK, `template` JSONB (sections/fields/docs/income_types/checks) |
+| `subscriptions` / `payment_events` / `subscription_invoices` / `plans` | Billing (Razorpay) |
+| `team_chat_channels` / `team_chat_messages` | Team chat |
+| `demo_requests` | Landing "Book a Demo" form |
+| `announcements` | Platform announcements |
 
-**ITR client classification is work-type-driven** (no per-client manual tag): a client is an "ITR client" when enrolled (via `worksheet_rows`) in any work type with `work_type_configs.is_itr_worktype = true`. The old `clients.itr_applicable` column was dropped (migration `20260531_itr_worktype_classification.sql`). ITR Desk, Client Master badges, and the Analytics ITR tile all derive ITR status from enrollment.
-
-`worksheet_rows.data` JSONB keys: `__title`, `__assignee`, `__priority`, `__description`, `__contact`, `__checklist`, `__h_<key>` (workflow hierarchy assignees)
-
-## LocalStorage Keys
-- `tf_mydayids_<org.id>` — JSON array of row IDs added to My Day
-- `tf_mydayhidden_<org.id>_<YYYY-MM-DD>` — row IDs hidden from My Day panel that day (resets next day)
-- `tf_reminders` — reminder objects for notification bell
-
-## App Architecture (key components in App.jsx)
-| Component | Approx line | Purpose |
-|---|---|---|
-| `YourDashboardModule` | ~7623 | Your Diary → Worklist tab. 2-col layout: task list + Plan My Day panel |
-| `PlanMyDayView` | ~12750 | Full Plan My Day tab. Uses `daily_plans` + logs to `attendance_time_logs` |
-| `ErpBoardModule` | ~7435 | WorkZone → Board tab. Kanban over `worksheet_rows` |
-| `WorksheetsModule` | earlier | WorkZone → Worksheets tab. Main worksheet grid |
-| `AnalyticsDashboard` | mid-file | Analytics module |
-| `TeamDashboard` | mid-file | Team workload view |
-
-## YourDashboardModule — Current Layout
-```
-<div display:flex height:100%>
-  MAIN (flex:1) — sticky header (3 rows) + scrollable task list
-  RIGHT (340px) — Plan My Day panel
-</div>
-```
-**Sticky header rows:**
-1. Greeting + refresh + create-task button
-2. Filter pills (All/Today/Overdue/Review) · View toggles (List/Board/Calendar/Grid) · Date filter · Member select
-3. Work-type pill strip — horizontal scrollable, `wsRailFilter` state, one pill per work type + "All Work Types" + "Due Today"
-
-**State relevant to Worklist:**
-```js
-wsRailFilter    // 'all' | 'today' | <work_type_name>
-myDayIds        // localStorage tf_mydayids_<org.id>
-myDayHidden     // localStorage tf_mydayhidden_<org.id>_<date>
-myDayLogId      // which card has → Log form open
-myDayLogForm    // {client_id, work_type, hours, minutes, notes}
-myDayLoggingId  // row.id currently being saved
-dashView        // 'list' | 'board' | 'calendar' | 'grid'
-```
-**Key helpers:**
-```js
-addToMyDay(rowId)      // adds to myDayIds, removes from myDayHidden
-removeFromMyDay(rowId) // removes from myDayIds, adds to myDayHidden
-sendMyDayLog(row)      // inserts into attendance_time_logs
-toggleMyDay(rowId)     // add or remove
-```
-
-**4 view modes:**
-- `list` — grouped collapsible by work type, overdue red left border, "Open →" / "Open Unclassified →" per group
-- `board` — 3-col Kanban (Pending / In Progress / Under Review), drag-and-drop changes status
-- `calendar` — full month grid, Mon-first, tasks on due-date cells
-- `grid` — dense table (Title · Client · Work Type · Assignee · Due · Status · ☀)
-
-**Plan My Day right panel (340px):**
-- Header: date, capacity bar, 3 summary pills (Scheduled / Done / Overdue)
-- Morning / Afternoon task cards — each has `× Remove` + `→ Log` button
-- `→ Log` expands inline form (Work Type, Hours, Mins, Notes) → `sendMyDayLog()` → `attendance_time_logs`
-- Suggested for today (overdue, not yet in My Day) — `☀ Add` button
-- 2-week mini calendar with task-dot indicators
-
-## WorkZone Modules
-```js
-{id:'workzone', tabs:[
-  {id:'worksheets'},  // WorksheetsModule — main worksheet grid
-  {id:'board'},       // ErpBoardModule — all-org Kanban over worksheet_rows
-  {id:'bigclients'},
-  {id:'teamview'}
-]}
-```
-`onOpenWorkType(wtName)` → `navigateToWorkType(wtName)` — navigates to WorkZone → Worksheets for that work type. Works for Unclassified too (amber styled button).
+- **ITR classification is work-type-driven**: a client is "ITR" when enrolled in any work type with `work_type_configs.is_itr_worktype = true` (the old `clients.itr_applicable` column was dropped).
+- `worksheet_rows.data` JSONB keys: `__title`, `__assignee`, `__priority`, `__description`, `__contact`, `__checklist`, `__h_<key>` (hierarchy assignees).
 
 ## Architecture Patterns
+- **Module-level caches** at App.jsx module scope keyed by `org.id` (`_dashCache`, `_billingCache`, etc.) survive navigation; switching orgs fetches fresh.
+- **Load-function pattern** (all modules): `loadingRef` concurrent guard + 12s timeout + `visibilitychange` restart of stalled fetches; write result into the org cache.
+- **Stage-based status** (`getEffectiveStatus`): derive from the row's `current_stage` position in `work_type_configs.stages` — first stage → pending, last → completed, else in_progress; fall back to `row.status` when no stages.
+- **Optimistic UI**: update Supabase then `setRows(prev => map…)`.
+- Admin access is `@taskflowco.in` email only (`is_tfc_admin()` = JWT email ilike `%@taskflowco.in`).
 
-### Module-level data cache (survives navigation)
-At top of App.jsx (module scope, not component scope):
-```js
-var _dashCache = {};       // orgId → { rows, clients, worksheets, orgMembers }
-var _billingCache = {};    // orgId → { clients, invoices, payments, proposals }
-var _ccCache = {};         // orgId → { clients, requests, responses, ... }
-var _worksheetsCache = {}; // orgId → { clients }
-var _commsCache = {};      // orgId → { clients, portalUsers, templates, commLogs }
-```
-Keyed by `org.id` — switching orgs always fetches fresh.
+## Security (Supabase) — IMPORTANT
+- **All app tables have RLS enabled with org-scoped policies.** Keep it that way — never disable RLS on a public table.
+- **SECURITY DEFINER RPCs must self-authorize** (check `auth.uid()` membership of the owning org before touching data) — e.g. `cred_get_secret`, `reset_client_portal_password` do. Set `search_path` on every function.
+- **Admin views** (`admin_billing_overview`, `admin_org_overview`, `admin_user_overview`) are reachable via the REST API with the public anon key. They must NOT leak cross-tenant data: guard rows with `where public.is_tfc_admin()` (SECURITY DEFINER views) or use `security_invoker=true` + underlying RLS, and revoke `anon` SELECT. (`admin_billing_overview` was fixed 2026-09 to add the admin guard.)
+- Run `get_advisors(security)` after any DDL. Known non-blocking lints: definer-view flag on the guarded admin view; `function_search_path_mutable` on a few `tf_jobs`/util functions; leaked-password protection is off (enable in Auth settings).
+- Block operations: server-side edge function only.
 
-### Load function pattern (ALL modules must follow this)
-```js
-var [loading, setLoading] = useState(!_cache[org.id]);
-var [loadError, setLoadError] = useState(null);
-var loadTimerRef = useRef(null);
-var loadingRef = useRef(false);  // concurrent-load guard
+## Server-side Automations (`tf_jobs` schema, PL/pgSQL + pg_cron; live)
+- **Recurrence generator** `tf_jobs.generate_recurring_worksheets(dry bool)` — cron 18:30 UTC. Creates worksheets/rows for prev+current+next period, idempotent.
+- **Work reminders** `tf_jobs.send_work_reminders(mode,test_email,days,only_email)` — daily digest via Resend (key in Vault), cron 03:30 UTC. Consolidated across a user's orgs.
+- **Client reminders** `tf_jobs.send_client_reminders(mode)` — cron 04:00 UTC (Resend, `no-reply@taskflowco.in`); manual mode sends via the firm's Gmail. Config in `organizations.client_reminder_config`.
+- Stage history (`worksheet_row_stage_events` + trigger), aging view, time-vs-estimate view (`worksheet_row_time`).
+- Verify crons: `select jobname,schedule,active from cron.job;`
 
-async function load() {
-  if (loadingRef.current) return;
-  loadingRef.current = true;
-  if (!_cache[org.id]) setLoading(true);
-  setLoadError(null);
-  if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-  loadTimerRef.current = setTimeout(function () {
-    if (!_cache[org.id]) { setLoading(false); setLoadError('timeout'); }
-    loadingRef.current = false;
-  }, 12000);
-  try {
-    // ... supabase queries ...
-    _cache[org.id] = { /* fetched data */ };
-  } catch (e) {
-    if (!_cache[org.id]) setLoadError('error');
-  } finally {
-    clearTimeout(loadTimerRef.current);
-    setLoading(false);
-    loadingRef.current = false;
-  }
-}
-// visibilitychange: restart stalled fetch when tab becomes visible
-useEffect(function () {
-  function onVisible() {
-    if (document.visibilityState === 'visible' && loadingRef.current) {
-      clearTimeout(loadTimerRef.current); loadingRef.current = false; load();
-    }
-  }
-  document.addEventListener('visibilitychange', onVisible);
-  return function () { document.removeEventListener('visibilitychange', onVisible); };
-}, [org.id]);
-```
-
-### Stage-based status (WorkZone + Worklist)
-Status is derived from the row's stage position in the work type config:
-```js
-function getEffectiveStatus(r) {
-  var ws = wsMap[r.worksheet_id];
-  var cfg = (workTypeConfigs || []).find(c => c.name === ws?.work_type);
-  var stages = cfg?.stages?.length > 0 ? cfg.stages : null;
-  if (!stages) return r.status || 'pending';
-  if (!r.current_stage) return 'pending';
-  var idx = stages.findIndex(s => s.key === r.current_stage);
-  if (idx < 0) return r.status || 'pending';
-  if (idx === stages.length - 1) return 'completed';
-  if (idx === 0) return 'pending';
-  return 'in_progress';
-}
-```
-
-### Status update with optimistic UI
-```js
-await supabase.from('worksheet_rows').update({status:newStatus}).eq('id',rowId);
-setRows(prev => prev.map(r => r.id===rowId ? {...r, status:newStatus} : r));
-```
-
-### Worksheet resolution (find or create for current period)
-See `resolveWorksheet(wtName)` in `YourDashboardModule` (~line 7860).
-
-### Dark sidebar
-Left sidebar is always dark navy regardless of app theme:
-```js
-background: '#0e1929'
-borderRight: '1px solid rgba(255,255,255,0.06)'
-// Active item: rgba(255,255,255,0.08), text #ffffff, icon #7fa3c7
-// Inactive: text #c7d2e3, icon #8696b3
-```
-
-## Security (Supabase)
-- All RLS policies are org-scoped (`org_id = auth.uid()` or via membership check)
-- Functions use `SET search_path = public, pg_temp`
-- Admin access: `@taskflowco.in` email domain only
-- Block operations: server-side edge function only
-
-## Landing Page
-- Headline: "Stop juggling. Start flowing."
-- Subtitle: "The operating system for your practice."
-- Problem section: "Your team works hard. Your systems should too."
-- Tours: Website Tour (LaunchTour) + ITR Season tour (ITRTour) — lazy loaded
-- No "14-day free trial" messaging anywhere
-- **Book a Demo** button in Nav, Hero CTAs, and FinalCTA — opens `BookDemoModal`
-- `BookDemoModal` in `LandingPage.jsx`: name, email, phone, firm, team size pills, message → inserts to `demo_requests`
-
-## Platform Admin Dashboard (`src/admin/AdminShell.jsx`)
-- Accessible via single **🛡 Admin** button in top bar (only `@taskflowco.in` accounts)
-- Full-screen overlay with dark navy sidebar
-- **Sections**: Overview · Users · Organisations · Demo Requests · Support Tickets · Announcements
-- **Overview**: live stats cards (users, orgs, new demos) + quick nav cards + recent demo requests table
-- **Realtime**: Overview and Demo Requests subscribe to `supabase_realtime` on `demo_requests` — updates push instantly, green pulsing LIVE indicator
-- Demo Requests has status filter pills (all/new/contacted/converted/declined) + inline status dropdown per row
-- Required Supabase SQL: `alter publication supabase_realtime add table demo_requests;`
-
-## Gmail Multi-Account (`CommunicationsModule` in App.jsx)
-- `gmailAccounts` state: array of `{email, token, expiry, type, label}`
-- `gmailActiveEmail`: which account is currently active
-- `addOrUpdateAccount(email, token, expiry, type, label)` — adds/updates account, schedules auto-refresh
-- `silentRefreshGmail(email)` — GIS `prompt:'none'` silent token refresh 5min before expiry
-- `disconnectAccount(email)` — removes account, clears active if needed
-- `connectOrgGmail()` — admin connects shared org email, stored in `org_cloud_storage` provider=`gmail_org_accounts`
-- `removeOrgGmail(email)` — removes org email from DB + local state
-- Personal accounts stored in `localStorage` key `tf_gmailAccounts_{orgId}_{userId}`
-- Org accounts stored in `localStorage` key `tf_gmailOrgAccounts_{orgId}` + DB
-- Account switcher UI in Gmail left panel: 🟢/🔴/⚪ dots, click to switch, ✕ to remove
-- Org email admin section in Gmail left panel (owner/admin only): list + Remove + "+ Connect Org Email"
-
-## What's Been Built
-1. **ERP Board (WorkZone → Board tab)** — `ErpBoardModule`: Kanban over `worksheet_rows`, drag-and-drop, group by status/work type, assignee filter, client search, hide-completed
-2. **Worklist redesign** — `YourDashboardModule`: removed 240px left rail → merged as Row 3 pill strip, 4 view modes (List/Board/Calendar/Grid), My Day add/remove with localStorage persistence
-3. **Send to Logs in Plan My Day panel** — `→ Log` button on every Morning/Afternoon card, inline form, writes to `attendance_time_logs`
-4. **Open Unclassified button** — "Open Unclassified →" in list-view group headers (amber styling)
-5. **Gmail multi-account** — account switcher in left panel, silent auto-refresh, org email management (admin), personal accounts per user in localStorage
-6. **Book a Demo form** — `BookDemoModal` on landing page (Nav + Hero + FinalCTA), inserts to `demo_requests` Supabase table with RLS
-7. **Platform Admin Dashboard** — `AdminShell` with Overview (realtime stats), Users, Orgs, Demo Requests, Support, Announcements. Single 🛡 Admin button, `@taskflowco.in` only. Realtime via Supabase postgres_changes channel.
-
-## Pending / Deferred Work
-- Client Ledger in Analytics
-- Employee "My Work Today" landing screen
-- Pricing tier feature flags
-- Unified Kanban across all work types
-- Recurring task management per client
-- Frontend Design plugin (only available in Claude Code desktop app, not web)
-
-## Work-Management Automations (`tf_jobs` schema, 2026-07) — LIVE on `vorxrjekbokqkigfabhr`
-Server-side jobs that turn the app from "shows work you go looking for" into "guarantees
-work exists + chases it". SQL lives in `supabase/migrations/20260703000001..4`. Edge deploy
-is approval-gated in this env — all implemented as **PL/pgSQL + pg_cron** (NOT edge functions;
-the `supabase/functions/generate-recurring-worksheets` TS file is reference-only, not deployed).
-
-- **① Recurrence generator** — `tf_jobs.generate_recurring_worksheets(dry bool)`. Faithful port
-  of client `loadWorksheet()` auto-create (period math, due_dates/monthly_map/quarterly_map/
-  month_offset, prep_days, enrollment via `clients.custom_fields.work_types`, dedupe). Creates
-  worksheets+rows for **prev+current+next** period. Idempotent. **Cron `generate-recurring-worksheets`
-  @ 18:30 UTC (00:00 IST)**. Test with `select tf_jobs.generate_recurring_worksheets(true)` (dry).
-- **② Work reminders** — `tf_jobs.send_work_reminders(mode,test_email,days,only_email)`. Daily
-  digest email (Resend via pg_net): ALL overdue + due-today + next-7-days, grouped sections,
-  **consolidated across all a user's orgs** (labelled by firm). Modes: `dry`/`test`/`live`.
-  Resend key in **Vault** (`RESEND_API_KEY`). **Cron `send-work-reminders` @ 03:30 UTC (09:00 IST)**.
-  Owner = `data.__assignee` + any `__h_*` role. To test one person: `send_work_reminders('test','x@y.com',7,'x@y.com')`.
-- **③ Stage history + aging** — `worksheet_row_stage_events` table + `trg_log_stage_event` trigger
-  (logs stage/status changes, forward-only) + `worksheet_row_aging` view. UI: **⏳Nd badge** on
-  ErpBoard cards (grey ≥3 / amber ≥7 / red ≥14), reads events, falls back to created_at.
-- **④ Time↔task + estimates** — cols `work_type_configs.estimated_hours`, `worksheet_rows.estimated_hours`,
-  `attendance_time_logs.worksheet_row_id`; view `worksheet_row_time` (actual vs estimate). UI:
-  "Estimated Hours" field in work-type editor; **⏱ Xh/Yh badge** on ErpBoard cards (red if over).
-  Time logged via Plan My Day "→ Log" now sets `worksheet_row_id` (sendToLog).
-- **⑤ Saved filters** — ErpBoard filters (groupBy/assignee/client/hideCompleted/dept) persist to
-  `localStorage tf_erpboard_filters_<org.id>`; survive navigation.
-
-- **⑥ Client reminders** (2026-07) — email CLIENTS about their upcoming/overdue work.
-  **Two modes, one template** (`organizations.client_reminder_config` jsonb: `{enabled,days_before,subject,body}`;
-  vars `{client}{firm}{items}{work_type}{due_date}{period}`):
-  - **Manual** — Communication → **Reminders** tab: "Find clients with due work" auto-picks
-    clients (with an email) having non-completed rows due within N days, personalised bulk **send via
-    the firm's connected Gmail** (correct from-address), logged to `comm_logs`.
-  - **Auto** — toggle "Auto-send every cycle" → `tf_jobs.send_client_reminders(mode)` PL/pgSQL cron
-    (**`send-client-reminders` @ 04:00 UTC / 09:30 IST**) sends via **Resend** from `no-reply@taskflowco.in`.
-    Dedupes per worksheet row via `client_reminder_sent` (never emails the same row twice). Test:
-    `select tf_jobs.send_client_reminders('dry')` (preview) / `('test','x@y.com')` (one live sample).
-  - ⚠ Auto uses taskflowco.in sender (Resend); manual uses the firm's Gmail. TODO: cap items per email
-    for big clients (one client had 55 due rows in dry test); optionally verify firm domains in Resend.
-
-Verify crons: `select jobname,schedule,active from cron.job;`. pg_cron + pg_net + supabase_vault all enabled.
-
-## SESSION HANDOFF — Design Refresh (brand blue/teal + Plus Jakarta Sans)
-A large multi-session design refresh is in progress off `design_handoff_taskflowco/`
-(Claude Design handoff: README.md + FEATURE-COVERAGE.md + landing-page.html).
-Golden rule from the handoff: **re-skin, not re-scope** — theme existing
-components, never delete a feature that's absent from a mock; flag undesigned
-ones. Brand: primary `#2F6BFF`, teal `#14C7C0`, gradient `linear-gradient(135deg,#2F6BFF,#14C7C0)`,
-navy ink `#0E2A47`; font Plus Jakarta Sans + JetBrains Mono (dates/nums).
-
-**Done & live on main:** app-wide colour/font rebrand; animated gradient-check
-logo (`components/TaskflowLogo.jsx`); loader family (`components/Loaders.jsx`);
-landing fully rebuilt to `landing-page.html` (`LandingPage.jsx`, scoped `.lp2`,
-light/dark via `data-theme`+localStorage `tfc-theme`, sign-in modal Google+email-link,
-demo form → `demo_requests` with free date+time picker, `.wrap` max-width 1400);
-WorkZone board (status colours, cardIn, count pills); Modules soft-tint tiles
-(`MODULE_TINT`); Practice Hub cards; My Work + Home calendars workload-heat;
-top-bar widgets themed; in-app dark mode = navy (`[data-theme=dark]` tokens);
-demo tour (`LaunchTour.jsx`) redesigned to new logo + navy screens.
-
-**Pending design items:**
-- Demo-tour VOICEOVER: scaffold built (`src/tourNarration.js` 11 timed lines,
-  `scripts/gen-narration.mjs` Sarvam TTS generator, LaunchTour audio-sync + mute
-  button, .mp3→.wav fallback). NOT generated yet — `api.sarvam.ai` is blocked by
-  this env's egress allowlist. To finish: add `api.sarvam.ai` to the environment's
-  network egress OR run the script on a machine with access:
-  `printf 'SARVAM_API_KEY=…\n' > .env.local && node scripts/gen-narration.mjs`
-  → produces `public/tour-vo/01..11.mp3`, commit them. (User must ROTATE the key.)
-- Workspaces "New Workspace" board-type picker (Kanban/Checklist/Blank) — designed, not built.
-- Undesigned modules kept+themed, flagged for a dedicated pass: Library, Team,
-  Analytics, Communication, Billing, Master Data, Set-up (+ WorkZone ITR Desk /
-  Big Clients / Team View; My Work Notes; Worksheets Stages/Summary).
-
-## SESSION OPS NOTES (important for continuity)
-- **Deploy = push to `main`** (Vercel auto-deploys). BUT Vercel sometimes builds
-  a near-simultaneous push only as a branch preview and SKIPS the production build
-  for main — verify via Vercel MCP `list_deployments` that a `target:production`
-  READY deploy exists for your commit; if not, push an empty commit to re-trigger.
-- **git push in this remote env is proxy-blocked (403).** Workaround used: a
-  user-provided GitHub PAT via `git push https://<PAT>@github.com/Vaibhav-24112003/taskflow-app.git <branch>`,
-  with `set +o history` and grep-filtering output. The PAT is short-lived — ask the
-  user for a fresh one; never commit it.
-- Stop-hook "Unverified commits" (GPG) warning is COSMETIC across whole history —
-  do NOT rewrite/force-push to fix it without explicit user say-so.
-- Local render/screenshot recipe: temp `.env.local` (public Supabase URL +
-  placeholder anon key) → `npm run build` → `python3 -m http.server` on dist →
-  screenshot with `playwright-core` (chromium at /opt/pw-browsers). Clean up
-  `.env.local` + revert package.json/package-lock after (don't commit playwright-core).
-
-## Design References
-Design files (extracted from tar.gz at `/tmp/design_files/taskflow/`):
-- `Taskflow Diary - Worklist.html` — implemented as current Worklist layout
-- `chats/chat1.md`, `chats/chat2.md` — prior design review conversations (full context on homepage, modules, alternatives)
+## Local render/screenshot recipe
+Temp `.env.local` (public Supabase URL + placeholder anon key) → `npx vite build` → serve `dist` / bundle with esbuild → screenshot via `playwright-core` (chromium at `/opt/pw-browsers/chromium`). Clean up `.env.local` after. To preview a component with fake data, bundle a small entry with esbuild against a **separate stub file** (do NOT overwrite `src/lib/supabase.js` — it triggers per-turn re-injection).
