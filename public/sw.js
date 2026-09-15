@@ -5,7 +5,7 @@
    - Hashed build assets (/assets/*): cache-first (immutable, content-hashed).
    - Everything else: stale-while-revalidate.
    Bumping SW_VERSION (or any byte of this file) triggers an update. */
-var SW_VERSION = 'tf-v1';
+var SW_VERSION = 'tf-v2';
 var SHELL_CACHE = 'tf-shell-' + SW_VERSION;
 var ASSET_CACHE = 'tf-assets-' + SW_VERSION;
 
