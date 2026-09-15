@@ -1202,7 +1202,12 @@ export default function LandingPage({ onSignIn, loading }) {
         </div>
         <div className="wrap bottom">
           <span>© 2026 TaskFlowCo. All rights reserved.</span>
-          <span>Privacy · Terms · Security</span>
+          <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <a href="/privacy.html" style={{ padding: 0, display: 'inline' }}>Privacy</a>
+            <a href="/terms.html" style={{ padding: 0, display: 'inline' }}>Terms</a>
+            <a href="/refund.html" style={{ padding: 0, display: 'inline' }}>Refunds</a>
+            <a href="/dpa.html" style={{ padding: 0, display: 'inline' }}>DPA</a>
+          </span>
         </div>
       </footer>
     </div>
