@@ -2470,7 +2470,12 @@ function ClientForm({client,orgId,supabase,onClose,onSaved,workTypeNames,workTyp
     if(isEdit){({error:err}=await supabase.from('clients').update(p).eq('id',client.id));}
     else{p.created_by=user?user.id:null;({error:err}=await supabase.from('clients').insert(p));}
     setSaving(false);
-    if(!err)onSaved();else setErrs({save:err.message});
+    if(!err){onSaved();return;}
+    var msg=err.message||'Failed to save';
+    if((err.hint&&String(err.hint).indexOf('plan_limit')===0)||/plan.?s limit/i.test(msg)){
+      msg=msg+' Open Plans & Billing from the sidebar to upgrade.';
+    }
+    setErrs({save:msg});
   }
   var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,width:'100%',outline:'none',fontFamily:'inherit'};
   var LBL={fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:.05,marginBottom:4,display:'block'};
@@ -18892,6 +18897,10 @@ function SetupWizard({org,cu,supabase,onClose}){
 // ── Org Dashboard ──────────────────────────────────────────────────
 function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}){
   const hasModule=(m)=>trialGate?.hasModule?.(m)??false;
+  // Modules locked to the plan. A gateable module the org isn't entitled to shows the upgrade wall.
+  const GATED_MODULES=['library','team','chat','analytics','comms','billing'];
+  const moduleLocked=(m)=>GATED_MODULES.indexOf(m)!==-1&&!hasModule(m);
+  const goUpgrade=(planId)=>{try{if(planId)localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('');};
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [commsClientId,setCommsClientId]=useState(null); // cross-link: Client Connect → Mailing preselect
@@ -19128,7 +19137,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             {MODULES.map(function(m){
               var tourAttr={'data-tour':'tour-'+m.id};
               var mTint=MODULE_TINT[m.id]||'#2F6BFF';
-              var mLocked=(m.id==='comms'||m.id==='billing')&&!hasModule(m.id); // paid add-ons
+              var mLocked=moduleLocked(m.id); // locked to plan
               return<button key={m.id} onClick={function(){openModule(m);}} {...tourAttr}
                 style={{textAlign:'left',padding:20,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:14,cursor:'pointer',position:'relative',transition:'transform 0.16s, border-color 0.16s, box-shadow 0.16s',fontFamily:'inherit'}}
                 onMouseEnter={function(e){e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.borderColor=mTint;e.currentTarget.style.boxShadow='0 10px 30px -18px rgba(14,42,71,0.35)';}}
@@ -19181,7 +19190,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
             {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
-            {tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
+            {tab==='portal'&&(hasModule('portal')
+              ? <ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>
+              : <ModuleLock module="portal" gate={trialGate} onBack={()=>setTab('mailing')} onUpgrade={goUpgrade}/>)}
             {tab==='connect'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
           </>
         : <ModuleLock module="comms" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('')}}/>)}
@@ -19230,7 +19241,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
                   {m.id==='chat'&&chatUnread>0&&!sidebarOpen&&<span style={{position:'absolute',top:-4,right:-5,minWidth:8,height:8,borderRadius:8,background:'#ef4444',border:'1.5px solid #0e1929',boxShadow:'0 0 0 1px rgba(239,68,68,0.4)'}}/>}
                 </span>
                 {sidebarOpen&&<span style={{fontSize:14,fontWeight:isActive?700:500,color:isActive?'#ffffff':'#c7d2e3',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{m.label}</span>}
-                {sidebarOpen&&(m.id==='comms'||m.id==='billing')&&!hasModule(m.id)&&<span title="Paid add-on — free 6-month trial available" style={{flexShrink:0,fontSize:10,opacity:0.7}}>🔒</span>}
+                {sidebarOpen&&moduleLocked(m.id)&&<span title="Locked — included in a higher plan. Click to upgrade." style={{flexShrink:0,fontSize:10,opacity:0.7}}>🔒</span>}
                 {m.id==='chat'&&chatUnread>0&&sidebarOpen&&<span style={{flexShrink:0,minWidth:18,height:18,padding:'0 5px',borderRadius:9,background:'#ef4444',color:'#fff',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'JetBrains Mono',monospace"}}>{chatUnread>99?'99+':chatUnread}</span>}
               </button>
               {sidebarOpen&&isActive&&hasTabs&&<div style={{paddingLeft:32,marginBottom:6}}>
@@ -19250,7 +19261,9 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       </div>}
       {/* Main content */}
       <div data-tour={orgModule?'tour-view-'+orgModule:undefined} style={{flex:1,overflow:'auto',padding:isMobile?'14px 12px 88px':'22px 24px 60px',minWidth:0}}>
-        {moduleContent}
+        {orgModule&&moduleLocked(orgModule)
+          ? <ModuleLock module={orgModule} gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={goUpgrade}/>
+          : moduleContent}
       </div>
       {/* Mobile bottom navigation */}
       {isMobile&&(function(){

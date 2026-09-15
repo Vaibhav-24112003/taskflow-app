@@ -49,9 +49,9 @@ serve(async (req) => {
   //    or unknown. (Do NOT rewrite 'trial' → 'starter' — that mislabels the
   //    invoice and wrongly unlocks paid modules for a ₹1 trial payment.)
   let plan_id = (payment.notes?.plan_id || '').trim()
-  let planData: { modules?: string[] } | null = null
+  let planData: { modules?: string[]; limits?: Record<string, number> } | null = null
   if (plan_id) {
-    const { data } = await supabase.from('plans').select('modules').eq('id', plan_id).maybeSingle()
+    const { data } = await supabase.from('plans').select('modules, limits').eq('id', plan_id).maybeSingle()
     planData = data
   }
   if (!plan_id || !planData) {
@@ -62,7 +62,7 @@ serve(async (req) => {
     } else {
       plan_id = 'starter'
     }
-    const { data } = await supabase.from('plans').select('modules').eq('id', plan_id).maybeSingle()
+    const { data } = await supabase.from('plans').select('modules, limits').eq('id', plan_id).maybeSingle()
     planData = data
   }
 
@@ -103,10 +103,12 @@ serve(async (req) => {
       updated_at:           now.toISOString()
     }, { onConflict: 'org_id' })
 
-    // Update organizations — this is what the app reads for module access
+    // Update organizations — this is what the app reads for module access + limits.
+    // plan_limits is the tamper-proof source the DB triggers enforce (users/clients/workspaces).
     await supabase.from('organizations').update({
       subscription_status: 'paid',
       paid_modules:        modules,
+      plan_limits:         planData?.limits ?? {},
       trial_expires_at:    null
     }).eq('id', org_id)
 
@@ -152,7 +154,8 @@ serve(async (req) => {
   if (['subscription.cancelled', 'subscription.expired'].includes(event.event) && org_id) {
     await supabase.from('organizations').update({
       subscription_status: 'cancelled',
-      paid_modules:        []
+      paid_modules:        [],
+      plan_limits:         null
     }).eq('id', org_id)
     await supabase.from('subscriptions')
       .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })

@@ -60,15 +60,18 @@ function PlanModal({ plan, onSave, onClose }) {
     price_yearly:  Math.round((plan.price_yearly||0)/100),
     features:      (plan.features||[]).join('\n'),
     modules:       plan.modules || PLAN_MODULES[plan.id] || [],
+    limits:        plan.limits || {},
   } : {
     id:'', name:'', category:'core', description:'',
     price_monthly:0, price_yearly:0, features:'',
-    modules:[], badge:'', offer_label:'', offer_expires_at:'',
+    modules:[], limits:{}, badge:'', offer_label:'', offer_expires_at:'',
     is_active:true, is_featured:false, sort_order:0,
   })
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState('')
   const s = (k,v) => setF(p => ({...p,[k]:v}))
+  // Limit fields are stored raw (string) while editing; sanitized to ints on save.
+  const sLim = (k,v) => setF(p => ({ ...p, limits: { ...(p.limits||{}), [k]: v } }))
 
   const toggleModule = (m) => {
     setF(p => ({ ...p, modules: p.modules.includes(m) ? p.modules.filter(x=>x!==m) : [...p.modules, m] }))
@@ -77,6 +80,15 @@ function PlanModal({ plan, onSave, onClose }) {
   async function save() {
     if (!f.id || !f.name) { setError('Plan ID and Name are required'); return }
     setSaving(true); setError('')
+    // Sanitize limits: blank => unlimited (omit key); -1 => unlimited; else int.
+    const cleanLimits = {}
+    ;['users','clients','workspaces'].forEach(k => {
+      const raw = f.limits?.[k]
+      if (raw === '' || raw === undefined || raw === null) return
+      const n = Math.trunc(Number(raw))
+      if (!Number.isFinite(n)) return
+      cleanLimits[k] = n
+    })
     const payload = {
       id:              f.id.toLowerCase().trim(),
       name:            f.name.trim(),
@@ -86,7 +98,7 @@ function PlanModal({ plan, onSave, onClose }) {
       price_yearly:    Math.round(Number(f.price_yearly)  * 100),
       features:        f.features.split('\n').map(x=>x.trim()).filter(Boolean),
       modules:         f.modules,
-      limits:          f.limits || {},
+      limits:          cleanLimits,
       badge:           f.badge || null,
       offer_label:     f.offer_label || null,
       offer_expires_at:f.offer_expires_at || null,
@@ -145,6 +157,21 @@ function PlanModal({ plan, onSave, onClose }) {
             </div>
           </F>
 
+          {/* Usage limits — enforced tamper-proof at the database (users / clients / workspaces) */}
+          <F label="Plan limits — blank or -1 = unlimited">
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+              {[['users','Team members'],['clients','Clients'],['workspaces','Workspaces']].map(([k,label]) => (
+                <label key={k} style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                  <span style={{ fontSize:10, fontWeight:600, color:'var(--tf-text-sub,#7a8aa0)' }}>{label}</span>
+                  <input style={inp} type="number" min="-1" step="1"
+                    value={f.limits?.[k] ?? ''}
+                    onChange={e=>sLim(k, e.target.value)}
+                    placeholder="∞" />
+                </label>
+              ))}
+            </div>
+          </F>
+
           <div style={{ gridColumn:'span 2', display:'flex', gap:20, paddingTop:4 }}>
             <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:'var(--tf-text,#e8edf5)' }}>
               <input type="checkbox" checked={f.is_active} onChange={e=>s('is_active',e.target.checked)} style={{ accentColor:'#2F6BFF' }} />
@@ -191,6 +218,7 @@ function OverrideModal({ row, plans, onSave, onClose }) {
     setSaving(true); setError('')
     const selectedPlan = plans.find(p => p.id === f.plan_id)
     const modules      = selectedPlan?.modules || PLAN_MODULES[f.plan_id] || []
+    const planLimits   = selectedPlan?.limits || {}
 
     // Update subscriptions
     const subPayload = {
@@ -220,6 +248,7 @@ function OverrideModal({ row, plans, onSave, onClose }) {
     await supabase.from('organizations').update({
       subscription_status: f.status === 'active' ? 'paid' : f.status === 'trialing' ? 'trial' : f.status,
       paid_modules:        f.status === 'active' ? modules : [],
+      plan_limits:         f.status === 'active' ? planLimits : null,
       trial_expires_at:    f.trial_ends_at || null,
     }).eq('id', row.org_id)
 
@@ -302,6 +331,7 @@ function ManualAccessModal({ orgs, plans, onSave, onClose }) {
 
     const selectedPlan = plans.find(p => p.id === planId)
     const modules      = selectedPlan?.modules || PLAN_MODULES[planId] || []
+    const planLimits   = selectedPlan?.limits || {}
     const periodEnd    = new Date(); periodEnd.setMonth(periodEnd.getMonth() + Number(months))
 
     const { data: existing } = await supabase.from('subscriptions').select('id').eq('org_id', orgId).maybeSingle()
@@ -325,6 +355,7 @@ function ManualAccessModal({ orgs, plans, onSave, onClose }) {
     await supabase.from('organizations').update({
       subscription_status: 'paid',
       paid_modules:        modules,
+      plan_limits:         planLimits,
       trial_expires_at:    null,
     }).eq('id', orgId)
 
@@ -691,6 +722,15 @@ export default function BillingAdmin() {
                     {(plan.modules||PLAN_MODULES[plan.id]||[]).map(m => (
                       <span key={m} style={{ fontSize:10, fontWeight:700, background:'rgba(47,107,255,.12)', color:'#93bbff', borderRadius:6, padding:'2px 8px' }}>{m}</span>
                     ))}
+                  </div>
+
+                  <div style={{ fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', marginBottom:6 }}>Limits:</div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:12 }}>
+                    {[['users','users'],['clients','clients'],['workspaces','workspaces']].map(([k,label]) => {
+                      const v = plan.limits?.[k]
+                      const txt = (v === undefined || v === null || v === '' || Number(v) < 0) ? '∞' : v
+                      return <span key={k} style={{ fontSize:10, fontWeight:700, background:'rgba(20,199,192,.12)', color:'#5eded8', borderRadius:6, padding:'2px 8px' }}>{txt} {label}</span>
+                    })}
                   </div>
 
                   <div style={{ fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', marginBottom:4 }}>Features:</div>

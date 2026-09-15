@@ -13,6 +13,7 @@ export default function OrgsAdmin() {
   const [q, setQ]               = useState("");
   const [filter, setFilter]     = useState("all");
   const [editing, setEditing]   = useState(null);
+  const [limitsOrg, setLimitsOrg] = useState(null);
   const [loading, setLoading]   = useState(true);
 
   async function load() {
@@ -62,6 +63,20 @@ export default function OrgsAdmin() {
       metadata: { module: key },
     });
     await load();
+  }
+
+  async function saveLimits(org, limits) {
+    // limits === null clears the per-org override (everything unlimited).
+    const { error } = await supabase
+      .from("organizations")
+      .update({ plan_limits: limits })
+      .eq("id", org.id);
+    if (error) { alert(error.message); return; }
+    await supabase.from("org_events").insert({
+      org_id: org.id, event: "limits.updated", metadata: { limits },
+    });
+    await load();
+    setLimitsOrg(null);
   }
 
   async function setStatus(org, status) {
@@ -117,6 +132,7 @@ export default function OrgsAdmin() {
         <div style={{ maxHeight: 560, overflow: "auto" }}>
           {filtered.map(o => <OrgRow key={o.id} org={o}
             onExtend={() => setEditing(o)}
+            onLimits={() => setLimitsOrg(o)}
             onModule={k => toggleModule(o, k)}
             onSuspend={() => setStatus(o, "suspended")}
             onMarkPaid={() => setStatus(o, "paid")}/>)}
@@ -128,6 +144,72 @@ export default function OrgsAdmin() {
           onCancel={() => setEditing(null)}
           onConfirm={(days, reason) => extendTrial(editing, days, reason)}/>
       )}
+
+      {limitsOrg && (
+        <LimitsDialog org={limitsOrg}
+          onCancel={() => setLimitsOrg(null)}
+          onSave={(limits) => saveLimits(limitsOrg, limits)}/>
+      )}
+    </div>
+  );
+}
+
+function LimitsDialog({ org, onCancel, onSave }) {
+  const cur = org.plan_limits || {};
+  const [users, setUsers]           = useState(cur.users ?? "");
+  const [clients, setClients]       = useState(cur.clients ?? "");
+  const [workspaces, setWorkspaces] = useState(cur.workspaces ?? "");
+
+  const build = () => {
+    const out = {};
+    [["users", users], ["clients", clients], ["workspaces", workspaces]].forEach(([k, v]) => {
+      if (v === "" || v === null || v === undefined) return;   // blank => unlimited (omit)
+      const n = Math.trunc(Number(v));
+      if (Number.isFinite(n)) out[k] = n;
+    });
+    return out;
+  };
+
+  const rows = [
+    ["Team members", users, setUsers, org.member_count],
+    ["Clients",      clients, setClients, org.client_count],
+    ["Workspaces",   workspaces, setWorkspaces, org.workspace_count],
+  ];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(5,7,18,.65)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{ width: 520, background: "rgba(11,15,28,.97)", border: "1px solid var(--tf-border-hov)", borderRadius: 14, boxShadow: "0 30px 80px rgba(0,0,0,.7)" }}>
+        <div style={{ padding: "18px 22px", borderBottom: "1px solid var(--tf-border)" }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Plan limits · {org.name}</div>
+          <div style={{ fontSize: 12, color: "var(--tf-text-sub)", marginTop: 3 }}>
+            Enforced tamper-proof at the database. Blank or -1 = unlimited. This override replaces the plan's limits for this org.
+          </div>
+        </div>
+        <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {rows.map(([label, val, setVal, used]) => (
+            <div key={label} style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 10, alignItems: "center" }}>
+              <div style={{ fontSize: 13 }}>
+                {label}
+                <span className="mono" style={{ fontSize: 11, color: "var(--tf-text-mut)", marginLeft: 8 }}>
+                  in use: {used ?? "—"}
+                </span>
+              </div>
+              <input type="number" min="-1" step="1" value={val} onChange={e => setVal(e.target.value)}
+                placeholder="∞"
+                style={{ padding: "9px 12px", background: "var(--tf-input)", border: "1px solid var(--tf-border)", borderRadius: 8, fontSize: 13, color: "var(--tf-text)" }}/>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "14px 22px", borderTop: "1px solid var(--tf-border)", display: "flex", gap: 8, justifyContent: "space-between" }}>
+          <button onClick={() => onSave(null)} style={{ ...miniBtn("#ef4444"), padding: "9px 14px" }} title="Remove override — org becomes unlimited">
+            Clear override
+          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onCancel} style={{ ...miniBtn("transparent"), color: "var(--tf-text-sub)", border: "1px solid var(--tf-border)", padding: "9px 16px" }}>Cancel</button>
+            <button onClick={() => onSave(build())} style={{ ...miniBtn("var(--tf-accent)"), background: "var(--tf-accent)", color: "#fff", border: "1px solid var(--tf-accent)", padding: "9px 16px" }}>Save limits</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -141,7 +223,7 @@ function Stat({ label, value, color = "var(--tf-accent)" }) {
   );
 }
 
-function OrgRow({ org, onExtend, onModule, onSuspend, onMarkPaid }) {
+function OrgRow({ org, onExtend, onLimits, onModule, onSuspend, onMarkPaid }) {
   const c = ({ paid: "#10b981", trial: "#f59e0b", expired: "#ef4444", suspended: "#ef4444", cancelled: "#5c6b87" })[org.subscription_status] ?? "#5c6b87";
   const expiry = org.trial_expires_at ? new Date(org.trial_expires_at) : null;
   const daysLeft = expiry ? Math.ceil((expiry - Date.now()) / 86_400_000) : null;
@@ -173,8 +255,9 @@ function OrgRow({ org, onExtend, onModule, onSuspend, onMarkPaid }) {
           );
         })}
       </div>
-      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
         <button onClick={onExtend}   style={miniBtn("var(--tf-accent)")}>Extend</button>
+        <button onClick={onLimits}   style={miniBtn("#14C7C0")}>Limits</button>
         {org.subscription_status !== "paid" &&
           <button onClick={onMarkPaid} style={miniBtn("#10b981")}>Paid</button>}
         {org.subscription_status !== "suspended" &&
