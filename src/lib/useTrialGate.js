@@ -3,10 +3,10 @@ import { useMemo } from "react";
 
 const DAY = 24 * 60 * 60 * 1000;
 
-// Modules a firm may use during an active trial (mirrors the DB `trial` plan).
-// Trials get full-plan module access; access is time-boxed by trial expiry, not
-// by module. `portal` stays paid-only (matches the trial plan's module set).
-export const TRIAL_MODULES = ["library", "team", "chat", "analytics", "comms", "billing"];
+// Module entitlements always come from organizations.paid_modules, which is
+// seeded from the admin-configured `trial` plan on org creation (DB trigger),
+// updated by the payment webhook, and editable per-org by the platform admin.
+// Trials therefore get exactly the trial plan's modules — no hardcoded set here.
 
 // Resource limits are read from organizations.plan_limits (copied from the plan
 // on purchase, admin-editable per org). null / missing / -1 => unlimited.
@@ -64,17 +64,15 @@ export function useTrialGate(org) {
     else if (daysLeft <= 7)       bannerLevel = "critical";
     else if (daysLeft <= 30)      bannerLevel = "warning";
 
-    // Active trial: full trial-plan modules (plus anything explicitly granted).
+    // Active trial: exactly the modules seeded from the trial plan (paid_modules).
     // Expired trial: everything locks until they subscribe.
-    const trialModules = new Set([...TRIAL_MODULES, ...paid]);
-
     return {
       ...base,
       status: expired ? "expired" : "trial",
       daysLeft,
       bannerLevel,
       writesAllowed: !expired,
-      hasModule: (m) => (expired ? false : trialModules.has(m)),
+      hasModule: (m) => (expired ? false : paid.has(m)),
     };
   }, [org]);
 }
