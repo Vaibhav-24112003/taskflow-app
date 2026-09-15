@@ -1066,14 +1066,6 @@ export default function LandingPage({ onSignIn, loading }) {
         <FAQItem q="Will you help me get set up?" a="Yes — onboarding is free. Our team imports your client list, configures your work types and gets your first period live with you. Book a slot from the 'Get onboarding help' button in pricing or the demo section." />
       </section>
 
-      {/* TESTIMONIAL */}
-      <section className="section wrap">
-        <div className="quote">
-          <p>"We streamlined our tasks and closed work and filing seasons without miscommunication or missed updates. TaskFlowCo replaced many worksheets and WhatsApp groups."</p>
-          <div className="who">Vaibhav Bhoite — Founder, TaskFlowCo</div>
-        </div>
-      </section>
-
       {/* PRICING */}
       <section className="section wrap" id="pricing">
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
