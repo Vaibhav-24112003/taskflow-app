@@ -123,6 +123,39 @@ function boardColumns(tasks, ws) {
   return order
 }
 
+// ── WorkZone (ERP worksheet_rows) status — derived from stage position ────────
+const WR_STATUS = {
+  pending: { key: 'pending', label: 'Pending', color: '#6b7c93' },
+  in_progress: { key: 'in_progress', label: 'In Progress', color: '#D97706' },
+  completed: { key: 'completed', label: 'Completed', color: '#0d9488' },
+}
+const WR_ORDER = ['pending', 'in_progress', 'completed']
+function wrEffectiveStatus(row, wshMap, cfgMap) {
+  if (row.completed) return 'completed'
+  const wsh = wshMap[row.worksheet_id]
+  const cfg = wsh ? cfgMap[wsh.work_type] : null
+  const stages = cfg && Array.isArray(cfg.stages) && cfg.stages.length ? cfg.stages : null
+  if (!stages) {
+    const s = String(row.status || 'pending').toLowerCase()
+    if (DONE_RE.test(s)) return 'completed'
+    if (PROG_RE.test(s)) return 'in_progress'
+    return 'pending'
+  }
+  if (!row.current_stage) return 'pending'
+  const idx = stages.findIndex(s => s.key === row.current_stage)
+  if (idx < 0) return 'pending'
+  if (idx === stages.length - 1) return 'completed'
+  if (idx === 0) return 'pending'
+  return 'in_progress'
+}
+function wrStageLabel(row, wshMap, cfgMap) {
+  const wsh = wshMap[row.worksheet_id]
+  const cfg = wsh ? cfgMap[wsh.work_type] : null
+  const stages = cfg && Array.isArray(cfg.stages) ? cfg.stages : []
+  const st = stages.find(s => s.key === row.current_stage)
+  return st ? (st.label || st.name || st.key) : ''
+}
+
 // ── inline icon ─────────────────────────────────────────────────────────────
 function Ic({ d, size = 20, sw = 1.9, stroke = 'currentColor' }) {
   return (
@@ -210,14 +243,18 @@ function Shell({ user }) {
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [filter, setFilter] = useState('All')
-  const [taskWs, setTaskWs] = useState('')          // '' = all workspaces in the practice
-  const [tasksView, setTasksView] = useState('list') // 'list' | 'board'
+  const [taskWs, setTaskWs] = useState('')          // Kanban workspace id (wstasks sub-screen)
+  const [tasksView, setTasksView] = useState('list') // 'list' | 'board' (Kanban)
+  const [workDetailId, setWorkDetailId] = useState(null) // open WorkZone (worksheet_row) id
+  const [workFilter, setWorkFilter] = useState('')  // '' = all work types
+  const [workView, setWorkView] = useState('list')  // 'list' | 'board' (WorkZone)
+  const [teamTab, setTeamTab] = useState('members') // 'members' | 'attendance' | 'time'
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() } })
 
   // data
   const [orgs, setOrgs] = useState([])
   const [orgId, setOrgId] = useState(() => { try { return localStorage.getItem('tf_mobile_orgId') || '' } catch { return '' } })
-  const [d, setD] = useState({ workspaces: [], tasks: [], members: [], profiles: {}, clients: 0, anns: [], channels: [] })
+  const [d, setD] = useState({ workspaces: [], tasks: [], members: [], profiles: {}, clients: 0, clientMap: {}, anns: [], channels: [], worksheets: [], cfgs: [], rows: [], logs: [], punches: [], leave: [] })
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const loadingRef = useRef(false)
@@ -272,10 +309,36 @@ function Shell({ user }) {
           ;(pr.data || []).forEach(p => { profiles[p.id] = p })
         }
       } catch {}
-      try { const cr = await supabase.from('clients').select('id', { count: 'exact', head: true }).eq('org_id', orgId); clients = cr.count || 0 } catch {}
+      let clientMap = {}
+      try {
+        const cl = await supabase.from('clients').select('id,name,display_name').eq('org_id', orgId).limit(4000)
+        ;(cl.data || []).forEach(c => { clientMap[c.id] = c.display_name || c.name })
+        clients = (cl.data || []).length
+      } catch {}
       try { const ar = await supabase.from('announcements').select('*').eq('active', true).order('published_at', { ascending: false }).limit(6); anns = ar.data || [] } catch {}
       try { const chr = await supabase.from('team_chat_channels').select('id,name,kind,dm_key,sort_order').eq('org_id', orgId).order('sort_order'); channels = chr.data || [] } catch {}
-      const next = { workspaces, tasks, members, profiles, clients, anns, channels }
+
+      // WorkZone (ERP) — the firm's real compliance work
+      let worksheets = [], cfgs = [], rows = []
+      try {
+        const [wsh, cf] = await Promise.all([
+          supabase.from('worksheets').select('id,work_type,period_label,period_year,period_month,frequency').eq('org_id', orgId).limit(3000),
+          supabase.from('work_type_configs').select('name,stages,is_itr_worktype,sort_order').eq('org_id', orgId).order('sort_order'),
+        ])
+        worksheets = wsh.data || []; cfgs = cf.data || []
+        const rr = await supabase.from('worksheet_rows')
+          .select('id,worksheet_id,client_id,data,status,due_date,current_stage,completed,completed_at,created_at')
+          .eq('org_id', orgId).is('archived_at', null).limit(4000)
+        rows = rr.data || []
+      } catch {}
+
+      // Practice Hub — attendance, time logs, leave (current user)
+      let logs = [], punches = [], leave = []
+      try { const lg = await supabase.from('attendance_time_logs').select('id,date,client_id,work_type,hours,minutes,notes,worksheet_row_id,created_at').eq('org_id', orgId).eq('user_id', uid).order('date', { ascending: false }).limit(100); logs = lg.data || [] } catch {}
+      try { const pu = await supabase.from('attendance_punches').select('id,punch_type,punched_at,address,note').eq('org_id', orgId).eq('user_id', uid).order('punched_at', { ascending: false }).limit(50); punches = pu.data || [] } catch {}
+      try { const lv = await supabase.from('leave_requests').select('id,leave_type,start_date,end_date,days,reason,status,created_at').eq('org_id', orgId).eq('user_id', uid).order('created_at', { ascending: false }).limit(20); leave = lv.data || [] } catch {}
+
+      const next = { workspaces, tasks, members, profiles, clients, clientMap, anns, channels, worksheets, cfgs, rows, logs, punches, leave }
       _mCache[orgId] = next
       setD(next)
     } catch (e) {
@@ -327,6 +390,40 @@ function Shell({ user }) {
     }
   }, [views])
 
+  // ── WorkZone (ERP) derived ─────────────────────────────────────────────────
+  const wshById = useMemo(() => Object.fromEntries((d.worksheets || []).map(w => [w.id, w])), [d.worksheets])
+  const cfgByType = useMemo(() => Object.fromEntries((d.cfgs || []).map(c => [c.name, c])), [d.cfgs])
+  const workTypeColor = useMemo(() => { const m = {}; (d.cfgs || []).forEach((c, i) => { m[c.name] = PALETTE[i % PALETTE.length] }); return m }, [d.cfgs])
+  const wrViews = useMemo(() => (d.rows || []).map(row => {
+    const wsh = wshById[row.worksheet_id]
+    const workType = wsh?.work_type || 'Work'
+    const data = row.data && typeof row.data === 'object' ? row.data : {}
+    const key = wrEffectiveStatus(row, wshById, cfgByType)
+    const done = key === 'completed'
+    const di = dueInfo(row.due_date)
+    const cl = checklistOf({ checklist: Array.isArray(data.__checklist) ? data.__checklist : [] })
+    const clientName = d.clientMap?.[row.client_id] || ''
+    const assignee = data.__assignee || ''
+    return {
+      id: row.id, row, workType, period: wsh?.period_label || '',
+      title: data.__title || clientName || workType,
+      client: clientName, clientId: row.client_id,
+      statusKey: key, statusMeta: WR_STATUS[key], stage: wrStageLabel(row, wshById, cfgByType),
+      pri: normPriority(data.__priority), assignee, mine: !!assignee && assignee === uid,
+      description: data.__description || '',
+      steps: cl.total, doneSteps: cl.done, checkItems: cl.items,
+      due: di.text, dueLine: di.line, overdue: di.overdue && !done, today: di.today && !done, done,
+      due_date: row.due_date, color: workTypeColor[workType] || ACCENT,
+      dueColor: (di.overdue && !done) ? '#DC2626' : (di.today ? ACCENT : t.sub2),
+    }
+  }), [d.rows, wshById, cfgByType, workTypeColor, d.clientMap, uid, t.sub2])
+
+  const wrStats = useMemo(() => {
+    const active = wrViews.filter(v => !v.done)
+    return { active: active.length, dueToday: active.filter(v => v.today).length, overdue: active.filter(v => v.overdue).length, done: wrViews.filter(v => v.done).length }
+  }, [wrViews])
+  const workTypes = useMemo(() => { const s = []; wrViews.forEach(v => { if (!s.includes(v.workType)) s.push(v.workType) }); return s }, [wrViews])
+
   const org = orgs.find(o => o.id === orgId) || null
   const orgName = org?.name || 'Your practice'
 
@@ -372,8 +469,56 @@ function Shell({ user }) {
       const { data, error } = await supabase.from('tasks').insert(payload).select().single()
       if (error) throw error
       setD(prev => { const nx = { ...prev, tasks: [data, ...prev.tasks] }; _mCache[orgId] = nx; return nx })
-      setAddOpen(false); setScreen('tasks'); setDetailId(null); flash('Task created')
+      setAddOpen(false); setScreen('wstasks'); setDetailId(null); flash('Task created')
     } catch { flash('Could not create task') }
+  }
+
+  // WorkZone checklist toggle (writes back into data.__checklist)
+  async function wrToggleStep(v, idx) {
+    const data = (v.row.data && typeof v.row.data === 'object') ? { ...v.row.data } : {}
+    const cur = Array.isArray(data.__checklist) ? data.__checklist : []
+    data.__checklist = cur.map((it, i) => {
+      if (i !== idx) return it
+      if (typeof it === 'string') return { text: it, done: true }
+      const done = !(it.done ?? it.checked ?? it.completed)
+      return { ...it, done, checked: done, completed: done }
+    })
+    setD(prev => { const nx = { ...prev, rows: prev.rows.map(r => r.id === v.id ? { ...r, data } : r) }; _mCache[orgId] = nx; return nx })
+    try { await supabase.from('worksheet_rows').update({ data }).eq('id', v.id) } catch { flash('Could not update'); loadOrg() }
+  }
+  async function wrToggleComplete(v) {
+    const done = !v.done
+    const completed_at = done ? new Date().toISOString() : null
+    setD(prev => { const nx = { ...prev, rows: prev.rows.map(r => r.id === v.id ? { ...r, completed: done, completed_at } : r) }; _mCache[orgId] = nx; return nx })
+    try { await supabase.from('worksheet_rows').update({ completed: done, completed_at }).eq('id', v.id) } catch { flash('Could not update'); loadOrg() }
+  }
+
+  // Attendance punch (optionally with geolocation)
+  async function punch(type) {
+    const base = { org_id: orgId, user_id: uid, punch_type: type, punched_at: new Date().toISOString() }
+    const insert = async (extra) => {
+      try {
+        const { data, error } = await supabase.from('attendance_punches').insert({ ...base, ...extra }).select().single()
+        if (error) throw error
+        setD(prev => { const nx = { ...prev, punches: [data, ...prev.punches] }; _mCache[orgId] = nx; return nx })
+        flash(type === 'in' ? 'Punched in' : 'Punched out')
+      } catch { flash('Punch failed') }
+    }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        p => insert({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy }),
+        () => insert({}), { timeout: 6000 })
+    } else insert({})
+  }
+
+  async function addTimeLog({ work_type, hours, minutes, notes, client_id }) {
+    const payload = { org_id: orgId, user_id: uid, date: todayISO(), work_type: work_type || null, hours: Number(hours) || 0, minutes: Number(minutes) || 0, notes: notes || null, client_id: client_id || null }
+    try {
+      const { data, error } = await supabase.from('attendance_time_logs').insert(payload).select().single()
+      if (error) throw error
+      setD(prev => { const nx = { ...prev, logs: [data, ...prev.logs] }; _mCache[orgId] = nx; return nx })
+      flash('Time logged')
+    } catch { flash('Could not log time') }
   }
 
   async function doSignOut() { try { await signOut() } catch {} window.location.reload() }
@@ -384,7 +529,8 @@ function Shell({ user }) {
   }
 
   const detail = detailId ? views.find(v => v.id === detailId) : null
-  const curScreen = detail ? 'detail' : screen
+  const workDetail = workDetailId ? wrViews.find(v => v.id === workDetailId) : null
+  const curScreen = workDetail ? 'workdetail' : detail ? 'detail' : screen
 
   // ── render ────────────────────────────────────────────────────────────────
   return (
@@ -408,32 +554,35 @@ function Shell({ user }) {
             hasOrgs={orgs.length > 1} onSwitch={() => setSwitcherOpen(true)}
             onBell={() => setScreen('notifs')} onProfile={() => setScreen('profile')} />
         : <TopBar t={t}
-            title={{ tasks: 'Tasks', detail: 'Task', calendar: 'Calendar', team: 'Team', chat: 'Messages', notifs: 'Notifications', profile: 'Profile' }[curScreen] || ''}
-            showBack={curScreen === 'detail' || curScreen === 'notifs' || curScreen === 'profile'}
-            onBack={() => { if (detail) setDetailId(null); else setScreen('home') }}
-            showBell={['tasks', 'calendar', 'team', 'chat'].includes(curScreen)}
+            title={curScreen === 'wstasks' ? (wsById[taskWs]?.name || 'Workspace')
+              : { work: 'Work', workdetail: 'Work', detail: 'Task', calendar: 'Calendar', team: 'Team', chat: 'Messages', notifs: 'Notifications', profile: 'Profile' }[curScreen] || ''}
+            showBack={['workdetail', 'detail', 'wstasks', 'notifs', 'profile'].includes(curScreen)}
+            onBack={() => { if (workDetail) setWorkDetailId(null); else if (detail) setDetailId(null); else setScreen('home') }}
+            showBell={['work', 'calendar', 'team', 'chat', 'wstasks'].includes(curScreen)}
             onBell={() => setScreen('notifs')} />}
 
       {/* body */}
       <main className="tfm-scroll" style={{ flex: 1, overflow: 'auto', padding: chatChannel ? 0 : '0 0 96px' }}>
-        {loading && !d.workspaces.length
+        {loading && !d.rows.length && !d.workspaces.length
           ? <Loading t={t} />
           : orgs.length === 0
             ? <Empty t={t} title="No practice found" sub="You're not a member of any organisation yet." />
             : <>
-                {curScreen === 'home' && <HomeScreen {...{ t, views, stats, d, wsColor, orgName, loading, setScreen, setDetailId, setTaskWs }} />}
-                {curScreen === 'tasks' && <TasksScreen {...{ t, views, workspaces: d.workspaces, wsById, wsColor, taskWs, setTaskWs, tasksView, setTasksView, filter, setFilter, setDetailId, toggleDone }} />}
+                {curScreen === 'home' && <HomeScreen {...{ t, wrViews, wrStats, d, wsColor, loading, setScreen, setWorkDetailId, setTaskWs }} />}
+                {curScreen === 'work' && <WorkScreen {...{ t, wrViews, workTypes, workFilter, setWorkFilter, workView, setWorkView, setWorkDetailId }} />}
+                {curScreen === 'workdetail' && workDetail && <WorkDetailScreen {...{ t, v: workDetail, profiles: d.profiles, wrToggleStep, wrToggleComplete }} />}
+                {curScreen === 'wstasks' && <TasksScreen {...{ t, views, workspaces: d.workspaces, wsById, wsColor, taskWs, setTaskWs, tasksView, setTasksView, filter, setFilter, setDetailId, toggleDone }} />}
                 {curScreen === 'detail' && detail && <DetailScreen {...{ t, v: detail, profiles: d.profiles, toggleStep }} />}
-                {curScreen === 'calendar' && <CalendarScreen {...{ t, views, calMonth, setCalMonth, setDetailId, setScreen }} />}
-                {curScreen === 'team' && <TeamScreen {...{ t, members: d.members, profiles: d.profiles, views, uid, org }} />}
+                {curScreen === 'calendar' && <CalendarScreen {...{ t, views: wrViews, calMonth, setCalMonth, openDetail: setWorkDetailId }} />}
+                {curScreen === 'team' && <TeamScreen {...{ t, teamTab, setTeamTab, members: d.members, profiles: d.profiles, wrViews, uid, org, punches: d.punches, logs: d.logs, leave: d.leave, clientMap: d.clientMap, workTypes, punch, addTimeLog }} />}
                 {curScreen === 'chat' && <ChatScreen {...{ t, orgId, channels: d.channels, profiles: d.profiles, uid, uname, chatChannel, setChatChannel, flash }} />}
-                {curScreen === 'notifs' && <NotifsScreen {...{ t, views, anns: d.anns, uid }} />}
+                {curScreen === 'notifs' && <NotifsScreen {...{ t, views: wrViews, anns: d.anns, uid }} />}
                 {curScreen === 'profile' && <ProfileScreen {...{ t, uname, uemail, org, dark, toggleDark, doSignOut, openFullApp }} />}
               </>}
       </main>
 
-      {/* FAB */}
-      {['home', 'tasks', 'calendar'].includes(curScreen) && (
+      {/* FAB — add a Kanban task inside a workspace board */}
+      {curScreen === 'wstasks' && (
         <button onClick={() => setAddOpen(true)} style={{
           position: 'absolute', right: 18, bottom: 84, width: 56, height: 56, borderRadius: 19, border: 'none',
           background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: '#fff', display: 'flex', alignItems: 'center',
@@ -442,14 +591,14 @@ function Shell({ user }) {
       )}
 
       {/* bottom nav */}
-      {!chatChannel && <BottomNav t={t} screen={curScreen} go={(s) => { setDetailId(null); setChatChannel(null); setScreen(s) }} />}
+      {!chatChannel && <BottomNav t={t} screen={curScreen} go={(s) => { setDetailId(null); setWorkDetailId(null); setChatChannel(null); setScreen(s) }} />}
 
       {/* switcher sheet */}
       {switcherOpen && (
         <Sheet t={t} title="Switch practice" onClose={() => setSwitcherOpen(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
             {orgs.map((o, i) => (
-              <button key={o.id} onClick={() => { setOrgId(o.id); setSwitcherOpen(false); setScreen('home'); setFilter('All'); setTaskWs('') }}
+              <button key={o.id} onClick={() => { setOrgId(o.id); setSwitcherOpen(false); setScreen('home'); setFilter('All'); setTaskWs(''); setWorkFilter(''); setWorkDetailId(null); setDetailId(null) }}
                 style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 14px', borderRadius: 15, border: `1px solid ${t.glassBd}`, background: t.glass, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                 <span style={{ width: 44, height: 44, flex: '0 0 auto', borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${PALETTE[i % PALETTE.length]} 14%,white)`, color: PALETTE[i % PALETTE.length], fontWeight: 800, fontSize: 14 }}>{initials(o.name)}</span>
                 <span style={{ flex: 1, minWidth: 0 }}><b style={{ display: 'block', fontSize: 14, fontWeight: 760, color: t.ink2 }}>{o.name}</b><small style={{ fontSize: 11, color: t.sub2 }}>{o.subscription_status || 'Practice'}</small></span>
@@ -502,7 +651,7 @@ function TopBar({ t, title, showBack, onBack, showBell, onBell }) {
 function BottomNav({ t, screen, go }) {
   const items = [
     { key: 'home', label: 'Home', d: D.home },
-    { key: 'tasks', label: 'Tasks', d: D.list },
+    { key: 'work', label: 'Work', d: D.brief },
     { key: 'calendar', label: 'Plan', d: D.cal },
     { key: 'team', label: 'Team', d: D.team },
     { key: 'chat', label: 'Chat', d: D.chat },
@@ -510,7 +659,7 @@ function BottomNav({ t, screen, go }) {
   return (
     <nav style={{ flex: '0 0 auto', display: 'flex', alignItems: 'stretch', padding: '8px 6px 10px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', background: t.navBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderTop: `1px solid ${t.navBd}`, boxShadow: '0 -6px 22px rgba(20,42,70,.05)' }}>
       {items.map(n => {
-        const active = n.key === 'tasks' ? (screen === 'tasks' || screen === 'detail') : screen === n.key
+        const active = n.key === 'work' ? (screen === 'work' || screen === 'workdetail') : screen === n.key
         const stroke = active ? ACCENT : (t === DARK ? '#7d92ad' : '#8ea0b3')
         return (
           <button key={n.key} onClick={() => go(n.key)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', padding: '2px 0' }}>
@@ -543,26 +692,26 @@ function Empty({ t, title, sub }) {
   return <div style={{ padding: '60px 24px', textAlign: 'center' }}><b style={{ display: 'block', fontSize: 15, color: t.ink2, marginBottom: 6 }}>{title}</b><span style={{ fontSize: 12.5, color: t.sub2 }}>{sub}</span></div>
 }
 
-// ── HOME ─────────────────────────────────────────────────────────────────────
-function HomeScreen({ t, views, stats, d, wsColor, setScreen, setDetailId, setTaskWs, loading }) {
-  const focus = views.find(v => v.overdue) || views.find(v => v.today && !v.done) || views.find(v => !v.done) || null
+// ── HOME (practice overview — WorkZone stats + Kanban workspaces) ─────────────
+function HomeScreen({ t, wrViews, wrStats, d, wsColor, setScreen, setWorkDetailId, setTaskWs, loading }) {
+  const focus = wrViews.find(v => v.overdue) || wrViews.find(v => v.today) || wrViews.find(v => !v.done) || null
   const statCards = [
-    { label: 'Active', value: stats.active, ink: ACCENT, bg: 'rgba(47,107,255,.10)', d: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
-    { label: 'Due today', value: stats.dueToday, ink: '#7C3AED', bg: 'rgba(124,58,237,.10)', d: D.clock },
-    { label: 'Overdue', value: stats.overdue, ink: '#DC2626', bg: 'rgba(220,38,38,.10)', d: D.warn },
-    { label: 'Done this week', value: stats.done, ink: '#0d9488', bg: 'rgba(20,184,166,.12)', d: D.checkCircle },
+    { label: 'Active', value: wrStats.active, ink: ACCENT, bg: 'rgba(47,107,255,.10)', d: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
+    { label: 'Due today', value: wrStats.dueToday, ink: '#7C3AED', bg: 'rgba(124,58,237,.10)', d: D.clock },
+    { label: 'Overdue', value: wrStats.overdue, ink: '#DC2626', bg: 'rgba(220,38,38,.10)', d: D.warn },
+    { label: 'Completed', value: wrStats.done, ink: '#0d9488', bg: 'rgba(20,184,166,.12)', d: D.checkCircle },
   ]
-  const openByWs = {}; views.forEach(v => { if (!v.done) openByWs[v.workspace_id] = (openByWs[v.workspace_id] || 0) + 1 })
-  // recent activity from most recently updated tasks
-  const activity = [...views].filter(v => v.updated_at).sort((a, b) => a.updated_at < b.updated_at ? 1 : -1).slice(0, 4)
+  const openByWs = {}; d.tasks.forEach(tk => { if (!isDone(tk)) openByWs[tk.workspace_id] = (openByWs[tk.workspace_id] || 0) + 1 })
+  // recent WorkZone activity (most recent rows)
+  const activity = [...wrViews].sort((a, b) => (a.row.created_at < b.row.created_at ? 1 : -1)).slice(0, 4)
 
   return (
     <section style={{ padding: '4px 18px 8px', animation: 'tfmIn .5s cubic-bezier(.2,.8,.2,1) both' }}>
       {focus && (
-        <button onClick={() => setDetailId(focus.id)} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: 16, borderRadius: 18, border: `1px solid ${t.glassBd}`, background: t === DARK ? 'linear-gradient(135deg,rgba(30,48,74,.9),rgba(24,40,64,.7))' : 'linear-gradient(135deg,rgba(255,255,255,.9),rgba(239,244,255,.72))', cursor: 'pointer', boxShadow: '0 16px 40px rgba(40,68,108,.09)', fontFamily: 'inherit' }}>
+        <button onClick={() => setWorkDetailId(focus.id)} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: 16, borderRadius: 18, border: `1px solid ${t.glassBd}`, background: t === DARK ? 'linear-gradient(135deg,rgba(30,48,74,.9),rgba(24,40,64,.7))' : 'linear-gradient(135deg,rgba(255,255,255,.9),rgba(239,244,255,.72))', cursor: 'pointer', boxShadow: '0 16px 40px rgba(40,68,108,.09)', fontFamily: 'inherit' }}>
           <span style={{ width: 44, height: 44, borderRadius: 13, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${ACCENT} 13%,white)`, color: ACCENT }}><Ic d={D.bolt} size={21} /></span>
           <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: t.faint }}>Next up</span>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: t.faint }}>Next up · {focus.workType}</span>
             <b style={{ fontSize: 14, fontWeight: 750, color: t.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{focus.title}</b>
             <span style={{ fontSize: 11.5, color: focus.dueColor, fontWeight: 700 }}>{focus.dueLine}</span>
           </span>
@@ -572,24 +721,26 @@ function HomeScreen({ t, views, stats, d, wsColor, setScreen, setDetailId, setTa
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 11, marginTop: 14 }}>
         {statCards.map((s, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 15, borderRadius: 16, background: t.card, border: `1px solid ${t.cardBd}`, boxShadow: '0 10px 26px rgba(32,59,93,.05)' }}>
+          <button key={i} onClick={() => setScreen('work')} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 15, borderRadius: 16, background: t.card, border: `1px solid ${t.cardBd}`, boxShadow: '0 10px 26px rgba(32,59,93,.05)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
             <span style={{ width: 38, height: 38, borderRadius: 11, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.bg, color: s.ink }}><Ic d={s.d} size={18} /></span>
             <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
               <strong style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-.04em', lineHeight: 1, color: t.ink }}>{loading ? '—' : s.value}</strong>
               <span style={{ fontSize: 11, fontWeight: 700, color: t.sub, marginTop: 4 }}>{s.label}</span>
             </span>
-          </div>
+          </button>
         ))}
       </div>
 
-      <SectionHead t={t} eyebrow="In this practice" title="Workspaces" />
+      <button onClick={() => setScreen('work')} style={{ width: '100%', marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 13, borderRadius: 14, border: `1px solid ${t.glassBd}`, background: t.glass, color: ACCENT, fontFamily: 'inherit', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}><Ic d={D.brief} size={17} sw={1.9} />Open WorkZone</button>
+
+      <SectionHead t={t} eyebrow="Kanban" title="Workspaces" />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {d.workspaces.length === 0
           ? <div style={{ padding: 20, borderRadius: 16, background: t.glass, border: `1px solid ${t.glassBd}`, fontSize: 12.5, color: t.sub2, textAlign: 'center' }}>No workspaces in this practice yet.</div>
           : d.workspaces.map(w => {
               const c = wsColor[w.id]
               return (
-                <button key={w.id} onClick={() => { setTaskWs(w.id); setScreen('tasks') }} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '15px 16px', borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.glass, cursor: 'pointer', boxShadow: '0 10px 26px rgba(35,65,100,.05)', fontFamily: 'inherit' }}>
+                <button key={w.id} onClick={() => { setTaskWs(w.id); setScreen('wstasks') }} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 13, padding: '15px 16px', borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.glass, cursor: 'pointer', boxShadow: '0 10px 26px rgba(35,65,100,.05)', fontFamily: 'inherit' }}>
                   <span style={{ width: 44, height: 44, borderRadius: 13, flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `color-mix(in srgb,${c} 13%,white)`, color: c, border: `1px solid color-mix(in srgb,${c} 24%,white)`, fontWeight: 800 }}>{initials(w.name)}</span>
                   <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
                     <b style={{ fontSize: 14, fontWeight: 760, color: t.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</b>
@@ -604,18 +755,18 @@ function HomeScreen({ t, views, stats, d, wsColor, setScreen, setDetailId, setTa
             })}
       </div>
 
-      <SectionHead t={t} eyebrow="Live" title="Recent activity" />
+      <SectionHead t={t} eyebrow="Live" title="Recent work" />
       <div style={{ borderRadius: 16, overflow: 'hidden', background: t.glass, border: `1px solid ${t.glassBd}`, boxShadow: '0 10px 26px rgba(35,65,100,.045)' }}>
         {activity.length === 0
-          ? <div style={{ padding: 16, fontSize: 12, color: t.sub2, textAlign: 'center' }}>No recent activity.</div>
+          ? <div style={{ padding: 16, fontSize: 12, color: t.sub2, textAlign: 'center' }}>No recent work.</div>
           : activity.map((a, i) => (
-              <div key={a.id} onClick={() => setDetailId(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '13px 15px', borderBottom: i < activity.length - 1 ? `1px solid ${t.line}` : 'none', cursor: 'pointer' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', flex: '0 0 auto', background: a.color, boxShadow: `0 0 0 4px color-mix(in srgb,${a.color} 12%,transparent)` }} />
+              <div key={a.id} onClick={() => setWorkDetailId(a.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '13px 15px', borderBottom: i < activity.length - 1 ? `1px solid ${t.line}` : 'none', cursor: 'pointer' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', flex: '0 0 auto', background: a.statusMeta.color, boxShadow: `0 0 0 4px color-mix(in srgb,${a.statusMeta.color} 14%,transparent)` }} />
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <b style={{ fontSize: 12, fontWeight: 700, color: t.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.title}</b>
-                  <small style={{ fontSize: 10.5, color: t.sub2 }}>{a.wsName}{a.done ? ' · done' : ''}</small>
+                  <small style={{ fontSize: 10.5, color: t.sub2 }}>{a.workType} · {a.statusMeta.label}</small>
                 </span>
-                <span style={{ fontSize: 9.5, color: t.sub2, fontWeight: 600, flex: '0 0 auto' }}>{a.due}</span>
+                <span style={{ fontSize: 9.5, color: t.sub2, fontWeight: 600, flex: '0 0 auto' }}>{a.done ? '' : a.due}</span>
               </div>
             ))}
       </div>
@@ -630,6 +781,145 @@ function SectionHead({ t, eyebrow, title }) {
         <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: '-.03em', color: t.ink }}>{title}</h2>
       </div>
     </div>
+  )
+}
+
+// ── WORK (WorkZone / ERP worksheet_rows — the firm's real compliance work) ────
+function WorkScreen({ t, wrViews, workTypes, workFilter, setWorkFilter, workView, setWorkView, setWorkDetailId }) {
+  const scoped = workFilter ? wrViews.filter(v => v.workType === workFilter) : wrViews
+  const chip = (on, color) => ({ flex: '0 0 auto', padding: '9px 15px', borderRadius: 12, border: `1px solid ${on ? (color || ACCENT) : (t === DARK ? 'rgba(140,165,200,.18)' : 'rgba(20,42,70,.1)')}`, background: on ? (color || ACCENT) : t.glass, color: on ? '#fff' : t.sub, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 750, cursor: 'pointer', whiteSpace: 'nowrap' })
+  return (
+    <section style={{ padding: '2px 0 8px', animation: 'tfmIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
+      <div className="tfm-x" style={{ display: 'flex', gap: 8, padding: '0 18px 12px', overflowX: 'auto' }}>
+        <button onClick={() => setWorkFilter('')} style={chip(!workFilter)}>All work types</button>
+        {workTypes.map(wt => <button key={wt} onClick={() => setWorkFilter(wt)} style={chip(workFilter === wt)}>{wt}</button>)}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 18px 14px' }}>
+        <div style={{ display: 'flex', flex: '0 0 auto', padding: 3, borderRadius: 11, background: t.glass, border: `1px solid ${t.glassBd}` }}>
+          {[['list', D.list], ['board', 'M4 4h6v16H4zM14 4h6v10h-6z']].map(([mode, dd]) => {
+            const on = workView === mode
+            return <button key={mode} onClick={() => setWorkView(mode)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: 'none', background: on ? (t === DARK ? '#22344e' : '#fff') : 'transparent', color: on ? ACCENT : t.sub2, fontFamily: 'inherit', fontSize: 12, fontWeight: 750, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(20,42,70,.08)' : 'none', textTransform: 'capitalize' }}><Ic d={dd} size={15} sw={2} />{mode}</button>
+          })}
+        </div>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: t.sub2 }}>{scoped.filter(v => !v.done).length} open</span>
+      </div>
+
+      {workView === 'board'
+        ? <WorkBoard t={t} rows={scoped} showType={!workFilter} setWorkDetailId={setWorkDetailId} />
+        : scoped.length === 0
+          ? <Empty t={t} title="No work here" sub={workFilter ? `No ${workFilter} work yet.` : 'No WorkZone tasks for this practice yet.'} />
+          : <div style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: '0 18px' }}>
+              {scoped.map(v => <WorkCard key={v.id} t={t} v={v} showType={!workFilter} onOpen={() => setWorkDetailId(v.id)} />)}
+            </div>}
+    </section>
+  )
+}
+function WorkCard({ t, v, showType, onOpen }) {
+  const priColor = PRI[v.pri]
+  return (
+    <div onClick={onOpen} style={{ display: 'flex', gap: 12, padding: 15, borderRadius: 16, border: `1px solid ${t.glassBd}`, background: t.card, boxShadow: '0 12px 28px rgba(35,65,100,.055)', cursor: 'pointer', borderLeft: `3px solid ${v.color}`, animation: 'tfmIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6, flexWrap: 'wrap' }}>
+          {showType && <span style={{ padding: '3px 8px', borderRadius: 7, background: `color-mix(in srgb,${v.color} 13%,white)`, color: v.color, fontSize: 9.5, fontWeight: 800, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.workType}</span>}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 7, background: v.statusMeta.color + '16', color: v.statusMeta.color, fontSize: 9.5, fontWeight: 800 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: v.statusMeta.color }} />{v.stage || v.statusMeta.label}</span>
+          {v.pri === 'High' && <span style={{ padding: '3px 8px', borderRadius: 7, background: 'rgba(220,38,38,.09)', color: priColor, fontSize: 9.5, fontWeight: 800 }}>High</span>}
+        </div>
+        <b style={{ fontSize: 14, fontWeight: 750, color: v.done ? '#9aa8b8' : t.ink2, lineHeight: 1.3, textDecoration: v.done ? 'line-through' : 'none', display: 'block' }}>{v.title}</b>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
+          <span style={{ fontSize: 11, color: t.sub2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{v.client || v.period || v.workType}</span>
+          {v.due_date && !v.done && <span style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '0 0 auto' }}><Ic d={D.clock} size={13} sw={2} stroke={v.dueColor} /><span style={{ fontSize: 10.5, fontWeight: 750, color: v.dueColor }}>{v.due}</span></span>}
+        </div>
+      </div>
+      <Ic d={D.chevR} size={16} sw={2} stroke={t.sub2} />
+    </div>
+  )
+}
+function WorkBoard({ t, rows, showType, setWorkDetailId }) {
+  if (rows.length === 0) return <Empty t={t} title="Empty board" sub="No WorkZone tasks yet." />
+  return (
+    <div className="tfm-x" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 18px 4px', alignItems: 'flex-start', scrollSnapType: 'x proximity' }}>
+      {WR_ORDER.map(key => {
+        const meta = WR_STATUS[key]
+        const items = rows.filter(v => v.statusKey === key)
+        return (
+          <div key={key} style={{ flex: '0 0 auto', width: 268, scrollSnapAlign: 'start', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 4px' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color }} />
+              <b style={{ fontSize: 12.5, fontWeight: 800, color: t.ink2 }}>{meta.label}</b>
+              <span style={{ fontSize: 11, fontWeight: 800, color: t.sub2, background: t.glass, border: `1px solid ${t.glassBd}`, borderRadius: 999, padding: '1px 8px' }}>{items.length}</span>
+            </div>
+            {items.length === 0
+              ? <div style={{ padding: 16, borderRadius: 14, border: `1px dashed ${t.cardBd}`, fontSize: 11.5, color: t.sub2, textAlign: 'center' }}>No tasks</div>
+              : items.map(v => (
+                  <div key={v.id} onClick={() => setWorkDetailId(v.id)} style={{ padding: 13, borderRadius: 14, border: `1px solid ${t.glassBd}`, background: t.card, boxShadow: '0 8px 20px rgba(35,65,100,.05)', cursor: 'pointer', borderLeft: `3px solid ${v.color}` }}>
+                    {showType && <span style={{ display: 'inline-block', padding: '2px 7px', borderRadius: 6, background: `color-mix(in srgb,${v.color} 13%,white)`, color: v.color, fontSize: 9, fontWeight: 800, marginBottom: 7, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.workType}</span>}
+                    <b style={{ fontSize: 13, fontWeight: 750, color: t.ink2, lineHeight: 1.32, display: 'block' }}>{v.title}</b>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
+                      <span style={{ fontSize: 10.5, color: t.sub2, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.client || v.period}</span>
+                      {v.due_date && !v.done && <span style={{ fontSize: 10, fontWeight: 750, color: v.dueColor }}>{v.due}</span>}
+                    </div>
+                  </div>
+                ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function WorkDetailScreen({ t, v, profiles, wrToggleStep, wrToggleComplete }) {
+  const priColor = PRI[v.pri]
+  const pct = v.steps ? Math.round((v.doneSteps / v.steps) * 100) : 0
+  const assigneeName = profiles[v.assignee]?.name || (typeof v.assignee === 'string' && v.assignee && !/^[0-9a-f-]{20,}$/i.test(v.assignee) ? v.assignee : '')
+  return (
+    <section style={{ padding: '2px 18px 8px', animation: 'tfmIn .4s cubic-bezier(.2,.8,.2,1) both' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ padding: '4px 10px', borderRadius: 8, background: `color-mix(in srgb,${v.color} 13%,white)`, color: v.color, fontSize: 10, fontWeight: 800 }}>{v.workType}</span>
+        <span style={{ padding: '4px 10px', borderRadius: 8, background: v.statusMeta.color + '18', color: v.statusMeta.color, fontSize: 10, fontWeight: 800 }}>{v.stage || v.statusMeta.label}</span>
+        <span style={{ padding: '4px 10px', borderRadius: 8, background: priColor + '18', color: priColor, fontSize: 10, fontWeight: 800 }}>{v.pri} priority</span>
+      </div>
+      <h1 style={{ margin: '0 0 8px', fontSize: 23, fontWeight: 800, letterSpacing: '-.03em', lineHeight: 1.2, color: t.ink }}>{v.title}</h1>
+      {v.due_date && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 18 }}><Ic d={D.clock} size={15} sw={2} stroke={v.dueColor} /><span style={{ fontSize: 13, fontWeight: 750, color: v.dueColor }}>{v.dueLine}</span></div>}
+
+      {v.description && <p style={{ margin: '0 0 18px', fontSize: 13.5, color: t.sub, lineHeight: 1.55 }}>{v.description}</p>}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
+        <div style={{ padding: 14, borderRadius: 14, background: t.glass, border: `1px solid ${t.glassBd}` }}>
+          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint, marginBottom: 6 }}>Client</div>
+          <b style={{ fontSize: 13, fontWeight: 750, color: t.ink2 }}>{v.client || '—'}</b>
+        </div>
+        <div style={{ padding: 14, borderRadius: 14, background: t.glass, border: `1px solid ${t.glassBd}` }}>
+          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint, marginBottom: 6 }}>Period</div>
+          <b style={{ fontSize: 13, fontWeight: 750, color: t.ink2 }}>{v.period || '—'}</b>
+        </div>
+      </div>
+
+      {assigneeName && <div style={{ padding: 14, borderRadius: 14, background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 18 }}>
+        <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint, marginBottom: 6 }}>Assigned</div>
+        <b style={{ fontSize: 13, fontWeight: 750, color: t.ink2 }}>{assigneeName}</b>
+      </div>}
+
+      {v.steps > 0 && <>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint }}>Checklist · {v.doneSteps}/{v.steps}</div>
+          <span style={{ fontSize: 11, fontWeight: 800, color: ACCENT }}>{pct}%</span>
+        </div>
+        <div style={{ height: 6, borderRadius: 4, background: 'rgba(20,42,70,.08)', overflow: 'hidden', marginBottom: 14 }}><div style={{ height: '100%', width: `${pct}%`, borderRadius: 4, background: `linear-gradient(90deg,${ACCENT},${ACCENT2})` }} /></div>
+        <div style={{ borderRadius: 16, overflow: 'hidden', background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 18 }}>
+          {v.checkItems.map((st, i) => (
+            <button key={i} onClick={() => wrToggleStep(v, st.i)} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', border: 'none', borderBottom: i < v.checkItems.length - 1 ? `1px solid ${t.line}` : 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <span style={{ width: 22, height: 22, flex: '0 0 auto', borderRadius: 7, border: `2px solid ${st.done ? ACCENT : 'rgba(93,120,150,.3)'}`, background: st.done ? ACCENT : (t === DARK ? 'transparent' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{st.done && <Ic d={D.check2} size={12} sw={3.4} stroke="#fff" />}</span>
+              <span style={{ fontSize: 12.5, color: st.done ? '#9aa8b8' : t.ink2, fontWeight: st.done ? 500 : 600, textDecoration: st.done ? 'line-through' : 'none' }}>{st.label}</span>
+            </button>
+          ))}
+        </div>
+      </>}
+
+      <button onClick={() => wrToggleComplete(v)} style={{ width: '100%', padding: 14, borderRadius: 14, border: v.done ? `1px solid ${t.cardBd}` : 'none', background: v.done ? t.card : `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: v.done ? t.sub : '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <Ic d={D.check2} size={17} sw={2.6} stroke={v.done ? t.sub : '#fff'} />{v.done ? 'Mark as not done' : 'Mark completed'}
+      </button>
+    </section>
   )
 }
 
@@ -795,7 +1085,7 @@ function DetailScreen({ t, v, profiles, toggleStep }) {
 }
 
 // ── CALENDAR ─────────────────────────────────────────────────────────────────
-function CalendarScreen({ t, views, calMonth, setCalMonth, setDetailId }) {
+function CalendarScreen({ t, views, calMonth, setCalMonth, openDetail }) {
   const { y, m } = calMonth
   const first = new Date(y, m, 1)
   const startDow = (first.getDay() + 6) % 7 // Mon=0
@@ -828,7 +1118,7 @@ function CalendarScreen({ t, views, calMonth, setCalMonth, setDetailId }) {
           const isToday = di === tIso
           const overdue = has && di < tIso
           return (
-            <div key={i} onClick={() => has && setDetailId(has[0].id)} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 11, cursor: has ? 'pointer' : 'default', background: isToday ? `color-mix(in srgb,${ACCENT} 12%,white)` : (has ? t.card : 'transparent'), border: isToday ? `1px solid color-mix(in srgb,${ACCENT} 30%,white)` : `1px solid ${has ? t.cardBd : 'transparent'}` }}>
+            <div key={i} onClick={() => has && openDetail(has[0].id)} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 11, cursor: has ? 'pointer' : 'default', background: isToday ? `color-mix(in srgb,${ACCENT} 12%,white)` : (has ? t.card : 'transparent'), border: isToday ? `1px solid color-mix(in srgb,${ACCENT} 30%,white)` : `1px solid ${has ? t.cardBd : 'transparent'}` }}>
               <span style={{ fontSize: 13, fontWeight: isToday ? 800 : 700, color: isToday ? ACCENT : t.ink2 }}>{dnum}</span>
               {has && <span style={{ display: 'flex', gap: 2 }}>{has.slice(0, 3).map((v, j) => <span key={j} style={{ width: 4, height: 4, borderRadius: '50%', background: overdue ? '#DC2626' : v.color }} />)}</span>}
             </div>
@@ -842,12 +1132,12 @@ function CalendarScreen({ t, views, calMonth, setCalMonth, setDetailId }) {
             {upcoming.map(v => {
               const dt = new Date(v.due_date + 'T00:00:00')
               return (
-                <div key={v.id} onClick={() => setDetailId(v.id)} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 15, background: t.card, border: `1px solid ${t.cardBd}`, boxShadow: '0 10px 24px rgba(35,65,100,.05)', cursor: 'pointer' }}>
+                <div key={v.id} onClick={() => openDetail(v.id)} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 15, background: t.card, border: `1px solid ${t.cardBd}`, boxShadow: '0 10px 24px rgba(35,65,100,.05)', cursor: 'pointer' }}>
                   <div style={{ width: 46, flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '7px 0', borderRadius: 12, background: `color-mix(in srgb,${v.color} 12%,white)` }}>
                     <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.06em', color: v.color, textTransform: 'uppercase' }}>{MON[dt.getMonth()]}</span>
                     <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.03em', color: v.color, lineHeight: 1 }}>{dt.getDate()}</span>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 13, fontWeight: 760, color: t.ink2, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title}</b><div style={{ fontSize: 11, color: t.sub2, marginTop: 3 }}>{v.wsName}</div></div>
+                  <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 13, fontWeight: 760, color: t.ink2, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.title}</b><div style={{ fontSize: 11, color: t.sub2, marginTop: 3 }}>{v.workType || v.wsName || ''}</div></div>
                   <span style={{ padding: '4px 9px', borderRadius: 8, background: `color-mix(in srgb,${v.color} 12%,white)`, color: v.color, fontSize: 10, fontWeight: 800, flex: '0 0 auto' }}>{v.due}</span>
                 </div>
               )
@@ -857,33 +1147,134 @@ function CalendarScreen({ t, views, calMonth, setCalMonth, setDetailId }) {
   )
 }
 
-// ── TEAM ─────────────────────────────────────────────────────────────────────
-function TeamScreen({ t, members, profiles, views, uid }) {
-  const loadByUser = {}; views.forEach(v => { if (!v.done) (v.assigneeIds || []).forEach(id => { loadByUser[id] = (loadByUser[id] || 0) + 1 }) })
-  const list = members.map((m, i) => {
-    const p = profiles[m.user_id] || {}
-    return { id: m.user_id, name: p.name || (p.email || '').split('@')[0] || 'Member', role: m.role || 'Member', email: p.email || '', color: PALETTE[i % PALETTE.length], load: loadByUser[m.user_id] || 0, you: m.user_id === uid }
-  })
+// ── TEAM + PRACTICE HUB (Members · Attendance · Time) ─────────────────────────
+function TeamScreen({ t, teamTab, setTeamTab, members, profiles, wrViews, uid, org, punches, logs, leave, clientMap, workTypes, punch, addTimeLog }) {
+  const tabs = [['members', 'Team'], ['attendance', 'Attendance'], ['time', 'Time']]
+  const chip = on => ({ flex: 1, padding: '8px 6px', borderRadius: 9, border: 'none', background: on ? (t === DARK ? '#22344e' : '#fff') : 'transparent', color: on ? ACCENT : t.sub2, fontFamily: 'inherit', fontSize: 12.5, fontWeight: 750, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(20,42,70,.08)' : 'none' })
   return (
     <section style={{ padding: '2px 18px 8px', animation: 'tfmIn .45s cubic-bezier(.2,.8,.2,1) both' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <b style={{ fontSize: 13, color: t.sub }}><span style={{ color: t.ink, fontWeight: 800, fontSize: 15 }}>{list.length}</span> member{list.length !== 1 ? 's' : ''}</b>
+      <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 16 }}>
+        {tabs.map(([k, l]) => <button key={k} onClick={() => setTeamTab(k)} style={chip(teamTab === k)}>{l}</button>)}
       </div>
-      {list.length === 0
-        ? <Empty t={t} title="No teammates yet" sub="Invite people to this practice from the desktop app." />
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {list.map(m => {
-              const loadInk = m.load > 6 ? '#DC2626' : m.load > 4 ? '#D97706' : '#0d9488'
-              return (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 16, background: t.card, border: `1px solid ${t.cardBd}`, boxShadow: '0 10px 24px rgba(35,65,100,.05)' }}>
-                  <span style={{ position: 'relative', width: 44, height: 44, flex: '0 0 auto', borderRadius: '50%', background: `linear-gradient(135deg,${m.color},${PALETTE[(list.indexOf(m) + 2) % PALETTE.length]})`, color: '#fff', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(m.name)}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 14, fontWeight: 760, color: t.ink2 }}>{m.name}{m.you && <span style={{ color: t.sub2, fontWeight: 600 }}> · you</span>}</b><div style={{ fontSize: 11, color: t.sub2, marginTop: 2, textTransform: 'capitalize' }}>{m.role}</div></div>
-                  <div style={{ textAlign: 'right', flex: '0 0 auto' }}><b style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.03em', color: loadInk }}>{m.load}</b><div style={{ fontSize: 9, color: t.sub2, fontWeight: 600 }}>active</div></div>
-                </div>
-              )
-            })}
-          </div>}
+      {teamTab === 'members' && <TeamMembers t={t} members={members} profiles={profiles} wrViews={wrViews} uid={uid} />}
+      {teamTab === 'attendance' && <AttendanceTab t={t} punches={punches} leave={leave} punch={punch} />}
+      {teamTab === 'time' && <TimeTab t={t} logs={logs} clientMap={clientMap} workTypes={workTypes} addTimeLog={addTimeLog} />}
     </section>
+  )
+}
+function TeamMembers({ t, members, profiles, wrViews, uid }) {
+  const loadByUser = {}; wrViews.forEach(v => { if (!v.done && v.assignee) loadByUser[v.assignee] = (loadByUser[v.assignee] || 0) + 1 })
+  const list = members.map((m, i) => {
+    const p = profiles[m.user_id] || {}
+    return { id: m.user_id, name: p.name || (p.email || '').split('@')[0] || 'Member', role: m.role || 'Member', color: PALETTE[i % PALETTE.length], load: loadByUser[m.user_id] || 0, you: m.user_id === uid }
+  })
+  if (list.length === 0) return <Empty t={t} title="No teammates yet" sub="Invite people to this practice from the desktop app." />
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {list.map((m, idx) => {
+        const loadInk = m.load > 6 ? '#DC2626' : m.load > 4 ? '#D97706' : '#0d9488'
+        return (
+          <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 15px', borderRadius: 16, background: t.card, border: `1px solid ${t.cardBd}`, boxShadow: '0 10px 24px rgba(35,65,100,.05)' }}>
+            <span style={{ width: 44, height: 44, flex: '0 0 auto', borderRadius: '50%', background: `linear-gradient(135deg,${m.color},${PALETTE[(idx + 2) % PALETTE.length]})`, color: '#fff', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(m.name)}</span>
+            <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 14, fontWeight: 760, color: t.ink2 }}>{m.name}{m.you && <span style={{ color: t.sub2, fontWeight: 600 }}> · you</span>}</b><div style={{ fontSize: 11, color: t.sub2, marginTop: 2, textTransform: 'capitalize' }}>{m.role}</div></div>
+            <div style={{ textAlign: 'right', flex: '0 0 auto' }}><b style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-.03em', color: loadInk }}>{m.load}</b><div style={{ fontSize: 9, color: t.sub2, fontWeight: 600 }}>open</div></div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+function fmtTime(isoStr) { try { return new Date(isoStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) } catch { return '' } }
+function fmtDate(dStr) { try { const d = new Date((dStr.length <= 10 ? dStr + 'T00:00:00' : dStr)); return `${d.getDate()} ${MON[d.getMonth()]}` } catch { return dStr } }
+function AttendanceTab({ t, punches, leave, punch }) {
+  const today = todayISO()
+  const todays = punches.filter(p => (p.punched_at || '').slice(0, 10) === today)
+  const last = todays[0] // punches sorted desc
+  const isIn = last && last.punch_type === 'in'
+  const LEAVE_C = { approved: '#0d9488', pending: '#D97706', rejected: '#DC2626', declined: '#DC2626' }
+  return (
+    <div>
+      <div style={{ padding: 18, borderRadius: 18, background: t === DARK ? 'linear-gradient(135deg,rgba(30,48,74,.9),rgba(24,40,64,.7))' : 'linear-gradient(135deg,rgba(255,255,255,.9),rgba(239,244,255,.72))', border: `1px solid ${t.glassBd}`, boxShadow: '0 16px 40px rgba(40,68,108,.08)', marginBottom: 16, textAlign: 'center' }}>
+        <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: t.faint, marginBottom: 6 }}>Today · {fmtDate(today)}</div>
+        <b style={{ fontSize: 20, fontWeight: 800, color: isIn ? '#0d9488' : t.ink2 }}>{isIn ? `Punched in · ${fmtTime(last.punched_at)}` : (last ? `Punched out · ${fmtTime(last.punched_at)}` : 'Not punched in')}</b>
+        <button onClick={() => punch(isIn ? 'out' : 'in')} style={{ width: '100%', marginTop: 14, padding: 14, borderRadius: 14, border: 'none', background: isIn ? 'linear-gradient(135deg,#DC2626,#f0736f)' : `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: '#fff', fontFamily: 'inherit', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>{isIn ? 'Punch Out' : 'Punch In'}</button>
+      </div>
+
+      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint, marginBottom: 10 }}>Recent punches</div>
+      {punches.length === 0
+        ? <div style={{ padding: 16, borderRadius: 14, background: t.glass, border: `1px solid ${t.glassBd}`, fontSize: 12, color: t.sub2, textAlign: 'center' }}>No punches yet.</div>
+        : <div style={{ borderRadius: 16, overflow: 'hidden', background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 18 }}>
+            {punches.slice(0, 10).map((p, i) => (
+              <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 15px', borderBottom: i < Math.min(punches.length, 10) - 1 ? `1px solid ${t.line}` : 'none' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', flex: '0 0 auto', background: p.punch_type === 'in' ? '#0d9488' : '#DC2626' }} />
+                <b style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: t.ink2, textTransform: 'capitalize' }}>Punch {p.punch_type}</b>
+                <span style={{ fontSize: 11, color: t.sub2, fontWeight: 600 }}>{fmtDate((p.punched_at || '').slice(0, 10))} · {fmtTime(p.punched_at)}</span>
+              </div>
+            ))}
+          </div>}
+
+      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint, marginBottom: 10 }}>My leave</div>
+      {leave.length === 0
+        ? <div style={{ padding: 16, borderRadius: 14, background: t.glass, border: `1px solid ${t.glassBd}`, fontSize: 12, color: t.sub2, textAlign: 'center' }}>No leave requests.</div>
+        : <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {leave.map(lv => (
+              <div key={lv.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 15px', borderRadius: 14, background: t.card, border: `1px solid ${t.cardBd}` }}>
+                <div style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 13, fontWeight: 750, color: t.ink2, textTransform: 'capitalize' }}>{lv.leave_type || 'Leave'}</b><div style={{ fontSize: 11, color: t.sub2, marginTop: 2 }}>{fmtDate(lv.start_date)}{lv.end_date && lv.end_date !== lv.start_date ? ` – ${fmtDate(lv.end_date)}` : ''}{lv.days ? ` · ${lv.days}d` : ''}</div></div>
+                <span style={{ padding: '3px 9px', borderRadius: 8, background: (LEAVE_C[String(lv.status || '').toLowerCase()] || t.sub2) + '18', color: LEAVE_C[String(lv.status || '').toLowerCase()] || t.sub2, fontSize: 10, fontWeight: 800, textTransform: 'capitalize' }}>{lv.status || 'pending'}</span>
+              </div>
+            ))}
+          </div>}
+    </div>
+  )
+}
+function TimeTab({ t, logs, clientMap, workTypes, addTimeLog }) {
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({ work_type: '', hours: '', minutes: '', notes: '' })
+  const weekAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 7); return iso(d) })()
+  const weekMins = logs.filter(l => l.date >= weekAgo).reduce((n, l) => n + (l.hours || 0) * 60 + (l.minutes || 0), 0)
+  const weekH = Math.floor(weekMins / 60), weekM = weekMins % 60
+  function submit() {
+    if (!(Number(form.hours) || Number(form.minutes))) return
+    addTimeLog(form); setForm({ work_type: '', hours: '', minutes: '', notes: '' }); setOpen(false)
+  }
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderRadius: 16, background: t.card, border: `1px solid ${t.cardBd}`, marginBottom: 14 }}>
+        <span style={{ width: 40, height: 40, flex: '0 0 auto', borderRadius: 12, background: `color-mix(in srgb,${ACCENT} 12%,white)`, color: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic d={D.clock} size={20} /></span>
+        <div style={{ flex: 1 }}><b style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.03em', color: t.ink }}>{weekH}h {weekM}m</b><div style={{ fontSize: 11, fontWeight: 700, color: t.sub2 }}>Logged this week</div></div>
+        <button onClick={() => setOpen(o => !o)} style={{ padding: '9px 13px', borderRadius: 11, border: 'none', background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: '#fff', fontFamily: 'inherit', fontSize: 12, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Ic d={D.plus} size={14} sw={2.4} />Log</button>
+      </div>
+
+      {open && (
+        <div style={{ padding: 15, borderRadius: 16, background: t.glass, border: `1px solid ${t.glassBd}`, marginBottom: 14 }}>
+          <div className="tfm-x" style={{ display: 'flex', gap: 7, overflowX: 'auto', marginBottom: 11 }}>
+            {workTypes.length === 0 ? <span style={{ fontSize: 12, color: t.sub2 }}>No work types</span>
+              : workTypes.map(wt => <button key={wt} onClick={() => setForm(f => ({ ...f, work_type: wt }))} style={{ flex: '0 0 auto', padding: '7px 12px', borderRadius: 10, border: `1px solid ${form.work_type === wt ? ACCENT : (t === DARK ? 'rgba(140,165,200,.18)' : 'rgba(20,42,70,.1)')}`, background: form.work_type === wt ? ACCENT : t.input, color: form.work_type === wt ? '#fff' : t.sub, fontFamily: 'inherit', fontSize: 12, fontWeight: 750, cursor: 'pointer', whiteSpace: 'nowrap' }}>{wt}</button>)}
+          </div>
+          <div style={{ display: 'flex', gap: 9, marginBottom: 11 }}>
+            <input value={form.hours} onChange={e => setForm(f => ({ ...f, hours: e.target.value.replace(/[^0-9]/g, '') }))} inputMode="numeric" placeholder="Hours" style={{ flex: 1, padding: '12px 14px', borderRadius: 12, border: `1px solid ${t.cardBd}`, background: t.input, fontFamily: 'inherit', fontSize: 14, color: t.ink2, outline: 'none' }} />
+            <input value={form.minutes} onChange={e => setForm(f => ({ ...f, minutes: e.target.value.replace(/[^0-9]/g, '') }))} inputMode="numeric" placeholder="Mins" style={{ flex: 1, padding: '12px 14px', borderRadius: 12, border: `1px solid ${t.cardBd}`, background: t.input, fontFamily: 'inherit', fontSize: 14, color: t.ink2, outline: 'none' }} />
+          </div>
+          <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes (optional)" style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: `1px solid ${t.cardBd}`, background: t.input, fontFamily: 'inherit', fontSize: 14, color: t.ink2, outline: 'none', marginBottom: 11 }} />
+          <button onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 12, border: 'none', background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: '#fff', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>Save time log</button>
+        </div>
+      )}
+
+      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: t.faint, marginBottom: 10 }}>Recent logs</div>
+      {logs.length === 0
+        ? <Empty t={t} title="No time logged" sub="Log time against your work from here." />
+        : <div style={{ borderRadius: 16, overflow: 'hidden', background: t.glass, border: `1px solid ${t.glassBd}` }}>
+            {logs.slice(0, 30).map((l, i) => (
+              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '13px 15px', borderBottom: i < Math.min(logs.length, 30) - 1 ? `1px solid ${t.line}` : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ fontSize: 12.5, fontWeight: 700, color: t.ink2 }}>{l.work_type || 'Work'}{l.client_id && clientMap[l.client_id] ? ` · ${clientMap[l.client_id]}` : ''}</b>
+                  <div style={{ fontSize: 10.5, color: t.sub2, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fmtDate(l.date)}{l.notes ? ` · ${l.notes}` : ''}</div>
+                </div>
+                <b style={{ fontSize: 13, fontWeight: 800, color: ACCENT, flex: '0 0 auto', fontFamily: "'JetBrains Mono',monospace" }}>{l.hours || 0}h {l.minutes || 0}m</b>
+              </div>
+            ))}
+          </div>}
+    </div>
   )
 }
 
@@ -976,9 +1367,9 @@ function ChatThread({ t, orgId, channel, profiles, uid, uname, onBack, flash }) 
 function NotifsScreen({ t, views, anns, uid }) {
   const today = []
   const earlier = []
-  views.filter(v => v.overdue).slice(0, 8).forEach(v => today.push({ d: D.warn, iconBg: 'rgba(220,38,38,.1)', iconInk: '#DC2626', title: `Overdue: ${v.title}`, sub: `${v.wsName} · ${v.dueLine}`, age: v.due }))
-  views.filter(v => v.today && !v.overdue && !v.done).slice(0, 8).forEach(v => today.push({ d: D.clock, iconBg: 'rgba(47,107,255,.1)', iconInk: ACCENT, title: `Due today: ${v.title}`, sub: v.wsName, age: 'Today' }))
-  views.filter(v => v.mine && !v.done && !v.today && !v.overdue).slice(0, 5).forEach(v => earlier.push({ d: D.at, iconBg: 'rgba(124,58,237,.1)', iconInk: '#7C3AED', title: `Assigned to you: ${v.title}`, sub: v.wsName, age: v.due }))
+  views.filter(v => v.overdue).slice(0, 8).forEach(v => today.push({ d: D.warn, iconBg: 'rgba(220,38,38,.1)', iconInk: '#DC2626', title: `Overdue: ${v.title}`, sub: `${v.workType} · ${v.dueLine}`, age: v.due }))
+  views.filter(v => v.today && !v.overdue && !v.done).slice(0, 8).forEach(v => today.push({ d: D.clock, iconBg: 'rgba(47,107,255,.1)', iconInk: ACCENT, title: `Due today: ${v.title}`, sub: v.workType, age: 'Today' }))
+  views.filter(v => v.mine && !v.done && !v.today && !v.overdue).slice(0, 5).forEach(v => earlier.push({ d: D.at, iconBg: 'rgba(124,58,237,.1)', iconInk: '#7C3AED', title: `Assigned to you: ${v.title}`, sub: v.workType, age: v.due }))
   ;(anns || []).forEach(a => earlier.push({ d: D.mega, iconBg: 'rgba(217,119,6,.12)', iconInk: '#D97706', title: a.title, sub: a.body || '', age: a.published_at ? new Date(a.published_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '' }))
 
   const groups = [{ label: 'Today', items: today }, { label: 'Earlier', items: earlier }].filter(g => g.items.length)
