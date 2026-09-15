@@ -1898,6 +1898,15 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
           </div>}
         </div>;
       })()}
+      {/* Upgrade badge — quick path to Plans & Billing when the org isn't on the full plan */}
+      {activeOrg&&(trialGate.status!=='paid'||!trialGate.hasModule('comms')||!trialGate.hasModule('billing'))&&(
+        <button onClick={()=>{setActiveOrg(activeOrg||orgs[0]);if(activeOrg)localStorage.setItem('tf_lastOrgId',activeOrg.id);try{localStorage.setItem('tf_lastOrgModule','upgrade')}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()});}}
+          title={trialGate.status==='paid'?'Upgrade your plan':'Upgrade to Pro — unlock every module'}
+          style={{display:'inline-flex',alignItems:'center',gap:6,height:32,padding:'0 12px',borderRadius:9,flexShrink:0,cursor:'pointer',border:'none',fontFamily:'inherit',fontSize:12.5,fontWeight:800,color:'#fff',background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',boxShadow:'0 4px 14px rgba(47,107,255,0.35)',whiteSpace:'nowrap'}}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+          Upgrade
+        </button>
+      )}
       {/* Install app (PWA) — only shows when installable and not already installed */}
       <InstallPWAButton variant="compact"/>
       {/* My Client Portals — if this user's email also has portal access */}
@@ -19175,11 +19184,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
             {tab==='portal'&&<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
             {tab==='connect'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
           </>
-        : <ModuleLock module="comms" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId)}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()})}}/>)}
+        : <ModuleLock module="comms" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('')}}/>)}
       {/* Billing — paid module */}
       {orgModule==='billing'&&(hasModule('billing')
         ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
-        : <ModuleLock module="billing" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId)}catch(e){}setOrgNavTarget({module:'upgrade',tab:'',workType:null,ts:Date.now()})}}/>)}
+        : <ModuleLock module="billing" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('')}}/>)}
       {/* Upgrade & Plans */}
       {orgModule==='upgrade'&&<Suspense fallback={null}><UpgradePlansModule org={org} supabase={supabase} cu={cu}
         defaultPlanId={function(){try{return localStorage.getItem('tf_upgrade_plan')||null}catch(e){return null}}()}
