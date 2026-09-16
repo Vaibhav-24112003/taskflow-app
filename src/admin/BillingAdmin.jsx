@@ -438,6 +438,7 @@ export default function BillingAdmin() {
   const [manualModal, setManualModal] = useState(false)
   const [viewInvoice, setViewInvoice] = useState(null)   // null | invoice row
   const [search,      setSearch]      = useState('')
+  const [defaultBilling, setDefaultBilling] = useState('monthly')
 
 
   const [exportMenu, setExportMenu] = useState(false)
@@ -448,6 +449,10 @@ export default function BillingAdmin() {
       // 1. Plans
       const { data: pl, error: pe } = await supabase.from('plans').select('*').order('sort_order')
       if (pe) throw new Error('Plans: ' + pe.message)
+
+      // 1b. Platform settings (default billing view on pricing pages)
+      const { data: ps } = await supabase.from('platform_settings').select('default_billing_cycle').eq('id', 1).maybeSingle()
+      if (ps?.default_billing_cycle) setDefaultBilling(ps.default_billing_cycle)
 
       // 2. Orgs
       const { data: orgList, error: oe } = await supabase.from('organizations')
@@ -595,6 +600,13 @@ export default function BillingAdmin() {
     load()
   }
 
+  async function saveDefaultBilling(cycle) {
+    setDefaultBilling(cycle)   // optimistic
+    const { error: e } = await supabase.from('platform_settings')
+      .update({ default_billing_cycle: cycle, updated_at: new Date().toISOString() }).eq('id', 1)
+    if (e) { setError('Could not save default billing view: ' + e.message); load() }
+  }
+
   const StatCard = ({ label, value, sub, color='#2F6BFF', alert=false }) => (
     <div style={{ ...card, display:'flex', flexDirection:'column', gap:4, borderColor: alert&&value>0 ? 'rgba(239,68,68,.3)' : undefined }}>
       <span style={{ fontSize:9, fontWeight:800, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--tf-text-sub,#7a8aa0)' }}>{label}</span>
@@ -677,6 +689,22 @@ export default function BillingAdmin() {
 
       {/* ── PLANS TAB ── */}
       {tab === 'plans' && (
+        <>
+        <div style={{ ...card, display:'flex', alignItems:'center', justifyContent:'space-between', gap:14, marginBottom:14, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:800, color:'var(--tf-text,#e8edf5)' }}>Default billing view</div>
+            <div style={{ fontSize:11, color:'var(--tf-text-sub,#7a8aa0)', marginTop:2 }}>Which cycle the pricing page (public &amp; in-app) shows first. Visitors can still toggle.</div>
+          </div>
+          <div style={{ display:'inline-flex', background:'var(--tf-bg,#151c28)', border:'1px solid var(--tf-border,rgba(255,255,255,.12))', borderRadius:10, padding:3 }}>
+            {['monthly','yearly'].map(c => (
+              <button key={c} onClick={()=>saveDefaultBilling(c)} style={{
+                border:'none', cursor:'pointer', borderRadius:8, padding:'7px 16px', fontSize:12, fontWeight:700, fontFamily:'inherit', textTransform:'capitalize',
+                background: defaultBilling===c ? 'linear-gradient(135deg,#2F6BFF,#14C7C0)' : 'transparent',
+                color: defaultBilling===c ? '#fff' : 'var(--tf-text-sub,#7a8aa0)'
+              }}>{c}</button>
+            ))}
+          </div>
+        </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))', gap:14 }}>
           {loading
             ? <p style={{ color:'var(--tf-text-sub,#7a8aa0)', fontSize:13 }}>Loading plans…</p>
@@ -743,6 +771,7 @@ export default function BillingAdmin() {
             })
           }
         </div>
+        </>
       )}
 
       {/* ── SUBSCRIBERS TAB ── */}

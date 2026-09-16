@@ -20,12 +20,14 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
 
   async function load() {
     setLoading(true)
-    const [pr, sr, ir, per] = await Promise.all([
+    const [pr, sr, ir, per, ps] = await Promise.all([
       supabase.from('plans').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('subscriptions').select('*, plans(name,price_monthly,price_yearly)').eq('org_id', org.id).maybeSingle(),
       supabase.from('subscription_invoices').select('*').eq('org_id', org.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('payment_events').select('id, razorpay_payment_id').eq('org_id', org.id)
+      supabase.from('payment_events').select('id, razorpay_payment_id').eq('org_id', org.id),
+      supabase.from('platform_settings').select('default_billing_cycle').eq('id', 1).maybeSingle()
     ])
+    if (ps.data?.default_billing_cycle) setBilling(ps.data.default_billing_cycle)
     const payRef = Object.fromEntries((per.data || []).map(p => [p.id, p.razorpay_payment_id]))
     setPlans(pr.data || [])
     setSub(sr.data)

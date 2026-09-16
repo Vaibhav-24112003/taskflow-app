@@ -795,7 +795,7 @@ export default function LandingPage({ onSignIn, loading }) {
   useEffect(() => { try { localStorage.setItem('tfc-theme', dark ? 'dark' : 'light') } catch (_) {} }, [dark])
   const [launchOpen, setLaunchOpen] = useState(false)
   const [authOpen, setAuthOpen] = useState(false)
-  const [billing, setBilling] = useState('yearly')
+  const [billing, setBilling] = useState('monthly')
   const [upgradeModal, setUpgradeModal] = useState(null)
   const [plans, setPlans] = useState([])
   const [plansLoading, setPlansLoading] = useState(true)
@@ -804,6 +804,10 @@ export default function LandingPage({ onSignIn, loading }) {
     supabase.from('plans').select('*').eq('is_active', true).order('sort_order')
       .then(({ data }) => { setPlans(data || []); setPlansLoading(false) })
       .catch(() => setPlansLoading(false))
+    // Admin-configurable default billing view (falls back to monthly).
+    supabase.from('platform_settings').select('default_billing_cycle').eq('id', 1).maybeSingle()
+      .then(({ data }) => { if (data?.default_billing_cycle) setBilling(data.default_billing_cycle) })
+      .catch(() => {})
   }, []) // null | 'pro' | 'starter'
   const [currentOrgId, setCurrentOrgId] = useState(null)
 
