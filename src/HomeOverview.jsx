@@ -85,6 +85,32 @@ export default function HomeOverview({ orgs, workspaces, allProfiles = [], supab
     return () => { alive = false }
   }, [supabase])
 
+  // Pending org invitations for this user (shown so they can accept/decline)
+  const [invites, setInvites] = useState([])
+  const [invBusy, setInvBusy] = useState('')
+  useEffect(() => {
+    let alive = true
+    supabase.rpc('org_my_pending_invites')
+      .then(({ data, error }) => { if (alive && !error && Array.isArray(data)) setInvites(data) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [supabase, cu?.id])
+  async function acceptInvite(inv) {
+    setInvBusy(inv.id)
+    const { error } = await supabase.rpc('org_accept_invite', { p_invite: inv.id })
+    setInvBusy('')
+    if (error) { alert(error.message); return }
+    setInvites(p => p.filter(i => i.id !== inv.id))
+    try { window.location.reload() } catch { /* noop */ }
+  }
+  async function declineInvite(inv) {
+    setInvBusy(inv.id)
+    const { error } = await supabase.rpc('org_decline_invite', { p_invite: inv.id })
+    setInvBusy('')
+    if (error) { alert(error.message); return }
+    setInvites(p => p.filter(i => i.id !== inv.id))
+  }
+
   const summary = useMemo(() => {
     const vals = Object.values(meta)
     return {
@@ -178,6 +204,41 @@ export default function HomeOverview({ orgs, workspaces, allProfiles = [], supab
             <span className="tf1b-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
           </button>
         </section>
+
+        {/* ── Pending invitations ── */}
+        {invites.length > 0 && (
+          <section className="tf1b-card tf1b-block" style={{ borderColor: 'rgba(47,107,255,.35)' }}>
+            <div className="tf1b-head">
+              <div>
+                <div className="tf1b-eyebrow">{IcUsers(13)} Invitations</div>
+                <h2 className="tf1b-h2">You've been invited</h2>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 12 }}>
+              {invites.map(inv => (
+                <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '12px 14px', border: '1px solid var(--tf-border, #e6ecf3)', borderRadius: 12, background: 'var(--tf-surface, #fff)' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 11, background: 'linear-gradient(135deg,#2F6BFF,#14C7C0)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
+                    {(inv.org_name || 'O').charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>{inv.org_name}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>Invited as <b style={{ textTransform: 'capitalize' }}>{inv.role || 'member'}</b></div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button onClick={() => acceptInvite(inv)} disabled={invBusy === inv.id}
+                      style={{ background: 'linear-gradient(135deg,#2F6BFF,#14C7C0)', color: '#fff', border: 'none', borderRadius: 9, padding: '8px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      {invBusy === inv.id ? 'Joining…' : '✓ Accept'}
+                    </button>
+                    <button onClick={() => declineInvite(inv)} disabled={invBusy === inv.id}
+                      style={{ background: 'rgba(239,68,68,.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,.25)', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                      Decline
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Jump into a practice + Kanban workspaces ── */}
         <section className="tf1b-card tf1b-block">
