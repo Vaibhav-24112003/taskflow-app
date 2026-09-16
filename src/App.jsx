@@ -3891,22 +3891,25 @@ function OrgMembersPanel({org,cu,supabase,orgDepts,orgDeptMembers}){
   async function inviteMember(){
     if(!email.trim()||!email.includes('@')){setErr('Enter a valid email');return;}
     setSending(true);setErr('');
-    var res=await supabase.from('org_invitations').insert({org_id:org.id,inviter_id:cu.id,invitee_email:email.trim().toLowerCase(),role:role,status:'pending'});
+    var res=await supabase.rpc('org_invite_member',{p_org:org.id,p_email:email.trim(),p_role:role});
     setSending(false);
     if(res.error){setErr(res.error.message);return;}
     setEmail('');loadAll();showToast('Invitation sent to '+email.trim());
   }
   async function removeMember(userId){
     if(!window.confirm('Remove this member?'))return;
-    await supabase.from('organization_members').delete().eq('org_id',org.id).eq('user_id',userId);
+    var res=await supabase.rpc('org_remove_member',{p_org:org.id,p_user:userId});
+    if(res.error){showToast(res.error.message,'err');return;}
     loadAll();showToast('Member removed');
   }
   async function cancelInvite(id){
-    await supabase.from('org_invitations').update({status:'declined'}).eq('id',id);
+    var res=await supabase.rpc('org_cancel_invite',{p_invite:id});
+    if(res.error){showToast(res.error.message,'err');return;}
     loadAll();showToast('Invitation cancelled');
   }
   async function changeRole(userId,newRole){
-    await supabase.from('organization_members').update({role:newRole}).eq('org_id',org.id).eq('user_id',userId);
+    var res=await supabase.rpc('org_change_role',{p_org:org.id,p_user:userId,p_role:newRole});
+    if(res.error){showToast(res.error.message,'err');loadAll();return;}
     loadAll();showToast('Role updated');
   }
 
@@ -3932,7 +3935,7 @@ function OrgMembersPanel({org,cu,supabase,orgDepts,orgDeptMembers}){
         <select value={role} onChange={function(e){setRole(e.target.value);}}
           style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',cursor:'pointer'}}>
           <option value="member">Member</option>
-          <option value="admin">Admin</option>
+          {myRole==='owner'&&<option value="admin">Admin</option>}
         </select>
         <button onClick={inviteMember} disabled={sending}
           style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 16px',color:'#fff',cursor:sending?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:sending?0.6:1,whiteSpace:'nowrap'}}>
@@ -3964,15 +3967,15 @@ function OrgMembersPanel({org,cu,supabase,orgDepts,orgDeptMembers}){
               <span style={{fontSize:11,fontWeight:700,color:rc,background:rc+'18',border:'1px solid '+rc+'30',borderRadius:20,padding:'2px 9px',textTransform:'capitalize',flexShrink:0}}>{m.role}</span>
             </div>
             {canManage&&!isMe&&m.role!=='owner'&&<div style={{display:'flex',gap:5,alignItems:'center',flexWrap:'wrap'}}>
-              <select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
+              {myRole==='owner'&&<select value={m.role} onChange={function(e){changeRole(m.user_id,e.target.value);}}
                 style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 7px',color:'var(--tf-text)',fontSize:11,cursor:'pointer',outline:'none'}}>
                 <option value="admin">Admin</option>
                 <option value="member">Member</option>
-              </select>
+              </select>}
               <button onClick={function(){setPermsMember(m);}}
                 style={{background:'rgba(107,140,173,0.1)',border:'1px solid rgba(107,140,173,0.3)',borderRadius:6,padding:'3px 9px',color:'#2F6BFF',cursor:'pointer',fontSize:11,fontWeight:600}}>Permissions</button>
-              <button onClick={function(){removeMember(m.user_id);}}
-                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>
+              {(myRole==='owner'||(myRole==='admin'&&m.role==='member'))&&<button onClick={function(){removeMember(m.user_id);}}
+                style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:6,padding:'3px 9px',color:'#ef4444',cursor:'pointer',fontSize:12,fontWeight:600}}>Remove</button>}
             </div>}
           </div>;
         })}
@@ -7353,15 +7356,14 @@ function OrgInviteBanner({cu,supabase,onAccepted}){
   },[cuId]);
   if(!invites.length)return null;
   async function accept(inv){
-    // Add to org_members
-    await supabase.from('organization_members').insert({org_id:inv.org_id,user_id:cu.id,role:inv.role||'member',joined_at:new Date().toISOString()});
-    // Mark invitation accepted
-    await supabase.from('org_invitations').update({status:'accepted'}).eq('id',inv.id);
+    var res=await supabase.rpc('org_accept_invite',{p_invite:inv.id});
+    if(res.error){alert(res.error.message);return;}
     setInvites(function(p){return p.filter(function(i){return i.id!==inv.id;});});
     if(onAccepted)onAccepted();
   }
   async function decline(inv){
-    await supabase.from('org_invitations').update({status:'declined'}).eq('id',inv.id);
+    var res=await supabase.rpc('org_decline_invite',{p_invite:inv.id});
+    if(res.error){alert(res.error.message);return;}
     setInvites(function(p){return p.filter(function(i){return i.id!==inv.id;});});
   }
   return<div style={{marginBottom:20}}>
@@ -18632,10 +18634,14 @@ function SetupWizard({org,cu,supabase,onClose}){
   async function saveInvites(){
     if(validInvites.length===0){setStep(5);return;}
     setBusy(true);setErr('');
-    var batch=validInvites.map(function(r){return{org_id:org.id,inviter_id:cu.id,invitee_email:r.email,role:r.role,status:'pending'};});
-    var res=await supabase.from('org_invitations').insert(batch);
+    var fails=[];
+    for(var i=0;i<validInvites.length;i++){
+      var r=validInvites[i];
+      var res=await supabase.rpc('org_invite_member',{p_org:org.id,p_email:r.email,p_role:r.role});
+      if(res.error)fails.push(r.email+': '+res.error.message);
+    }
     setBusy(false);
-    if(res.error){setErr(res.error.message);return;}
+    if(fails.length){setErr('Some invites failed — '+fails.join('; '));return;}
     madeChanges.current=true;
     setStep(5);
   }
