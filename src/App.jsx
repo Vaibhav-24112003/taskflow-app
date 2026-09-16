@@ -7347,12 +7347,8 @@ function OrgInviteBanner({cu,supabase,onAccepted}){
   var cuId=cu?cu.id:null;
   useEffect(function(){
     if(!cu)return;
-    supabase.from('org_invitations')
-      .select('*, organizations(id,name)')
-      .eq('invitee_email',cu.email.toLowerCase())
-      .eq('status','pending')
-      .limit(50)
-      .then(function(r){if(r.data&&r.data.length)setInvites(r.data);});
+    supabase.rpc('org_my_pending_invites')
+      .then(function(r){if(!r.error&&Array.isArray(r.data))setInvites(r.data);});
   },[cuId]);
   if(!invites.length)return null;
   async function accept(inv){
@@ -7368,7 +7364,7 @@ function OrgInviteBanner({cu,supabase,onAccepted}){
   }
   return<div style={{marginBottom:20}}>
     {invites.map(function(inv){
-      var org=inv.organizations||{};
+      var org={id:inv.org_id,name:inv.org_name};
       return<div key={inv.id} style={{background:'linear-gradient(135deg,rgba(14,42,71,0.1),rgba(14,42,71,0.06))',border:'1px solid rgba(14,42,71,0.3)',borderRadius:12,padding:'14px 18px',marginBottom:10,display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
         <div style={{width:38,height:38,borderRadius:10,background:'linear-gradient(135deg,#0e2a47,#1d4670)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,fontWeight:700,color:'#fff',flexShrink:0}}>
           {(org.name||'O').charAt(0).toUpperCase()}
