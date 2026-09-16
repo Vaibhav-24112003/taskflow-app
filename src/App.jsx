@@ -12811,7 +12811,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                   setDragSrc(null);
                 }
               }}
-              style={{flex:'0 0 300px',background:col.bg,border:'1px solid var(--tf-border)',borderTop:'3px solid '+col.color,borderRadius:10,display:'flex',flexDirection:'column',minHeight:120}}>
+              style={{flex:'0 0 300px',background:col.bg,border:'1px solid var(--tf-border)',borderRadius:12,display:'flex',flexDirection:'column',minHeight:120}}>
               {/* Column header */}
               <div style={{padding:'10px 12px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -12877,9 +12877,9 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                       onDragStart={function(e){if(isExpanded){e.preventDefault();return;}e.dataTransfer.setData('text/plain',r.id);e.dataTransfer.effectAllowed='move';setDragSrc({rowId:r.id,colId:col.id,idx:rIdx});}}
                       onDragEnd={function(){setDragSrc(null);setDragOverCardId(null);}}
                       onClick={function(){toggleExpand(r.id);}}
-                      style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderLeft:'3px solid '+(isOver?'#ef4444':col.color),borderRadius:8,padding:'10px 12px',cursor:'pointer',transition:'box-shadow 0.15s',boxShadow:isExpanded?'0 4px 16px rgba(14,42,71,0.12)':'none'}}
-                      onMouseEnter={function(e){if(!isExpanded)e.currentTarget.style.boxShadow='0 2px 8px rgba(14,42,71,0.1)';}}
-                      onMouseLeave={function(e){if(!isExpanded)e.currentTarget.style.boxShadow='none';}}>
+                      style={{background:'var(--tf-panel)',border:'1px solid '+(isOver?'rgba(239,68,68,0.45)':'var(--tf-border)'),borderRadius:10,padding:'10px 12px',cursor:isExpanded?'pointer':'grab',transition:'box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease',boxShadow:isExpanded?'0 4px 16px rgba(14,42,71,0.12)':'none',opacity:(dragSrc&&dragSrc.rowId===r.id)?0.4:1,transform:(dragSrc&&dragSrc.rowId===r.id)?'scale(0.98)':'none'}}
+                      onMouseEnter={function(e){if(!isExpanded&&!(dragSrc&&dragSrc.rowId===r.id)){e.currentTarget.style.boxShadow='0 4px 14px rgba(14,42,71,0.1)';e.currentTarget.style.transform='translateY(-2px)';}}}
+                      onMouseLeave={function(e){if(!isExpanded){e.currentTarget.style.boxShadow='none';e.currentTarget.style.transform='none';}}}>
                       {/* Title row */}
                       <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:6,marginBottom:6}}>
                         <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',lineHeight:1.35,flex:1}}>{rd.__title||c.display_name||c.name||'Task'}</div>
