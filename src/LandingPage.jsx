@@ -738,10 +738,10 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
         <div style={{ background:'linear-gradient(135deg,rgba(47,107,255,.07),rgba(20,199,192,.06))',border:'1px solid rgba(47,107,255,.14)',borderRadius:13,padding:'16px 18px',marginBottom:20 }}>
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline' }}>
             <span style={{ fontSize:13,color:'var(--text-2)' }}>{planName} · {billing === 'yearly' ? 'Yearly' : 'Monthly'}</span>
-            <span style={{ fontSize:24,fontWeight:800,color:'var(--blue)' }}>₹{billing === 'yearly' ? yearlyAmt : monthlyAmt}<span style={{ fontSize:12,fontWeight:500,color:'var(--text-2)' }}>/mo</span></span>
+            <span style={{ fontSize:24,fontWeight:800,color:'var(--blue)' }}>₹{billing === 'yearly' ? yearlyTotal : monthlyAmt}<span style={{ fontSize:12,fontWeight:500,color:'var(--text-2)' }}>{billing === 'yearly' ? '/yr' : '/mo'}</span></span>
           </div>
           {billing === 'yearly' && (
-            <div style={{ fontSize:11,color:'var(--text-2)',marginTop:4 }}>Billed ₹{yearlyTotal}/year · 2 months free</div>
+            <div style={{ fontSize:11,color:'var(--text-2)',marginTop:4 }}>One payment for 12 months · ₹{yearlyAmt}/mo · 2 months free</div>
           )}
           <div style={{ fontSize:11,color:'var(--muted)',marginTop:6 }}>Cancel anytime · Receipt emailed automatically</div>
         </div>
@@ -1097,7 +1097,8 @@ export default function LandingPage({ onSignIn, loading }) {
                 const monthlyPrice  = plan.price_monthly / 100
                 const yearlyTotal   = plan.price_yearly  / 100
                 const yearlyMonthly = monthlyPrice > 0 ? Math.round(yearlyTotal / 12) : 0
-                const displayPrice  = billing === 'yearly' ? yearlyMonthly : monthlyPrice
+                // Yearly is charged as one full annual payment, so show the full amount.
+                const displayPrice  = billing === 'yearly' ? yearlyTotal : monthlyPrice
                 const savePct       = monthlyPrice > 0 && yearlyTotal > 0
                   ? Math.round((1 - yearlyTotal / (monthlyPrice * 12)) * 100) : 0
                 const isFree        = plan.id === 'free' || monthlyPrice === 0
@@ -1113,12 +1114,12 @@ export default function LandingPage({ onSignIn, loading }) {
                     <h3>{plan.name}</h3>
                     {isEnterprise
                       ? <div className="amt">Custom</div>
-                      : <div className="amt">₹{displayPrice.toLocaleString('en-IN')}<small>/mo</small></div>
+                      : <div className="amt">₹{displayPrice.toLocaleString('en-IN')}<small>{billing === 'yearly' ? '/yr' : '/mo'}</small></div>
                     }
                     {!isEnterprise && !isFree && (
                       <p style={{ color:'var(--text-2)', fontSize:12, margin:'0 0 4px', minHeight:16 }}>
                         {billing === 'yearly' && savePct > 0
-                          ? `Billed ₹${yearlyTotal.toLocaleString('en-IN')}/yr · saves ${savePct}%`
+                          ? `One payment for 12 months · ₹${yearlyMonthly.toLocaleString('en-IN')}/mo · saves ${savePct}%`
                           : 'Billed monthly · switch to yearly to save'}
                       </p>
                     )}

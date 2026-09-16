@@ -137,10 +137,10 @@ export default function UpgradePlansModule({ org, supabase, cu, onUpgraded, defa
                   <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--tf-text-sub)', lineHeight: 1.5 }}>{plan.description}</p>
 
                   <div style={{ margin: '0 0 4px' }}>
-                    <span style={{ fontSize: 32, fontWeight: 800, color: '#2F6BFF', letterSpacing: '-.03em' }}>{fmt(monthlyEquiv)}</span>
-                    <span style={{ fontSize: 12, color: 'var(--tf-text-sub)' }}>/mo</span>
+                    <span style={{ fontSize: 32, fontWeight: 800, color: '#2F6BFF', letterSpacing: '-.03em' }}>{fmt(billing === 'yearly' && plan.price_monthly > 0 ? price : monthlyEquiv)}</span>
+                    <span style={{ fontSize: 12, color: 'var(--tf-text-sub)' }}>{billing === 'yearly' && plan.price_monthly > 0 ? '/yr' : '/mo'}</span>
                   </div>
-                  {billing === 'yearly' && <div style={{ fontSize: 11, color: 'var(--tf-text-sub)', marginBottom: 16 }}>Billed {fmt(price)}/year — 2 months free</div>}
+                  {billing === 'yearly' && plan.price_monthly > 0 && <div style={{ fontSize: 11, color: 'var(--tf-text-sub)', marginBottom: 16 }}>One payment for 12 months · {fmt(monthlyEquiv)}/mo — 2 months free</div>}
                   {billing === 'monthly' && <div style={{ fontSize: 11, color: 'var(--tf-text-sub)', marginBottom: 16 }}>Billed monthly · switch to yearly to save</div>}
 
                   <ul style={{ margin: '0 0 20px', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
