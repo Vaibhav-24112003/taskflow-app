@@ -9536,7 +9536,6 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
     {/* Tab bar */}
     <div style={{display:'flex',gap:0,borderBottom:'1px solid var(--tf-border)',marginBottom:16,overflowX:'auto'}}>
       {TAB_BTN('overview','Overview',null)}
-      {TAB_BTN('gst','GST',null)}
       {TAB_BTN('ledger','Client Ledger',null)}
       {TAB_BTN('monthly','Monthly',null)}
       {TAB_BTN('clients','Clients',clientStats.length)}
@@ -9882,8 +9881,8 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
       </table></div>}
     </div>}
 
-    {/* ── OVERDUE TAB ── */}
-    {activeTab==='gst'&&<GstDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs}/>}
+    {/* GST Desk moved to WorkZone → GST Desk. Redirect any persisted 'gst' tab to Overview. */}
+    {activeTab==='gst'&&<div style={{padding:'24px 4px',fontSize:13,color:'var(--tf-text-sub)'}}>The GST Desk now lives in <b>WorkZone → GST Desk</b>.</div>}
     {activeTab==='ledger'&&<ClientLedgerTab org={org} supabase={supabase} clients={clients} initClientId={ledgerInitClient}/>}
 
     {/* ── TEAM WORKLOAD TAB ── */}
@@ -12505,11 +12504,14 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
             <option value="nodate">No Due Date</option>
           </select>
           {/* Member picker */}
-          {orgMembers.length>1&&<select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');setWsRailFilter('all');}}
-            style={{background:'var(--tf-surface)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'4px 8px',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:600,outline:'none',fontFamily:'inherit',flexShrink:0}}>
-            <option value={cu.id}>My Work</option>
-            {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
-          </select>}
+          {orgMembers.length>1&&<div title="Switch whose work you're viewing — see any teammate's board" style={{display:'flex',alignItems:'center',gap:5,background:isSelf?'var(--tf-surface)':'rgba(139,92,246,0.08)',border:'1px solid',borderColor:isSelf?'var(--tf-border)':'#8b5cf6',borderRadius:7,padding:'3px 8px 3px 9px',flexShrink:0}}>
+            <Users size={13} style={{color:isSelf?'var(--tf-text-sub)':'#8b5cf6',flexShrink:0}}/>
+            <select value={viewMemberId} onChange={function(e){setViewMemberId(e.target.value);setFilter('all');setDateFilter('all');setWsRailFilter('all');}}
+              style={{background:'transparent',border:'none',color:isSelf?'var(--tf-text-sub)':'#8b5cf6',cursor:'pointer',fontSize:11,fontWeight:700,outline:'none',fontFamily:'inherit'}}>
+              <option value={cu.id}>My Work</option>
+              {orgMembers.filter(function(m){return m.id!==cu.id;}).map(function(m){return<option key={m.id} value={m.id}>{m.name||m.email}</option>;})}
+            </select>
+          </div>}
           {/* View toggles */}
           <div data-tour="tour-views" style={{display:'flex',gap:2,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:3,flexShrink:0}}>
             {[{id:'list',Icon:List,label:'List'},{id:'board',Icon:Kanban,label:'Board'},{id:'calendar',Icon:Calendar,label:'Calendar'},{id:'grid',Icon:LayoutGrid,label:'Grid'},{id:'urgency',Icon:Zap,label:'Urgency'}].map(function(v){
@@ -12792,6 +12794,7 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
               :baseRows;
             return<div key={col.id}
               onDragOver={function(e){e.preventDefault();e.dataTransfer.dropEffect='move';}}
+              onDragLeave={function(e){if(!e.currentTarget.contains(e.relatedTarget))setDragOverCardId(null);}}
               onDrop={function(e){
                 e.preventDefault();
                 setDragOverCardId(null);
@@ -12843,7 +12846,6 @@ function YourDashboardModule({org,supabase,cu,workflowHierarchy,workTypeConfigs,
                         setDragOverCardId(r.id);
                       }
                     }}
-                    onDragLeave={function(){setDragOverCardId(null);}}
                     onDrop={function(e){
                       setDragOverCardId(null);
                       if(!dragSrc||dragSrc.rowId===r.id)return;
@@ -19026,9 +19028,10 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
 
   // WorkZone tabs — some can be toggled off per org
   var workzoneTabs=[{id:'worksheets',label:'Worksheets'}];
-  if(ffOn('workzone_board'))workzoneTabs.push({id:'board',label:'Board'});
+  if(ffOn('workzone_board'))workzoneTabs.push({id:'board',label:'Full Board'});
   if(ffOn('workzone_itr'))workzoneTabs.push({id:'itr',label:'ITR Desk'});
-  // GST Desk lives in the Analytics module (overseer view); doers use the inline GST status on worksheet rows.
+  // GST Desk moved here from Analytics — it's operational work, not just reporting.
+  workzoneTabs.push({id:'gst',label:'GST Desk'});
   if(ffOn('workzone_bigclients'))workzoneTabs.push({id:'bigclients',label:'Big Clients'});
   workzoneTabs.push({id:'teamview',label:'Team View'});
 
@@ -19171,6 +19174,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='workzone'&&tab==='worksheets'&&<WorksheetsModule org={org} supabase={supabase} cu={cu} allWorkspaces={allWorkspaces} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} initWorkType={wsInitWorkType} initMineOnly={wsInitMineOnly} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='board'&&<ErpBoardModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgDepts={orgDepts} orgDeptMembers={orgDeptMembers}/>}
       {orgModule==='workzone'&&tab==='itr'&&<ITRDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]}/>}
+      {orgModule==='workzone'&&tab==='gst'&&<GstDeskModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='workzone'&&tab==='bigclients'&&<BigClientsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} workflowHierarchy={org.workflow_hierarchy||[]} orgGroups={orgGroups} orgGroupMemberships={orgGroupMemberships}/>}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
