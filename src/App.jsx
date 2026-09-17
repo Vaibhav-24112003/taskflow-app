@@ -1925,7 +1925,7 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
               {ic:'📝',lb:'Quick Notes',fn:()=>{setShowNotesDrawer(true);setShowMoreMenu(false);}},
               {ic:'🛟',lb:isAdminEmail(cu.email)?'Support tickets':'Get help',fn:()=>{if(isAdminEmail(cu.email))setShowSupportAdmin(true);else setShowSupportModal(true);setShowMoreMenu(false);}},
               {ic:lightMode?'🌙':'☀️',lb:lightMode?'Dark mode':'Light mode',fn:()=>{setLightMode(v=>!v);}},
-            ].concat(isAdminEmail(cu?.email)?[{ic:'🛡',lb:'Platform Admin',fn:()=>{setShowAdminShell(true);setShowMoreMenu(false);},danger:true}]:[]).map(function(it,i){
+            ].concat(typeof window!=='undefined'&&window.innerWidth<820?[{ic:'📱',lb:'Switch to mobile view',fn:()=>{try{localStorage.setItem('tf_view_pref','mobile');localStorage.setItem('tf_view_prompt_seen','1');sessionStorage.removeItem('tf_mobile_off');}catch(e){}window.location.reload();}}]:[]).concat(isAdminEmail(cu?.email)?[{ic:'🛡',lb:'Platform Admin',fn:()=>{setShowAdminShell(true);setShowMoreMenu(false);},danger:true}]:[]).map(function(it,i){
               return<button key={i} onClick={it.fn} style={{width:'100%',textAlign:'left',display:'flex',alignItems:'center',gap:10,padding:'10px 14px',border:'none',borderTop:i?'1px solid var(--tf-border)':'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',fontSize:13,fontWeight:600,color:it.danger?'#ef4444':'var(--tf-text)'}} onMouseEnter={e=>e.currentTarget.style.background='var(--tf-surface)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}><span style={{fontSize:15,width:18,textAlign:'center'}}>{it.ic}</span>{it.lb}</button>;
             })}
           </div>

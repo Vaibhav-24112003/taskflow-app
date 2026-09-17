@@ -4,6 +4,7 @@
 // offers a one-tap switch back to the mobile app, plus a one-time prompt the
 // first time we detect a phone on the desktop layout.
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from './lib/supabase.js'
 
 const ACCENT = '#2F6BFF', ACCENT2 = '#14C7C0'
@@ -44,8 +45,8 @@ export default function ViewModeSwitcher() {
   function dismiss() { try { localStorage.setItem('tf_view_prompt_seen', '1') } catch {} setShowPrompt(false) }
 
   if (showPrompt) {
-    return (
-      <div style={{ position: 'fixed', left: 12, right: 12, bottom: 16, zIndex: 99985, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+    return createPortal(
+      <div style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(16px + env(safe-area-inset-bottom))', zIndex: 2147483000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
         <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: 460, background: '#fff', color: '#0E2A47', border: '1px solid #e6ecf3', borderRadius: 16, boxShadow: '0 18px 50px rgba(14,42,71,.28)', padding: '16px 16px 14px', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif" }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
             <span style={{ width: 34, height: 34, borderRadius: 10, background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -59,20 +60,22 @@ export default function ViewModeSwitcher() {
             <button onClick={dismiss} style={{ border: '1px solid #e6ecf3', borderRadius: 10, padding: '11px 16px', fontSize: 13, fontWeight: 700, color: '#5d7189', background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Stay on desktop</button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
   // Persistent small pill once the prompt has been dealt with.
-  return (
+  return createPortal(
     <button onClick={goMobile} title="Switch to the mobile app"
-      style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 14, zIndex: 99985,
-        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 999,
+      style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 'calc(14px + env(safe-area-inset-bottom))', zIndex: 2147483000,
+        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 999,
         border: 'none', color: '#fff', background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`,
-        boxShadow: '0 8px 24px rgba(47,107,255,.4)', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
+        boxShadow: '0 8px 24px rgba(47,107,255,.45)', fontFamily: "'Plus Jakarta Sans',system-ui,sans-serif",
         fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
       Mobile view
-    </button>
+    </button>,
+    document.body
   )
 }
