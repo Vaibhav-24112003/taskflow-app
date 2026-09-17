@@ -1487,6 +1487,11 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
   const [adminModule,setAdminModule]=useState(null) // 'users' | 'orgs' | null
   const [showAdminShell,setShowAdminShell]=useState(false)
   const trialGate=useTrialGate(activeOrg)
+  // View-mode switch: on a phone-width screen the user may be in forced desktop
+  // mode; offer a one-tap way back to the mobile app (persistent preference).
+  const [narrowScreen,setNarrowScreen]=useState(typeof window!=='undefined'&&window.innerWidth<820);
+  useEffect(function(){function onNR(){setNarrowScreen(window.innerWidth<820);}window.addEventListener('resize',onNR);return function(){window.removeEventListener('resize',onNR);};},[]);
+  function switchToMobileView(){try{localStorage.setItem('tf_view_pref','mobile');sessionStorage.removeItem('tf_mobile_off');}catch(e){}window.location.reload();}
   const [wsMembers,setWsMembers]=useState([]);const [tasks,setTasks]=useState([])
   const [myRole,setMyRole]=useState('member')
   const [view,setView]=useState('board');const [teamMemberId,setTeamMemberId]=useState(null)
@@ -1907,6 +1912,12 @@ function TaskFlowApp({cu,allProfiles,onSignOut,pendingInvites,refreshInvites,onP
           Upgrade
         </button>
       )}
+      {/* Switch back to the mobile app — only on phone-width screens (forced desktop mode) */}
+      {narrowScreen&&<button onClick={switchToMobileView} title="Switch to mobile view"
+        style={{display:'inline-flex',alignItems:'center',gap:6,height:32,padding:'0 11px',borderRadius:9,flexShrink:0,cursor:'pointer',border:'1px solid #2F6BFF',fontFamily:'inherit',fontSize:12.5,fontWeight:800,color:'#2F6BFF',background:'rgba(47,107,255,0.08)',whiteSpace:'nowrap'}}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+        Mobile view
+      </button>}
       {/* Install app (PWA) — only shows when installable and not already installed */}
       <InstallPWAButton variant="compact"/>
       {/* My Client Portals — if this user's email also has portal access */}
@@ -18917,8 +18928,11 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const [wsInitWorkType,setWsInitWorkType]=useState(null);
   const [wsInitMineOnly,setWsInitMineOnly]=useState(false);
   const [sidebarOpen,setSidebarOpen]=useState(true);
-  const [isMobile,setIsMobile]=useState(typeof window!=='undefined'&&window.innerWidth<820);
-  useEffect(function(){function onR(){setIsMobile(window.innerWidth<820);}window.addEventListener('resize',onR);return function(){window.removeEventListener('resize',onR);};},[]);
+  // 'desktop' preference forces the full desktop layout even on a phone; 'mobile'
+  // is handled by the MobileApp overlay. Otherwise fall back to viewport width.
+  function calcIsMobile(){try{var p=localStorage.getItem('tf_view_pref');if(p==='desktop')return false;if(p==='mobile')return true;}catch(e){}return typeof window!=='undefined'&&window.innerWidth<820;}
+  const [isMobile,setIsMobile]=useState(calcIsMobile);
+  useEffect(function(){function onR(){setIsMobile(calcIsMobile());}window.addEventListener('resize',onR);return function(){window.removeEventListener('resize',onR);};},[]);
   var [orgDepts,setOrgDepts]=useState([]);
   var [orgDeptMembers,setOrgDeptMembers]=useState([]);
   var [orgRoles,setOrgRoles]=useState([]);

@@ -192,7 +192,14 @@ const D = {
 
 function shouldShowMobile() {
   if (typeof window === 'undefined') return false
-  try { if (sessionStorage.getItem('tf_mobile_off') === '1') return false } catch {}
+  try {
+    // Persistent, explicit user choice wins (set from either UI's view switch).
+    const p = localStorage.getItem('tf_view_pref')
+    if (p === 'desktop') return false
+    if (p === 'mobile') return true
+    // Legacy per-session flag → migrate to the persistent desktop preference.
+    if (sessionStorage.getItem('tf_mobile_off') === '1') { localStorage.setItem('tf_view_pref', 'desktop'); return false }
+  } catch {}
   // Phone form-factor only. Gate on viewport width, NOT display-mode:standalone —
   // a *desktop* PWA install also reports standalone, and must keep the full
   // desktop app. An installed phone PWA has a narrow viewport, so it still gets
@@ -522,7 +529,7 @@ function Shell({ user }) {
   }
 
   async function doSignOut() { try { await signOut() } catch {} window.location.reload() }
-  function openFullApp() { try { sessionStorage.setItem('tf_mobile_off', '1') } catch {} window.location.reload() }
+  function openFullApp() { try { localStorage.setItem('tf_view_pref', 'desktop'); sessionStorage.removeItem('tf_mobile_off') } catch {} window.location.reload() }
   function toggleDark() {
     const nv = !dark; setDark(nv)
     try { localStorage.setItem('tfc-theme', nv ? 'dark' : 'light'); document.documentElement.setAttribute('data-theme', nv ? 'dark' : 'light') } catch {}
@@ -1427,7 +1434,8 @@ function ProfileScreen({ t, uname, uemail, org, dark, toggleDark, doSignOut, ope
         ))}
       </div>
 
-      <button onClick={openFullApp} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: 14, border: `1px solid ${t.cardBd}`, background: t.card, color: t.ink2, fontFamily: 'inherit', fontSize: 13, fontWeight: 750, cursor: 'pointer', marginBottom: 12 }}><Ic d={D.external} size={17} sw={1.9} />Open full desktop app</button>
+      <button onClick={openFullApp} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 14, borderRadius: 14, border: 'none', background: `linear-gradient(135deg,${ACCENT},${ACCENT2})`, color: '#fff', fontFamily: 'inherit', fontSize: 13, fontWeight: 800, cursor: 'pointer', marginBottom: 6 }}><Ic d={D.external} size={17} sw={1.9} />Switch to desktop view</button>
+      <div style={{ fontSize: 10.5, color: t.sub2, textAlign: 'center', marginBottom: 12 }}>Full desktop layout. Tap “Mobile view” in the top bar anytime to switch back.</div>
       <button onClick={doSignOut} style={{ width: '100%', padding: 14, borderRadius: 14, border: '1px solid rgba(220,38,38,.2)', background: 'rgba(220,38,38,.05)', color: '#DC2626', fontFamily: 'inherit', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Ic d={D.logout} size={17} sw={1.9} />Sign out</button>
     </section>
   )
