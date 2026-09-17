@@ -26,7 +26,7 @@ const CSS = `
   --shadow-cta:0 12px 26px -10px rgba(47,107,255,.7);
   --footer-bg:#0E2A47;
   font-family:'Plus Jakarta Sans',system-ui,sans-serif; background:var(--page); color:var(--text);
-  -webkit-font-smoothing:antialiased; min-height:100vh; transition:background .4s ease,color .4s ease;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; min-height:100vh; transition:background .4s ease,color .4s ease;
 }
 .lp2[data-theme="dark"]{
   --page:#0B2237; --surface:#0F2C49; --canvas:#0B2237; --col:#0F2A45;
@@ -237,8 +237,8 @@ const CSS = `
 @keyframes lp2-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 .lp2 .haurora{position:absolute;border-radius:50%;filter:blur(34px);pointer-events:none;z-index:0}
 .lp2 .hstage{flex:1.15;min-width:0;position:relative;align-self:stretch;min-height:520px;perspective:1600px;z-index:1}
-.lp2 .hscene{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .12s ease-out;will-change:transform}
-.lp2 .hwin{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);width:min(560px,96%);border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--card-border);box-shadow:0 60px 120px -40px rgba(14,42,71,.45)}
+.lp2 .hscene{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .12s ease-out;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.lp2 .hwin{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);width:min(560px,96%);border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--card-border);box-shadow:0 60px 120px -40px rgba(14,42,71,.45);backface-visibility:hidden;-webkit-backface-visibility:hidden;-webkit-font-smoothing:antialiased}
 .lp2 .hwin-head{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--canvas);border-bottom:1px solid var(--border)}
 .lp2 .hwin-head i{width:10px;height:10px;border-radius:50%}
 .lp2 .hwin-addr{flex:1;max-width:230px;margin:0 auto;text-align:center;font-size:11px;color:var(--muted);background:var(--field);border:1px solid var(--card-border);border-radius:7px;padding:4px 10px}
@@ -480,12 +480,12 @@ function HeroStage() {
     const leave = () => { m.tx = 0; m.ty = 0 }
     const loop = () => {
       m.x += (m.tx - m.x) * 0.06; m.y += (m.ty - m.y) * 0.06
-      scene.style.transform = `rotateX(${(5 - m.y * 8).toFixed(2)}deg) rotateY(${(-13 + m.x * 10).toFixed(2)}deg)`
+      scene.style.transform = `rotateX(${(3 - m.y * 5).toFixed(2)}deg) rotateY(${(-7 + m.x * 7).toFixed(2)}deg)`
       raf = requestAnimationFrame(loop)
     }
     function startDesktop() {
       clearMobile()
-      if (reduce) { scene.style.transform = 'rotateX(4deg) rotateY(-12deg)'; return }
+      if (reduce) { scene.style.transform = 'rotateX(2.5deg) rotateY(-6deg)'; return }
       stage.addEventListener('mousemove', move); stage.addEventListener('mouseleave', leave)
       raf = requestAnimationFrame(loop)
     }
@@ -535,7 +535,7 @@ function HeroStage() {
           </div>
         </div>
         {HERO_CHIPS.map((ch, i) => (
-          <div className="hchip" key={ch.l} style={{ ...ch.s, transform: `translateZ(${70 + i * 6}px)` }}>
+          <div className="hchip" key={ch.l} style={{ ...ch.s, transform: `translateZ(${40 + i * 4}px)` }}>
             <span style={{ animation: `lp2-bob ${6 + i * 0.4}s ease-in-out ${ch.d} infinite`, display: 'inline-flex' }}>
               <span className="ic" style={{ background: ch.c + '22', color: ch.c, fontSize: ch.txt ? 14 : undefined, fontWeight: ch.txt ? 800 : undefined }}>{ch.txt || sico(ch.p)}</span>
               <b>{ch.l}</b>
