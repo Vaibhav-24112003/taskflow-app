@@ -480,12 +480,12 @@ function HeroStage() {
     const leave = () => { m.tx = 0; m.ty = 0 }
     const loop = () => {
       m.x += (m.tx - m.x) * 0.06; m.y += (m.ty - m.y) * 0.06
-      scene.style.transform = `rotateX(${(3 - m.y * 5).toFixed(2)}deg) rotateY(${(-7 + m.x * 7).toFixed(2)}deg)`
+      scene.style.transform = `rotateX(${(5 - m.y * 8).toFixed(2)}deg) rotateY(${(-13 + m.x * 10).toFixed(2)}deg)`
       raf = requestAnimationFrame(loop)
     }
     function startDesktop() {
       clearMobile()
-      if (reduce) { scene.style.transform = 'rotateX(2.5deg) rotateY(-6deg)'; return }
+      if (reduce) { scene.style.transform = 'rotateX(4deg) rotateY(-12deg)'; return }
       stage.addEventListener('mousemove', move); stage.addEventListener('mouseleave', leave)
       raf = requestAnimationFrame(loop)
     }
@@ -535,7 +535,7 @@ function HeroStage() {
           </div>
         </div>
         {HERO_CHIPS.map((ch, i) => (
-          <div className="hchip" key={ch.l} style={{ ...ch.s, transform: `translateZ(${40 + i * 4}px)` }}>
+          <div className="hchip" key={ch.l} style={{ ...ch.s, transform: `translateZ(${70 + i * 6}px)` }}>
             <span style={{ animation: `lp2-bob ${6 + i * 0.4}s ease-in-out ${ch.d} infinite`, display: 'inline-flex' }}>
               <span className="ic" style={{ background: ch.c + '22', color: ch.c, fontSize: ch.txt ? 14 : undefined, fontWeight: ch.txt ? 800 : undefined }}>{ch.txt || sico(ch.p)}</span>
               <b>{ch.l}</b>
