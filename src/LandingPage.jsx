@@ -93,20 +93,21 @@ const CSS = `
 @keyframes lp2-floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 .lp2 .grid{display:grid;gap:20px}
 .lp2 .cols-3{grid-template-columns:repeat(3,1fr)}
-.lp2 .feature{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:26px;transition:transform .18s ease,box-shadow .2s ease}
-.lp2 .feature:hover{transform:translateY(-3px);box-shadow:var(--shadow-card)}
-.lp2 .feature .ico{width:46px;height:46px;border-radius:13px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg);margin-bottom:16px}
-.lp2 .feature h3{font-size:17px;margin-bottom:8px}
+/* Editorial feature list — no boxes at rest; a soft card reveals on hover. */
+.lp2 .feature{background:transparent;border:0;border-radius:16px;padding:18px 16px;transition:background .18s ease,box-shadow .2s ease}
+.lp2 .feature:hover{background:var(--card);box-shadow:var(--shadow-card)}
+.lp2 .feature .ico{width:42px;height:42px;border-radius:12px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg);margin-bottom:14px}
+.lp2 .feature h3{font-size:16.5px;margin-bottom:7px;letter-spacing:-.01em}
 .lp2 .feature p{margin:0;font-size:14px;line-height:1.6;color:var(--text-2)}
 .lp2 .feat-grouplabel{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--teal-fg);margin:0 0 14px;display:flex;align-items:center;gap:10px}
 .lp2 .feat-grouplabel::after{content:"";flex:1;height:1px;background:var(--border)}
-.lp2 .modstrip{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:20px 24px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:var(--shadow-card)}
-.lp2 .modstrip .eyebrow{white-space:nowrap}
-.lp2 .modchips{display:flex;flex-wrap:wrap;gap:8px;flex:1}
-.lp2 .modchip{font-size:13px;font-weight:700;color:var(--text);background:var(--field);border:1px solid var(--card-border);border-radius:999px;padding:7px 14px}
-.lp2 .modchip:nth-child(3n+1){color:var(--blue)}
-.lp2 .modchip:nth-child(3n+2){color:var(--teal-fg)}
-@media(max-width:620px){.lp2 .modstrip{flex-direction:column;align-items:flex-start;gap:12px}}
+.lp2 .factrow{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:22px 0}
+.lp2 .factcell{padding:4px 26px;border-left:1px solid var(--border)}
+.lp2 .factcell:first-child{border-left:0}
+.lp2 .factbig{font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--text);line-height:1.1}
+.lp2 .factlabel{font-size:13.5px;font-weight:700;color:var(--text);margin-top:4px}
+.lp2 .factsub{font-size:12.5px;color:var(--text-2);margin-top:4px;line-height:1.5}
+@media(max-width:760px){.lp2 .factrow{grid-template-columns:1fr;gap:16px;padding:18px 0}.lp2 .factcell{border-left:0;padding:0}}
 .lp2 .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:20px}
 .lp2 .step{position:relative;padding-top:14px}
 .lp2 .step .num{width:34px;height:34px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;margin-bottom:14px}
@@ -157,6 +158,7 @@ const CSS = `
 .lp2 .two-col{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
 .lp2 .support-card{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:22px;flex:1}
 .lp2 .support-card .ico{width:38px;height:38px;border-radius:11px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg);margin-bottom:14px}
+.lp2 .promo-ico{width:40px;height:40px;flex-shrink:0;border-radius:12px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg)}
 .lp2 .faq-item{background:var(--card);border:1px solid var(--card-border);border-radius:14px;overflow:hidden}
 .lp2 .faq-item+.faq-item{margin-top:12px}
 .lp2 .faq-q{display:flex;align-items:center;gap:14px;padding:18px 20px;cursor:pointer}
@@ -905,12 +907,20 @@ export default function LandingPage({ onSignIn, loading }) {
         </div>
       </section>
 
-      {/* MODULES — mobile-only chip fallback (radial hub lives in the hero) */}
+      {/* FACT ROW — clean, editorial, no chips */}
       <section className="wrap" style={{ paddingTop: 24 }}>
-        <div className="modstrip modstrip-sm">
-          <div className="modchips">
-            {MODULES.map(m => <span className="modchip" key={m}>{m}</span>)}
-          </div>
+        <div className="factrow">
+          {[
+            ['10', 'modules, one workspace', 'WorkZone, desks, portal, billing, analytics & more'],
+            ['GST · ITR · TDS · ROC', 'calendars built-in', 'Due dates & recurring worksheets for every client'],
+            ['₹0', 'to start · no card', 'Free forever up to 25 clients — upgrade when ready'],
+          ].map((f, i) => (
+            <div className="factcell" key={i}>
+              <div className="factbig">{f[0]}</div>
+              <div className="factlabel">{f[1]}</div>
+              <div className="factsub">{f[2]}</div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -1159,14 +1169,14 @@ export default function LandingPage({ onSignIn, loading }) {
         {/* Practice Hub promo + onboarding help */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 28 }}>
           <div style={{ background: 'linear-gradient(135deg,rgba(47,107,255,.08),rgba(20,199,192,.08))', border: '1px solid rgba(20,199,192,.3)', borderRadius: 16, padding: '20px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 26, lineHeight: 1 }}>🎁</span>
+            <span className="promo-ico">{fico(<><rect x="3" y="8" width="18" height="4" rx="1" /><path d="M5 12v9h14v-9M12 8v13M12 8C12 8 10.5 3 8 4.2 5.8 5.3 7.8 8 12 8ZM12 8c0 0 1.5-5 4-3.8C18.2 5.3 16.2 8 12 8Z" /></>)}</span>
             <div>
               <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>Practice Hub — free for 6 months</div>
               <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.55 }}><b>Workspaces (Kanban)</b> is free for life. The <b>Practice Hub</b> is free for your first 6 months. <b>Communication</b> (client email &amp; portal) and <b>Billing</b> (invoices &amp; payments) are paid add-ons.</p>
             </div>
           </div>
           <div style={{ background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 16, padding: '20px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 26, lineHeight: 1 }}>🤝</span>
+            <span className="promo-ico">{fico(<><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 3.5a3 3 0 0 1 0 5.8M21 20a5.5 5.5 0 0 0-4-5.3" /></>)}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>Free onboarding &amp; client migration</div>
               <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 10px', lineHeight: 1.55 }}>New to TaskFlowCo? Our team imports your client list, sets up your work types and gets your first period running — at no cost.</p>
