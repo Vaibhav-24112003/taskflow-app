@@ -17966,6 +17966,7 @@ function CredentialsModule({org,supabase,cu}){
   var [showAddPortal,setShowAddPortal]=useState(false);
   var [newPortalName,setNewPortalName]=useState('');
   var [form,setForm]=useState({portal_name:'',username:'',password:'',pan:'',email:'',mobile:'',notes:''});
+  var [consent,setConsent]=useState(false); // firm confirms authorisation to store client portal credentials (SPDI/DPDP)
   var COMMON_PORTALS=['GST Portal','Income Tax','MCA','TDS Portal','Traces','EPFO','ESIC','Tally','Zoho','Other'];
 
   useEffect(function(){load();},[org.id]);
@@ -17996,19 +17997,20 @@ function CredentialsModule({org,supabase,cu}){
   function openAddCell(client,portalName){
     setFormClient(client);setFormPortal(portalName||'');
     setForm({portal_name:portalName||'',username:'',password:'',pan:client.pan||'',email:client.email||'',mobile:'',notes:''});
-    setEditCred(null);setShowForm(true);setDetailCell(null);
+    setEditCred(null);setConsent(false);setShowForm(true);setDetailCell(null);
   }
   function openEditCred(cred,client){
     setFormClient(client);setFormPortal(cred.portal_name);
     setForm({portal_name:cred.portal_name,username:cred.username||'',password:cred.password||'',pan:cred.pan||'',email:cred.email||'',mobile:cred.mobile||'',notes:cred.notes||''});
-    setEditCred(cred);setShowForm(true);setDetailCell(null);
+    setEditCred(cred);setConsent(!!cred.consent_at);setShowForm(true);setDetailCell(null);
   }
   async function saveCred(){
     if(!form.portal_name.trim()){showToast('Portal name required','err');return;}
     if(!formClient){showToast('No client selected','err');return;}
+    if(!consent){showToast('Please confirm you are authorised to store this credential','err');return;}
     setSaving(true);
     // Password is never stored in plaintext — it goes through cred_set_secret (encrypted at rest).
-    var payload={org_id:org.id,client_id:formClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,updated_at:new Date().toISOString()};
+    var payload={org_id:org.id,client_id:formClient.id,portal_name:form.portal_name.trim(),username:form.username.trim()||null,password:null,pan:form.pan.trim()||null,email:form.email.trim()||null,mobile:form.mobile.trim()||null,notes:form.notes.trim()||null,created_by:cu.id,consent_at:new Date().toISOString(),consent_by:cu.id,updated_at:new Date().toISOString()};
     var r=editCred?await supabase.from('client_credentials').update(payload).eq('id',editCred.id).select().single():await supabase.from('client_credentials').insert(payload).select().single();
     if(r.error){showToast(r.error.message,'err');setSaving(false);return;}
     // Only (re)encrypt the password when a new one was entered; blank on edit keeps the existing one.
@@ -18135,6 +18137,7 @@ function CredentialsModule({org,supabase,cu}){
               <button onClick={async function(){if(!revealPw){await fetchCredPw(detailCell.cred.id);setRevealPw(true);}else{setRevealPw(false);}}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'var(--tf-text-sub)',fontWeight:600}}>{revealPw?'Hide':'Show'}</button>
               <button onClick={async function(){var pw=revealedPw!=null?revealedPw:await fetchCredPw(detailCell.cred.id);copyText(pw,'Password');}} style={{background:'none',border:'none',cursor:'pointer',fontSize:11,color:'#0e2a47',fontWeight:600}}>Copy</button>
             </div>
+            <div style={{fontSize:9.5,color:'var(--tf-text-sub)',marginTop:5,display:'flex',alignItems:'center',gap:4}}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 7v5l3 2"/></svg>Every reveal/copy is audit-logged</div>
           </div>}
           {detailCell.cred.pan&&<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--tf-bg)',borderRadius:8,padding:'8px 12px'}}>
             <div><div style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:2}}>PAN</div><div style={{fontSize:13,color:'var(--tf-text)',fontFamily:'monospace',fontWeight:600}}>{detailCell.cred.pan}</div></div>
@@ -18176,9 +18179,13 @@ function CredentialsModule({org,supabase,cu}){
           <label style={{display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',marginBottom:4,textTransform:'uppercase',letterSpacing:'0.05em'}}>Notes</label>
           <textarea value={form.notes} onChange={function(e){setForm(function(p){return Object.assign({},p,{notes:e.target.value});});}} rows={2} style={Object.assign({},INP,{resize:'vertical'})}/>
         </div>
+        <label style={{display:'flex',gap:9,alignItems:'flex-start',padding:'11px 12px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,marginBottom:14,cursor:'pointer'}}>
+          <input type="checkbox" checked={consent} onChange={function(e){setConsent(e.target.checked);}} style={{marginTop:2,accentColor:'#2F6BFF',flexShrink:0}}/>
+          <span style={{fontSize:11.5,color:'var(--tf-text-sub)',lineHeight:1.5}}>I confirm my firm is authorised to store this client’s portal credential. It is <b>encrypted at rest</b>, access is <b>restricted to this organisation and audit-logged</b>, and it can be deleted anytime. (Required — DPDP/SPDI)</span>
+        </label>
         <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
           <button onClick={function(){setShowForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',cursor:'pointer',fontSize:13,fontWeight:600,color:'var(--tf-text-sub)'}}>Cancel</button>
-          <button onClick={saveCred} disabled={saving} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>{saving?'Saving…':'Save'}</button>
+          <button onClick={saveCred} disabled={saving||!consent} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:(saving||!consent)?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:(saving||!consent)?0.6:1}}>{saving?'Saving…':'Save'}</button>
         </div>
       </div>
     </div>}

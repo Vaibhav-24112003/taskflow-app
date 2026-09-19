@@ -4,6 +4,7 @@ import App from './App.jsx'
 import HomeSkin from './HomeSkin.jsx'
 import MobileApp from './MobileApp.jsx'
 import ViewModeSwitcher from './ViewModeSwitcher.jsx'
+import CookieConsent from './CookieConsent.jsx'
 import './home-glass.css'
 import './home-dark.css'
 import './home-create-fix.js'
@@ -14,5 +15,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <HomeSkin />
     <MobileApp />
     <ViewModeSwitcher />
+    <CookieConsent />
   </React.StrictMode>
 )
