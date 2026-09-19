@@ -6,372 +6,204 @@ import CheckoutButton from './components/CheckoutButton.jsx'
 // "Watch demo" tour is loaded on demand.
 const LaunchTour = lazy(() => import('./LaunchTour.jsx'))
 
-// ── Design tokens + styles ported from the TaskFlowCo landing-page.html
-// handoff. Scoped to .lp2 so nothing leaks into the app shell; the <style>
-// unmounts with the component (only mounted while logged-out).
+// ── Design tokens + styles ported from the "Landing Page v2" handoff (editorial,
+// Zoho/Razorpay-style) with the user-selected navy accent. Scoped to .lp2 so
+// nothing leaks into the app shell; the <style> unmounts with the component
+// (only mounted while logged-out). Legacy aliases (--card, --grad, --text…) are
+// kept so the existing AuthModal / UpgradeModal / DemoForm markup keeps working.
 const CSS = `
 .lp2{
-  --blue:#2F6BFF; --teal:#14C7C0; --navy:#0E2A47;
-  --grad:linear-gradient(135deg,#2F6BFF,#14C7C0);
-  --danger:#EF4444; --progress:#2F6BFF; --warning:#F4A52A; --success:#1FA971;
-  --page:#EAF0F7; --surface:#FFFFFF; --canvas:#F4F7FB; --col:#EEF3F9;
-  --field:#F1F5FA; --seg:#E9EEF5; --border:#E6ECF4; --border-2:#EAEFF6;
-  --text:#0E2A47; --text-2:#5A6E87; --muted:#94A3B8; --sub:#8194AB;
-  --nav:#5A6E87; --badge-fg:#0E7A74; --badge-bg:rgba(20,199,192,.14);
-  --hero-bg:radial-gradient(900px 420px at 88% -40px,rgba(20,199,192,.16),transparent),radial-gradient(700px 360px at 6% 110%,rgba(47,107,255,.12),transparent),#F7FAFD;
-  --card:#FFFFFF; --card-border:#E6ECF4; --inner:#FFFFFF; --inner-border:#EDF1F7;
-  --chip-bg:#EEF2F7; --chip-fg:#5A6E87; --teal-fg:#0E7A74;
-  --shadow-panel:0 24px 60px -28px rgba(14,42,71,.45);
-  --shadow-card:0 12px 24px -14px rgba(14,42,71,.45);
-  --shadow-cta:0 12px 26px -10px rgba(47,107,255,.7);
-  --footer-bg:#0E2A47;
-  font-family:'Plus Jakarta Sans',system-ui,sans-serif; background:var(--page); color:var(--text);
-  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility; min-height:100vh; transition:background .4s ease,color .4s ease;
+  /* v2 palette — light (primary) */
+  --blue:#0E2A47; --blue-strong:#0A1F35;
+  --bg:#FBF9F5; --bg-alt:#F4F1EA; --panel:#FFFFFF; --field:#F6F3EC;
+  --ink:#132338; --ink-2:#55637A; --muted:#8C93A3;
+  --border:#E7E2D8; --border-2:#EFEBE2;
+  --nav-bg:rgba(251,249,245,.85); --foot:#14243A; --teal:#0E8F89;
+  --laptop:#1A2A40; --laptopbase:#C9CFD9;
+  --hero:radial-gradient(760px 360px at 80% 8%,rgba(14,42,71,.06),transparent),#F4F1EA;
+  --serif:'Source Serif 4',Georgia,serif;
+  --r:14px; --r2:8px;
+  /* legacy aliases for shared modals/forms */
+  --grad:var(--blue); --card:var(--panel); --card-border:var(--border); --surface:var(--panel);
+  --text:var(--ink); --text-2:var(--ink-2); --sub:var(--muted);
+  --danger:#D6455A; --success:#0E8F89;
+  --shadow-panel:0 24px 60px -30px rgba(19,35,56,.4);
+  --shadow-cta:0 14px 30px -16px rgba(14,42,71,.55);
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif; background:var(--bg); color:var(--ink);
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility;
+  min-height:100vh; transition:background .3s ease,color .3s ease;
 }
 .lp2[data-theme="dark"]{
-  --page:#0B2237; --surface:#0F2C49; --canvas:#0B2237; --col:#0F2A45;
-  --field:#12314F; --seg:#12314F; --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.06);
-  --text:#EAF1F8; --text-2:#B4C4D6; --muted:#7E93AD; --sub:#8AA0BB;
-  --nav:#9FB6D4; --badge-fg:#7FF0EA; --badge-bg:rgba(20,199,192,.16);
-  --hero-bg:radial-gradient(900px 460px at 85% -60px,rgba(20,199,192,.22),transparent),radial-gradient(760px 400px at 0% 120%,rgba(47,107,255,.28),transparent),linear-gradient(160deg,#0B2038,#0E2A47);
-  --card:#12324F; --card-border:rgba(255,255,255,.06); --inner:#143A5E; --inner-border:rgba(255,255,255,.06);
-  --chip-bg:rgba(255,255,255,.08); --chip-fg:#C7D5E6; --teal-fg:#7FF0EA;
-  --shadow-panel:0 24px 60px -28px rgba(6,16,30,.7);
-  --footer-bg:#081627;
+  --blue:#4C86F0; --blue-strong:#3E76DC;
+  --bg:#0B1B2C; --bg-alt:#0F2132; --panel:#132A3E; --field:#0F2132;
+  --ink:#EAF1F8; --ink-2:#AEC0D4; --muted:#7E93AD;
+  --border:rgba(255,255,255,.10); --border-2:rgba(255,255,255,.06);
+  --nav-bg:rgba(11,27,44,.85); --foot:#08131F; --teal:#3FD0C9;
+  --laptop:#050D16; --laptopbase:#243244;
+  --hero:radial-gradient(760px 360px at 80% 8%,rgba(76,134,240,.16),transparent),#0F2132;
+  --shadow-panel:0 24px 60px -30px rgba(6,16,30,.7);
+  --shadow-cta:0 14px 30px -16px rgba(0,0,0,.5);
 }
 .lp2 *{box-sizing:border-box}
 .lp2 .mono{font-family:'JetBrains Mono',monospace}
-.lp2 .wrap{max-width:1400px;margin:0 auto;padding:0 40px}
-.lp2 .section{padding:88px 0}
-.lp2 h1,.lp2 h2,.lp2 h3{margin:0;letter-spacing:-.02em;font-weight:800}
-.lp2 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.lp2 .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
+.lp2 h1,.lp2 h2,.lp2 h3{margin:0}
+.lp2 .serif{font-family:var(--serif);letter-spacing:-.02em}
+.lp2 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
 .lp2 a{color:inherit;text-decoration:none}
-.lp2 .logo{display:inline-flex;align-items:center;gap:9px;font-weight:800;font-size:17px;color:var(--text)}
-.lp2 .logo .tile{width:30px;height:30px;border-radius:9px;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lp2 .mark{position:relative;display:inline-block;white-space:nowrap}
-.lp2 .mark .leg{position:absolute;left:.30em;bottom:.05em;height:1.15em;width:auto;overflow:visible}
-.lp2 .mark .co{margin-left:.50em}
-.lp2 .btn{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:14.5px;padding:13px 24px;border-radius:12px;cursor:pointer;border:0;white-space:nowrap;transition:transform .15s ease,box-shadow .2s ease;font-family:inherit}
-.lp2 .btn:hover{transform:translateY(-1px)}
-.lp2 .btn-primary{background:var(--grad);color:#fff;box-shadow:var(--shadow-cta)}
-.lp2 .btn-ghost{background:var(--card);border:1px solid var(--card-border);color:var(--text)}
-.lp2 .btn-sm{padding:9px 16px;font-size:13px;border-radius:10px}
-.lp2 .nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);background:color-mix(in srgb,var(--page) 82%,transparent);border-bottom:1px solid var(--border)}
-.lp2 .nav .row{display:flex;align-items:center;justify-content:space-between;height:68px}
-.lp2 .nav .links{display:flex;align-items:center;gap:22px;font-size:13.5px;font-weight:600;color:var(--nav)}
-.lp2 .nav .links a:hover{color:var(--text)}
-.lp2 .theme-toggle{display:inline-flex;align-items:center;gap:4px;padding:4px;border-radius:999px;background:var(--seg);border:1px solid var(--border);cursor:pointer}
-.lp2 .theme-toggle span{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center}
-.lp2 .theme-toggle .sun{background:var(--surface)}
-.lp2[data-theme="dark"] .theme-toggle .sun{background:transparent}
-.lp2[data-theme="dark"] .theme-toggle .moon{background:var(--grad)}
-.lp2 .hero{position:relative;overflow:hidden}
-.lp2 .hero-inner{position:relative;background:var(--hero-bg);border-radius:28px;margin-top:26px;padding:56px 56px;min-height:560px;overflow:hidden;transition:background .4s ease;display:flex;align-items:center;gap:28px}
-.lp2 .hero-hub{flex:1;min-width:0;display:flex;justify-content:center;align-items:center}
-.lp2 .hero-hub .hub{margin:0;max-width:500px}
-.lp2 .hero-hub .hub-node{width:98px}
-.lp2 .hero-hub .hub-node span{font-size:11px}
-.lp2 .hero-hub .hub-ico{width:44px;height:44px;border-radius:13px}
-.lp2 .hero-hub .hub-center{padding:11px 16px}
-.lp2 .hero-hub .hub-center b{font-size:16px}
-.lp2 .badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--badge-fg);background:var(--badge-bg);padding:6px 12px;border-radius:999px}
-.lp2 .hero h1{font-size:clamp(34px,4.4vw,50px);line-height:1.04;letter-spacing:-.028em;margin:18px 0 14px;max-width:15ch}
-.lp2 .hero .lede{font-size:16.5px;line-height:1.6;color:var(--text-2);max-width:44ch;margin:0 0 28px}
-.lp2 .hero .cta-row{display:flex;gap:12px;flex-wrap:wrap}
-.lp2 .hero .trust{display:flex;align-items:center;gap:9px;margin-top:26px;font-size:12.5px;color:var(--muted)}
-.lp2 .avatars{display:flex}
-.lp2 .avatars span{width:26px;height:26px;border-radius:50%;border:2px solid #F7FAFD}
-.lp2 .avatars span+span{margin-left:-8px}
-.lp2 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.lp2 .hero-copy{flex:0 1 460px;max-width:460px;position:relative;z-index:2}
-.lp2 .preview{position:absolute;right:-24px;bottom:-16px;width:400px;border-radius:18px 18px 0 0;background:var(--card);border:1px solid var(--card-border);box-shadow:var(--shadow-panel);padding:16px;animation:lp2-floaty 6s ease-in-out infinite}
-.lp2 .preview h4{margin:0;font-size:13px;font-weight:800;color:var(--text)}
-.lp2 .task{border:1px solid var(--inner-border);background:var(--inner);border-radius:10px;padding:11px 12px}
-.lp2 .task+.task{margin-top:9px}
-.lp2 .task .name{font-weight:700;font-size:12.5px;color:var(--text)}
-.lp2 .chip{font-size:10px;font-weight:700;background:var(--chip-bg);color:var(--chip-fg);padding:2px 7px;border-radius:6px}
-@keyframes lp2-floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
-.lp2 .grid{display:grid;gap:20px}
-.lp2 .cols-3{grid-template-columns:repeat(3,1fr)}
-/* Editorial feature list — no boxes at rest; a soft card reveals on hover. */
-.lp2 .feature{background:transparent;border:0;border-radius:16px;padding:18px 16px;transition:background .18s ease,box-shadow .2s ease}
-.lp2 .feature:hover{background:var(--card);box-shadow:var(--shadow-card)}
-.lp2 .feature .ico{width:42px;height:42px;border-radius:12px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg);margin-bottom:14px}
-.lp2 .feature h3{font-size:16.5px;margin-bottom:7px;letter-spacing:-.01em}
-.lp2 .feature p{margin:0;font-size:14px;line-height:1.6;color:var(--text-2)}
-.lp2 .feat-grouplabel{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--teal-fg);margin:0 0 14px;display:flex;align-items:center;gap:10px}
-.lp2 .feat-grouplabel::after{content:"";flex:1;height:1px;background:var(--border)}
-.lp2 .factrow{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:22px 0}
-.lp2 .factcell{padding:4px 26px;border-left:1px solid var(--border)}
-.lp2 .factcell:first-child{border-left:0}
-.lp2 .factbig{font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--text);line-height:1.1}
-.lp2 .factlabel{font-size:13.5px;font-weight:700;color:var(--text);margin-top:4px}
-.lp2 .factsub{font-size:12.5px;color:var(--text-2);margin-top:4px;line-height:1.5}
-@media(max-width:760px){.lp2 .factrow{grid-template-columns:1fr;gap:16px;padding:18px 0}.lp2 .factcell{border-left:0;padding:0}}
-.lp2 .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:20px}
-.lp2 .step{position:relative;padding-top:14px}
-.lp2 .step .num{width:34px;height:34px;border-radius:10px;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;margin-bottom:14px}
-.lp2 .step h3{font-size:16px;margin-bottom:6px}
-.lp2 .step p{margin:0;font-size:13.5px;line-height:1.55;color:var(--text-2)}
-.lp2 .showcase{background:var(--canvas);border:1px solid var(--border);border-radius:22px;padding:22px;box-shadow:var(--shadow-panel)}
-.lp2 .app-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)}
-.lp2 .app-tab{font-size:12.5px;font-weight:700;color:var(--text-2);background:var(--surface);border:1px solid var(--card-border);border-radius:9px;padding:7px 13px}
-.lp2 .app-tab.on{background:var(--grad);color:#fff;border-color:transparent}
-.lp2 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.lp2 .column{background:var(--col);border-radius:14px;padding:13px}
-.lp2 .column .head{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-weight:800;font-size:13px}
-.lp2 .dot{width:9px;height:9px;border-radius:50%}
-.lp2 .count{margin-left:auto;font-size:11.5px;font-weight:700;background:var(--surface);padding:2px 9px;border-radius:99px}
-.lp2 .card{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:13px;border-left:3px solid var(--muted)}
-.lp2 .card+.card{margin-top:10px}
-.lp2 .card .name{font-weight:700;font-size:13.5px}
-.lp2 .card .meta{font-size:11.5px;color:var(--muted);margin-top:7px}
-.lp2 .bar{height:5px;border-radius:99px;background:var(--seg);overflow:hidden;margin-top:10px}
-.lp2 .bar>i{display:block;height:100%;border-radius:99px;background:var(--grad)}
-.lp2 .quote{background:var(--grad);border-radius:24px;padding:56px;color:#fff;text-align:center}
-.lp2 .quote p{font-size:clamp(20px,2.4vw,28px);font-weight:700;line-height:1.4;max-width:24ch;margin:0 auto 22px;letter-spacing:-.01em}
-.lp2 .quote .who{font-size:14px;opacity:.85;font-weight:600}
-.lp2 .price-grid{display:grid;grid-template-columns:repeat(4,minmax(200px,1fr));gap:16px}
-.lp2 .plan{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:28px}
-.lp2 .plan.featured{border:2px solid var(--blue);box-shadow:var(--shadow-card);position:relative}
-.lp2 .plan .tag{position:absolute;top:-12px;left:28px;background:var(--grad);color:#fff;font-size:11px;font-weight:800;padding:4px 11px;border-radius:99px}
-.lp2 .plan h3{font-size:16px}
-.lp2 .plan .amt{font-size:38px;font-weight:800;margin:12px 0 4px;letter-spacing:-.03em}
-.lp2 .plan .amt small{font-size:14px;font-weight:600;color:var(--muted)}
-.lp2 .plan ul{list-style:none;padding:0;margin:18px 0 22px;display:flex;flex-direction:column;gap:10px}
-.lp2 .plan li{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--text-2)}
-.lp2 .cta-band{background:var(--card);border:1px solid var(--card-border);border-radius:24px;padding:48px;text-align:center;box-shadow:var(--shadow-panel)}
-.lp2 .cta-band h2{font-size:clamp(26px,3vw,34px);margin-bottom:12px}
-.lp2 .cta-band p{color:var(--text-2);font-size:16px;margin:0 auto 26px;max-width:46ch;line-height:1.6}
-.lp2 .preview-card{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:20px;box-shadow:var(--shadow-panel)}
-.lp2 .preview-card .ph{display:flex;align-items:center;gap:9px;margin-bottom:14px}
-.lp2 .preview-card .ph .ico{width:32px;height:32px;border-radius:9px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg)}
-.lp2 .preview-card .ph h3{font-size:14px;font-weight:800;color:var(--text)}
-.lp2 .mini{border:1px solid var(--inner-border);background:var(--inner);border-radius:10px;padding:11px}
-.lp2 .mini+.mini{margin-top:9px}
-.lp2 .chipbtn{font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:9px;background:var(--field);border:1px solid var(--card-border);color:var(--text-2);cursor:pointer}
-.lp2 .chipbtn.on{background:var(--grad);color:#fff;border-color:transparent}
-.lp2 .field{border:1px solid var(--card-border);background:var(--field);border-radius:10px;padding:11px 13px;font-size:13.5px;color:var(--text);font-family:inherit;outline:none}
-.lp2 .field::placeholder{color:var(--muted)}
-.lp2[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.6)}
-.lp2 .lbl{display:block;font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:6px}
-.lp2 .two-col{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
-.lp2 .support-card{background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:22px;flex:1}
-.lp2 .support-card .ico{width:38px;height:38px;border-radius:11px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg);margin-bottom:14px}
-.lp2 .promo-ico{width:40px;height:40px;flex-shrink:0;border-radius:12px;background:var(--badge-bg);display:flex;align-items:center;justify-content:center;color:var(--teal-fg)}
-.lp2 .faq-item{background:var(--card);border:1px solid var(--card-border);border-radius:14px;overflow:hidden}
-.lp2 .faq-item+.faq-item{margin-top:12px}
-.lp2 .faq-q{display:flex;align-items:center;gap:14px;padding:18px 20px;cursor:pointer}
-.lp2 .faq-q span:first-child{font-weight:700;font-size:15px;color:var(--text);flex:1}
-.lp2 .faq-sign{font-size:22px;font-weight:400;color:var(--blue);line-height:1;width:20px;text-align:center}
-.lp2 .faq-a{padding:0 20px 18px;font-size:14px;line-height:1.6;color:var(--text-2)}
-.lp2 footer{background:var(--footer-bg);color:#9FB6D4;margin-top:64px}
-.lp2 footer .cols{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:30px;padding:56px 0 34px}
-.lp2 footer h5{color:#fff;font-size:13px;font-weight:700;margin:0 0 14px;letter-spacing:.02em}
+
+/* buttons */
+.lp2 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:15px;padding:14px 24px;border-radius:var(--r2);cursor:pointer;border:0;white-space:nowrap;font-family:inherit;transition:background .15s ease,border-color .15s ease,transform .15s ease,filter .15s ease}
+.lp2 .btn-primary{background:var(--blue);color:#fff}
+.lp2 .btn-primary:hover{background:var(--blue-strong)}
+.lp2 .btn-primary:disabled{opacity:.6;cursor:not-allowed}
+.lp2 .btn-ghost{background:var(--panel);border:1px solid var(--border);color:var(--ink)}
+.lp2 .btn-ghost:hover{border-color:var(--blue)}
+.lp2 .btn-sm{padding:10px 18px;font-size:14px}
+
+/* form fields (shared with DemoForm / AuthModal) */
+.lp2 .field{border:1px solid var(--border);background:var(--field);border-radius:8px;padding:11px 13px;font-size:14px;color:var(--ink);font-family:inherit;outline:none}
+.lp2 .field:focus{border-color:var(--blue)}
+.lp2 .lbl{display:block;font-size:12px;font-weight:700;color:var(--ink-2);margin-bottom:6px}
+.lp2 .chipbtn{font-size:13px;font-weight:700;padding:9px 15px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--field);color:var(--ink-2);user-select:none}
+.lp2 .chipbtn.on{background:var(--blue);color:#fff;border-color:transparent}
+
+/* nav */
+.lp2 .nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);background:var(--nav-bg);border-bottom:1px solid var(--border)}
+.lp2 .nav .row{display:flex;align-items:center;justify-content:space-between;gap:24px;height:66px}
+.lp2 .nav .links{display:flex;align-items:center;gap:26px;font-size:14px;font-weight:600;color:var(--ink-2)}
+.lp2 .nav .links a:hover{color:var(--ink)}
+.lp2 .nav .right{display:flex;align-items:center;gap:12px}
+.lp2 .theme-toggle{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.lp2 .login-link{font-size:14px;font-weight:700;color:var(--ink);padding:9px 14px;border:1px solid var(--border);border-radius:var(--r2)}
+.lp2 .login-link:hover{border-color:var(--blue)}
+
+/* logo */
+.lp2 .logo{display:inline-flex;align-items:center;gap:10px;color:var(--ink)}
+.lp2 .logo .tile{width:30px;height:30px;border-radius:8px;background:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lp2 .logo .word{font-weight:800;font-size:18px;letter-spacing:-.02em}
+.lp2 .logo .word .co{color:var(--blue)}
+
+/* hero */
+.lp2 .hero{background:var(--hero);border-bottom:1px solid var(--border)}
+.lp2 .hero .inner{display:flex;flex-wrap:wrap;gap:48px;align-items:center;padding:60px 0 64px}
+.lp2 .hero .copy{flex:1 1 400px;min-width:0}
+.lp2 .hero h1{font-family:var(--serif);font-size:clamp(38px,4.8vw,58px);line-height:1.05;letter-spacing:-.02em;font-weight:600;color:var(--ink);margin:0 0 20px}
+.lp2 .hero h1 .accent{color:var(--blue)}
+.lp2 .hero .lede{font-size:17px;line-height:1.65;color:var(--ink-2);max-width:46ch;margin:0 0 30px}
+.lp2 .hero .checks{display:flex;align-items:center;gap:20px;margin-top:28px;flex-wrap:wrap;font-size:13.5px;color:var(--ink-2);font-weight:600}
+.lp2 .hero .checks span{display:inline-flex;align-items:center;gap:8px}
+.lp2 .stage{flex:1 1 520px;min-width:0;position:relative;padding:30px 10px}
+.lp2 .stage .frame{position:relative;margin:0 auto;max-width:620px}
+.lp2 .floatcard{display:flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:9px 12px;box-shadow:0 16px 36px -20px rgba(19,35,56,.5)}
+
+@keyframes lpfade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes lpfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+
+/* sections */
+.lp2 .band{background:var(--bg-alt);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.lp2 .sec-head h2{font-family:var(--serif);font-size:clamp(30px,3.4vw,42px);font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+
+/* features */
+.lp2 .grp-label{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.lp2 .grp-label span{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--teal)}
+.lp2 .grp-label .rule{flex:1;height:1px;background:var(--border)}
+.lp2 .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.lp2 .fcell{background:var(--panel);padding:24px;transition:background .15s ease}
+.lp2 .fcell:hover{background:var(--field)}
+.lp2 .fcell .fic{width:42px;height:42px;border-radius:11px;background:var(--field);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);margin-bottom:15px}
+.lp2 .fcell h3{font-size:16.5px;font-weight:800;letter-spacing:-.01em;color:var(--ink);margin:0 0 7px}
+.lp2 .fcell p{font-size:13.5px;line-height:1.6;color:var(--ink-2);margin:0}
+
+/* product showcase */
+.lp2 .tabrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.lp2 .ptab{white-space:nowrap;font-size:13px;font-weight:700;padding:9px 16px;border-radius:var(--r2);cursor:pointer;font-family:inherit;border:1px solid var(--border);background:var(--panel);color:var(--ink-2)}
+.lp2 .ptab.on{background:var(--blue);color:#fff;border-color:transparent}
+.lp2 .browser{border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--panel);box-shadow:0 24px 60px -34px rgba(19,35,56,.35)}
+.lp2 .browser .chrome{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--bg-alt);border-bottom:1px solid var(--border)}
+.lp2 .browser .addr{flex:1;max-width:280px;margin:0 auto;text-align:center;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:4px 10px}
+.lp2 .prow{display:flex;align-items:center;justify-content:space-between;background:var(--bg-alt);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:9px}
+.lp2 .pill-ok{font-size:11px;font-weight:700;color:var(--teal);background:var(--field);border:1px solid var(--border);padding:4px 10px;border-radius:99px;white-space:nowrap}
+.lp2 .pill-wait{font-size:11px;font-weight:700;color:#B4791C;background:rgba(244,165,42,.14);border:1px solid rgba(244,165,42,.28);padding:4px 10px;border-radius:99px;white-space:nowrap}
+
+/* steps */
+.lp2 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px}
+.lp2 .step{border-top:2px solid var(--border);padding-top:18px}
+.lp2 .step .n{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--blue);color:#fff;font-weight:800;font-size:15px;margin-bottom:14px}
+.lp2 .step h3{font-size:16.5px;font-weight:800;letter-spacing:-.01em;color:var(--ink);margin:0 0 7px}
+.lp2 .step p{font-size:13.5px;line-height:1.6;color:var(--ink-2);margin:0}
+
+/* capability band */
+.lp2 .capband{background:var(--foot);color:#fff}
+.lp2 .capgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:36px;padding:56px 0}
+.lp2 .capgrid .big{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:-.01em;line-height:1.15;color:#fff}
+
+/* testimonial */
+.lp2 .quote{font-family:var(--serif);font-size:clamp(24px,3vw,34px);font-weight:500;line-height:1.4;letter-spacing:-.01em;color:var(--ink);margin:0 auto 26px;max-width:24ch}
+
+/* pricing */
+.lp2 .seg{display:inline-flex;margin-top:20px;padding:4px;border-radius:999px;background:var(--panel);border:1px solid var(--border)}
+.lp2 .seg button{font-size:13px;font-weight:700;padding:8px 16px;border-radius:999px;cursor:pointer;font-family:inherit;border:0;background:transparent;color:var(--ink-2)}
+.lp2 .seg button.on{background:var(--blue);color:#fff}
+.lp2 .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;align-items:start}
+.lp2 .plan{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:26px}
+.lp2 .plan.featured{border:2px solid var(--blue);box-shadow:0 18px 40px -24px rgba(14,42,71,.5)}
+.lp2 .plan .tag{position:absolute;top:-11px;left:24px;background:var(--blue);color:#fff;font-size:11px;font-weight:800;padding:4px 11px;border-radius:99px}
+.lp2 .plan h3{font-size:16px;font-weight:800;color:var(--ink);margin:0}
+.lp2 .plan .amt{font-family:var(--serif);font-size:38px;font-weight:600;letter-spacing:-.02em;color:var(--ink);margin:12px 0 2px}
+.lp2 .plan .amt small{font-size:14px;font-weight:600;color:var(--muted);font-family:'Plus Jakarta Sans',sans-serif}
+.lp2 .plan ul{list-style:none;margin:20px 0 0;padding:20px 0 0;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:11px}
+.lp2 .plan li{display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--ink-2);line-height:1.4}
+
+/* faq */
+.lp2 .faq-item{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--panel)}
+.lp2 .faq-q{display:flex;align-items:center;gap:14px;padding:17px 20px;cursor:pointer}
+.lp2 .faq-q span:first-child{flex:1;font-weight:700;font-size:15px;color:var(--ink)}
+.lp2 .faq-sign{font-size:22px;font-weight:400;color:var(--blue);line-height:1;width:18px;text-align:center}
+.lp2 .faq-a{padding:0 20px 18px;font-size:14px;line-height:1.65;color:var(--ink-2)}
+
+/* demo */
+.lp2 .demo-card{border:1px solid var(--border);border-radius:20px;overflow:hidden;background:var(--panel);display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.lp2 .demo-left{padding:46px;background:var(--foot);color:#fff}
+
+/* footer */
+.lp2 footer{background:var(--foot);color:#9FB6D4}
+.lp2 footer .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:32px;padding:56px 0 30px}
+.lp2 footer h5{color:#fff;font-size:13px;font-weight:700;margin:0 0 14px}
 .lp2 footer a{display:block;font-size:13.5px;color:#9FB6D4;padding:5px 0}
 .lp2 footer a:hover{color:#fff}
-.lp2 footer .bottom{border-top:1px solid rgba(255,255,255,.1);padding:20px 0;display:flex;justify-content:space-between;font-size:12.5px;color:#7E93AD}
-.lp2 footer .logo{color:#fff}
-@media(max-width:900px){
-  .lp2 .cols-3,.lp2 .steps,.lp2 .price-grid,.lp2 .board{grid-template-columns:1fr 1fr}
-  .lp2 .two-col{grid-template-columns:1fr}
-  .lp2 .preview{display:none}
-  .lp2 .hero-inner{padding:44px 32px}
-}
-@media(max-width:620px){
-  .lp2 .cols-3,.lp2 .steps,.lp2 .price-grid,.lp2 .board{grid-template-columns:1fr}
-  .lp2 .nav .links a{display:none}
-  .lp2 .nav .links .keep{display:inline-flex}
-}
-@media(prefers-reduced-motion:reduce){.lp2 *{animation:none!important;transition:none!important}}
+.lp2 footer .bottom{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12.5px;color:#7E93AD;padding:20px 0;border-top:1px solid rgba(255,255,255,.1)}
 
-/* ── Radial module hub ── */
-.lp2 .hub{position:relative;width:100%;max-width:720px;margin:8px auto 0;aspect-ratio:1/.9}
-.lp2 .hub-ring{position:absolute;inset:6%;border:1px dashed var(--border);border-radius:50%}
-.lp2 .hub-ring.two{inset:20%;opacity:.6}
-.lp2 .hub-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--card-border);border-radius:18px;padding:14px 20px;box-shadow:var(--shadow-panel);z-index:3;white-space:nowrap}
-.lp2 .hub-center .tile{width:38px;height:38px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lp2 .hub-center b{font-size:19px;font-weight:800;color:var(--text);letter-spacing:-.02em}
-.lp2 .hub-node{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:6px;width:112px;text-align:center;z-index:2}
-.lp2 .hub-ico{width:50px;height:50px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--card-border);box-shadow:var(--shadow-card);transition:transform .2s ease}
-.lp2 .hub-node:hover .hub-ico{transform:translateY(-3px) scale(1.06)}
-.lp2 .hub-node span{font-size:12px;font-weight:700;color:var(--text);line-height:1.25}
-.lp2 .hub-glow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:44%;height:44%;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.9),transparent 68%);z-index:1}
-.lp2[data-theme="dark"] .hub-glow{background:radial-gradient(circle,rgba(47,107,255,.18),transparent 68%)}
-
-/* ── Device showcase (laptop + phone) with rotating slides ── */
-.lp2 .devwrap{display:flex;align-items:flex-end;justify-content:center;position:relative}
-.lp2 .laptop{width:min(860px,100%)}
-.lp2 .laptop-screen{background:var(--canvas);border:12px solid #0E2A47;border-bottom:none;border-radius:18px 18px 0 0;overflow:hidden;box-shadow:var(--shadow-panel)}
-.lp2[data-theme="dark"] .laptop-screen{border-color:#081627}
-.lp2 .laptop-base{height:14px;width:min(940px,112%);margin:0 auto;background:linear-gradient(180deg,#cbd5e1,#94a3b8);border-radius:0 0 14px 14px;position:relative}
-.lp2[data-theme="dark"] .laptop-base{background:linear-gradient(180deg,#334155,#1e293b)}
-.lp2 .laptop-base::after{content:"";position:absolute;left:50%;top:0;transform:translateX(-50%);width:120px;height:5px;border-radius:0 0 8px 8px;background:rgba(14,42,71,.18)}
-.lp2 .appchrome{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
-.lp2 .appchrome .dots{display:flex;gap:5px}
-.lp2 .appchrome .dots i{width:9px;height:9px;border-radius:50%;background:var(--seg)}
-.lp2 .appchrome .addr{flex:1;font-size:11px;color:var(--muted);background:var(--field);border:1px solid var(--card-border);border-radius:7px;padding:4px 10px;text-align:center}
-.lp2 .slidebody{position:relative;background:var(--canvas);padding:16px;min-height:330px}
-.lp2 .slide{animation:lp2-fade .45s ease}
-@keyframes lp2-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.lp2 .rec-row{display:flex;align-items:center;justify-content:space-between;background:var(--card);border:1px solid var(--card-border);border-radius:10px;padding:11px 13px}
-.lp2 .rec-row+.rec-row{margin-top:9px}
-.lp2 .pill-ok{font-size:10.5px;font-weight:700;color:var(--success);background:var(--badge-bg);padding:3px 9px;border-radius:99px}
-.lp2 .pill-wait{font-size:10.5px;font-weight:700;color:var(--warning);background:rgba(244,165,42,.14);padding:3px 9px;border-radius:99px}
-.lp2 .phone{width:158px;flex-shrink:0;border:8px solid #0E2A47;border-radius:26px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow-panel);margin:0 0 22px -44px;position:relative;z-index:4}
-.lp2[data-theme="dark"] .phone{border-color:#081627}
-.lp2 .phone-notch{height:18px;background:#0E2A47;position:relative}
-.lp2 .phone-notch::after{content:"";position:absolute;left:50%;top:5px;transform:translateX(-50%);width:46px;height:5px;border-radius:99px;background:rgba(255,255,255,.25)}
-.lp2 .phone-body{padding:11px;background:var(--canvas);min-height:300px}
-.lp2 .mrow{background:var(--card);border:1px solid var(--card-border);border-radius:9px;padding:9px 10px;margin-bottom:8px}
-@media(max-width:820px){.lp2 .phone{display:none}.lp2 .slidebody{min-height:300px}}
-
-/* ── Hero floating toasts (many) + hub responsive toggle ── */
-.lp2 .float-toast{position:absolute;display:flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:9px 13px;font-size:12px;font-weight:700;color:var(--text);box-shadow:var(--shadow-card);z-index:3;white-space:nowrap}
-.lp2 .float-toast b{font-weight:800}
-.lp2 .ft-a{right:26px;top:150px;animation:lp2-floaty 5.5s ease-in-out infinite}
-.lp2 .ft-b{right:255px;top:58px;animation:lp2-floaty 6.5s ease-in-out .4s infinite}
-.lp2 .ft-c{right:445px;top:250px;animation:lp2-floaty 6s ease-in-out .8s infinite}
-.lp2 .modstrip-sm{display:none}
-
-/* ── Hero object-animation stage (analytics window + floating chips + parallax) ── */
-@keyframes lp2-aurora{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(26px,-22px) scale(1.12)}}
-@keyframes lp2-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
-.lp2 .haurora{position:absolute;border-radius:50%;filter:blur(34px);pointer-events:none;z-index:0}
-.lp2 .hstage{flex:1.15;min-width:0;position:relative;align-self:stretch;min-height:520px;perspective:1600px;z-index:1}
-.lp2 .hscene{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .12s ease-out;will-change:transform;backface-visibility:hidden;-webkit-backface-visibility:hidden}
-.lp2 .hwin{position:absolute;left:50%;top:51%;transform:translate(-50%,-50%);width:min(560px,96%);border-radius:16px;overflow:hidden;background:var(--card);border:1px solid var(--card-border);box-shadow:0 60px 120px -40px rgba(14,42,71,.45);backface-visibility:hidden;-webkit-backface-visibility:hidden;-webkit-font-smoothing:antialiased}
-.lp2 .hwin-head{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--canvas);border-bottom:1px solid var(--border)}
-.lp2 .hwin-head i{width:10px;height:10px;border-radius:50%}
-.lp2 .hwin-addr{flex:1;max-width:230px;margin:0 auto;text-align:center;font-size:11px;color:var(--muted);background:var(--field);border:1px solid var(--card-border);border-radius:7px;padding:4px 10px}
-.lp2 .hwin-body{padding:16px;background:var(--surface)}
-.lp2 .hcell{background:var(--field);border-radius:11px;padding:10px 12px}
-.lp2 .hcell .k{font-size:9.5px;color:var(--muted);font-weight:700}
-.lp2 .hcell .v{font-size:19px;font-weight:800;margin-top:2px}
-.lp2 .hrow{display:grid;grid-template-columns:1.4fr .6fr .6fr .8fr 1.1fr;gap:8px;align-items:center;font-size:11.5px;padding:9px 0;border-bottom:1px solid var(--border2)}
-.lp2 .hbar{width:56px;height:6px;border-radius:99px;background:var(--seg);overflow:hidden}
-.lp2 .hbar>i{display:block;height:100%}
-.lp2 .hchip{position:absolute}
-.lp2 .hchip>span{display:inline-flex;align-items:center;gap:8px;background:var(--card);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid var(--card-border);border-radius:999px;padding:8px 14px;white-space:nowrap;box-shadow:0 22px 44px -18px rgba(14,42,71,.4)}
-.lp2 .hchip .ic{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.lp2 .hchip b{font-size:12px;font-weight:700;color:var(--text)}
-@media(max-width:1024px){
-  .lp2 .hero-inner{flex-direction:column;align-items:stretch;gap:22px}
-  .lp2 .hero-copy{flex:none;max-width:none}
-  .lp2 .hero-hub{display:none}
-  .lp2 .modstrip-sm{display:flex;margin-top:4px}
-  /* Mobile: keep the FULL desktop hero composition (analytics window + floating
-     module chips) but scale it down to fit the viewport — HeroStage measures the
-     width and sets the scale via JS. flex:none + width:100% + overflow visible so
-     the scaled scene (positioned absolutely, height set inline by JS) fits. */
-  .lp2 .hstage{flex:none;width:100%;min-width:0;align-self:auto;min-height:0;perspective:none;overflow:visible}
+@media (max-width:760px){
+  .lp2 .nav .links .navlink{display:none}
+  .lp2 .floatcard{display:none}
+  .lp2 .wrap{padding:0 20px}
 }
 `
 
-// ── Reusable wordmark: gradient tile + "Taskflo v[check] co" (reads "Taskflowco") ──
+// ── Wordmark: navy tile + white check + "Taskflowco" ──
 function Logo({ footer }) {
   return (
     <span className="logo" style={footer ? { color: '#fff' } : undefined}>
       <span className="tile">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </span>
-      <span>TaskFlo<span className="mark">v
-        <svg className="leg" viewBox="0 0 72 92">
-          <defs><linearGradient id="lp2tk" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#2F6BFF" /><stop offset="1" stopColor="#14C7C0" /></linearGradient></defs>
-          <path d="M4 56 24 78 68 8" fill="none" stroke="url(#lp2tk)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span className="co">Co</span>
-      </span></span>
+      <span className="word" style={footer ? { color: '#fff' } : undefined}>Taskflow<span className="co" style={footer ? { color: '#5B9BFF' } : undefined}>co</span></span>
     </span>
   )
 }
 
-const check = <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17 19 7" stroke="#1FA971" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+const check = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M5 12.5 10 17 19 7" stroke="var(--teal,#0E8F89)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
 
 function scrollToId(id) {
   const el = document.getElementById(id)
   if (el) el.scrollIntoView({ behavior: 'smooth' })
 }
 
-// ── Demo booking form (wired to demo_requests) ──
-// Half-hourly time options across a working day (any day is bookable).
-const SLOT_TIMES = (() => {
-  const out = []
-  for (let h = 9; h <= 19; h++) { out.push(String(h).padStart(2, '0') + ':00'); if (h < 19) out.push(String(h).padStart(2, '0') + ':30') }
-  return out
-})()
-function todayISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
+// icon helpers
+const fic = paths => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
 
-function DemoForm() {
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [firm, setFirm] = useState('CA')
-  const [slotDate, setSlotDate] = useState(todayISO)
-  const [slotTime, setSlotTime] = useState('11:00')
-  const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(false)
-  const [err, setErr] = useState('')
-  async function submit(e) {
-    e.preventDefault()
-    if (!name.trim() || !email.trim()) { setErr('Name and work email are required.'); return }
-    setBusy(true); setErr('')
-    try {
-      const slot = slotDate ? (slotDate + ' ' + slotTime) : slotTime
-      const { error } = await supabase.from('demo_requests').insert({
-        name: name.trim(), email: email.trim(), firm_name: firm,
-        message: 'Firm type: ' + firm + ' · Preferred slot: ' + slot, status: 'new',
-      })
-      if (error) throw error
-      setDone(true)
-    } catch (e2) { setErr('Could not submit. Please email support@taskflowco.in.') }
-    setBusy(false)
-  }
-  if (done) return (
-    <div style={{ textAlign: 'center', padding: '30px 0' }}>
-      <div style={{ fontSize: 38, marginBottom: 12 }}>🎉</div>
-      <h3 style={{ fontSize: 20, margin: '0 0 8px' }}>Demo request received</h3>
-      <p style={{ fontSize: 14, color: 'var(--text-2)', margin: 0 }}>We'll reach out within 24 hours to confirm your slot.</p>
-    </div>
-  )
-  const single = (val, cur, set, opts) => (
-    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-      {opts.map(o => <span key={o} className={'chipbtn' + (cur === o ? ' on' : '') + (val === 'slot' ? ' mono' : '')} onClick={() => set(o)}>{o}</span>)}
-    </div>
-  )
-  return (
-    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 150 }}><label className="lbl">Your name</label><input className="field" style={{ width: '100%' }} placeholder="Vaibhav B." value={name} onChange={e => setName(e.target.value)} required /></div>
-        <div style={{ flex: 1, minWidth: 150 }}><label className="lbl">Work email</label><input className="field" style={{ width: '100%' }} type="email" placeholder="you@firm.in" value={email} onChange={e => setEmail(e.target.value)} required /></div>
-      </div>
-      <div><label className="lbl">Firm type</label>{single('firm', firm, setFirm, ['CA', 'CS', 'CMA', 'Tax / Advisory'])}</div>
-      <div><label className="lbl">Preferred slot</label>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <input className="field mono" type="date" min={todayISO()} value={slotDate} onChange={e => setSlotDate(e.target.value)} style={{ flex: '1 1 150px', minWidth: 140 }} />
-          <select className="field mono" value={slotTime} onChange={e => setSlotTime(e.target.value)} style={{ flex: '1 1 110px', minWidth: 110, cursor: 'pointer' }}>
-            {SLOT_TIMES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>Any day works — weekends included. We'll confirm by email.</div>
-      </div>
-      {err && <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>{err}</div>}
-      <button type="submit" className="btn btn-primary" disabled={busy} style={{ justifyContent: 'center', marginTop: 4 }}>{busy ? 'Sending…' : 'Book my demo'}</button>
-    </form>
-  )
-}
-
-function FAQItem({ q, a, defaultOpen }) {
-  const [open, setOpen] = useState(!!defaultOpen)
-  return (
-    <div className={'faq-item' + (open ? ' open' : '')}>
-      <div className="faq-q" onClick={() => setOpen(o => !o)}>
-        <span>{q}</span><span className="faq-sign">{open ? '−' : '+'}</span>
-      </div>
-      {open && <div className="faq-a">{a}</div>}
-    </div>
-  )
-}
-
+// ── Feature groups (copy from handoff) ──
 const FEATURE_GROUPS = [
   { group: 'Compliance & filing', items: [
     { p: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6M9 16l1.6 1.6L14 14.5" /></>, h: 'GST Desk', d: 'Track every GSTR return by stage and reconcile your internal status against the GST portal — so nothing is filed twice or slips through.' },
@@ -394,154 +226,100 @@ const FEATURE_GROUPS = [
     { p: <path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" />, h: 'Analytics & workload', d: 'Revenue, on-time %, pending work and who’s overloaded — the health of your firm at a glance.' },
   ] },
 ]
-const MODULES = ['Practice Hub', 'WorkZone', 'GST Desk', 'ITR Desk', 'Client Portal', 'Communications', 'Billing', 'Attendance', 'Analytics', 'Team']
-const fico = paths => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths}</svg>
 
-// ── Radial "everything in one place" hub ──
-const HUB_NODES = [
-  { l: 'Worksheets & Filings', c: '#2F6BFF', p: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" /></> },
-  { l: 'Analytics', c: '#7C3AED', p: <path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" /> },
-  { l: 'Team Workload', c: '#14C7C0', p: <><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M16 5.5a3 3 0 0 1 0 5.5M17 14.5a5 5 0 0 1 3 5.5" /></> },
-  { l: 'Billing & Invoices', c: '#EC4899', p: <><path d="M6 3h9l3 3v15H6z" /><path d="M9 9h6M9 13h6M9 17h4" /></> },
-  { l: 'Time Tracking', c: '#F4A52A', p: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></> },
-  { l: 'Client Portal', c: '#0EA5E9', p: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></> },
-  { l: 'Team Chat', c: '#2F6BFF', p: <path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4z" /> },
-  { l: 'Bulk Email', c: '#7C3AED', p: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></> },
-  { l: 'Documents', c: '#14C7C0', p: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /> },
-  { l: 'Kanban Boards', c: '#2F6BFF', p: <><rect x="3" y="4" width="5" height="16" rx="1" /><rect x="10" y="4" width="5" height="10" rx="1" /><rect x="17" y="4" width="5" height="13" rx="1" /></> },
-  { l: 'Auto Reminders', c: '#EF4444', p: <><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></> },
-  { l: 'Compliance Calendar', c: '#F4A52A', p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></> },
-]
-function RadialHub() {
-  const n = HUB_NODES.length, Rx = 40, Ry = 42
-  return (
-    <div className="hub" aria-hidden="true">
-      <div className="hub-ring" /><div className="hub-ring two" /><div className="hub-glow" />
-      <div className="hub-center"><span className="tile"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg></span><b>TaskFlow<span className="grad-text">Co</span></b></div>
-      {HUB_NODES.map((nd, i) => {
-        const a = (-90 + i * (360 / n)) * Math.PI / 180
-        const left = 50 + Rx * Math.cos(a), top = 50 + Ry * Math.sin(a)
-        return (
-          <div className="hub-node" key={nd.l} style={{ left: left + '%', top: top + '%' }}>
-            <span className="hub-ico" style={{ background: nd.c + '18', color: nd.c, borderColor: nd.c + '33' }}>{fico(nd.p)}</span>
-            <span>{nd.l}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Hero object-animation stage: analytics window + floating chips + mouse parallax ──
-const HERO_CHIPS = [
-  { l: 'Compliance Calendar', c: '#F4A52A', s: { left: '32%', top: '1%' }, d: '.6s', p: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></> },
-  { l: 'GST Desk', c: '#2F6BFF', s: { left: '0%', top: '13%' }, d: '0s', p: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6" /></> },
-  { l: 'ITR Desk', c: '#7C3AED', s: { right: '1%', top: '7%' }, d: '.3s', p: <><rect x="6" y="4" width="12" height="16" rx="2" /><path d="M9 4V3h6v1M9 10h6M9 14h4" /></> },
-  { l: 'Client Portal', c: '#0EA5E9', s: { left: '-1%', top: '46%' }, d: '.8s', p: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></> },
-  { l: 'Auto Reminders', c: '#EF4444', s: { right: '-1%', top: '33%' }, d: '1.1s', p: <><path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6Z" /><path d="M10 19a2 2 0 0 0 4 0" /></> },
-  { l: 'Billing & Invoices', c: '#EC4899', s: { right: '-3%', bottom: '22%' }, d: '.2s', txt: '₹' },
-  { l: 'Team Chat', c: '#14C7C0', s: { left: '3%', bottom: '5%' }, d: '.9s', p: <path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4z" /> },
-]
-const AROW = [
-  ['GSTR-1', 120, 22, 18, 73, '#2F6BFF'], ['GST Returns', 40, 8, 12, 67, '#2F6BFF'],
-  ['ITR', 88, 14, 6, 81, '#14C7C0'], ['TDS', 32, 6, 5, 74, '#2F6BFF'], ['ROC', 18, 3, 0, 100, '#1FA971'],
-]
+// ── Hero product stage: laptop dashboard + floating module cards ──
 function HeroStage() {
-  const stageRef = useRef(null), sceneRef = useRef(null)
-  useEffect(() => {
-    const stage = stageRef.current, scene = sceneRef.current
-    if (!stage || !scene) return
-    // Design size of the desktop composition — the scene is authored at this size
-    // and, on narrow screens, scaled down uniformly so mobile shows the exact
-    // desktop layout (window + floating chips) in miniature.
-    const DW = 660, DH = 520
-    const mq = window.matchMedia('(max-width:1024px)')
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    let raf = 0
-
-    function fitMobile() {
-      const w = stage.clientWidth || DW
-      const s = Math.min(1, w / DW)
-      scene.style.position = 'absolute'
-      scene.style.inset = '0'
-      scene.style.width = DW + 'px'
-      scene.style.height = DH + 'px'
-      scene.style.transformOrigin = 'top left'
-      scene.style.transform = 'scale(' + s + ')'
-      stage.style.height = (DH * s) + 'px'
-    }
-    function clearMobile() {
-      scene.style.position = ''; scene.style.inset = ''
-      scene.style.width = ''; scene.style.height = ''
-      scene.style.transformOrigin = ''; scene.style.transform = ''
-      stage.style.height = ''
-    }
-
-    const m = { x: 0, y: 0, tx: 0, ty: 0 }
-    const move = e => { const r = stage.getBoundingClientRect(); m.tx = ((e.clientX - r.left) / r.width - 0.5) * 2; m.ty = ((e.clientY - r.top) / r.height - 0.5) * 2 }
-    const leave = () => { m.tx = 0; m.ty = 0 }
-    const loop = () => {
-      m.x += (m.tx - m.x) * 0.06; m.y += (m.ty - m.y) * 0.06
-      scene.style.transform = `rotateX(${(5 - m.y * 8).toFixed(2)}deg) rotateY(${(-13 + m.x * 10).toFixed(2)}deg)`
-      raf = requestAnimationFrame(loop)
-    }
-    function startDesktop() {
-      clearMobile()
-      if (reduce) { scene.style.transform = 'rotateX(4deg) rotateY(-12deg)'; return }
-      stage.addEventListener('mousemove', move); stage.addEventListener('mouseleave', leave)
-      raf = requestAnimationFrame(loop)
-    }
-    function stopDesktop() {
-      cancelAnimationFrame(raf); raf = 0
-      stage.removeEventListener('mousemove', move); stage.removeEventListener('mouseleave', leave)
-    }
-    function setup() {
-      if (mq.matches) { stopDesktop(); fitMobile() }
-      else { startDesktop() }
-    }
-    setup()
-    const onResize = () => { if (mq.matches) fitMobile() }
-    window.addEventListener('resize', onResize)
-    if (mq.addEventListener) mq.addEventListener('change', setup); else if (mq.addListener) mq.addListener(setup)
-    return () => {
-      stopDesktop()
-      window.removeEventListener('resize', onResize)
-      if (mq.removeEventListener) mq.removeEventListener('change', setup); else if (mq.removeListener) mq.removeListener(setup)
-    }
-  }, [])
-  const sico = p => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{p}</svg>
+  const DASH_NAV = [['Home', 1], ['Clients', 0], ['WorkZone', 0], ['Compliance', 0], ['Documents', 0], ['Team', 0], ['Billing', 0], ['Reports', 0]]
+  const dot = <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="12" cy="12" r="8" /></svg>
+  const STATS = [
+    { v: '128', k: 'Total Clients', color: 'var(--blue)' },
+    { v: '24', k: 'Active Tasks', color: 'var(--ink)' },
+    { v: '8', k: 'Due Today', color: '#D68A17' },
+    { v: '4', k: 'Overdue', color: '#D6455A' },
+  ]
+  const pillA = { fontSize: 7.5, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(14,42,71,.10)', color: 'var(--blue)' }
+  const pillB = { fontSize: 7.5, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(244,165,42,.16)', color: '#B4791C' }
+  const pillC = { fontSize: 7.5, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: 'rgba(20,199,192,.16)', color: 'var(--teal)' }
+  const WORK = [
+    { t: 'GST Filing – ABC Ltd', s: 'In Progress', pill: pillA },
+    { t: 'ITR Review – Mehta & Co', s: 'Review', pill: pillC },
+    { t: 'Audit Papers – XYZ', s: 'Due Today', pill: pillB },
+    { t: 'Client Docs – Kumar', s: 'Pending', pill: pillB },
+  ]
+  const DEADS = [['GST Return', 'Apr 20'], ['TDS Return', 'Apr 25'], ['ITR Filing', 'Jul 30'], ['Audit Report', 'Sep 30']]
+  const FLOAT = [
+    { label: 'Clients', sub: 'All client info in one place', color: '#0E8F89', tint: 'rgba(20,199,192,.14)', pos: { left: '-6%', top: '8%' }, dur: '6s', icon: fic(<><circle cx="9" cy="8" r="3" /><path d="M4 20a5 5 0 0 1 10 0" /><path d="M16 5.5a3 3 0 0 1 0 5.5M17 14.5a5 5 0 0 1 3 5.5" /></>) },
+    { label: 'Tasks', sub: 'Assign, track, complete', color: 'var(--blue)', tint: 'rgba(14,42,71,.10)', pos: { left: '38%', top: '-5%' }, dur: '7s', icon: fic(<><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8.5 12.5 11 15l5-5.5" /></>) },
+    { label: 'Compliance', sub: 'Never miss a deadline', color: '#D6455A', tint: 'rgba(214,69,90,.12)', pos: { right: '-5%', top: '4%' }, dur: '6.5s', icon: fic(<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></>) },
+    { label: 'Reports', sub: 'Your practice at a glance', color: 'var(--blue)', tint: 'rgba(14,42,71,.10)', pos: { right: '-7%', bottom: '14%' }, dur: '7.5s', icon: fic(<path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" />) },
+    { label: 'Team', sub: 'Work together with clarity', color: '#D68A17', tint: 'rgba(244,165,42,.16)', pos: { left: '-3%', bottom: '6%' }, dur: '6.8s', icon: fic(<><circle cx="12" cy="8" r="3.2" /><path d="M5 20a7 7 0 0 1 14 0" /></>) },
+  ]
   return (
-    <div className="hstage" ref={stageRef} aria-hidden="true">
-      <div className="hscene" ref={sceneRef}>
-        <div className="hwin">
-          <div className="hwin-head"><i style={{ background: '#E2626B' }} /><i style={{ background: '#F4C04E' }} /><i style={{ background: '#5FCE8E' }} /><span className="hwin-addr">app.taskflowco.in/analytics</span></div>
-          <div className="hwin-body">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}><div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Analytics · Work performed</div><div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 600 }}>231 tasks · 5 work types</div></div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14 }}>
-              <div className="hcell"><div className="k">TOTAL</div><div className="v" style={{ color: 'var(--text)' }}>231</div></div>
-              <div className="hcell"><div className="k">DONE</div><div className="v" style={{ color: 'var(--success)' }}>168</div></div>
-              <div className="hcell"><div className="k">OVERDUE</div><div className="v" style={{ color: 'var(--danger)' }}>41</div></div>
-            </div>
-            <div className="hcell" style={{ padding: '4px 14px 10px' }}>
-              <div className="hrow" style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.05em', color: 'var(--muted)' }}><span>WORK TYPE</span><span style={{ textAlign: 'center' }}>DONE</span><span style={{ textAlign: 'center' }}>PEND</span><span style={{ textAlign: 'center' }}>OVERDUE</span><span style={{ textAlign: 'right' }}>COMPLETE</span></div>
-              {AROW.map((r, i) => (
-                <div className="hrow" key={r[0]} style={i === AROW.length - 1 ? { borderBottom: 'none' } : undefined}>
-                  <span style={{ fontWeight: 700, color: 'var(--text)' }}>{r[0]}</span>
-                  <span style={{ textAlign: 'center', color: 'var(--success)', fontWeight: 700 }}>{r[1]}</span>
-                  <span style={{ textAlign: 'center', color: 'var(--muted)' }}>{r[2]}</span>
-                  <span style={{ textAlign: 'center', color: r[3] ? 'var(--danger)' : 'var(--muted)', fontWeight: r[3] ? 700 : 400 }}>{r[3]}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 7, justifyContent: 'flex-end' }}><span className="hbar"><i style={{ width: r[4] + '%', background: r[5] }} /></span><span style={{ fontSize: 10, color: r[4] === 100 ? 'var(--success)' : 'var(--muted)', fontWeight: 700 }}>{r[4]}%</span></span>
+    <div className="stage">
+      <div className="frame">
+        {/* laptop */}
+        <div style={{ border: '11px solid var(--laptop)', borderBottom: 'none', borderRadius: '16px 16px 0 0', overflow: 'hidden', background: 'var(--panel)', boxShadow: '0 40px 80px -40px rgba(19,35,56,.5)' }}>
+          <div style={{ display: 'flex', background: 'var(--panel)', minHeight: 360 }}>
+            {/* sidebar */}
+            <div style={{ width: 132, flexShrink: 0, background: 'var(--bg-alt)', borderRight: '1px solid var(--border)', padding: '12px 10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 6px 12px' }}>
+                <span style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ink)' }}>Taskflowco</span>
+              </div>
+              {DASH_NAV.map(([name, on]) => (
+                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: on ? 700 : 600, padding: '6px 8px', borderRadius: 6, marginBottom: 2, color: on ? '#fff' : 'var(--ink-2)', background: on ? 'var(--blue)' : 'transparent' }}>
+                  <span style={{ width: 14, height: 14, display: 'inline-flex', color: on ? '#fff' : 'var(--muted)' }}>{dot}</span>{name}
                 </div>
               ))}
             </div>
+            {/* main */}
+            <div style={{ flex: 1, minWidth: 0, padding: '13px 14px', background: 'var(--panel)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)' }}>Welcome back, Vaibhav 👋</div>
+                  <div style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 2 }}>Here's what's happening in your practice today</div>
+                </div>
+                <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--ink-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px' }}>This Board ▾</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 7, marginBottom: 12 }}>
+                {STATS.map(s => (
+                  <div key={s.k} style={{ background: 'var(--field)', border: '1px solid var(--border-2)', borderRadius: 8, padding: '8px 9px' }}>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.v}</div>
+                    <div style={{ fontSize: 8, color: 'var(--muted)', fontWeight: 600, marginTop: 4 }}>{s.k}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 11 }}>
+                <div>
+                  <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--ink)', marginBottom: 7 }}>Today's Work</div>
+                  {WORK.map(w => (
+                    <div key={w.t} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 0', borderBottom: '1px solid var(--border-2)' }}>
+                      <span style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--field)', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w.t}</div></div>
+                      <span style={w.pill}>{w.s}</span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: 9.5, fontWeight: 800, color: 'var(--ink)', marginBottom: 7 }}>Upcoming Deadlines</div>
+                  {DEADS.map(([n, d]) => (
+                    <div key={n} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-2)' }}>
+                      <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--ink-2)' }}>{n}</span>
+                      <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--blue)' }}>{d}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        {HERO_CHIPS.map((ch, i) => (
-          <div className="hchip" key={ch.l} style={{ ...ch.s, transform: `translateZ(${70 + i * 6}px)` }}>
-            <span style={{ animation: `lp2-bob ${6 + i * 0.4}s ease-in-out ${ch.d} infinite`, display: 'inline-flex' }}>
-              <span className="ic" style={{ background: ch.c + '22', color: ch.c, fontSize: ch.txt ? 14 : undefined, fontWeight: ch.txt ? 800 : undefined }}>{ch.txt || sico(ch.p)}</span>
-              <b>{ch.l}</b>
-            </span>
+        <div style={{ height: 12, width: '112%', marginLeft: '-6%', background: 'var(--laptopbase)', borderRadius: '0 0 12px 12px' }} />
+
+        {/* floating cards */}
+        {FLOAT.map(f => (
+          <div key={f.label} className="floatcard" style={{ position: 'absolute', zIndex: 5, ...f.pos, animation: `lpfloat ${f.dur} ease-in-out infinite` }}>
+            <span style={{ width: 30, height: 30, borderRadius: 8, background: f.tint, color: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{f.icon}</span>
+            <div><div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ink)', lineHeight: 1.1 }}>{f.label}</div><div style={{ fontSize: 9.5, color: 'var(--muted)', marginTop: 2 }}>{f.sub}</div></div>
           </div>
         ))}
       </div>
@@ -549,101 +327,183 @@ function HeroStage() {
   )
 }
 
-// ── Device showcase: laptop + phone, auto-rotating module slides ──
-const SHOW_TABS = ['WorkZone', 'GST Desk', 'Client Portal', 'Billing', 'Analytics']
-function ShowSlide({ tab }) {
-  if (tab === 'GST Desk') return (
-    <div className="slide" key="gst">
-      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 12 }}>GST Desk · Reconciliation — Sep 2026</div>
-      {[['Milind Rathod', 'GSTR-3B', 'Reviewed', 'ok', 'Filed'], ['Omkar Mane', 'GSTR-1', 'Filed', 'wait', 'Pending'], ['OM & Associates', 'GSTR-3B', 'Reviewed', 'ok', 'Filed'], ['Raj Bhoite', 'GSTR-1', 'In progress', 'wait', 'Not filed']].map((r, i) => (
-        <div className="rec-row" key={i}><div><div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[0]} · {r[1]}</div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>Internal: {r[2]}</div></div><span className={r[3] === 'ok' ? 'pill-ok' : 'pill-wait'}>Portal: {r[4]}</span></div>
-      ))}
-    </div>
-  )
-  if (tab === 'Client Portal') return (
-    <div className="slide" key="portal">
-      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 12 }}>Client Portal · Document requests</div>
-      {[['Sandip Kale', 'Bank statements FY25-26', 'ok', 'Received'], ['Milind Rathod', 'Form 16 · FY24-25', 'ok', 'Approved'], ['Raj Bhoite', 'Purchase invoices — Aug', 'wait', '3 pending'], ['OM & Associates', 'Aadhaar + PAN', 'wait', 'Requested']].map((r, i) => (
-      <div className="rec-row" key={i}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--badge-bg)', color: 'var(--teal-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{fico(<><path d="M12 16V5m0 0L8 9m4-4 4 4" /><path d="M5 17v2h14v-2" /></>)}</span><div><div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[1]}</div><div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>{r[0]}</div></div></div><span className={r[2] === 'ok' ? 'pill-ok' : 'pill-wait'}>{r[3]}</span></div>
-      ))}
-    </div>
-  )
-  if (tab === 'Billing') return (
-    <div className="slide" key="billing">
-      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 12 }}>Billing · Invoices &amp; payments</div>
-      {[['#INV-2041', 'Rathod · Filing fee', '₹12,000', 'ok', 'Paid'], ['#INV-2038', 'OM & Assoc · Advisory', '₹8,500', 'wait', 'Sent'], ['#INV-2044', 'Kale · ITR filing', '₹4,000', 'ok', 'Paid']].map((r, i) => (
-        <div className="rec-row" key={i}><div><div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[0]} · {r[1]}</div></div><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span className="mono" style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{r[2]}</span><span className={r[3] === 'ok' ? 'pill-ok' : 'pill-wait'}>{r[4]}</span></div></div>
-      ))}
-      <div className="rec-row" style={{ marginTop: 12, background: 'var(--field)' }}><span style={{ fontWeight: 800, fontSize: 12.5, color: 'var(--text)' }}>Export to Tally / Zoho Books</span><span className="pill-ok">Ready</span></div>
-    </div>
-  )
-  if (tab === 'Analytics') return (
-    <div className="slide" key="an">
-      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-2)', marginBottom: 14 }}>Analytics · Practice health</div>
-      <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-        {[['On-time %', '96%'], ['Filed · month', '128'], ['Outstanding', '₹20.5k']].map((s, i) => (
-          <div key={i} style={{ flex: 1, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 12, padding: '12px 14px' }}><div style={{ fontSize: 10.5, color: 'var(--muted)', fontWeight: 600 }}>{s[0]}</div><div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginTop: 3 }}>{s[1]}</div></div>
-        ))}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 12, padding: 16 }}>
-        {['45%', '68%', '55%', '90%', '72%', '84%'].map((h, i) => <div key={i} style={{ flex: 1, height: h, borderRadius: '6px 6px 0 0', background: i === 3 ? 'var(--grad)' : 'var(--seg)' }} />)}
-      </div>
-    </div>
-  )
-  // WorkZone board (default)
-  const col = (dot, name, count, cards) => (
-    <div className="column"><div className="head"><span className="dot" style={{ background: dot }} />{name}<span className="count" style={{ color: dot }}>{count}</span></div>{cards}</div>
-  )
-  const card = (b, chip, meta, mc) => <div className="card" style={{ borderLeftColor: b }}><div className="name">{chip[0]}</div><div style={{ marginTop: 7 }}><span className="chip">{chip[1]}</span></div><div className={'meta' + (mc ? ' mono' : '')} style={mc ? { color: mc } : undefined}>{meta}</div></div>
+// ── Product showcase (tabbed browser window) ──
+const TABS = [
+  { name: 'GST Desk', addr: 'app.taskflowco.in/gst' },
+  { name: 'Client Portal', addr: 'app.taskflowco.in/portal' },
+  { name: 'Billing', addr: 'app.taskflowco.in/billing' },
+  { name: 'Analytics', addr: 'app.taskflowco.in/analytics' },
+]
+function ProductShowcase() {
+  const [tab, setTab] = useState('GST Desk')
+  const addr = (TABS.find(t => t.name === tab) || TABS[0]).addr
+  const gstRows = [
+    { name: 'Milind Rathod', ret: 'GSTR-3B', internal: 'Reviewed', portal: 'Filed', ok: true },
+    { name: 'Omkar Mane', ret: 'GSTR-1', internal: 'Filed', portal: 'Pending', ok: false },
+    { name: 'OM & Associates', ret: 'GSTR-3B', internal: 'Reviewed', portal: 'Filed', ok: true },
+    { name: 'Raj Bhoite', ret: 'GSTR-1', internal: 'In progress', portal: 'Not filed', ok: false },
+  ]
+  const portalRows = [
+    { doc: 'Bank statements FY25-26', client: 'Sandip Kale', status: 'Received', ok: true },
+    { doc: 'Form 16 · FY24-25', client: 'Milind Rathod', status: 'Approved', ok: true },
+    { doc: 'Purchase invoices — Aug', client: 'Raj Bhoite', status: '3 pending', ok: false },
+    { doc: 'Aadhaar + PAN', client: 'OM & Associates', status: 'Requested', ok: false },
+  ]
+  const billRows = [
+    { no: '#INV-2041', desc: 'Rathod · Filing fee', amt: '₹12,000', status: 'Paid', ok: true },
+    { no: '#INV-2038', desc: 'OM & Assoc · Advisory', amt: '₹8,500', status: 'Sent', ok: false },
+    { no: '#INV-2044', desc: 'Kale · ITR filing', amt: '₹4,000', status: 'Paid', ok: true },
+  ]
+  const aStats = [['On-time %', '96%'], ['Filed · month', '128'], ['Outstanding', '₹20.5k']]
+  const bars = ['45%', '68%', '55%', '90%', '72%', '84%']
+  const uploadIcon = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V5m0 0L8 9m4-4 4 4" /><path d="M5 17v2h14v-2" /></svg>
   return (
-    <div className="slide board" key="wz">
-      {col('var(--muted)', 'Pending', 24, <>{card('var(--danger)', ['Milind Rathod', 'GSTR Returns'], '⚠ 2026-02-11', 'var(--danger)')}{card('var(--danger)', ['Raj Bhoite', 'GSTR 3B'], '⚠ 2026-04-20', 'var(--danger)')}</>)}
-      {col('var(--progress)', 'In Progress', 1, card('var(--progress)', ['Milind Rathod', 'GSTR Returns'], 'Priya N.'))}
-      {col('var(--warning)', 'Under Review', 2, card('var(--warning)', ['Sandip Kale', 'ITR Filing'], 'Aarti S.'))}
-      {col('var(--success)', 'Completed', 9, card('var(--success)', ['OM & Associates', 'Income Tax Return'], 'Filed · 2026-06-28', 'var(--success)'))}
-    </div>
+    <>
+      <div className="tabrow">
+        {TABS.map(t => <button key={t.name} className={'ptab' + (tab === t.name ? ' on' : '')} onClick={() => setTab(t.name)}>{t.name}</button>)}
+      </div>
+      <div className="browser">
+        <div className="chrome">
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#E2626B' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#F4C04E' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#5FCE8E' }} />
+          <span className="addr mono">{addr}</span>
+        </div>
+        <div style={{ padding: 18, minHeight: 340 }}>
+          {tab === 'GST Desk' && (
+            <div style={{ animation: 'lpfade .35s ease' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 14 }}>GST Desk · Reconciliation — Sep 2026</div>
+              {gstRows.map(r => (
+                <div key={r.name} className="prow">
+                  <div style={{ minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)', lineHeight: 1.3 }}>{r.name} · {r.ret}</div><div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>Internal: {r.internal}</div></div>
+                  <span className={r.ok ? 'pill-ok' : 'pill-wait'}>Portal: {r.portal}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab === 'Client Portal' && (
+            <div style={{ animation: 'lpfade .35s ease' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 14 }}>Client Portal · Document requests</div>
+              {portalRows.map(r => (
+                <div key={r.doc} className="prow">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--field)', border: '1px solid var(--border)', color: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{uploadIcon}</span>
+                    <div><div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)' }}>{r.doc}</div><div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 3 }}>{r.client}</div></div>
+                  </div>
+                  <span className={r.ok ? 'pill-ok' : 'pill-wait'}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab === 'Billing' && (
+            <div style={{ animation: 'lpfade .35s ease' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 14 }}>Billing · Invoices &amp; payments</div>
+              {billRows.map(r => (
+                <div key={r.no} className="prow">
+                  <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)' }}>{r.no} · {r.desc}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}><span className="mono" style={{ fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{r.amt}</span><span className={r.ok ? 'pill-ok' : 'pill-wait'}>{r.status}</span></div>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--field)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', marginTop: 12 }}>
+                <span style={{ fontWeight: 800, fontSize: 13, color: 'var(--ink)' }}>Export to Tally / Zoho Books</span>
+                <span className="pill-ok">Ready</span>
+              </div>
+            </div>
+          )}
+          {tab === 'Analytics' && (
+            <div style={{ animation: 'lpfade .35s ease' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink)', marginBottom: 14 }}>Analytics · Practice health</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12, marginBottom: 16 }}>
+                {aStats.map(([k, v]) => (
+                  <div key={k} style={{ background: 'var(--bg-alt)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}><div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{k}</div><div style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', marginTop: 4 }}>{v}</div></div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 150, background: 'var(--bg-alt)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
+                {bars.map((h, i) => <div key={i} style={{ flex: 1, height: h, borderRadius: '6px 6px 0 0', background: i === 3 ? 'var(--blue)' : 'var(--border)' }} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
-function Showcase() {
-  const [active, setActive] = useState(0)
-  const [paused, setPaused] = useState(false)
-  useEffect(() => {
-    if (paused) return
-    const t = setInterval(() => setActive(a => (a + 1) % SHOW_TABS.length), 2200)
-    return () => clearInterval(t)
-  }, [paused])
-  const tab = SHOW_TABS[active]
+
+// ── Demo booking form (wired to demo_requests) ──
+function DemoForm() {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [firm, setFirm] = useState('CA')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState('')
+  async function submit(e) {
+    e.preventDefault()
+    if (!name.trim() || !email.trim()) { setErr('Name and work email are required.'); return }
+    setBusy(true); setErr('')
+    try {
+      const { error } = await supabase.from('demo_requests').insert({
+        name: name.trim(), email: email.trim(), firm_name: firm,
+        message: 'Firm type: ' + firm, status: 'new',
+      })
+      if (error) throw error
+      setDone(true)
+    } catch (e2) { setErr('Could not submit. Please email support@taskflowco.in.') }
+    setBusy(false)
+  }
+  if (done) return (
+    <div style={{ textAlign: 'center', padding: '40px 0' }}>
+      <span style={{ display: 'inline-flex', width: 52, height: 52, borderRadius: '50%', background: 'var(--field)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17 19 7" /></svg>
+      </span>
+      <h3 style={{ fontSize: 20, fontWeight: 800, color: 'var(--ink)', margin: '0 0 8px' }}>Demo request received</h3>
+      <p style={{ fontSize: 14, color: 'var(--ink-2)', margin: 0 }}>We'll reach out within 24 hours to confirm your slot.</p>
+    </div>
+  )
   return (
-    <div className="devwrap" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      <div className="laptop">
-        <div className="laptop-screen">
-          <div className="appchrome"><span className="dots"><i /><i /><i /></span><span className="addr">app.taskflowco.in</span></div>
-          <div className="app-tabs" style={{ margin: 0, padding: '12px 14px', border: 'none', borderBottom: '1px solid var(--border)' }}>
-            {SHOW_TABS.map((t, i) => (
-              <button key={t} className={'app-tab' + (i === active ? ' on' : '')} onClick={() => setActive(i)} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{t}</button>
-            ))}
+    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 150 }}><label className="lbl">Your name</label><input className="field" style={{ width: '100%' }} placeholder="Vaibhav B." value={name} onChange={e => setName(e.target.value)} required /></div>
+        <div style={{ flex: 1, minWidth: 150 }}><label className="lbl">Work email</label><input className="field" style={{ width: '100%' }} type="email" placeholder="you@firm.in" value={email} onChange={e => setEmail(e.target.value)} required /></div>
+      </div>
+      <div>
+        <label className="lbl">Firm type</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {['CA', 'CS', 'CMA', 'Tax / Advisory'].map(f => <span key={f} className={'chipbtn' + (firm === f ? ' on' : '')} onClick={() => setFirm(f)}>{f}</span>)}
+        </div>
+      </div>
+      {err && <div style={{ fontSize: 12.5, color: 'var(--danger)' }}>{err}</div>}
+      <button type="submit" className="btn btn-primary" disabled={busy} style={{ marginTop: 4 }}>{busy ? 'Sending…' : 'Book my demo'}</button>
+      <p style={{ fontSize: 11.5, color: 'var(--muted)', margin: 0, textAlign: 'center' }}>We'll confirm your slot by email within 24 hours.</p>
+    </form>
+  )
+}
+
+// ── FAQ (single-open accordion) ──
+const FAQS = [
+  { q: 'Is TaskFlowCo built specifically for CA / CS / CMA firms?', a: 'Yes. The compliance calendar, work types and worksheets are pre-built for Indian practice work — GST, ITR, ROC and more — so you are productive on day one.' },
+  { q: 'Can I import my existing client list?', a: 'Absolutely. Upload an Excel sheet and we map the columns automatically. Most firms import their entire client base in a few minutes.' },
+  { q: 'Do I need a card to start?', a: 'No. Sign up free on the Free plan — free forever for up to 25 clients, no card required. Upgrade to Pro or Max whenever your team is ready; switch between monthly and yearly anytime.' },
+  { q: 'Is my client data secure?', a: 'Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. Enterprise adds SSO.' },
+  { q: 'Does it reconcile with the GST portal?', a: "Yes. The GST Desk tracks each return by internal stage and lets you reconcile it against the portal's filing status, so you can instantly see what's actually filed versus what's still pending." },
+  { q: 'Can I export to Tally or Zoho Books?', a: 'Yes. Billing exports your invoices, payments and statements as import-ready files for Tally and Zoho Books (plus Excel) — no manual re-entry between systems.' },
+  { q: 'Is there a mobile app?', a: 'TaskFlowCo installs as an app on your phone and desktop (PWA), with a mobile-optimised layout and geotagged attendance — no app store needed.' },
+]
+function FAQList() {
+  const [open, setOpen] = useState(0)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {FAQS.map((f, i) => (
+        <div key={i} className="faq-item">
+          <div className="faq-q" onClick={() => setOpen(o => o === i ? -1 : i)}>
+            <span>{f.q}</span><span className="faq-sign">{open === i ? '–' : '+'}</span>
           </div>
-          <div className="slidebody"><ShowSlide tab={tab} /></div>
+          {open === i && <div className="faq-a">{f.a}</div>}
         </div>
-        <div className="laptop-base" />
-      </div>
-      <div className="phone" aria-hidden="true">
-        <div className="phone-notch" />
-        <div className="phone-body">
-          <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text)', marginBottom: 2 }}>Good morning, Raj</div>
-          <div style={{ fontSize: 9, color: 'var(--muted)', marginBottom: 10 }}>3 due today · 1 overdue</div>
-          <div className="mrow"><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>GSTR-3B · Rathod</div><div className="mono" style={{ fontSize: 9, color: 'var(--danger)', marginTop: 3, fontWeight: 600 }}>⚠ Due in 3 days</div></div>
-          <div className="mrow"><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>Docs received · Kale</div><div style={{ fontSize: 9, color: 'var(--text-2)', marginTop: 3 }}>via Client Portal</div></div>
-          <div className="mrow"><div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text)' }}>Payment · ₹12,000</div><div className="mono" style={{ fontSize: 9, color: 'var(--success)', marginTop: 3, fontWeight: 600 }}>INV-2041 paid</div></div>
-          <div style={{ textAlign: 'center', fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>📍 Punched in · 9:12 AM</div>
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
 
-// ── Sign-in modal: Google + email magic link. The email link is how domain /
-// admin mailboxes (e.g. name@taskflowco.in) that aren't Google accounts sign in.
+// ── Sign-in modal: Google + email magic link ──
 function AuthModal({ open, onClose, onGoogle, googleBusy }) {
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
@@ -675,7 +535,7 @@ function AuthModal({ open, onClose, onGoogle, googleBusy }) {
             <div style={{ fontSize: 32, marginBottom: 8, color: 'var(--success)' }}>✓</div>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Check your inbox</div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>We sent a sign-in link to <b style={{ color: 'var(--text)' }}>{email}</b>.<br />Click it from any device to finish signing in.</div>
-            <button onClick={onClose} className="btn btn-ghost" style={{ marginTop: 18, justifyContent: 'center' }}>Done</button>
+            <button onClick={onClose} className="btn btn-ghost" style={{ marginTop: 18 }}>Done</button>
           </div>
         ) : (
           <>
@@ -692,7 +552,7 @@ function AuthModal({ open, onClose, onGoogle, googleBusy }) {
               <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, letterSpacing: '.02em' }}>Sign in with email link</label>
               <input className="field" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@yourdomain.com" disabled={busy || googleBusy} style={{ width: '100%' }} />
               {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8 }}>{error}</div>}
-              <button type="submit" disabled={busy || googleBusy} className="btn btn-ghost" style={{ width: '100%', marginTop: 12, justifyContent: 'center' }}>{busy ? 'Sending…' : 'Send sign-in link →'}</button>
+              <button type="submit" disabled={busy || googleBusy} className="btn btn-ghost" style={{ width: '100%', marginTop: 12 }}>{busy ? 'Sending…' : 'Send sign-in link →'}</button>
               <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 12, textAlign: 'center', lineHeight: 1.5 }}>Works with any email — no password required.<br />New here? Your account is created automatically.</div>
             </form>
           </>
@@ -701,9 +561,6 @@ function AuthModal({ open, onClose, onGoogle, googleBusy }) {
     </div>
   )
 }
-
-
-
 
 // ── Upgrade modal — shown after sign-in when user clicked a plan CTA ──
 function UpgradeModal({ planId, billing, orgId, onClose }) {
@@ -719,7 +576,7 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
         <div style={{ fontSize:48,marginBottom:12 }}>🎉</div>
         <h3 style={{ margin:'0 0 8px',fontSize:20,fontWeight:800,color:'var(--text)' }}>You're all set!</h3>
         <p style={{ color:'var(--text-2)',fontSize:14,margin:'0 0 22px',lineHeight:1.6 }}>Your {planName} plan is active. Your payment receipt will arrive in your inbox shortly.</p>
-        <button onClick={onClose} style={{ background:'var(--grad)',color:'#fff',border:'none',borderRadius:11,padding:'12px 28px',fontSize:14,fontWeight:800,cursor:'pointer',width:'100%' }}>Go to dashboard →</button>
+        <button onClick={onClose} style={{ background:'var(--blue)',color:'#fff',border:'none',borderRadius:11,padding:'12px 28px',fontSize:14,fontWeight:800,cursor:'pointer',width:'100%' }}>Go to dashboard →</button>
       </div>
     </div>
   )
@@ -736,8 +593,7 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
           </div>
         </div>
 
-        {/* Price recap */}
-        <div style={{ background:'linear-gradient(135deg,rgba(47,107,255,.07),rgba(20,199,192,.06))',border:'1px solid rgba(47,107,255,.14)',borderRadius:13,padding:'16px 18px',marginBottom:20 }}>
+        <div style={{ background:'var(--field)',border:'1px solid var(--border)',borderRadius:13,padding:'16px 18px',marginBottom:20 }}>
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline' }}>
             <span style={{ fontSize:13,color:'var(--text-2)' }}>{planName} · {billing === 'yearly' ? 'Yearly' : 'Monthly'}</span>
             <span style={{ fontSize:24,fontWeight:800,color:'var(--blue)' }}>₹{billing === 'yearly' ? yearlyTotal : monthlyAmt}<span style={{ fontSize:12,fontWeight:500,color:'var(--text-2)' }}>{billing === 'yearly' ? '/yr' : '/mo'}</span></span>
@@ -748,7 +604,6 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
           <div style={{ fontSize:11,color:'var(--muted)',marginTop:6 }}>Cancel anytime · Receipt emailed automatically</div>
         </div>
 
-        {/* What you get */}
         <ul style={{ margin:'0 0 22px',padding:'0 0 0 18px',color:'var(--text-2)',fontSize:13,lineHeight:1.9 }}>
           {planId === 'pro' ? <>
             <li>Unlimited clients &amp; up to 15 team members</li>
@@ -762,7 +617,6 @@ function UpgradeModal({ planId, billing, orgId, onClose }) {
           </>}
         </ul>
 
-        {/* CheckoutButton — full Razorpay flow */}
         {orgId ? (
           <CheckoutButton
             orgId={orgId}
@@ -810,7 +664,7 @@ export default function LandingPage({ onSignIn, loading }) {
     supabase.from('platform_settings').select('default_billing_cycle').eq('id', 1).maybeSingle()
       .then(({ data }) => { if (data?.default_billing_cycle) setBilling(data.default_billing_cycle) })
       .catch(() => {})
-  }, []) // null | 'pro' | 'starter'
+  }, [])
   const [currentOrgId, setCurrentOrgId] = useState(null)
 
   // After sign-in, fetch user's first org so CheckoutButton has an orgId
@@ -830,20 +684,26 @@ export default function LandingPage({ onSignIn, loading }) {
 
   const start = () => setAuthOpen(true)
   const buyPlan = (planId) => {
-    if (currentOrgId) {
-      // Already signed in with an org — go to in-app billing module
-      // Store intent so the app can open billing on load
-      try { localStorage.setItem('tfc-upgrade-intent', planId) } catch(_) {}
-      // Open auth modal which will redirect to app after sign-in
-      // Since they're already signed in (currentOrgId exists), open UpgradeModal
-      setUpgradeModal(planId)
-    } else {
-      // Not signed in — store intent and open sign-in modal
-      // After sign-in, app reads tfc-upgrade-intent and navigates to billing
-      try { localStorage.setItem('tfc-upgrade-intent', planId) } catch(_) {}
-      setAuthOpen(true)
-    }
+    try { localStorage.setItem('tfc-upgrade-intent', planId) } catch (_) {}
+    if (currentOrgId) setUpgradeModal(planId)
+    else setAuthOpen(true)
   }
+
+  const arrow = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+  const heroChecks = ['No complicated setup', 'Built for CA firms', 'Secure & reliable']
+  const AUDIENCES = ['CA Firms', 'CS Practices', 'CMA', 'Tax Consultants', 'Advisory']
+  const STEPS = [
+    { n: '1', h: 'Add your clients', d: 'Import your client list from Excel — we map the columns automatically, so your whole book is in within minutes.' },
+    { n: '2', h: 'Turn on work types', d: 'Switch on GST, ITR, TDS, ROC and more. Worksheets and due dates populate for every client and cycle.' },
+    { n: '3', h: 'Run the work', d: 'Your team moves each task through stages on the WorkZone board; reminders chase what is due.' },
+    { n: '4', h: 'See the whole firm', d: 'Analytics show on-time %, pending work and workload so you always know where the firm stands.' },
+  ]
+  const FACTS = [
+    { big: 'GST · ITR · TDS · ROC', label: 'Every due date, auto-tracked', sub: 'Compliance calendar pre-built for Indian practice work.' },
+    { big: '25 clients, free', label: 'Free forever plan', sub: 'No card required — start today and upgrade when ready.' },
+    { big: 'One-click', label: 'Tally & Zoho Books export', sub: 'Invoices, payments and statements, import-ready.' },
+    { big: 'Hosted in India', label: 'Encrypted & access-controlled', sub: 'Role-based access with a full audit trail on every action.' },
+  ]
 
   return (
     <div className="lp2" data-theme={dark ? 'dark' : 'light'}>
@@ -851,12 +711,7 @@ export default function LandingPage({ onSignIn, loading }) {
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} onGoogle={onSignIn} googleBusy={loading} />
       {upgradeModal && (
-        <UpgradeModal
-          planId={upgradeModal}
-          billing={billing}
-          orgId={currentOrgId}
-          onClose={() => setUpgradeModal(null)}
-        />
+        <UpgradeModal planId={upgradeModal} billing={billing} orgId={currentOrgId} onClose={() => setUpgradeModal(null)} />
       )}
       {launchOpen && (
         <Suspense fallback={null}>
@@ -867,345 +722,230 @@ export default function LandingPage({ onSignIn, loading }) {
       {/* NAV */}
       <header className="nav">
         <div className="wrap row">
-          <a className="logo" href="#" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}><Logo /></a>
+          <a className="logo" href="#top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}><Logo /></a>
           <nav className="links">
-            <a href="#features" onClick={e => { e.preventDefault(); scrollToId('features') }}>Product</a>
-            <a href="#workflow" onClick={e => { e.preventDefault(); scrollToId('workflow') }}>How it works</a>
-            <a href="#pricing" onClick={e => { e.preventDefault(); scrollToId('pricing') }}>Pricing</a>
-            <a href="#faq" onClick={e => { e.preventDefault(); scrollToId('faq') }}>FAQ</a>
-            <button className="theme-toggle keep" onClick={() => setDark(d => !d)} title="Switch theme" aria-label="Switch theme">
-              <span className="sun"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.2" stroke="#F4A52A" strokeWidth="1.9" /><path d="M12 3.5v2M12 18.5v2M3.5 12h2M18.5 12h2M6 6l1.4 1.4M16.6 16.6 18 18M18 6l-1.4 1.4M7.4 16.6 6 18" stroke="#F4A52A" strokeWidth="1.9" strokeLinecap="round" /></svg></span>
-              <span className="moon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" stroke="#94A3B8" strokeWidth="1.9" strokeLinejoin="round" /></svg></span>
+            <a className="navlink" href="#features" onClick={e => { e.preventDefault(); scrollToId('features') }}>Product</a>
+            <a className="navlink" href="#product" onClick={e => { e.preventDefault(); scrollToId('product') }}>Solutions</a>
+            <a className="navlink" href="#pricing" onClick={e => { e.preventDefault(); scrollToId('pricing') }}>Pricing</a>
+            <a className="navlink" href="#faq" onClick={e => { e.preventDefault(); scrollToId('faq') }}>Resources</a>
+          </nav>
+          <div className="right">
+            <button className="theme-toggle" onClick={() => setDark(d => !d)} title="Toggle theme" aria-label="Toggle theme">
+              {dark
+                ? <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="4.5" /><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19" /></svg>
+                : <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" /></svg>}
             </button>
             <InstallPWAButton variant="compact" />
-            <a href="#" className="keep" onClick={e => { e.preventDefault(); start() }} style={{ color: 'var(--nav)', fontWeight: 600 }}>Sign in</a>
-            <a href="#demo" className="btn btn-primary btn-sm keep" onClick={e => { e.preventDefault(); scrollToId('demo') }}>Book a demo</a>
-          </nav>
+            <a href="#login" className="login-link" onClick={e => { e.preventDefault(); start() }}>Login</a>
+            <button className="btn btn-primary btn-sm" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Get started free'} {arrow}</button>
+          </div>
         </div>
       </header>
 
       {/* HERO */}
-      <section className="hero wrap">
-        <div className="hero-inner">
-          <div className="haurora" style={{ left: '58%', top: '-14%', width: 420, height: 420, background: 'radial-gradient(circle,rgba(47,107,255,.28),transparent 66%)', animation: 'lp2-aurora 16s ease-in-out infinite' }} />
-          <div className="haurora" style={{ left: '74%', top: '30%', width: 360, height: 360, background: 'radial-gradient(circle,rgba(20,199,192,.26),transparent 66%)', animation: 'lp2-aurora 20s ease-in-out infinite reverse' }} />
-          <div className="haurora" style={{ left: '2%', top: '54%', width: 300, height: 300, background: 'radial-gradient(circle,rgba(124,58,237,.16),transparent 66%)', animation: 'lp2-aurora 18s ease-in-out infinite' }} />
-          <div className="hero-copy">
-            <span className="badge">● Built for CA · CS · CMA &amp; tax firms</span>
-            <h1>Stop juggling. <span className="grad-text">Start flowing.</span></h1>
-            <p className="lede">The operating system for your CA practice — GST &amp; ITR desks, WorkZone, client portal, billing, attendance and your whole team in one place that never lets a deadline slip.</p>
-            <div className="cta-row">
-              <button className="btn btn-primary" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Get started free'}</button>
-              <button className="btn btn-ghost" onClick={() => setLaunchOpen(true)}><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M8 6.5v11l9-5.5z" fill="#2F6BFF" /></svg>Watch demo</button>
+      <section id="top" className="hero">
+        <div className="wrap inner">
+          <div className="copy">
+            <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 18 }}>Built for Chartered Accountants</div>
+            <h1>More than a task manager.<br /><span className="accent">A better way to run your practice.</span></h1>
+            <p className="lede">Clients, compliance, documents, team and billing — all in one place, so you can focus on what really matters.</p>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Get started free'} {arrow}</button>
+              <button className="btn btn-ghost" onClick={() => setLaunchOpen(true)}>
+                <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--field)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="var(--blue)"><path d="M8 6.5v11l9-5.5z" /></svg></span>
+                Watch demo
+              </button>
             </div>
-            <div className="trust">
-              <span className="avatars"><span style={{ background: '#2F6BFF' }} /><span style={{ background: '#14C7C0' }} /><span style={{ background: '#0E2A47' }} /></span>
-              Trusted by firms and their teams
+            <div className="checks">
+              {heroChecks.map(c => (
+                <span key={c}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M8.5 12.5 11 15l5-5.5" /></svg>{c}</span>
+              ))}
             </div>
           </div>
           <HeroStage />
         </div>
       </section>
 
-      {/* FACT ROW — clean, editorial, no chips */}
-      <section className="wrap" style={{ paddingTop: 24 }}>
-        <div className="factrow">
-          {[
-            ['10', 'modules, one workspace', 'WorkZone, desks, portal, billing, analytics & more'],
-            ['GST · ITR · TDS · ROC', 'calendars built-in', 'Due dates & recurring worksheets for every client'],
-            ['₹0', 'to start · no card', 'Free forever up to 25 clients — upgrade when ready'],
-          ].map((f, i) => (
-            <div className="factcell" key={i}>
-              <div className="factbig">{f[0]}</div>
-              <div className="factlabel">{f[1]}</div>
-              <div className="factsub">{f[2]}</div>
+      {/* TRUST STRIP */}
+      <div style={{ borderBottom: '1px solid var(--border)', background: 'var(--panel)' }}>
+        <div className="wrap" style={{ padding: '22px 32px', display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Trusted by firms across India</span>
+          {AUDIENCES.map(a => <span key={a} className="serif" style={{ fontSize: 17, fontWeight: 600, color: 'var(--ink-2)', opacity: .8 }}>{a}</span>)}
+        </div>
+      </div>
+
+      {/* FEATURES */}
+      <section id="features" className="wrap" style={{ padding: '80px 32px 44px' }}>
+        <div className="sec-head" style={{ maxWidth: 640 }}>
+          <span className="eyebrow">Everything in one place</span>
+          <h2 style={{ margin: '14px 0 12px' }}>One platform for the whole firm</h2>
+          <p style={{ fontSize: 16, lineHeight: 1.65, color: 'var(--ink-2)', margin: 0 }}>Compliance, workflow, clients and operations — the modules your practice actually uses, working off the same data.</p>
+        </div>
+        <div style={{ marginTop: 38, display: 'flex', flexDirection: 'column', gap: 36 }}>
+          {FEATURE_GROUPS.map(g => (
+            <div key={g.group}>
+              <div className="grp-label"><span>{g.group}</span><span className="rule" /></div>
+              <div className="fgrid">
+                {g.items.map(it => (
+                  <div key={it.h} className="fcell">
+                    <span className="fic">{fic(it.p)}</span>
+                    <h3>{it.h}</h3>
+                    <p>{it.d}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* FEATURES */}
-      <section className="section wrap" id="features">
-        <div style={{ textAlign: 'center', marginBottom: 46 }}>
-          <span className="eyebrow">Everything in one place</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Built for the way practices actually work</h2>
-          <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '56ch', marginInline: 'auto', lineHeight: 1.6 }}>From GST &amp; ITR desks to the client portal, attendance and billing — the whole firm runs in one place, not twelve spreadsheets and a WhatsApp group.</p>
+      {/* PRODUCT SHOWCASE */}
+      <div id="product" className="band" style={{ marginTop: 36 }}>
+        <div className="wrap" style={{ padding: '80px 32px' }}>
+          <div className="sec-head" style={{ maxWidth: 640, marginBottom: 28 }}>
+            <span className="eyebrow">See it in action</span>
+            <h2 style={{ marginTop: 14 }}>The modules your team lives in</h2>
+          </div>
+          <ProductShowcase />
         </div>
-        {FEATURE_GROUPS.map((grp) => (
-          <div key={grp.group} style={{ marginBottom: 34 }}>
-            <div className="feat-grouplabel">{grp.group}</div>
-            <div className="grid cols-3">
-              {grp.items.map((f, i) => (
-                <div className="feature" key={i}>
-                  <div className="ico">{fico(f.p)}</div>
-                  <h3>{f.h}</h3>
-                  <p>{f.d}</p>
-                </div>
+      </div>
+
+      {/* HOW IT WORKS */}
+      <section id="workflow" className="wrap" style={{ padding: '80px 32px' }}>
+        <div className="sec-head" style={{ maxWidth: 640, marginBottom: 36 }}>
+          <span className="eyebrow">How it works</span>
+          <h2 style={{ marginTop: 14 }}>Live in a day, not a quarter</h2>
+        </div>
+        <div className="steps">
+          {STEPS.map(s => (
+            <div key={s.n} className="step"><span className="n">{s.n}</span><h3>{s.h}</h3><p>{s.d}</p></div>
+          ))}
+        </div>
+      </section>
+
+      {/* CAPABILITY BAND */}
+      <div className="capband">
+        <div className="wrap capgrid">
+          {FACTS.map(f => (
+            <div key={f.label}>
+              <div className="big">{f.big}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8, color: '#fff' }}>{f.label}</div>
+              <div style={{ fontSize: 13, color: '#9FB6D4', marginTop: 5, lineHeight: 1.5 }}>{f.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* TESTIMONIAL */}
+      <div className="wrap" style={{ maxWidth: 900, padding: '80px 32px', textAlign: 'center' }}>
+        <p className="quote">“Every GST and ITR deadline for the whole firm sits on one board now. Nothing slips.”</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+          <span style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--field)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--ink-2)', fontSize: 14 }}>RB</span>
+          <div style={{ textAlign: 'left' }}><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>Managing Partner</div><div style={{ fontSize: 13, color: 'var(--muted)' }}>Mid-size CA firm · Pune</div></div>
+        </div>
+      </div>
+
+      {/* PRICING */}
+      <div id="pricing" className="band">
+        <div className="wrap" style={{ padding: '80px 32px' }}>
+          <div className="sec-head" style={{ textAlign: 'center', maxWidth: 600, margin: '0 auto 28px' }}>
+            <span className="eyebrow">Pricing</span>
+            <h2 style={{ margin: '14px 0 10px' }}>Simple, per-firm pricing</h2>
+            <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}>Start free forever. Upgrade when your team is ready — switch monthly to yearly anytime.</p>
+            <div className="seg">
+              <button className={billing === 'monthly' ? 'on' : ''} onClick={() => setBilling('monthly')}>Monthly</button>
+              <button className={billing === 'yearly' ? 'on' : ''} onClick={() => setBilling('yearly')}>Yearly · save 17%</button>
+            </div>
+          </div>
+          <div className="pgrid">
+            {plansLoading
+              ? [1, 2, 3, 4].map(i => (
+                  <div key={i} className="plan" style={{ opacity: .5, minHeight: 320 }}>
+                    <div style={{ height: 18, background: 'var(--border)', borderRadius: 6, width: '55%', marginBottom: 14 }} />
+                    <div style={{ height: 40, background: 'var(--border)', borderRadius: 6, width: '75%', marginBottom: 16 }} />
+                    <div style={{ height: 120, background: 'var(--border)', borderRadius: 6 }} />
+                  </div>
+                ))
+              : plans.filter(plan => !/^trial/i.test(plan.id) && !/^trial/i.test(plan.name || '')).map(plan => {
+                  const monthlyPrice = plan.price_monthly / 100
+                  const yearlyTotal  = plan.price_yearly / 100
+                  const yearlyMonthly = monthlyPrice > 0 ? Math.round(yearlyTotal / 12) : 0
+                  const displayPrice = billing === 'yearly' ? yearlyTotal : monthlyPrice
+                  const savePct = monthlyPrice > 0 && yearlyTotal > 0 ? Math.round((1 - yearlyTotal / (monthlyPrice * 12)) * 100) : 0
+                  const isFree = plan.id === 'free' || monthlyPrice === 0
+                  const isEnterprise = plan.id === 'enterprise' || plan.category === 'enterprise'
+                  const isFeatured = plan.is_featured
+                  const features = plan.features || []
+                  return (
+                    <div key={plan.id} className={'plan' + (isFeatured ? ' featured' : '')}>
+                      {isFeatured && <span className="tag">Most popular</span>}
+                      <h3>{plan.name}</h3>
+                      <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 5, minHeight: 34, lineHeight: 1.4 }}>{plan.description}</div>
+                      {isEnterprise
+                        ? <div className="amt">Custom</div>
+                        : <div className="amt">₹{displayPrice.toLocaleString('en-IN')}<small>{isFree ? '' : billing === 'yearly' ? '/yr' : '/mo'}</small></div>}
+                      <div style={{ fontSize: 12, color: 'var(--muted)', minHeight: 18 }}>
+                        {isEnterprise ? 'Tailored to your firm'
+                          : isFree ? 'Free forever · no card'
+                          : billing === 'yearly' && savePct > 0 ? `billed annually · ₹${yearlyMonthly.toLocaleString('en-IN')}/mo · saves ${savePct}%`
+                          : 'billed monthly'}
+                      </div>
+                      {isFree
+                        ? <button className="btn btn-ghost" onClick={start} style={{ width: '100%', marginTop: 18 }}>Start free →</button>
+                        : isEnterprise
+                          ? <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width: '100%', marginTop: 18 }}>Talk to sales →</button>
+                          : <button className="btn btn-primary" onClick={() => buyPlan(plan.id)} style={{ width: '100%', marginTop: 18 }}>{currentOrgId ? `Upgrade to ${plan.name}` : `Get ${plan.name}`}</button>}
+                      {features.length > 0 && (
+                        <ul>
+                          {features.slice(0, 6).map((f, i) => <li key={i}>{check}{f}</li>)}
+                          {features.length > 6 && <li style={{ color: 'var(--blue)', fontSize: 12 }}>+{features.length - 6} more</li>}
+                        </ul>
+                      )}
+                    </div>
+                  )
+                })}
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13.5, color: 'var(--ink-2)' }}>Need a hand getting started? <a onClick={() => scrollToId('demo')} style={{ color: 'var(--blue)', fontWeight: 700, cursor: 'pointer' }}>Get free onboarding help →</a></div>
+        </div>
+      </div>
+
+      {/* FAQ */}
+      <section id="faq" className="wrap" style={{ maxWidth: 820, padding: '80px 32px 44px' }}>
+        <div className="sec-head" style={{ textAlign: 'center', marginBottom: 32 }}>
+          <span className="eyebrow">FAQ</span>
+          <h2 style={{ marginTop: 14 }}>Everything you're wondering</h2>
+        </div>
+        <FAQList />
+      </section>
+
+      {/* DEMO CTA */}
+      <section id="demo" className="wrap" style={{ padding: '44px 32px 84px' }}>
+        <div className="demo-card">
+          <div className="demo-left">
+            <h2 className="serif" style={{ fontSize: 'clamp(26px,2.8vw,34px)', fontWeight: 600, margin: '0 0 14px' }}>Bring your whole practice into one workspace</h2>
+            <p style={{ fontSize: 15, lineHeight: 1.6, color: '#9FB6D4', margin: '0 0 24px', maxWidth: '40ch' }}>Book a 30-minute demo. We'll import a few of your clients and configure your work types with you — free.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {['Free setup & client import', 'No card required to start', 'Cancel anytime'].map(p => (
+                <span key={p} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: '#DCE7F3' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3FD0C9" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5 10 17 19 7" /></svg>{p}</span>
               ))}
             </div>
           </div>
-        ))}
-      </section>
-
-      {/* WORKFLOW */}
-      <section className="section wrap" id="workflow" style={{ background: 'var(--canvas)', borderRadius: 28 }}>
-        <div style={{ textAlign: 'center', marginBottom: 46 }}>
-          <span className="eyebrow">From first login to filed &amp; paid</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Your whole practice, end to end</h2>
-          <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '52ch', marginInline: 'auto', lineHeight: 1.6 }}>Not just a board — the full journey, from onboarding a client to getting the work done, filed and billed.</p>
-        </div>
-        <div className="steps">
-          {[['1', 'Onboard in minutes', 'Import your client list from Excel — columns map automatically.'],
-            ['2', 'Auto-built compliance', 'GST, ITR, TDS & ROC calendars and recurring worksheets generate for every client.'],
-            ['3', 'Collect from clients', 'Request and receive documents through the Client Portal — no more email chasing.'],
-            ['4', 'Do the work', 'Assign, track and move work through stages with your team on WorkZone.'],
-            ['5', 'File & get paid', 'Mark filed with a clean audit trail, then invoice and collect payment.']].map(s => (
-            <div className="step" key={s[0]}><div className="num">{s[0]}</div><h3>{s[1]}</h3><p>{s[2]}</p></div>
-          ))}
-        </div>
-      </section>
-
-      {/* BOARD SHOWCASE */}
-      <section className="section wrap">
-        <div style={{ textAlign: 'center', marginBottom: 38 }}>
-          <span className="eyebrow">In-app preview</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>One workspace for the whole firm</h2>
-          <p style={{ color: 'var(--text-2)', fontSize: 15, marginTop: 12, maxWidth: '52ch', marginInline: 'auto', lineHeight: 1.6 }}>The WorkZone board is just one view. Switch between worksheets, the GST &amp; ITR desks, the client portal, billing and analytics — all on the same data.</p>
-        </div>
-        <Showcase />
-      </section>
-
-      {/* IN-APP PREVIEWS */}
-      <section className="section wrap">
-        <div style={{ textAlign: 'center', marginBottom: 38 }}>
-          <span className="eyebrow">One workspace, every workflow</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Everything your practice runs on</h2>
-        </div>
-        <div className="grid cols-3">
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><rect x="4" y="6" width="16" height="12" rx="2" /><path d="m5 8 7 5 7-5" /></>)}</span><h3>Communications</h3></div>
-            <div className="mini"><div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>GST reminder sent</span><span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>2:14 PM</span></div><div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 4 }}>To Milind Rathod · GSTR-3B due in 3 days</div></div>
-            <div className="mini"><div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Docs requested</span><span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>Yst</span></div><div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 4 }}>To Sandip Kale · Bank statements FY25‑26</div></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M3 10h18M7 15h3" /></>)}</span><h3>Client Ledger</h3></div>
-            <div className="mini">
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--muted)', paddingBottom: 8, borderBottom: '1px solid var(--inner-border)' }}><span>Invoice</span><span>Amount</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 12.5, color: 'var(--text)' }}><span>#INV‑2041 · Filing fee</span><span className="mono">₹12,000</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 12.5, color: 'var(--text)', borderTop: '1px solid var(--inner-border)' }}><span>#INV‑2038 · Advisory</span><span className="mono">₹8,500</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 9, marginTop: 3, borderTop: '1px solid var(--inner-border)', fontWeight: 800, fontSize: 12.5, color: 'var(--text)' }}><span>Outstanding</span><span className="mono" style={{ color: 'var(--warning)' }}>₹20,500</span></div>
-            </div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4z" />)}</span><h3>Team Chat</h3></div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 9 }}><span style={{ width: 26, height: 26, borderRadius: '50%', background: '#2F6BFF', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, flexShrink: 0 }}>PN</span><div style={{ background: 'var(--inner)', border: '1px solid var(--inner-border)', borderRadius: 10, padding: '8px 11px', fontSize: 12, color: 'var(--text)' }}>Rathod's GSTR is ready for review 👍</div></div>
-            <div style={{ display: 'flex', gap: 8, flexDirection: 'row-reverse' }}><span style={{ width: 26, height: 26, borderRadius: '50%', background: '#14C7C0', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, flexShrink: 0 }}>AS</span><div style={{ background: 'var(--grad)', color: '#fff', borderRadius: 10, padding: '8px 11px', fontSize: 12 }}>On it — filing today.</div></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><rect x="4" y="7" width="16" height="12" rx="2" /><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /></>)}</span><h3>WorkZone</h3></div>
-            <div className="mini" style={{ borderLeft: '3px solid var(--progress)' }}><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>GSTR Returns · Rathod</div><div className="bar" style={{ marginTop: 8 }}><i style={{ width: '62%' }} /></div></div>
-            <div className="mini" style={{ borderLeft: '3px solid var(--success)' }}><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>ITR · OM &amp; Associates</div><div className="mono" style={{ fontSize: 10.5, color: 'var(--success)', marginTop: 5, fontWeight: 600 }}>Filed · 2026‑06‑28</div></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 9h16M8 3v4M16 3v4" /></>)}</span><h3>Client Portal</h3></div>
-            <div className="mini" style={{ display: 'flex', alignItems: 'center', gap: 9 }}><span style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--badge-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--teal-fg)' }}>{fico(<><path d="M12 16V5m0 0L8 9m4-4 4 4" /><path d="M5 17v2h14v-2" /></>)}</span><div><div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Upload documents</div><div style={{ fontSize: 10.5, color: 'var(--muted)' }}>3 pending requests</div></div></div>
-            <div className="mini" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Form 16 · FY24‑25</span><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--success)', background: 'var(--badge-bg)', padding: '3px 8px', borderRadius: 99 }}>Approved</span></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" />)}</span><h3>Analytics</h3></div>
-            <div className="mini" style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 96, padding: '14px 11px' }}>
-              {['40%', '62%', '50%', '85%', '70%'].map((h, i) => <div key={i} style={{ flex: 1, height: h, borderRadius: '5px 5px 0 0', background: i === 3 ? 'var(--grad)' : 'var(--seg)' }} />)}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, fontSize: 11.5, color: 'var(--text-2)' }}><span>Work filed this month</span><span style={{ fontWeight: 800, color: 'var(--text)' }}>128</span></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6M9 16l1.6 1.6L14 14.5" /></>)}</span><h3>GST Desk · Reconciliation</h3></div>
-            <div className="mini" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Milind Rathod · GSTR-3B</div><div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 3 }}>Internal: Reviewed</div></div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--success)', background: 'var(--badge-bg)', padding: '3px 8px', borderRadius: 99 }}>Portal: Filed ✓</span></div>
-            <div className="mini" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Omkar Mane · GSTR-1</div><div style={{ fontSize: 10.5, color: 'var(--muted)', marginTop: 3 }}>Internal: Filed</div></div><span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--warning)', background: 'rgba(244,165,42,.14)', padding: '3px 8px', borderRadius: 99 }}>Portal: Pending</span></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10Z" /><circle cx="12" cy="11" r="2.2" /></>)}</span><h3>Attendance &amp; Time</h3></div>
-            <div className="mini" style={{ display: 'flex', alignItems: 'center', gap: 9 }}><span style={{ width: 26, height: 26, borderRadius: '50%', background: '#14C7C0', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 10, flexShrink: 0 }}>PN</span><div style={{ flex: 1 }}><div style={{ fontWeight: 700, fontSize: 12, color: 'var(--text)' }}>Priya N. · Punched in</div><div style={{ fontSize: 10.5, color: 'var(--muted)' }}>📍 Office · 9:12 AM</div></div></div>
-            <div className="mini" style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>Logged today</span><span className="mono" style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)' }}>6h 20m</span></div>
-          </div>
-          <div className="preview-card">
-            <div className="ph"><span className="ico">{fico(<><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></>)}</span><h3>Automations</h3></div>
-            <div className="mini"><div style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Recurring worksheets generated</div><div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 4 }}>Sep GSTR-3B · 24 clients · auto-created</div></div>
-            <div className="mini"><div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--text)' }}>Client reminders sent</span><span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>9:30 AM</span></div><div style={{ fontSize: 11.5, color: 'var(--text-2)', marginTop: 4 }}>18 clients · upcoming & overdue work</div></div>
-          </div>
-        </div>
-      </section>
-
-      {/* DEMO + SUPPORT */}
-      <section className="section wrap" id="demo" style={{ paddingTop: 0 }}>
-        <div className="two-col">
-          <div style={{ background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 22, padding: 34, boxShadow: 'var(--shadow-panel)' }}>
-            <span className="eyebrow">Book a demo</span>
-            <h2 style={{ fontSize: 'clamp(22px,2.4vw,28px)', margin: '12px 0 8px' }}>See TaskFlowCo on your own practice</h2>
-            <p style={{ fontSize: 14.5, lineHeight: 1.6, color: 'var(--text-2)', margin: '0 0 22px', maxWidth: '44ch' }}>A 20-minute walkthrough with our team. We'll map your work types and show you exactly how your firm would run.</p>
+          <div style={{ padding: 46 }}>
             <DemoForm />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div className="support-card">
-              <span className="ico">{fico(<path d="M5 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H9l-4 4z" />)}</span>
-              <h3 style={{ fontSize: 16, margin: '0 0 6px', fontWeight: 800 }}>Chat with support</h3>
-              <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-2)', margin: '0 0 14px' }}>Real humans, Mon–Sat 9am–7pm IST. Average first reply under 5 minutes.</p>
-              <a href="mailto:support@taskflowco.in" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontWeight: 700, fontSize: 13, color: 'var(--blue)' }}>Start a chat <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg></a>
-            </div>
-            <div className="support-card">
-              <span className="ico">{fico(<><rect x="4" y="6" width="16" height="12" rx="2" /><path d="m5 8 7 5 7-5" /></>)}</span>
-              <h3 style={{ fontSize: 16, margin: '0 0 6px', fontWeight: 800 }}>Email us</h3>
-              <p style={{ fontSize: 13.5, lineHeight: 1.55, color: 'var(--text-2)', margin: '0 0 10px' }}>Questions about migrating or pricing? We're glad to help.</p>
-              <a href="mailto:support@taskflowco.in" className="mono" style={{ fontSize: 13, fontWeight: 600, color: 'var(--blue)' }}>support@taskflowco.in</a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="section" id="faq" style={{ maxWidth: 820, margin: '0 auto', padding: '0 28px 88px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 38 }}>
-          <span className="eyebrow">Questions</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>Everything you're wondering</h2>
-        </div>
-        <FAQItem defaultOpen q="Is TaskFlowCo built specifically for CA / CS / CMA firms?" a="Yes. The compliance calendar, work types and worksheets are pre-built for Indian practice work — GST, ITR, ROC and more — so you are productive on day one." />
-        <FAQItem q="Can I import my existing client list?" a="Absolutely. Upload an Excel sheet and we map the columns automatically. Most firms import their entire client base in a few minutes." />
-        <FAQItem q="Do I need a card to start?" a="No. Sign up free on the Free plan — free forever for up to 25 clients, no card required. Upgrade to Pro or Max whenever your team is ready; switch between monthly and yearly anytime." />
-        <FAQItem q="Is my client data secure?" a="Data is encrypted in transit and at rest, hosted in India, with role-based access and a full audit trail on every action. The Max plan adds SSO." />
-        <FAQItem q="Can clients upload documents themselves?" a="Yes — the Client Portal lets clients respond to document requests and approvals directly, so you stop chasing paperwork over email and WhatsApp." />
-        <FAQItem q="What's free and what's paid?" a="Workspaces (Kanban boards), the WorkZone board and the compliance calendar are free for life. The Practice Hub is free for your first 6 months. Communication (client email & portal) and Billing (invoices & payments) are paid add-ons." />
-        <FAQItem q="Does it reconcile with the GST portal?" a="Yes. The GST Desk tracks each return by internal stage and lets you reconcile it against the portal's filing status, so you can instantly see what's actually filed versus what's still pending." />
-        <FAQItem q="Can I export to Tally or Zoho Books?" a="Yes. Billing exports your invoices, payments and statements as import-ready files for Tally and Zoho Books (plus Excel) — no manual re-entry between systems." />
-        <FAQItem q="Is there a mobile app?" a="TaskFlowCo installs as an app on your phone and desktop (PWA), with a mobile-optimised layout and geotagged attendance — no app store needed." />
-        <FAQItem q="Will you help me get set up?" a="Yes — onboarding is free. Our team imports your client list, configures your work types and gets your first period live with you. Book a slot from the 'Get onboarding help' button in pricing or the demo section." />
-      </section>
-
-      {/* PRICING */}
-      <section className="section wrap" id="pricing">
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <span className="eyebrow">Simple pricing</span>
-          <h2 style={{ fontSize: 'clamp(26px,3vw,36px)', marginTop: 12 }}>One price per firm. Your whole team included.</h2>
-          <p style={{ color: 'var(--text-2)', fontSize: 14, marginTop: 8 }}>No per-user fees. No setup cost. Start free, upgrade when you're ready.</p>
-        </div>
-        {/* Monthly / Yearly toggle */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 34 }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 99, padding: 4 }}>
-            {['monthly', 'yearly'].map(cyc => (
-              <button key={cyc} onClick={() => setBilling(cyc)} style={{ border: 'none', cursor: 'pointer', borderRadius: 99, padding: '8px 18px', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 7, background: billing === cyc ? 'var(--grad)' : 'transparent', color: billing === cyc ? '#fff' : 'var(--text-2)', transition: 'all .15s' }}>
-                {cyc === 'monthly' ? 'Monthly' : 'Yearly'}
-                {cyc === 'yearly' && <span style={{ fontSize: 10, fontWeight: 800, background: billing === 'yearly' ? 'rgba(255,255,255,.22)' : 'rgba(20,199,192,.15)', color: billing === 'yearly' ? '#fff' : '#0EA5A0', borderRadius: 99, padding: '2px 7px' }}>Save 2 months</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="price-grid">
-          {plansLoading
-            ? [1,2,3,4].map(i => (
-                <div key={i} className="plan" style={{ opacity:.5, minHeight:320 }}>
-                  <div style={{ height:18, background:'var(--card-border)', borderRadius:6, width:'55%', marginBottom:14 }}/>
-                  <div style={{ height:40, background:'var(--card-border)', borderRadius:6, width:'75%', marginBottom:16 }}/>
-                  <div style={{ height:120, background:'var(--card-border)', borderRadius:6 }}/>
-                </div>
-              ))
-            : plans.filter(plan => !/^trial/i.test(plan.id) && !/^trial/i.test(plan.name || '')).map(plan => {
-                const monthlyPrice  = plan.price_monthly / 100
-                const yearlyTotal   = plan.price_yearly  / 100
-                const yearlyMonthly = monthlyPrice > 0 ? Math.round(yearlyTotal / 12) : 0
-                // Yearly is charged as one full annual payment, so show the full amount.
-                const displayPrice  = billing === 'yearly' ? yearlyTotal : monthlyPrice
-                const savePct       = monthlyPrice > 0 && yearlyTotal > 0
-                  ? Math.round((1 - yearlyTotal / (monthlyPrice * 12)) * 100) : 0
-                const isFree        = plan.id === 'free' || monthlyPrice === 0
-                const isEnterprise  = plan.id === 'enterprise' || plan.category === 'enterprise'
-                const isFeatured    = plan.is_featured
-                const features      = plan.features || []
-                return (
-                  <div key={plan.id} className={`plan${isFeatured ? ' featured' : ''}`}>
-                    {isFeatured && <span className="tag">⭐ Most popular</span>}
-                    {plan.badge && !isFeatured && (
-                      <span style={{ display:'inline-block', fontSize:10, fontWeight:800, background:'var(--grad)', color:'#fff', borderRadius:99, padding:'3px 10px', marginBottom:8 }}>{plan.badge}</span>
-                    )}
-                    <h3>{plan.name}</h3>
-                    {isEnterprise
-                      ? <div className="amt">Custom</div>
-                      : <div className="amt">₹{displayPrice.toLocaleString('en-IN')}<small>{billing === 'yearly' ? '/yr' : '/mo'}</small></div>
-                    }
-                    {!isEnterprise && !isFree && (
-                      <p style={{ color:'var(--text-2)', fontSize:12, margin:'0 0 4px', minHeight:16 }}>
-                        {billing === 'yearly' && savePct > 0
-                          ? `One payment for 12 months · ₹${yearlyMonthly.toLocaleString('en-IN')}/mo · saves ${savePct}%`
-                          : 'Billed monthly · switch to yearly to save'}
-                      </p>
-                    )}
-                    {isFree && <p style={{ fontSize:11, color:'var(--muted)', margin:'0 0 4px' }}>No credit card required</p>}
-                    <p style={{ color:'var(--text-2)', fontSize:13, margin:'4px 0 0' }}>{plan.description}</p>
-                    {plan.offer_label && new Date(plan.offer_expires_at) > new Date() && (
-                      <div style={{ display:'inline-flex', alignItems:'center', gap:5, background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.25)', color:'#D97706', borderRadius:7, padding:'3px 9px', fontSize:11, fontWeight:700, margin:'8px 0 0' }}>
-                        🏷 {plan.offer_label}
-                      </div>
-                    )}
-                    <ul>
-                      {features.slice(0, 6).map((f, i) => <li key={i}>{check}{f}</li>)}
-                      {features.length > 6 && <li style={{ color:'var(--blue)', fontSize:12 }}>+{features.length - 6} more</li>}
-                    </ul>
-                    {isFree
-                      ? <button className="btn btn-ghost" onClick={start} style={{ width:'100%', justifyContent:'center' }}>Get started free →</button>
-                      : isEnterprise
-                        ? <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ width:'100%', justifyContent:'center' }}>Talk to sales →</button>
-                        : <>
-                            <button className="btn btn-primary" onClick={() => buyPlan(plan.id)} style={{ width:'100%', justifyContent:'center' }}>
-                              {currentOrgId ? `⚡ Upgrade to ${plan.name}` : `Get ${plan.name} — sign in to buy`}
-                            </button>
-                            <p style={{ textAlign:'center', fontSize:10.5, color:'var(--muted)', margin:'7px 0 0' }}>
-                              {currentOrgId ? 'Instant · Receipt auto-emailed' : 'Sign in first, then complete checkout'}
-                            </p>
-                          </>
-                    }
-                  </div>
-                )
-              })
-          }
-        </div>
-        {/* Practice Hub promo + onboarding help */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16, marginTop: 28 }}>
-          <div style={{ background: 'linear-gradient(135deg,rgba(47,107,255,.08),rgba(20,199,192,.08))', border: '1px solid rgba(20,199,192,.3)', borderRadius: 16, padding: '20px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <span className="promo-ico">{fico(<><rect x="3" y="8" width="18" height="4" rx="1" /><path d="M5 12v9h14v-9M12 8v13M12 8C12 8 10.5 3 8 4.2 5.8 5.3 7.8 8 12 8ZM12 8c0 0 1.5-5 4-3.8C18.2 5.3 16.2 8 12 8Z" /></>)}</span>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>Practice Hub — free for 6 months</div>
-              <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.55 }}><b>Workspaces (Kanban)</b> is free for life. The <b>Practice Hub</b> is free for your first 6 months. <b>Communication</b> (client email &amp; portal) and <b>Billing</b> (invoices &amp; payments) are paid add-ons.</p>
-            </div>
-          </div>
-          <div style={{ background: 'var(--card)', border: '1px solid var(--card-border)', borderRadius: 16, padding: '20px 22px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <span className="promo-ico">{fico(<><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 3.5a3 3 0 0 1 0 5.8M21 20a5.5 5.5 0 0 0-4-5.3" /></>)}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>Free onboarding &amp; client migration</div>
-              <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 10px', lineHeight: 1.55 }}>New to TaskFlowCo? Our team imports your client list, sets up your work types and gets your first period running — at no cost.</p>
-              <button className="btn btn-ghost" onClick={() => scrollToId('demo')} style={{ fontSize: 13, padding: '8px 16px' }}>Get onboarding help →</button>
-            </div>
-          </div>
-        </div>
-        <p style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 12, marginTop: 22 }}>All prices in ₹ · Cancel anytime · Your data stays yours</p>
-      </section>
-
-      {/* CTA BAND */}
-      <section className="section wrap">
-        <div className="cta-band">
-          <h2>Give every deadline a home.</h2>
-          <p>Join firms and their teams who run their compliance work on TaskFlowCo. Free to start, no card required.</p>
-          <button className="btn btn-primary" onClick={start} style={{ fontSize: 15.5, padding: '15px 30px' }}>Get started free</button>
         </div>
       </section>
 
       {/* FOOTER */}
       <footer>
         <div className="wrap cols">
-          <div>
-            <Logo footer />
+          <div style={{ minWidth: 220 }}>
+            <a href="#top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}><Logo footer /></a>
             <p style={{ fontSize: 13.5, lineHeight: 1.6, color: '#9FB6D4', margin: '16px 0 0', maxWidth: '30ch' }}>Practice management for CA, CS, CMA &amp; tax firms. Every filing, deadline and client in one calm workspace.</p>
           </div>
-          <div><h5>Product</h5><a href="#features" onClick={e => { e.preventDefault(); scrollToId('features') }}>Features</a><a href="#pricing" onClick={e => { e.preventDefault(); scrollToId('pricing') }}>Pricing</a><a href="#workflow" onClick={e => { e.preventDefault(); scrollToId('workflow') }}>WorkZone</a><a href="#demo" onClick={e => { e.preventDefault(); scrollToId('demo') }}>Book a demo</a></div>
-          <div><h5>Company</h5><a href="#">About</a><a href="#">Customers</a><a href="#">Careers</a><a href="mailto:support@taskflowco.in">Contact</a></div>
-          <div><h5>Resources</h5><a href="mailto:support@taskflowco.in">Help center</a><a href="#faq" onClick={e => { e.preventDefault(); scrollToId('faq') }}>FAQ</a><a href="#">Blog</a><a href="#">Status</a></div>
+          <div><h5>Product</h5><a href="#features" onClick={e => { e.preventDefault(); scrollToId('features') }}>Features</a><a href="#pricing" onClick={e => { e.preventDefault(); scrollToId('pricing') }}>Pricing</a><a href="#workflow" onClick={e => { e.preventDefault(); scrollToId('workflow') }}>How it works</a><a href="#demo" onClick={e => { e.preventDefault(); scrollToId('demo') }}>Book a demo</a></div>
+          <div><h5>Modules</h5><a href="#product" onClick={e => { e.preventDefault(); scrollToId('product') }}>GST Desk</a><a href="#product" onClick={e => { e.preventDefault(); scrollToId('product') }}>ITR Desk</a><a href="#product" onClick={e => { e.preventDefault(); scrollToId('product') }}>Client Portal</a><a href="#product" onClick={e => { e.preventDefault(); scrollToId('product') }}>Billing</a></div>
+          <div><h5>Company</h5><a href="#faq" onClick={e => { e.preventDefault(); scrollToId('faq') }}>FAQ</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a><a href="mailto:support@taskflowco.in">Contact</a></div>
         </div>
         <div className="wrap bottom">
           <span>© 2026 TaskFlowCo. All rights reserved.</span>
@@ -1214,6 +954,7 @@ export default function LandingPage({ onSignIn, loading }) {
             <a href="/terms.html" style={{ padding: 0, display: 'inline' }}>Terms</a>
             <a href="/refund.html" style={{ padding: 0, display: 'inline' }}>Refunds</a>
             <a href="/dpa.html" style={{ padding: 0, display: 'inline' }}>DPA</a>
+            <span>Made in India · support@taskflowco.in</span>
           </span>
         </div>
       </footer>
