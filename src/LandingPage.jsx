@@ -690,7 +690,7 @@ export default function LandingPage({ onSignIn, loading }) {
   }
 
   const arrow = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-  const heroChecks = ['No complicated setup', 'Built for CA firms', 'Secure & reliable']
+  const heroChecks = ['Save hours every week', 'Never miss a deadline', 'Set up in a day']
   const AUDIENCES = ['CA Firms', 'CS Practices', 'CMA', 'Tax Consultants', 'Advisory']
   const STEPS = [
     { n: '1', h: 'Add your clients', d: 'Import your client list from Excel — we map the columns automatically, so your whole book is in within minutes.' },
@@ -746,9 +746,9 @@ export default function LandingPage({ onSignIn, loading }) {
       <section id="top" className="hero">
         <div className="wrap inner">
           <div className="copy">
-            <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 18 }}>Built for Chartered Accountants</div>
-            <h1>More than a task manager.<br /><span className="accent">A better way to run your practice.</span></h1>
-            <p className="lede">Clients, compliance, documents, team and billing — all in one place, so you can focus on what really matters.</p>
+            <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 18 }}>Built for CA · CS · CMA &amp; tax firms</div>
+            <h1>Stop juggling.<br /><span className="accent">Start flowing.</span></h1>
+            <p className="lede">Every client, filing, deadline, document and invoice in one workspace — so your team stops switching between ten tools and spreadsheets, and gets <b style={{ color: 'var(--ink)', fontWeight: 700 }}>hours back every week</b>.</p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <button className="btn btn-primary" onClick={start} disabled={loading}>{loading ? 'Signing in…' : 'Get started free'} {arrow}</button>
               <button className="btn btn-ghost" onClick={() => setLaunchOpen(true)}>
