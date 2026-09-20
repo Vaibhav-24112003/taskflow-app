@@ -88,6 +88,7 @@ const CSS = `
 .lp2 .hero{background:var(--hero);border-bottom:1px solid var(--border)}
 .lp2 .hero .inner{display:flex;flex-wrap:wrap;gap:48px;align-items:center;padding:60px 0 64px}
 .lp2 .hero .copy{flex:1 1 400px;min-width:0}
+.lp2 .hero-pain{font-size:clamp(16px,1.7vw,20px);font-weight:600;line-height:1.45;color:var(--ink-2);max-width:34ch;margin:0 0 14px}
 .lp2 .hero h1{font-family:var(--serif);font-size:clamp(38px,4.8vw,58px);line-height:1.05;letter-spacing:-.02em;font-weight:600;color:var(--ink);margin:0 0 20px}
 .lp2 .hero h1 .accent{color:var(--blue)}
 .lp2 .hero .lede{font-size:17px;line-height:1.65;color:var(--ink-2);max-width:46ch;margin:0 0 30px}
@@ -746,7 +747,8 @@ export default function LandingPage({ onSignIn, loading }) {
       <section id="top" className="hero">
         <div className="wrap inner">
           <div className="copy">
-            <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 18 }}>Built for CA · CS · CMA &amp; tax firms</div>
+            <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 14 }}>Built for CA · CS · CMA &amp; tax firms</div>
+            <div className="hero-pain">Still losing hours to scattered work, data and client follow-ups across a dozen tools?</div>
             <h1>Stop juggling.<br /><span className="accent">Start flowing.</span></h1>
             <p className="lede">Every client, filing, deadline, document and invoice in one workspace — so your team stops switching between ten tools and spreadsheets, and gets <b style={{ color: 'var(--ink)', fontWeight: 700 }}>hours back every week</b>.</p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
