@@ -14340,8 +14340,10 @@ var reportName='Vouchers';
 var _allDates=[];eligible.forEach(function(inv){var x=d2(inv.invoice_date);if(x)_allDates.push(x);});
 if(cfg.includeReceipts)payments.forEach(function(p){if(p.payment_date&&Number(p.amount)>0){var x=d2(p.payment_date);if(x)_allDates.push(x);}});
 _allDates.sort();var fromDate=_allDates[0]||'',toDate=_allDates[_allDates.length-1]||'';
-var xml=['<?xml version="1.0" encoding="UTF-16" standalone="yes"?>',
-'<ENVELOPE>',
+// Tally's own export has NO <?xml?> declaration — just the UTF-16 BOM then
+// <ENVELOPE>. Match it exactly; the declaration can make Tally's parser misread
+// the file (dropping the voucher date).
+var xml=['<ENVELOPE>',
 ' <HEADER>',
 '  <TALLYREQUEST>Import Data</TALLYREQUEST>',
 ' </HEADER>',
