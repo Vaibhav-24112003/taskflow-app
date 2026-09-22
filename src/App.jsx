@@ -18086,7 +18086,7 @@ function DscModule({org,supabase,cu}){
   return<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
     {/* Toolbar */}
     <div style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10,flexShrink:0,flexWrap:'wrap'}}>
-      <div style={{fontSize:19,fontWeight:400,fontFamily:"'Forum',Georgia,serif",color:'var(--tf-text)',flexShrink:0}}>DSC Register</div>
+      <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flexShrink:0}}>DSC Register</div>
       <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search holder, client, serial, PAN…" style={Object.assign({},INP,{maxWidth:280,flex:1})}/>
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         {[['','All'],['expiring','Expiring ≤30d'],['expired','Expired'],['active','Active'],['revoked','Revoked'],['lost','Lost']].map(function(f){return<span key={f[0]} onClick={function(){setFilterStatus(f[0]);}} style={CHIP(filterStatus===f[0])}>{f[1]}</span>;})}
@@ -18335,7 +18335,7 @@ function CredentialsModule({org,supabase,cu}){
   return<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
     {/* Toolbar */}
     <div style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10,flexShrink:0,flexWrap:'wrap'}}>
-      <div style={{fontSize:19,fontWeight:400,fontFamily:"'Forum',Georgia,serif",color:'var(--tf-text)',flexShrink:0}}>Credentials</div>
+      <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flexShrink:0}}>Credentials</div>
       <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search client or PAN…" style={Object.assign({},INP,{width:200,padding:'5px 9px',fontSize:12})}/>
       <select value={filterType} onChange={function(e){setFilterType(e.target.value);}} style={Object.assign({},INP,{width:'auto',padding:'5px 9px',fontSize:12,cursor:'pointer'})}>
         <option value="">All Types</option>

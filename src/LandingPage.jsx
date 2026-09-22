@@ -21,7 +21,7 @@ const CSS = `
   --nav-bg:rgba(251,249,245,.85); --foot:#14243A; --teal:#0E8F89;
   --laptop:#1A2A40; --laptopbase:#C9CFD9;
   --hero:radial-gradient(760px 360px at 80% 8%,rgba(14,42,71,.06),transparent),#F4F1EA;
-  --serif:'Forum','Source Serif 4',Georgia,serif;
+  --serif:'Source Serif 4',Georgia,serif;
   --r:14px; --r2:8px;
   /* legacy aliases for shared modals/forms */
   --grad:var(--blue); --card:var(--panel); --card-border:var(--border); --surface:var(--panel);
@@ -49,9 +49,6 @@ const CSS = `
 .lp2 .wrap{max-width:1200px;margin:0 auto;padding:0 32px}
 .lp2 h1,.lp2 h2,.lp2 h3{margin:0}
 .lp2 .serif{font-family:var(--serif);letter-spacing:-.02em}
-/* Forum is a single-weight (400) titling face: use its true weight on every
-   serif display element so the browser never synthesises an ugly faux-bold. */
-.lp2 .hero h1,.lp2 .sec-head h2,.lp2 .serif,.lp2 .quote,.lp2 .plan .amt,.lp2 .capgrid .big{font-weight:400;letter-spacing:-.01em}
 .lp2 .eyebrow{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--blue)}
 .lp2 a{color:inherit;text-decoration:none}
 
