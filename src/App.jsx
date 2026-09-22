@@ -1179,7 +1179,7 @@ function TeamViewPanel({allT,wsMembers,teamMemberId,setTeamMemberId,cu,wsColor,w
 var CMD_MODULES=[
   {id:'diary',label:'My Work',tabs:[{id:'home',label:'Work'},{id:'plan',label:'Plan Today'}]},
   {id:'workzone',label:'WorkZone',tabs:[{id:'worksheets',label:'Worksheets'},{id:'itr',label:'ITR Desk'},{id:'bigclients',label:'Big Clients'},{id:'teamview',label:'Team Workload'}]},
-  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]},
+  {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'dsc',label:'DSC Register'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
   {id:'comms',label:'Communication',tabs:[{id:'mailing',label:'Mail'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]},
@@ -17943,6 +17943,298 @@ function ToolsResourcesModule(){
   </div>;
 }
 
+// ── DSC Register (Library > DSC Register) ──────────────────────────
+// Tracks each client's Digital Signature Certificate: class, CA, serial,
+// expiry, token, custody, purposes, status and an encrypted PIN (via the
+// credential-vault key + audit log). Expiry alerting is built in.
+function dscExpiry(d){
+  if(!d.expires_on) return {state:'none',label:'No expiry',days:null,color:'var(--tf-text-sub)',bg:'transparent',bd:'var(--tf-border)'};
+  var today=new Date();today.setHours(0,0,0,0);
+  var exp=new Date(d.expires_on+'T00:00:00');
+  var days=Math.round((exp-today)/86400000);
+  var dstr=exp.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+  if(days<0) return {state:'expired',label:'Expired '+dstr,days:days,color:'#D6455A',bg:'rgba(214,69,90,.12)',bd:'rgba(214,69,90,.3)'};
+  if(days<=30) return {state:'soon',label:days+'d left · '+dstr,days:days,color:'#B4791C',bg:'rgba(244,165,42,.16)',bd:'rgba(244,165,42,.34)'};
+  return {state:'ok',label:dstr,days:days,color:'#0E8F89',bg:'rgba(20,199,192,.12)',bd:'rgba(20,199,192,.28)'};
+}
+function DscModule({org,supabase,cu}){
+  var [rows,setRows]=useState([]);
+  var [clients,setClients]=useState([]);
+  var [loading,setLoading]=useState(true);
+  var [loadError,setLoadError]=useState(null);
+  var loadingRef=useRef(false);var loadTimerRef=useRef(null);
+  var [search,setSearch]=useState('');
+  var [filterStatus,setFilterStatus]=useState(''); // '' | expiring | expired | active | revoked | lost
+  var [showForm,setShowForm]=useState(false);
+  var [edit,setEdit]=useState(null);
+  var [saving,setSaving]=useState(false);
+  var [toast,setToast]=useState(null);
+  var [detail,setDetail]=useState(null);        // dsc row open in the side panel
+  var [custodyLog,setCustodyLog]=useState([]);
+  var [revealPin,setRevealPin]=useState(null);  // decrypted PIN for the open detail
+  var [custAction,setCustAction]=useState('checked_out');
+  var [custPerson,setCustPerson]=useState('');
+  var [custNotes,setCustNotes]=useState('');
+  var BLANK={client_id:'',holder_name:'',holder_pan:'',cert_class:'Class 3',cert_type:'Signature',certifying_authority:'',serial_no:'',issued_on:'',expires_on:'',token_type:'',token_serial:'',purposes:[],custody:'firm',custody_person:'',status:'active',notes:'',pin:''};
+  var [form,setForm]=useState(BLANK);
+  var [consent,setConsent]=useState(false);
+  var PURPOSES=['GST','Income Tax','MCA/ROC','TRACES','ICEGATE','DGFT','EPFO','Other'];
+  var CAS=['eMudhra','Capricorn','Sify','VSign','Pantasign','NSDL','IDSign','Other'];
+  var CLASSES=['Class 3','Class 3 - DGFT','Class 2','Other'];
+  var TYPES=['Signature','Encryption','Combo (Sign+Encrypt)'];
+  var TOKENS=['ePass2003','ProxKey','HYP2003','Watchdata','Trustkey','Aladdin','Other'];
+  var STATUSES=['active','revoked','lost'];
+
+  useEffect(function(){load();},[org.id]);
+  async function load(){
+    if(loadingRef.current)return;loadingRef.current=true;setLoading(true);setLoadError(null);
+    if(loadTimerRef.current)clearTimeout(loadTimerRef.current);
+    loadTimerRef.current=setTimeout(function(){setLoading(false);setLoadError('timeout');loadingRef.current=false;},12000);
+    try{
+      var [rc,rd]=await Promise.all([
+        supabase.from('clients').select('id,name,pan,client_type,status').eq('org_id',org.id).eq('status','active').order('name').limit(2000),
+        supabase.from('client_dsc').select('*').eq('org_id',org.id).order('expires_on',{nullsFirst:false})
+      ]);
+      setClients(rc.data||[]);setRows(rd.data||[]);
+    }catch(e){console.error(e);setLoadError('error');}
+    finally{clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}
+  }
+  function showToast(msg,err){setToast({msg,err});setTimeout(function(){setToast(null);},3000);}
+  var clientName=useMemo(function(){var m={};clients.forEach(function(c){m[c.id]=c.name;});return m;},[clients]);
+
+  function openAdd(){setForm(BLANK);setEdit(null);setConsent(false);setShowForm(true);}
+  function openEdit(d){
+    setForm({client_id:d.client_id||'',holder_name:d.holder_name||'',holder_pan:d.holder_pan||'',cert_class:d.cert_class||'Class 3',cert_type:d.cert_type||'Signature',certifying_authority:d.certifying_authority||'',serial_no:d.serial_no||'',issued_on:d.issued_on||'',expires_on:d.expires_on||'',token_type:d.token_type||'',token_serial:d.token_serial||'',purposes:d.purposes||[],custody:d.custody||'firm',custody_person:d.custody_person||'',status:d.status||'active',notes:d.notes||'',pin:''});
+    setEdit(d);setConsent(true);setShowForm(true);
+  }
+  function togglePurpose(p){setForm(function(f){var has=(f.purposes||[]).indexOf(p)>=0;return Object.assign({},f,{purposes:has?f.purposes.filter(function(x){return x!==p;}):(f.purposes||[]).concat([p])});});}
+  async function save(){
+    if(!form.holder_name.trim()){showToast('Holder name is required','err');return;}
+    if(!consent){showToast('Please confirm you are authorised to store this DSC','err');return;}
+    setSaving(true);
+    var payload={org_id:org.id,client_id:form.client_id||null,holder_name:form.holder_name.trim(),holder_pan:form.holder_pan.trim()||null,cert_class:form.cert_class||null,cert_type:form.cert_type||null,certifying_authority:form.certifying_authority||null,serial_no:form.serial_no.trim()||null,issued_on:form.issued_on||null,expires_on:form.expires_on||null,token_type:form.token_type||null,token_serial:form.token_serial.trim()||null,purposes:form.purposes&&form.purposes.length?form.purposes:null,custody:form.custody||'firm',custody_person:form.custody_person.trim()||null,status:form.status||'active',notes:form.notes.trim()||null,updated_at:new Date().toISOString()};
+    if(!edit)payload.created_by=cu.id;
+    var r=edit?await supabase.from('client_dsc').update(payload).eq('id',edit.id).select().single():await supabase.from('client_dsc').insert(payload).select().single();
+    if(r.error){showToast(r.error.message,'err');setSaving(false);return;}
+    // PIN is never stored in plaintext — it goes through dsc_set_pin (encrypted at rest).
+    if(form.pin&&form.pin.trim()){
+      var enc=await supabase.rpc('dsc_set_pin',{p_dsc:r.data.id,p_pin:form.pin});
+      if(enc.error)showToast('Saved, but PIN encryption failed: '+enc.error.message,'err');
+    }
+    showToast(edit?'Updated':'Saved');setShowForm(false);setSaving(false);load();
+  }
+  async function del(id){
+    if(!window.confirm('Delete this DSC record? This cannot be undone.'))return;
+    var r=await supabase.from('client_dsc').delete().eq('id',id);
+    if(!r.error){showToast('Deleted');setDetail(null);load();}else showToast(r.error.message,'err');
+  }
+  async function openDetail(d){
+    setDetail(d);setRevealPin(null);setCustAction('checked_out');setCustPerson('');setCustNotes('');setCustodyLog([]);
+    var r=await supabase.from('dsc_custody_log').select('*').eq('dsc_id',d.id).order('at',{ascending:false}).limit(50);
+    setCustodyLog(r.data||[]);
+  }
+  async function revealDscPin(d){
+    var r=await supabase.rpc('dsc_get_pin',{p_dsc:d.id});
+    if(r.error){showToast(r.error.message,'err');return;}
+    setRevealPin(r.data||'(no PIN saved)');
+  }
+  async function recordCustody(){
+    if(!detail)return;
+    var next=detail;
+    var upd={};
+    if(custAction==='issued_to_client'){upd={custody:'client',custody_person:custPerson.trim()||null};}
+    else if(custAction==='checked_out'){upd={custody:'firm',custody_person:custPerson.trim()||null};}
+    else {upd={custody:'firm',custody_person:null};} // checked_in / returned -> back in firm locker
+    var logRow={dsc_id:detail.id,org_id:org.id,action:custAction,person:custPerson.trim()||null,by_user:cu.id,notes:custNotes.trim()||null};
+    var [li,uu]=await Promise.all([
+      supabase.from('dsc_custody_log').insert(logRow),
+      supabase.from('client_dsc').update(Object.assign({updated_at:new Date().toISOString()},upd)).eq('id',detail.id)
+    ]);
+    if(li.error||uu.error){showToast((li.error||uu.error).message,'err');return;}
+    showToast('Custody updated');setCustPerson('');setCustNotes('');
+    var merged=Object.assign({},detail,upd);setDetail(merged);
+    var r=await supabase.from('dsc_custody_log').select('*').eq('dsc_id',detail.id).order('at',{ascending:false}).limit(50);
+    setCustodyLog(r.data||[]);load();
+  }
+
+  // summary counts
+  var summary=useMemo(function(){
+    var s={total:rows.length,expired:0,soon:0,active:0};
+    rows.forEach(function(d){var e=dscExpiry(d);if(d.status==='active')s.active++;if(d.status==='active'&&e.state==='expired')s.expired++;if(d.status==='active'&&e.state==='soon')s.soon++;});
+    return s;
+  },[rows]);
+
+  var filtered=rows.filter(function(d){
+    var q=search.toLowerCase();
+    var nm=(clientName[d.client_id]||'').toLowerCase();
+    var match=!q||(d.holder_name||'').toLowerCase().includes(q)||nm.includes(q)||(d.serial_no||'').toLowerCase().includes(q)||(d.holder_pan||'').toLowerCase().includes(q);
+    if(!match)return false;
+    if(!filterStatus)return true;
+    var e=dscExpiry(d);
+    if(filterStatus==='expiring')return d.status==='active'&&e.state==='soon';
+    if(filterStatus==='expired')return d.status==='active'&&e.state==='expired';
+    return d.status===filterStatus;
+  });
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 10px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit',width:'100%',boxSizing:'border-box'};
+  var LBL={display:'block',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',margin:'0 0 5px'};
+  var CHIP=function(on){return{fontSize:11.5,fontWeight:700,padding:'6px 11px',borderRadius:8,cursor:'pointer',border:'1px solid '+(on?'transparent':'var(--tf-border)'),background:on?'#0e2a47':'var(--tf-surface)',color:on?'#fff':'var(--tf-text-sub)',userSelect:'none'};};
+
+  if(loadError)return<div style={{padding:40,textAlign:'center'}}><div style={{color:'var(--tf-text-sub)',marginBottom:14}}>{loadError==='timeout'?'Taking longer than usual…':'Failed to load.'}</div><button onClick={load} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Retry</button></div>;
+  if(loading)return<div style={{padding:40,textAlign:'center',color:'var(--tf-text-sub)'}}>Loading…</div>;
+
+  return<div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+    {/* Toolbar */}
+    <div style={{padding:'10px 16px',borderBottom:'1px solid var(--tf-border)',display:'flex',alignItems:'center',gap:10,flexShrink:0,flexWrap:'wrap'}}>
+      <div style={{fontSize:15,fontWeight:800,color:'var(--tf-text)',flexShrink:0}}>DSC Register</div>
+      <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search holder, client, serial, PAN…" style={Object.assign({},INP,{maxWidth:280,flex:1})}/>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        {[['','All'],['expiring','Expiring ≤30d'],['expired','Expired'],['active','Active'],['revoked','Revoked'],['lost','Lost']].map(function(f){return<span key={f[0]} onClick={function(){setFilterStatus(f[0]);}} style={CHIP(filterStatus===f[0])}>{f[1]}</span>;})}
+      </div>
+      <div style={{flex:1}}/>
+      <button onClick={openAdd} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>+ Add DSC</button>
+    </div>
+
+    {/* Summary strip */}
+    <div style={{padding:'12px 16px',display:'flex',gap:10,flexWrap:'wrap',flexShrink:0,borderBottom:'1px solid var(--tf-border)'}}>
+      {[['Total DSCs',summary.total,'var(--tf-text)'],['Expiring ≤30 days',summary.soon,'#B4791C'],['Expired',summary.expired,'#D6455A'],['Active',summary.active,'#0E8F89']].map(function(s){return(
+        <div key={s[0]} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'10px 16px',minWidth:130}}>
+          <div style={{fontSize:22,fontWeight:800,color:s[2],lineHeight:1}}>{s[1]}</div>
+          <div style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginTop:4}}>{s[0]}</div>
+        </div>
+      );})}
+      {(summary.soon>0||summary.expired>0)&&<div style={{flex:1,minWidth:200,display:'flex',alignItems:'center',gap:8,color:'#B4791C',fontSize:12.5,fontWeight:600,padding:'0 8px'}}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        {summary.expired>0?summary.expired+' expired · ':''}{summary.soon>0?summary.soon+' expiring within 30 days — renew soon.':'Renew the expiring certificates soon.'}
+      </div>}
+    </div>
+
+    {/* Table */}
+    <div style={{flex:1,overflow:'auto',minHeight:0}}>
+      {filtered.length===0
+        ? <div style={{padding:48,textAlign:'center',color:'var(--tf-text-sub)'}}>
+            <div style={{fontSize:15,fontWeight:700,marginBottom:6,color:'var(--tf-text)'}}>No DSCs yet</div>
+            <div style={{fontSize:13,marginBottom:16}}>Add your clients' Digital Signature Certificates to track expiry, custody and PINs in one place.</div>
+            <button onClick={openAdd} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'9px 20px',fontWeight:700,fontSize:13,cursor:'pointer'}}>+ Add your first DSC</button>
+          </div>
+        : <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+            <thead><tr style={{position:'sticky',top:0,background:'var(--tf-panel)',zIndex:1}}>
+              {['Holder','Client','Class / Type','Certifying Authority','Expiry','Custody','Purposes',''].map(function(h){return<th key={h} style={{textAlign:'left',padding:'9px 12px',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',borderBottom:'1px solid var(--tf-border)',whiteSpace:'nowrap'}}>{h}</th>;})}
+            </tr></thead>
+            <tbody>
+              {filtered.map(function(d){
+                var e=dscExpiry(d);
+                var revoked=d.status!=='active';
+                return<tr key={d.id} onClick={function(){openDetail(d);}} style={{borderBottom:'1px solid var(--tf-border)',cursor:'pointer',opacity:revoked?0.6:1}}>
+                  <td style={{padding:'9px 12px'}}><div style={{fontWeight:700,color:'var(--tf-text)'}}>{d.holder_name}</div>{d.holder_pan&&<div style={{fontSize:11,color:'var(--tf-text-sub)'}} className="mono">{d.holder_pan}</div>}</td>
+                  <td style={{padding:'9px 12px',color:'var(--tf-text-sub)'}}>{clientName[d.client_id]||'—'}</td>
+                  <td style={{padding:'9px 12px',color:'var(--tf-text-sub)'}}>{d.cert_class||'—'}{d.cert_type?' · '+d.cert_type:''}</td>
+                  <td style={{padding:'9px 12px',color:'var(--tf-text-sub)'}}>{d.certifying_authority||'—'}</td>
+                  <td style={{padding:'9px 12px'}}>{revoked?<span style={{fontSize:11,fontWeight:700,color:'#D6455A',textTransform:'capitalize'}}>{d.status}</span>:<span style={{fontSize:11,fontWeight:700,color:e.color,background:e.bg,border:'1px solid '+e.bd,borderRadius:99,padding:'3px 9px',whiteSpace:'nowrap'}}>{e.label}</span>}</td>
+                  <td style={{padding:'9px 12px',color:'var(--tf-text-sub)'}}>{d.custody==='client'?'With client':'With firm'}{d.custody_person?' · '+d.custody_person:''}</td>
+                  <td style={{padding:'9px 12px',color:'var(--tf-text-sub)',maxWidth:180}}><span style={{fontSize:11}}>{(d.purposes||[]).join(', ')||'—'}</span></td>
+                  <td style={{padding:'9px 12px',textAlign:'right',whiteSpace:'nowrap'}} onClick={function(ev){ev.stopPropagation();}}>
+                    <button onClick={function(){openEdit(d);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 10px',fontSize:12,cursor:'pointer',color:'var(--tf-text)',fontFamily:'inherit'}}>Edit</button>
+                  </td>
+                </tr>;
+              })}
+            </tbody>
+          </table>}
+    </div>
+
+    {/* Add / Edit form */}
+    {showForm&&<div onClick={function(){setShowForm(false);}} style={{position:'fixed',inset:0,background:'rgba(7,20,36,.5)',zIndex:300,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px',overflow:'auto'}}>
+      <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:640,padding:'22px 24px',boxShadow:'0 24px 60px rgba(7,20,36,.4)'}}>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:16}}>{edit?'Edit DSC':'Add DSC'}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{gridColumn:'1 / -1'}}><label style={LBL}>Client (optional)</label><select value={form.client_id} onChange={function(e){setForm(Object.assign({},form,{client_id:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">— No client / firm's own —</option>{clients.map(function(c){return<option key={c.id} value={c.id}>{c.name}</option>;})}</select></div>
+          <div><label style={LBL}>Holder name *</label><input value={form.holder_name} onChange={function(e){setForm(Object.assign({},form,{holder_name:e.target.value}));}} placeholder="Director / partner / signatory" style={INP}/></div>
+          <div><label style={LBL}>Holder PAN</label><input value={form.holder_pan} onChange={function(e){setForm(Object.assign({},form,{holder_pan:e.target.value.toUpperCase()}));}} placeholder="ABCDE1234F" style={INP}/></div>
+          <div><label style={LBL}>Class</label><select value={form.cert_class} onChange={function(e){setForm(Object.assign({},form,{cert_class:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer'})}>{CLASSES.map(function(x){return<option key={x}>{x}</option>;})}</select></div>
+          <div><label style={LBL}>Type</label><select value={form.cert_type} onChange={function(e){setForm(Object.assign({},form,{cert_type:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer'})}>{TYPES.map(function(x){return<option key={x}>{x}</option>;})}</select></div>
+          <div><label style={LBL}>Certifying Authority</label><select value={form.certifying_authority} onChange={function(e){setForm(Object.assign({},form,{certifying_authority:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">—</option>{CAS.map(function(x){return<option key={x}>{x}</option>;})}</select></div>
+          <div><label style={LBL}>Serial number</label><input value={form.serial_no} onChange={function(e){setForm(Object.assign({},form,{serial_no:e.target.value}));}} style={INP}/></div>
+          <div><label style={LBL}>Issued on</label><input type="date" value={form.issued_on||''} onChange={function(e){setForm(Object.assign({},form,{issued_on:e.target.value}));}} style={INP}/></div>
+          <div><label style={LBL}>Expires on</label><input type="date" value={form.expires_on||''} onChange={function(e){setForm(Object.assign({},form,{expires_on:e.target.value}));}} style={INP}/></div>
+          <div><label style={LBL}>Token type</label><select value={form.token_type} onChange={function(e){setForm(Object.assign({},form,{token_type:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">—</option>{TOKENS.map(function(x){return<option key={x}>{x}</option>;})}</select></div>
+          <div><label style={LBL}>Token serial</label><input value={form.token_serial} onChange={function(e){setForm(Object.assign({},form,{token_serial:e.target.value}));}} style={INP}/></div>
+          <div style={{gridColumn:'1 / -1'}}><label style={LBL}>Purposes / portals</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{PURPOSES.map(function(p){return<span key={p} onClick={function(){togglePurpose(p);}} style={CHIP((form.purposes||[]).indexOf(p)>=0)}>{p}</span>;})}</div></div>
+          <div><label style={LBL}>Custody</label><select value={form.custody} onChange={function(e){setForm(Object.assign({},form,{custody:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="firm">With firm</option><option value="client">With client</option></select></div>
+          <div><label style={LBL}>Held by (person)</label><input value={form.custody_person} onChange={function(e){setForm(Object.assign({},form,{custody_person:e.target.value}));}} placeholder="Staff / client name" style={INP}/></div>
+          <div><label style={LBL}>Status</label><select value={form.status} onChange={function(e){setForm(Object.assign({},form,{status:e.target.value}));}} style={Object.assign({},INP,{cursor:'pointer',textTransform:'capitalize'})}>{STATUSES.map(function(x){return<option key={x} value={x} style={{textTransform:'capitalize'}}>{x}</option>;})}</select></div>
+          <div><label style={LBL}>DSC PIN {edit?'(leave blank to keep)':''}</label><input type="password" value={form.pin} onChange={function(e){setForm(Object.assign({},form,{pin:e.target.value}));}} placeholder="Encrypted at rest" autoComplete="new-password" style={INP}/></div>
+          <div style={{gridColumn:'1 / -1'}}><label style={LBL}>Notes</label><textarea value={form.notes} onChange={function(e){setForm(Object.assign({},form,{notes:e.target.value}));}} rows={2} style={Object.assign({},INP,{resize:'vertical'})}/></div>
+        </div>
+        <label style={{display:'flex',gap:8,alignItems:'flex-start',margin:'14px 0 4px',cursor:'pointer'}}>
+          <input type="checkbox" checked={consent} onChange={function(e){setConsent(e.target.checked);}} style={{marginTop:2,accentColor:'#2F6BFF',flexShrink:0}}/>
+          <span style={{fontSize:11.5,color:'var(--tf-text-sub)',lineHeight:1.5}}>I confirm my firm is authorised to hold this client's DSC and PIN. The PIN is <b>encrypted at rest</b>, access is <b>restricted to this organisation and audit-logged</b>. (Required — DPDP/SPDI)</span>
+        </label>
+        <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:14}}>
+          <button onClick={function(){setShowForm(false);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 18px',color:'var(--tf-text)',cursor:'pointer',fontSize:13,fontWeight:700,fontFamily:'inherit'}}>Cancel</button>
+          <button onClick={save} disabled={saving||!consent} style={{background:'#0e2a47',border:'none',borderRadius:8,padding:'8px 22px',color:'#fff',cursor:(saving||!consent)?'not-allowed':'pointer',fontSize:13,fontWeight:700,opacity:(saving||!consent)?0.6:1}}>{saving?'Saving…':'Save'}</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* Detail / custody / PIN side panel */}
+    {detail&&<div onClick={function(){setDetail(null);}} style={{position:'fixed',inset:0,background:'rgba(7,20,36,.5)',zIndex:300,display:'flex',justifyContent:'flex-end'}}>
+      <div onClick={function(e){e.stopPropagation();}} style={{background:'var(--tf-panel)',borderLeft:'1px solid var(--tf-border)',width:'100%',maxWidth:440,height:'100%',overflow:'auto',padding:'20px 22px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4}}>
+          <div><div style={{fontSize:17,fontWeight:800,color:'var(--tf-text)'}}>{detail.holder_name}</div><div style={{fontSize:12.5,color:'var(--tf-text-sub)'}}>{clientName[detail.client_id]||'Firm / no client'}</div></div>
+          <button onClick={function(){setDetail(null);}} style={{background:'none',border:'none',fontSize:22,color:'var(--tf-text-sub)',cursor:'pointer',lineHeight:1}}>×</button>
+        </div>
+        {(function(){var e=dscExpiry(detail);return detail.status!=='active'
+          ? <div style={{display:'inline-block',fontSize:11.5,fontWeight:700,color:'#D6455A',background:'rgba(214,69,90,.12)',border:'1px solid rgba(214,69,90,.3)',borderRadius:99,padding:'3px 10px',margin:'8px 0',textTransform:'capitalize'}}>{detail.status}</div>
+          : <div style={{display:'inline-block',fontSize:11.5,fontWeight:700,color:e.color,background:e.bg,border:'1px solid '+e.bd,borderRadius:99,padding:'3px 10px',margin:'8px 0'}}>{e.label}</div>;})()}
+        {/* Facts */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'10px 0 16px'}}>
+          {[['Class',detail.cert_class],['Type',detail.cert_type],['Authority',detail.certifying_authority],['Serial',detail.serial_no],['Issued',detail.issued_on],['Token',detail.token_type],['Token serial',detail.token_serial],['PAN',detail.holder_pan]].map(function(f){return f[1]?<div key={f[0]}><div style={{fontSize:10.5,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.04em'}}>{f[0]}</div><div style={{fontSize:13,color:'var(--tf-text)'}}>{f[1]}</div></div>:null;})}
+        </div>
+        {(detail.purposes||[]).length>0&&<div style={{marginBottom:16}}><div style={{fontSize:10.5,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:5}}>Purposes</div><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{detail.purposes.map(function(p){return<span key={p} style={{fontSize:11,fontWeight:600,background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 9px',color:'var(--tf-text-sub)'}}>{p}</span>;})}</div></div>}
+        {/* PIN */}
+        <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 14px',marginBottom:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{fontSize:12.5,fontWeight:700,color:'var(--tf-text)'}}>DSC PIN</div>
+            {revealPin===null
+              ? <button onClick={function(){revealDscPin(detail);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 12px',fontSize:12,cursor:'pointer',color:'var(--tf-text)',fontFamily:'inherit'}}>Reveal</button>
+              : <div style={{display:'flex',gap:8,alignItems:'center'}}><span className="mono" style={{fontSize:13,color:'var(--tf-text)'}}>{revealPin}</span><button onClick={function(){navigator.clipboard.writeText(revealPin||'');showToast('PIN copied');}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'3px 9px',fontSize:11,cursor:'pointer',color:'var(--tf-text)',fontFamily:'inherit'}}>Copy</button></div>}
+          </div>
+          <div style={{fontSize:10.5,color:'var(--tf-text-sub)',marginTop:6,display:'flex',alignItems:'center',gap:4}}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 7v5l3 2"/></svg>Every reveal is encrypted & audit-logged</div>
+        </div>
+        {/* Custody */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:12.5,fontWeight:800,color:'var(--tf-text)',marginBottom:8}}>Token custody — currently {detail.custody==='client'?'with client':'with firm'}{detail.custody_person?' ('+detail.custody_person+')':''}</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+            <select value={custAction} onChange={function(e){setCustAction(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer',flex:'1 1 150px'})}>
+              <option value="checked_out">Checked out (to staff)</option>
+              <option value="issued_to_client">Issued to client</option>
+              <option value="checked_in">Checked in (to locker)</option>
+              <option value="returned">Returned by client</option>
+            </select>
+            <input value={custPerson} onChange={function(e){setCustPerson(e.target.value);}} placeholder="Person" style={Object.assign({},INP,{flex:'1 1 120px'})}/>
+          </div>
+          <input value={custNotes} onChange={function(e){setCustNotes(e.target.value);}} placeholder="Notes (optional)" style={Object.assign({},INP,{marginBottom:8})}/>
+          <button onClick={recordCustody} style={{background:'#0e2a47',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',fontWeight:700,fontSize:12.5,cursor:'pointer',width:'100%'}}>Record custody change</button>
+        </div>
+        {custodyLog.length>0&&<div style={{marginBottom:16}}>
+          <div style={{fontSize:10.5,color:'var(--tf-text-sub)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.04em',marginBottom:6}}>Custody history</div>
+          {custodyLog.map(function(l){return<div key={l.id} style={{display:'flex',justifyContent:'space-between',gap:8,padding:'6px 0',borderBottom:'1px solid var(--tf-border)',fontSize:12}}>
+            <span style={{color:'var(--tf-text)'}}>{({checked_out:'Checked out',issued_to_client:'Issued to client',checked_in:'Checked in',returned:'Returned'})[l.action]||l.action}{l.person?' · '+l.person:''}</span>
+            <span className="mono" style={{color:'var(--tf-text-sub)',flexShrink:0}}>{new Date(l.at).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})}</span>
+          </div>;})}
+        </div>}
+        {detail.notes&&<div style={{fontSize:12.5,color:'var(--tf-text-sub)',lineHeight:1.5,marginBottom:16}}><b style={{color:'var(--tf-text)'}}>Notes:</b> {detail.notes}</div>}
+        <div style={{display:'flex',gap:10,marginTop:8}}>
+          <button onClick={function(){openEdit(detail);setDetail(null);}} style={{flex:1,background:'none',border:'1px solid var(--tf-border)',borderRadius:8,padding:'9px 0',fontWeight:700,fontSize:13,cursor:'pointer',color:'var(--tf-text)',fontFamily:'inherit'}}>Edit</button>
+          <button onClick={function(){del(detail.id);}} style={{background:'none',border:'1px solid rgba(214,69,90,.4)',borderRadius:8,padding:'9px 16px',fontWeight:700,fontSize:13,cursor:'pointer',color:'#D6455A',fontFamily:'inherit'}}>Delete</button>
+        </div>
+      </div>
+    </div>}
+
+    {toast&&<div style={{position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',background:toast.err?'#D6455A':'#0e2a47',color:'#fff',padding:'10px 20px',borderRadius:10,fontSize:13,fontWeight:600,zIndex:400,boxShadow:'0 8px 24px rgba(7,20,36,.3)'}}>{toast.msg}</div>}
+  </div>;
+}
+
 // ── Credentials Module (Library > Credentials) ─────────────────────
 function CredentialsModule({org,supabase,cu}){
   var [clients,setClients]=useState([]);
@@ -19060,7 +19352,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
     {id:'diary',label:'My Work',icon:BookOpen,desc:'Your work, calendar and daily plan — personal productivity in one place.',gradient:'linear-gradient(135deg,#2F6BFF,#14C7C0)',tabs:[{id:'home',label:'Work'},{id:'notes',label:'Notes'}]},
     {id:'workzone',label:'WorkZone',icon:Briefcase,desc:'Worksheets, ITR Desk, Big Clients and Team Workload — all work and tasks in one place.',gradient:'linear-gradient(135deg,#0e2a47,#1d4670)',tabs:workzoneTabs},
   ];
-  if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]});
+  if(ffOn('library'))MODULES.push({id:'library',label:'Library',icon:Library,desc:'Credentials vault, DSC register, SOPs, tools and study resources for the firm.',gradient:'linear-gradient(135deg,#0ea5e9,#0284c7)',tabs:[{id:'credentials',label:'Credentials'},{id:'dsc',label:'DSC Register'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]});
   if(ffOn('team'))MODULES.push({id:'team',label:'Team',icon:Users,desc:'Attendance, leaves and activity logs for your team.',gradient:'linear-gradient(135deg,#f59e0b,#d97706)',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]});
   MODULES.push({id:'chat',label:'Team Chat',icon:MessageSquare,desc:'Real-time group messaging for your team — channels, threads and instant updates.',gradient:'linear-gradient(135deg,#7c3aed,#6d28d9)',tabs:[]});
   if(canSeeAnalytics&&ffOn('analytics')){
@@ -19191,6 +19483,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {orgModule==='workzone'&&tab==='teamview'&&<TeamDashboard org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {/* Library */}
       {orgModule==='library'&&tab==='credentials'&&<CredentialsModule org={org} supabase={supabase} cu={cu}/>}
+      {orgModule==='library'&&tab==='dsc'&&<DscModule org={org} supabase={supabase} cu={cu}/>}
       {orgModule==='library'&&tab==='sops'&&<SOPsLibraryModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>}
       {orgModule==='library'&&tab==='tools'&&<ToolsResourcesModule/>}
       {orgModule==='library'&&tab==='study'&&<PlaceholderModule title="Study Resources" desc="Circulars, case laws, study material and reference documents." icon="📚"/>}
