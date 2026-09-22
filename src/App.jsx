@@ -21187,6 +21187,23 @@ function PlanMyDayView({cu, supabase, workspaces, org, allProfiles, workTypeConf
   </div>;
 }
 
+// Strip the Supabase auth callback fragment (#access_token=…&refresh_token=…,
+// or an ?code=… / #error=… ) from the URL once the session is established.
+// If left in place it lingers in the address bar AND sits in browser history —
+// pressing Back returns to that single-use token URL, which can no longer be
+// consumed, bouncing the user to the login screen. replaceState swaps the
+// current (callback) entry for a clean one so Back never lands on it.
+function stripAuthHash(){
+  try{
+    var h=window.location.hash||'';var s=window.location.search||'';
+    var hasAuth=/(?:^#|[#&])(access_token|refresh_token|provider_token|provider_refresh_token|expires_in|expires_at|token_type)=/.test(h)||/[#&]error=/.test(h)||/[?&]code=/.test(s);
+    if(hasAuth){
+      var cleanSearch=s.replace(/([?&])code=[^&]*/,'$1').replace(/([?&])(state|error|error_description)=[^&]*/g,'$1').replace(/[?&]+$/,'').replace(/\?&/,'?');
+      window.history.replaceState(null,document.title,window.location.pathname+(cleanSearch&&cleanSearch!=='?'?cleanSearch:''));
+    }
+  }catch(_){}
+}
+
 export default function App(){
   // Client Connect public form: #/c/{token}
   const clientFormToken=useState(function(){var h=window.location.hash;return h.startsWith('#/c/')?h.slice(4):null;})[0];
@@ -21265,6 +21282,7 @@ export default function App(){
         setLoading(false); initRef.current=true
         return
       }
+      stripAuthHash() // remove any leftover #access_token / ?code callback params
       setSession(session)
       if(session){
         handleAuth(session.user)
@@ -21280,6 +21298,7 @@ export default function App(){
       const wasBlocked=await handleAuthEvent(event,session,onBlocked)
       if(wasBlocked){setSession(null);authIdRef.current=null;return}
 
+      if(event==='SIGNED_IN'||event==='INITIAL_SESSION')stripAuthHash()
       setSession(session)
       if(!session){authIdRef.current=null;setLoading(false);initRef.current=true;return}
       const isNew=authIdRef.current!==session.user.id
