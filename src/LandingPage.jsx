@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { supabase, signInWithEmailLink } from './lib/supabase'
 import InstallPWAButton from './components/InstallPWAButton.jsx'
 import CheckoutButton from './components/CheckoutButton.jsx'
+import TaskflowLogo from './components/TaskflowLogo.jsx'
 
 // "Watch demo" tour is loaded on demand.
 const LaunchTour = lazy(() => import('./LaunchTour.jsx'))
@@ -184,16 +185,12 @@ const CSS = `
 }
 `
 
-// ── Wordmark: navy tile + white check + "Taskflowco" ──
-function Logo({ footer }) {
-  return (
-    <span className="logo" style={footer ? { color: '#fff' } : undefined}>
-      <span className="tile">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-      </span>
-      <span className="word" style={footer ? { color: '#fff' } : undefined}>Taskflow<span className="co" style={footer ? { color: '#5B9BFF' } : undefined}>co</span></span>
-    </span>
-  )
+// ── Brand wordmark: "TaskFlo" + gradient tick forming the "w" + "Co" ──
+// Uses the canonical shared TaskflowLogo so the landing matches the app.
+function Logo({ footer, dark }) {
+  return footer
+    ? <TaskflowLogo size={20} inkColor="#fff" dark showCo />
+    : <TaskflowLogo size={22} inkColor="var(--ink)" dark={!!dark} showCo />
 }
 
 const check = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}><path d="M5 12.5 10 17 19 7" stroke="var(--teal,#0E8F89)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -266,8 +263,7 @@ function HeroStage() {
             {/* sidebar */}
             <div style={{ width: 132, flexShrink: 0, background: 'var(--bg-alt)', borderRight: '1px solid var(--border)', padding: '12px 10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 6px 12px' }}>
-                <span style={{ width: 20, height: 20, borderRadius: 6, background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17.5 19.5 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
-                <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--ink)' }}>Taskflowco</span>
+                <TaskflowLogo size={12} inkColor="var(--ink)" showCo />
               </div>
               {DASH_NAV.map(([name, on]) => (
                 <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: on ? 700 : 600, padding: '6px 8px', borderRadius: 6, marginBottom: 2, color: on ? '#fff' : 'var(--ink-2)', background: on ? 'var(--blue)' : 'transparent' }}>
@@ -725,7 +721,7 @@ export default function LandingPage({ onSignIn, loading }) {
       {/* NAV */}
       <header className="nav">
         <div className="wrap row">
-          <a className="logo" href="#top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}><Logo /></a>
+          <a className="logo" href="#top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }) }}><Logo dark={dark} /></a>
           <nav className="links">
             <a className="navlink" href="#features" onClick={e => { e.preventDefault(); scrollToId('features') }}>Product</a>
             <a className="navlink" href="#product" onClick={e => { e.preventDefault(); scrollToId('product') }}>Solutions</a>
@@ -749,8 +745,7 @@ export default function LandingPage({ onSignIn, loading }) {
       <section id="top" className="hero">
         <div className="wrap inner">
           <div className="copy">
-            <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 14 }}>Built for CA · CS · CMA &amp; tax firms</div>
-            <div className="hero-pain">Still <span className="hl">losing hours</span> to scattered work, data &amp; endless client follow-ups?</div>
+            <div className="hero-pain" style={{ marginTop: 4 }}>Still <span className="hl">losing hours</span> to scattered work, data &amp; endless client follow-ups?</div>
             <h1>Stop juggling.<br /><span className="accent">Start flowing.</span></h1>
             <p className="lede">Every client, filing, deadline, document and invoice in one workspace — so your team stops switching between ten tools and spreadsheets, and gets <b style={{ color: 'var(--ink)', fontWeight: 700 }}>hours back every week</b>.</p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
