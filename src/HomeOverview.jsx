@@ -188,7 +188,7 @@ export default function HomeOverview({ orgs, workspaces, allProfiles = [], supab
           <div className="tf1b-hero-top">
             <div className="tf1b-hero-copy">
               <div className="tf1b-eyebrow tf1b-eyebrow-plain">{dateLine}</div>
-              <h1>{greeting}, {name} <span className="tf1b-wave">👋</span></h1>
+              <h1>{greeting}, <span className="tf1b-name">{name}</span> <span className="tf1b-wave">👋</span></h1>
             </div>
             <div className="tf1b-hero-stats">
               <div><b>{loading ? '—' : summary.clients}</b><span>Clients</span></div>
