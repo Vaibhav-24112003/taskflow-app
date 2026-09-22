@@ -14328,7 +14328,11 @@ if(cfg.includeReceipts){
   });
 }
 
-var reportName=cfg.createMasters?'All Masters':'Vouchers';
+// Always import under "Vouchers": Tally reads voucher <DATE> correctly here and
+// still auto-creates the inline <LEDGER ACTION="Create"> masters. Using
+// "All Masters" makes Tally treat vouchers as masters and drop their dates
+// ("Voucher Date is missing").
+var reportName='Vouchers';
 var xml=['<?xml version="1.0" encoding="UTF-8"?>',
 '<ENVELOPE>',
 ' <HEADER>',
