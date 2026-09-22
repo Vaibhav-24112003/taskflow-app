@@ -14463,14 +14463,14 @@ return<div>
 {/* ── How to import ── */}
 <div style={{background:'rgba(47,107,255,0.05)',border:'1px solid rgba(47,107,255,0.18)',borderRadius:12,padding:'14px 16px',marginTop:14}}>
 <div style={{fontSize:12.5,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>How to import into Tally</div>
+<div style={{fontSize:11.5,fontWeight:700,color:'#b45309',background:'rgba(245,158,11,0.12)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:8,padding:'8px 10px',marginBottom:8}}>⚠ Import via <b>Import → Vouchers</b> — NOT “Import → Masters”. The Masters path creates the ledgers but drops the voucher date (“Voucher Date is missing”).</div>
 <ol style={{margin:0,paddingLeft:18,fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.7}}>
-<li>Open the target company in <b>Tally Prime</b> (keep it open).</li>
-<li>Gateway of Tally → <b>Import</b> → <b>Masters</b> (or Vouchers) → select the downloaded <code>tally_import_*.xml</code>.</li>
-<li>Ledgers are auto-created under standard groups; if your ledger names differ, set them above <b>before</b> exporting so amounts post to the right accounts.</li>
-<li>Re-importing the same file <b>updates</b> the vouchers (matched by ID) — it won't create duplicates.</li>
+<li>Open the target company in <b>Tally Prime</b> and set the period (Alt+F2) to cover the invoice dates.</li>
+<li>Gateway of Tally → <b>Import</b> → <b>Vouchers</b> → select the downloaded <code>tally_import_*.xml</code>. (Ledgers referenced in the file are created automatically.)</li>
+<li>If your ledger names differ from the defaults, set them above <b>before</b> exporting so amounts post to the right accounts.</li>
 <li>Heavily-customised Tally? Use the <b>Tally Excel (CSV)</b> file with your import utility instead.</li>
 </ol>
-<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Tip: leave <b>Tally company name</b> blank to import into whichever company is currently open — avoids company-name mismatches. Test with one invoice first.</div>
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Tip: leave <b>Tally company name</b> blank to import into whichever company is currently open — avoids company-name mismatches. Test with one invoice first. (Re-importing may create duplicates — import once per period.)</div>
 </div>
 </div>;
 }
