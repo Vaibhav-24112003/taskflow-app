@@ -88,7 +88,9 @@ const CSS = `
 .lp2 .hero{background:var(--hero);border-bottom:1px solid var(--border)}
 .lp2 .hero .inner{display:flex;flex-wrap:wrap;gap:48px;align-items:center;padding:60px 0 64px}
 .lp2 .hero .copy{flex:1 1 400px;min-width:0}
-.lp2 .hero-pain{font-size:clamp(16px,1.7vw,20px);font-weight:600;line-height:1.45;color:var(--ink-2);max-width:34ch;margin:0 0 14px}
+.lp2 .hero-pain{font-size:clamp(17px,1.9vw,22px);font-weight:700;line-height:1.4;letter-spacing:-.01em;color:var(--ink);max-width:36ch;margin:0 0 16px}
+.lp2 .hero-pain .hl{color:#C2410C;background:linear-gradient(transparent 58%,rgba(244,165,42,.42) 0);padding:0 3px;border-radius:3px;white-space:nowrap}
+.lp2[data-theme="dark"] .hero-pain .hl{color:#FBBF6B;background:linear-gradient(transparent 58%,rgba(244,165,42,.22) 0)}
 .lp2 .hero h1{font-family:var(--serif);font-size:clamp(38px,4.8vw,58px);line-height:1.05;letter-spacing:-.02em;font-weight:600;color:var(--ink);margin:0 0 20px}
 .lp2 .hero h1 .accent{color:var(--blue)}
 .lp2 .hero .lede{font-size:17px;line-height:1.65;color:var(--ink-2);max-width:46ch;margin:0 0 30px}
@@ -748,7 +750,7 @@ export default function LandingPage({ onSignIn, loading }) {
         <div className="wrap inner">
           <div className="copy">
             <div className="eyebrow" style={{ color: 'var(--muted)', marginBottom: 14 }}>Built for CA · CS · CMA &amp; tax firms</div>
-            <div className="hero-pain">Still losing hours to scattered work, data and client follow-ups across a dozen tools?</div>
+            <div className="hero-pain">Still <span className="hl">losing hours</span> to scattered work, data &amp; endless client follow-ups?</div>
             <h1>Stop juggling.<br /><span className="accent">Start flowing.</span></h1>
             <p className="lede">Every client, filing, deadline, document and invoice in one workspace — so your team stops switching between ten tools and spreadsheets, and gets <b style={{ color: 'var(--ink)', fontWeight: 700 }}>hours back every week</b>.</p>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
