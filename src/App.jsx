@@ -14333,6 +14333,11 @@ if(cfg.includeReceipts){
 // "All Masters" makes Tally treat vouchers as masters and drop their dates
 // ("Voucher Date is missing").
 var reportName='Vouchers';
+// Period context — helps Tally accept the voucher dates (they must fall inside
+// the company's financial year; otherwise Tally reports "Voucher Date is missing").
+var _allDates=[];eligible.forEach(function(inv){var x=d2(inv.invoice_date);if(x)_allDates.push(x);});
+if(cfg.includeReceipts)payments.forEach(function(p){if(p.payment_date&&Number(p.amount)>0){var x=d2(p.payment_date);if(x)_allDates.push(x);}});
+_allDates.sort();var fromDate=_allDates[0]||'',toDate=_allDates[_allDates.length-1]||'';
 var xml=['<?xml version="1.0" encoding="UTF-16" standalone="yes"?>',
 '<ENVELOPE>',
 ' <HEADER>',
@@ -14343,7 +14348,10 @@ var xml=['<?xml version="1.0" encoding="UTF-16" standalone="yes"?>',
 '   <REQUESTDESC>',
 '    <REPORTNAME>'+reportName+'</REPORTNAME>',
 '    <STATICVARIABLES>',
+'     <SVEXPORTFORMAT>$$SysName:XML</SVEXPORTFORMAT>',
 (cfg.company?'     <SVCURRENTCOMPANY>'+esc(cfg.company)+'</SVCURRENTCOMPANY>':''),
+(fromDate?'     <SVFROMDATE TYPE="Date">'+fromDate+'</SVFROMDATE>':''),
+(toDate?'     <SVTODATE TYPE="Date">'+toDate+'</SVTODATE>':''),
 '    </STATICVARIABLES>',
 '   </REQUESTDESC>',
 '   <REQUESTDATA>',
