@@ -14264,6 +14264,7 @@ eligible.forEach(function(inv){
   var v=[];
   v.push('    <VOUCHER VCHTYPE="'+esc(cfg.salesVchType||'Sales')+'" ACTION="Create" OBJVIEW="Accounting Voucher View">');
   v.push('     <DATE>'+d2(inv.invoice_date)+'</DATE>');
+  v.push('     <VCHSTATUSDATE>'+d2(inv.invoice_date)+'</VCHSTATUSDATE>');
   v.push('     <EFFECTIVEDATE>'+d2(inv.invoice_date)+'</EFFECTIVEDATE>');
   v.push('     <VOUCHERTYPENAME>'+esc(cfg.salesVchType||'Sales')+'</VOUCHERTYPENAME>');
   v.push('     <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
@@ -14304,6 +14305,7 @@ if(cfg.includeReceipts){
     var v=[];
     v.push('    <VOUCHER VCHTYPE="'+esc(cfg.receiptVchType||'Receipt')+'" ACTION="Create" OBJVIEW="Accounting Voucher View">');
     v.push('     <DATE>'+d2(p.payment_date)+'</DATE>');
+    v.push('     <VCHSTATUSDATE>'+d2(p.payment_date)+'</VCHSTATUSDATE>');
     v.push('     <EFFECTIVEDATE>'+d2(p.payment_date)+'</EFFECTIVEDATE>');
     v.push('     <VOUCHERTYPENAME>'+esc(cfg.receiptVchType||'Receipt')+'</VOUCHERTYPENAME>');
     if(p.ref_no)v.push('     <VOUCHERNUMBER>'+esc(p.ref_no)+'</VOUCHERNUMBER>');
