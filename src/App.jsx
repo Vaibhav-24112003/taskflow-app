@@ -14262,29 +14262,27 @@ eligible.forEach(function(inv){
   if(taxAmt>0){if(inter){igst=taxAmt;}else{cgst=Math.round(taxAmt/2*100)/100;sgst=Math.round((taxAmt-cgst)*100)/100;}}
   var roundOff=Math.round((total-(net+cgst+sgst+igst))*100)/100;
   var v=[];
-  v.push('    <VOUCHER VCHTYPE="'+esc(cfg.salesVchType||'Sales')+'" ACTION="Create" OBJVIEW="Invoice Voucher View">');
+  v.push('    <VOUCHER VCHTYPE="'+esc(cfg.salesVchType||'Sales')+'" ACTION="Create">');
   v.push('     <DATE>'+d2(inv.invoice_date)+'</DATE>');
-  v.push('     <EFFECTIVEDATE>'+d2(inv.invoice_date)+'</EFFECTIVEDATE>');
   v.push('     <VOUCHERTYPENAME>'+esc(cfg.salesVchType||'Sales')+'</VOUCHERTYPENAME>');
   v.push('     <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
+  v.push('     <REFERENCE>'+esc(inv.invoice_no||'')+'</REFERENCE>');
   v.push('     <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
-  v.push('     <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>');
-  v.push('     <REMOTEID>tfc-inv-'+esc(inv.id)+'</REMOTEID>');
-  v.push('     <GUID>tfc-inv-'+esc(inv.id)+'</GUID>');
+  v.push('     <PARTYNAME>'+esc(partyName)+'</PARTYNAME>');
   if(inv.notes)v.push('     <NARRATION>'+esc(inv.notes)+'</NARRATION>');
   if(c.gstin)v.push('     <PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>');
-  v.push('     <LEDGERENTRIES.LIST>');
+  v.push('     <ALLLEDGERENTRIES.LIST>');
   v.push('      <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
   v.push('      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
   v.push('      <AMOUNT>-'+amt(total)+'</AMOUNT>');
   if(cfg.billwise){v.push('      <BILLALLOCATIONS.LIST>');v.push('       <NAME>'+esc(inv.invoice_no||'')+'</NAME>');v.push('       <BILLTYPE>New Ref</BILLTYPE>');v.push('       <AMOUNT>-'+amt(total)+'</AMOUNT>');v.push('      </BILLALLOCATIONS.LIST>');}
-  v.push('     </LEDGERENTRIES.LIST>');
-  v.push('     <LEDGERENTRIES.LIST>');
+  v.push('     </ALLLEDGERENTRIES.LIST>');
+  v.push('     <ALLLEDGERENTRIES.LIST>');
   v.push('      <LEDGERNAME>'+esc(cfg.salesLedger||'Sales')+'</LEDGERNAME>');
   v.push('      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
   v.push('      <AMOUNT>'+amt(net)+'</AMOUNT>');
-  v.push('     </LEDGERENTRIES.LIST>');
-  function taxE(name,val){return '     <LEDGERENTRIES.LIST>\n      <LEDGERNAME>'+esc(name)+'</LEDGERNAME>\n      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n      <AMOUNT>'+amt(val)+'</AMOUNT>\n     </LEDGERENTRIES.LIST>';}
+  v.push('     </ALLLEDGERENTRIES.LIST>');
+  function taxE(name,val){return '     <ALLLEDGERENTRIES.LIST>\n      <LEDGERNAME>'+esc(name)+'</LEDGERNAME>\n      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n      <AMOUNT>'+amt(val)+'</AMOUNT>\n     </ALLLEDGERENTRIES.LIST>';}
   if(igst>0)v.push(taxE(cfg.igst||'Output IGST',igst));
   if(cgst>0)v.push(taxE(cfg.cgst||'Output CGST',cgst));
   if(sgst>0)v.push(taxE(cfg.sgst||'Output SGST',sgst));
@@ -14305,24 +14303,24 @@ if(cfg.includeReceipts){
     var v=[];
     v.push('    <VOUCHER VCHTYPE="'+esc(cfg.receiptVchType||'Receipt')+'" ACTION="Create">');
     v.push('     <DATE>'+d2(p.payment_date)+'</DATE>');
-    v.push('     <EFFECTIVEDATE>'+d2(p.payment_date)+'</EFFECTIVEDATE>');
     v.push('     <VOUCHERTYPENAME>'+esc(cfg.receiptVchType||'Receipt')+'</VOUCHERTYPENAME>');
     if(p.ref_no)v.push('     <VOUCHERNUMBER>'+esc(p.ref_no)+'</VOUCHERNUMBER>');
     v.push('     <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
-    v.push('     <REMOTEID>tfc-pay-'+esc(p.id)+'</REMOTEID>');
-    v.push('     <GUID>tfc-pay-'+esc(p.id)+'</GUID>');
+    v.push('     <PARTYNAME>'+esc(partyName)+'</PARTYNAME>');
     v.push('     <NARRATION>'+esc('Receipt '+(p.mode||'')+(p.ref_no?' '+p.ref_no:'')+(inv.invoice_no?' against '+inv.invoice_no:''))+'</NARRATION>');
-    v.push('     <LEDGERENTRIES.LIST>');
-    v.push('      <LEDGERNAME>'+esc(into)+'</LEDGERNAME>');
-    v.push('      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
-    v.push('      <AMOUNT>-'+amt(a)+'</AMOUNT>');
-    v.push('     </LEDGERENTRIES.LIST>');
-    v.push('     <LEDGERENTRIES.LIST>');
+    // Party credited (positive) — first line for a Receipt in accounting view.
+    v.push('     <ALLLEDGERENTRIES.LIST>');
     v.push('      <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
     v.push('      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
     v.push('      <AMOUNT>'+amt(a)+'</AMOUNT>');
     if(cfg.billwise&&inv.invoice_no){v.push('      <BILLALLOCATIONS.LIST>');v.push('       <NAME>'+esc(inv.invoice_no)+'</NAME>');v.push('       <BILLTYPE>Agst Ref</BILLTYPE>');v.push('       <AMOUNT>'+amt(a)+'</AMOUNT>');v.push('      </BILLALLOCATIONS.LIST>');}
-    v.push('     </LEDGERENTRIES.LIST>');
+    v.push('     </ALLLEDGERENTRIES.LIST>');
+    // Bank / Cash debited (negative).
+    v.push('     <ALLLEDGERENTRIES.LIST>');
+    v.push('      <LEDGERNAME>'+esc(into)+'</LEDGERNAME>');
+    v.push('      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
+    v.push('      <AMOUNT>-'+amt(a)+'</AMOUNT>');
+    v.push('     </ALLLEDGERENTRIES.LIST>');
     v.push('    </VOUCHER>');
     msgs.push(v.join('\n'));
   });
