@@ -14262,8 +14262,9 @@ eligible.forEach(function(inv){
   if(taxAmt>0){if(inter){igst=taxAmt;}else{cgst=Math.round(taxAmt/2*100)/100;sgst=Math.round((taxAmt-cgst)*100)/100;}}
   var roundOff=Math.round((total-(net+cgst+sgst+igst))*100)/100;
   var v=[];
-  v.push('    <VOUCHER VCHTYPE="'+esc(cfg.salesVchType||'Sales')+'" ACTION="Create">');
+  v.push('    <VOUCHER VCHTYPE="'+esc(cfg.salesVchType||'Sales')+'" ACTION="Create" OBJVIEW="Accounting Voucher View">');
   v.push('     <DATE>'+d2(inv.invoice_date)+'</DATE>');
+  v.push('     <EFFECTIVEDATE>'+d2(inv.invoice_date)+'</EFFECTIVEDATE>');
   v.push('     <VOUCHERTYPENAME>'+esc(cfg.salesVchType||'Sales')+'</VOUCHERTYPENAME>');
   v.push('     <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
   v.push('     <REFERENCE>'+esc(inv.invoice_no||'')+'</REFERENCE>');
@@ -14301,8 +14302,9 @@ if(cfg.includeReceipts){
     var into=(/cash/i.test(p.mode||''))?(cfg.cash||'Cash'):(cfg.bank||'Bank');
     var a=Math.round(Number(p.amount)*100)/100; payCount++;
     var v=[];
-    v.push('    <VOUCHER VCHTYPE="'+esc(cfg.receiptVchType||'Receipt')+'" ACTION="Create">');
+    v.push('    <VOUCHER VCHTYPE="'+esc(cfg.receiptVchType||'Receipt')+'" ACTION="Create" OBJVIEW="Accounting Voucher View">');
     v.push('     <DATE>'+d2(p.payment_date)+'</DATE>');
+    v.push('     <EFFECTIVEDATE>'+d2(p.payment_date)+'</EFFECTIVEDATE>');
     v.push('     <VOUCHERTYPENAME>'+esc(cfg.receiptVchType||'Receipt')+'</VOUCHERTYPENAME>');
     if(p.ref_no)v.push('     <VOUCHERNUMBER>'+esc(p.ref_no)+'</VOUCHERNUMBER>');
     v.push('     <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
@@ -14331,7 +14333,7 @@ if(cfg.includeReceipts){
 // "All Masters" makes Tally treat vouchers as masters and drop their dates
 // ("Voucher Date is missing").
 var reportName='Vouchers';
-var xml=['<?xml version="1.0" encoding="UTF-8"?>',
+var xml=['<?xml version="1.0" encoding="UTF-16" standalone="yes"?>',
 '<ENVELOPE>',
 ' <HEADER>',
 '  <TALLYREQUEST>Import Data</TALLYREQUEST>',
@@ -14352,7 +14354,9 @@ msgs.join('\n'),
 '  </IMPORTDATA>',
 ' </BODY>',
 '</ENVELOPE>'].filter(function(l){return l!=='';}).join('\r\n');
-downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'text/xml;charset=utf-8');
+// Tally's native XML is UTF-16LE with BOM — matching it exactly (a UTF-8 file
+// makes Tally drop the voucher date on import).
+downloadFileUTF16('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml);
 showToast('Tally XML: '+eligible.length+' invoice'+(eligible.length!==1?'s':'')+(payCount?' + '+payCount+' receipt'+(payCount!==1?'s':''):'')+(skipped?' · '+skipped+' skipped (no date)':''));}
 
 // Column CSV fallback for Tally import utilities / manual entry.
