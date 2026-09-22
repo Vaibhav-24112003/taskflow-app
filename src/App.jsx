@@ -13828,6 +13828,14 @@ var [stmtClientId,setStmtClientId]=useState('');
 var [stmtData,setStmtData]=useState(null);
 var [exportFmt,setExportFmt]=useState('pdf');
 
+// ── Per-firm Tally export mapping (organizations.tally_config) ──
+var TALLY_DEFAULTS={company:'',salesLedger:'Sales',cgst:'Output CGST',sgst:'Output SGST',igst:'Output IGST',roundOff:'Round Off',bank:'Bank',cash:'Cash',debtorGroup:'Sundry Debtors',salesVchType:'Sales',receiptVchType:'Receipt',createMasters:true,includeReceipts:true,billwise:true};
+var [tallyCfg,setTallyCfg]=useState(Object.assign({},TALLY_DEFAULTS,(org&&org.tally_config)||{}));
+var [tallySaving,setTallySaving]=useState(false);
+var [showTallyCfg,setShowTallyCfg]=useState(false);
+useEffect(function(){supabase.from('organizations').select('tally_config').eq('id',org.id).single().then(function(r){if(r&&r.data&&r.data.tally_config&&Object.keys(r.data.tally_config).length)setTallyCfg(Object.assign({},TALLY_DEFAULTS,r.data.tally_config));}).catch(function(){});/* eslint-disable-next-line */},[org.id]);
+async function saveTallyCfg(){setTallySaving(true);var r=await supabase.from('organizations').update({tally_config:tallyCfg}).eq('id',org.id);setTallySaving(false);if(r.error)showToast(r.error.message,'err');else{showToast('Tally settings saved');setShowTallyCfg(false);}}
+
 function showToast(m,k){setToast({msg:m,kind:k||'ok'});setTimeout(function(){setToast(null);},2400);}
 
 useEffect(function(){loadAll();},[org.id]);
@@ -14215,66 +14223,112 @@ downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.json',JSON.s
 showToast('Tally JSON downloaded');}
 
 function exportTallyXML(){
+var cfg=tallyCfg;
 var orgState=org.gstin?org.gstin.slice(0,2):'';
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function tallyDate(d){return String(d).slice(0,10).replace(/-/g,'');}
-var skipped=invoices.filter(function(inv){return !inv.invoice_date;}).length;
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function d2(d){return String(d||'').slice(0,10).replace(/-/g,'');}
+function amt(n){return (Math.round(Number(n||0)*100)/100).toFixed(2);}
 var eligible=invoices.filter(function(inv){return !!inv.invoice_date;});
-if(eligible.length===0){showToast('No invoices have a date set — add dates first','err');return;}
-var vouchers=eligible.map(function(inv){
-var c=clientMap[inv.client_id]||{};
-var items=inv.items||[];
-var sub=items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
-var taxAmt=inv.tax_percent?Math.round(((inv.total||0)-sub)*100)/100:0;
-var clientState=c.gstin?c.gstin.slice(0,2):'';
-var isInterState=orgState&&clientState&&orgState!==clientState;
-var dt=tallyDate(inv.invoice_date);
-var partyName=c.display_name||c.name||'Sundry Debtors';
-var total=Number(inv.total||0);
-var v=[];
-v.push(' <VOUCHER VCHTYPE="Sales" ACTION="Create">');
-v.push('  <DATE>'+dt+'</DATE>');
-v.push('  <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>');
-v.push('  <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
-v.push('  <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
-if(inv.notes)v.push('  <NARRATION>'+esc(inv.notes)+'</NARRATION>');
-if(c.gstin)v.push('  <PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>');
-v.push('  <LEDGERENTRIES.LIST>');
-v.push('   <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
-v.push('   <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>'+total.toFixed(2)+'</AMOUNT>');
-v.push('  </LEDGERENTRIES.LIST>');
-items.forEach(function(it){
-var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
-v.push('  <LEDGERENTRIES.LIST>');
-v.push('   <LEDGERNAME>'+esc(it.description||'Sales Account')+'</LEDGERNAME>');
-v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>'+amt.toFixed(2)+'</AMOUNT>');
-v.push('  </LEDGERENTRIES.LIST>');
+var skipped=invoices.length-eligible.length;
+if(eligible.length===0){showToast('No invoices have a date — add dates first','err');return;}
+
+// ── Masters (auto-create so import never fails on missing ledgers) ──
+var partySet={};
+eligible.forEach(function(inv){var c=clientMap[inv.client_id]||{};var nm=c.display_name||c.name||'Sundry Debtors';partySet[nm]={gstin:c.gstin||''};});
+if(cfg.includeReceipts)payments.forEach(function(p){if(!p.payment_date||!(Number(p.amount)>0))return;var inv=invoices.find(function(x){return x.id===p.invoice_id;})||{};var c=clientMap[p.client_id||inv.client_id]||{};var nm=c.display_name||c.name;if(nm&&!partySet[nm])partySet[nm]={gstin:c.gstin||''};});
+var msgs=[];
+if(cfg.createMasters){
+  function led(name,parent,extra){return '   <LEDGER NAME="'+esc(name)+'" ACTION="Create">\n    <NAME>'+esc(name)+'</NAME>\n    <PARENT>'+esc(parent)+'</PARENT>'+(extra||'')+'\n   </LEDGER>';}
+  Object.keys(partySet).forEach(function(nm){var p=partySet[nm];var extra='\n    <ISBILLWISEON>Yes</ISBILLWISEON>'+(p.gstin?'\n    <PARTYGSTIN>'+esc(p.gstin)+'</PARTYGSTIN>':'');msgs.push(led(nm,cfg.debtorGroup||'Sundry Debtors',extra));});
+  msgs.push(led(cfg.salesLedger||'Sales','Sales Accounts'));
+  msgs.push(led(cfg.cgst||'Output CGST','Duties & Taxes'));
+  msgs.push(led(cfg.sgst||'Output SGST','Duties & Taxes'));
+  msgs.push(led(cfg.igst||'Output IGST','Duties & Taxes'));
+  msgs.push(led(cfg.roundOff||'Round Off','Indirect Expenses'));
+  if(cfg.includeReceipts){msgs.push(led(cfg.bank||'Bank','Bank Accounts'));msgs.push(led(cfg.cash||'Cash','Cash-in-Hand'));}
+}
+
+// ── Sales vouchers (balanced: party Dr = -total; income/GST Cr = +; round off balances) ──
+eligible.forEach(function(inv){
+  var c=clientMap[inv.client_id]||{};
+  var partyName=c.display_name||c.name||'Sundry Debtors';
+  var items=inv.items||[];
+  var net=Math.round(items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0)*100)/100;
+  var total=Math.round(Number(inv.total||0)*100)/100;
+  var taxAmt=inv.tax_percent?Math.round((total-net)*100)/100:0; if(taxAmt<0)taxAmt=0;
+  var clientState=c.gstin?c.gstin.slice(0,2):'';
+  var inter=orgState&&clientState&&orgState!==clientState;
+  var cgst=0,sgst=0,igst=0;
+  if(taxAmt>0){if(inter){igst=taxAmt;}else{cgst=Math.round(taxAmt/2*100)/100;sgst=Math.round((taxAmt-cgst)*100)/100;}}
+  var roundOff=Math.round((total-(net+cgst+sgst+igst))*100)/100;
+  var v=[];
+  v.push('    <VOUCHER VCHTYPE="'+esc(cfg.salesVchType||'Sales')+'" ACTION="Create" OBJVIEW="Invoice Voucher View">');
+  v.push('     <DATE>'+d2(inv.invoice_date)+'</DATE>');
+  v.push('     <EFFECTIVEDATE>'+d2(inv.invoice_date)+'</EFFECTIVEDATE>');
+  v.push('     <VOUCHERTYPENAME>'+esc(cfg.salesVchType||'Sales')+'</VOUCHERTYPENAME>');
+  v.push('     <VOUCHERNUMBER>'+esc(inv.invoice_no||'')+'</VOUCHERNUMBER>');
+  v.push('     <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
+  v.push('     <PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>');
+  v.push('     <REMOTEID>tfc-inv-'+esc(inv.id)+'</REMOTEID>');
+  v.push('     <GUID>tfc-inv-'+esc(inv.id)+'</GUID>');
+  if(inv.notes)v.push('     <NARRATION>'+esc(inv.notes)+'</NARRATION>');
+  if(c.gstin)v.push('     <PARTYGSTIN>'+esc(c.gstin)+'</PARTYGSTIN>');
+  v.push('     <LEDGERENTRIES.LIST>');
+  v.push('      <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
+  v.push('      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
+  v.push('      <AMOUNT>-'+amt(total)+'</AMOUNT>');
+  if(cfg.billwise){v.push('      <BILLALLOCATIONS.LIST>');v.push('       <NAME>'+esc(inv.invoice_no||'')+'</NAME>');v.push('       <BILLTYPE>New Ref</BILLTYPE>');v.push('       <AMOUNT>-'+amt(total)+'</AMOUNT>');v.push('      </BILLALLOCATIONS.LIST>');}
+  v.push('     </LEDGERENTRIES.LIST>');
+  v.push('     <LEDGERENTRIES.LIST>');
+  v.push('      <LEDGERNAME>'+esc(cfg.salesLedger||'Sales')+'</LEDGERNAME>');
+  v.push('      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+  v.push('      <AMOUNT>'+amt(net)+'</AMOUNT>');
+  v.push('     </LEDGERENTRIES.LIST>');
+  function taxE(name,val){return '     <LEDGERENTRIES.LIST>\n      <LEDGERNAME>'+esc(name)+'</LEDGERNAME>\n      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>\n      <AMOUNT>'+amt(val)+'</AMOUNT>\n     </LEDGERENTRIES.LIST>';}
+  if(igst>0)v.push(taxE(cfg.igst||'Output IGST',igst));
+  if(cgst>0)v.push(taxE(cfg.cgst||'Output CGST',cgst));
+  if(sgst>0)v.push(taxE(cfg.sgst||'Output SGST',sgst));
+  if(Math.abs(roundOff)>=0.01)v.push(taxE(cfg.roundOff||'Round Off',roundOff));
+  v.push('    </VOUCHER>');
+  msgs.push(v.join('\n'));
 });
-if(taxAmt>0){
-if(isInterState){
-v.push('  <LEDGERENTRIES.LIST>');
-v.push('   <LEDGERNAME>IGST</LEDGERNAME>');
-v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>'+taxAmt.toFixed(2)+'</AMOUNT>');
-v.push('  </LEDGERENTRIES.LIST>');
-}else{
-var half=Math.round(taxAmt/2*100)/100;
-v.push('  <LEDGERENTRIES.LIST>');
-v.push('   <LEDGERNAME>CGST</LEDGERNAME>');
-v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>'+half.toFixed(2)+'</AMOUNT>');
-v.push('  </LEDGERENTRIES.LIST>');
-v.push('  <LEDGERENTRIES.LIST>');
-v.push('   <LEDGERNAME>SGST</LEDGERNAME>');
-v.push('   <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
-v.push('   <AMOUNT>'+half.toFixed(2)+'</AMOUNT>');
-v.push('  </LEDGERENTRIES.LIST>');
-}}
-v.push(' </VOUCHER>');
-return v.join('\n');
-});
+
+// ── Receipt vouchers from payments (Bank/Cash Dr; Party Cr, bill-wise) ──
+var payCount=0;
+if(cfg.includeReceipts){
+  payments.filter(function(p){return !!p.payment_date&&Number(p.amount)>0;}).forEach(function(p){
+    var inv=invoices.find(function(x){return x.id===p.invoice_id;})||{};
+    var c=clientMap[p.client_id||inv.client_id]||{};
+    var partyName=c.display_name||c.name||'Sundry Debtors';
+    var into=(/cash/i.test(p.mode||''))?(cfg.cash||'Cash'):(cfg.bank||'Bank');
+    var a=Math.round(Number(p.amount)*100)/100; payCount++;
+    var v=[];
+    v.push('    <VOUCHER VCHTYPE="'+esc(cfg.receiptVchType||'Receipt')+'" ACTION="Create">');
+    v.push('     <DATE>'+d2(p.payment_date)+'</DATE>');
+    v.push('     <EFFECTIVEDATE>'+d2(p.payment_date)+'</EFFECTIVEDATE>');
+    v.push('     <VOUCHERTYPENAME>'+esc(cfg.receiptVchType||'Receipt')+'</VOUCHERTYPENAME>');
+    if(p.ref_no)v.push('     <VOUCHERNUMBER>'+esc(p.ref_no)+'</VOUCHERNUMBER>');
+    v.push('     <PARTYLEDGERNAME>'+esc(partyName)+'</PARTYLEDGERNAME>');
+    v.push('     <REMOTEID>tfc-pay-'+esc(p.id)+'</REMOTEID>');
+    v.push('     <GUID>tfc-pay-'+esc(p.id)+'</GUID>');
+    v.push('     <NARRATION>'+esc('Receipt '+(p.mode||'')+(p.ref_no?' '+p.ref_no:'')+(inv.invoice_no?' against '+inv.invoice_no:''))+'</NARRATION>');
+    v.push('     <LEDGERENTRIES.LIST>');
+    v.push('      <LEDGERNAME>'+esc(into)+'</LEDGERNAME>');
+    v.push('      <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>');
+    v.push('      <AMOUNT>-'+amt(a)+'</AMOUNT>');
+    v.push('     </LEDGERENTRIES.LIST>');
+    v.push('     <LEDGERENTRIES.LIST>');
+    v.push('      <LEDGERNAME>'+esc(partyName)+'</LEDGERNAME>');
+    v.push('      <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>');
+    v.push('      <AMOUNT>'+amt(a)+'</AMOUNT>');
+    if(cfg.billwise&&inv.invoice_no){v.push('      <BILLALLOCATIONS.LIST>');v.push('       <NAME>'+esc(inv.invoice_no)+'</NAME>');v.push('       <BILLTYPE>Agst Ref</BILLTYPE>');v.push('       <AMOUNT>'+amt(a)+'</AMOUNT>');v.push('      </BILLALLOCATIONS.LIST>');}
+    v.push('     </LEDGERENTRIES.LIST>');
+    v.push('    </VOUCHER>');
+    msgs.push(v.join('\n'));
+  });
+}
+
+var reportName=cfg.createMasters?'All Masters':'Vouchers';
 var xml=['<?xml version="1.0" encoding="UTF-8"?>',
 '<ENVELOPE>',
 ' <HEADER>',
@@ -14283,21 +14337,50 @@ var xml=['<?xml version="1.0" encoding="UTF-8"?>',
 ' <BODY>',
 '  <IMPORTDATA>',
 '   <REQUESTDESC>',
-'    <REPORTNAME>Vouchers</REPORTNAME>',
+'    <REPORTNAME>'+reportName+'</REPORTNAME>',
 '    <STATICVARIABLES>',
-'     <SVCURRENTCOMPANY>'+esc(org.name||'')+'</SVCURRENTCOMPANY>',
+(cfg.company?'     <SVCURRENTCOMPANY>'+esc(cfg.company)+'</SVCURRENTCOMPANY>':''),
 '    </STATICVARIABLES>',
 '   </REQUESTDESC>',
 '   <REQUESTDATA>',
 '    <TALLYMESSAGE xmlns:UDF="TallyUDF">',
-vouchers.join('\n'),
+msgs.join('\n'),
 '    </TALLYMESSAGE>',
 '   </REQUESTDATA>',
 '  </IMPORTDATA>',
 ' </BODY>',
-'</ENVELOPE>'].join('\r\n');
+'</ENVELOPE>'].filter(function(l){return l!=='';}).join('\r\n');
 downloadFile('tally_import_'+new Date().toISOString().slice(0,10)+'.xml',xml,'text/xml;charset=utf-8');
-showToast('Tally XML downloaded'+(skipped>0?' ('+skipped+' invoice'+(skipped>1?'s':'')+' skipped — no date)':''));}
+showToast('Tally XML: '+eligible.length+' invoice'+(eligible.length!==1?'s':'')+(payCount?' + '+payCount+' receipt'+(payCount!==1?'s':''):'')+(skipped?' · '+skipped+' skipped (no date)':''));}
+
+// Column CSV fallback for Tally import utilities / manual entry.
+function exportTallyExcel(){
+var orgState=org.gstin?org.gstin.slice(0,2):'';
+function cell(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';}
+var invHdr=['Voucher Type','Date','Voucher No','Party Ledger','Party GSTIN','Sales Ledger','Item Description','Qty','Rate','Line Amount','Taxable Value','CGST','SGST','IGST','Round Off','Invoice Total'];
+var invRows=[];
+invoices.filter(function(i){return !!i.invoice_date;}).forEach(function(inv){
+  var c=clientMap[inv.client_id]||{};var party=c.display_name||c.name||'';
+  var items=inv.items||[];
+  var net=Math.round(items.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0)*100)/100;
+  var total=Math.round(Number(inv.total||0)*100)/100;
+  var taxAmt=inv.tax_percent?Math.round((total-net)*100)/100:0;if(taxAmt<0)taxAmt=0;
+  var clientState=c.gstin?c.gstin.slice(0,2):'';var inter=orgState&&clientState&&orgState!==clientState;
+  var cgst=inter?0:Math.round(taxAmt/2*100)/100,sgst=inter?0:Math.round((taxAmt-cgst)*100)/100,igst=inter?taxAmt:0;
+  var roundOff=Math.round((total-(net+cgst+sgst+igst))*100)/100;
+  (items.length?items:[{description:'',qty:'',rate:''}]).forEach(function(it,idx){
+    invRows.push([idx===0?(tallyCfg.salesVchType||'Sales'):'',inv.invoice_date||'',idx===0?(inv.invoice_no||''):'',idx===0?party:'',idx===0?(c.gstin||''):'',tallyCfg.salesLedger||'Sales',it.description||'',it.qty||'',it.rate||'',(Number(it.qty)||1)*(Number(it.rate)||0)||'',idx===0?net:'',idx===0?cgst:'',idx===0?sgst:'',idx===0?igst:'',idx===0&&Math.abs(roundOff)>=0.01?roundOff:'',idx===0?total:'']);
+  });
+});
+var invCsv=invHdr.map(cell).join(',')+'\n'+invRows.map(function(r){return r.map(cell).join(',');}).join('\n');
+downloadFile('tally_invoices_'+new Date().toISOString().slice(0,10)+'.csv',invCsv,'text/csv');
+var payHdr=['Voucher Type','Date','Ref No','Party Ledger','Deposit To','Mode','Against Invoice','Amount'];
+var payRows=payments.filter(function(p){return !!p.payment_date&&Number(p.amount)>0;}).map(function(p){
+  var inv=invoices.find(function(x){return x.id===p.invoice_id;})||{};var c=clientMap[p.client_id||inv.client_id]||{};
+  return [tallyCfg.receiptVchType||'Receipt',p.payment_date||'',p.ref_no||'',c.display_name||c.name||'',(/cash/i.test(p.mode||''))?(tallyCfg.cash||'Cash'):(tallyCfg.bank||'Bank'),p.mode||'',inv.invoice_no||'',Number(p.amount)||0];
+});
+if(payRows.length){var payCsv=payHdr.map(cell).join(',')+'\n'+payRows.map(function(r){return r.map(cell).join(',');}).join('\n');setTimeout(function(){downloadFile('tally_receipts_'+new Date().toISOString().slice(0,10)+'.csv',payCsv,'text/csv');},350);}
+showToast('Tally CSV downloaded ('+invRows.length+' invoice rows'+(payRows.length?' + '+payRows.length+' receipts':'')+')');}
 
 function exportZohoXLSX(){
 var header=['Invoice Number','Invoice Date','Due Date','Customer Name','Item Name','Quantity','Rate','Tax','Total'];
@@ -14335,9 +14418,12 @@ showToast('Excel CSV downloaded');}
 var FORMATS=[
 {id:'pdf',label:'All Invoices PDF',desc:'Print all invoices as PDF',icon:'📄',color:'#ef4444',fn:exportAllPDF},
 {id:'excel',label:'Invoices Excel/CSV',desc:'All invoices with items, payments, balance',icon:'📊',color:'#22c55e',fn:exportExcel},
-{id:'tallyxml',label:'Tally XML',desc:'Native XML import for Tally ERP/Prime. Invoice dates must fall within the Tally company period.',icon:'📋',color:'#f59e0b',fn:exportTallyXML},
+{id:'tallyxml',label:'Tally XML',desc:'Native import for Tally ERP/Prime — invoices + receipts, auto-creates ledgers, GST-split & bill-wise. Uses your Tally settings below.',icon:'📋',color:'#f59e0b',fn:exportTallyXML},
+{id:'tallyexcel',label:'Tally Excel (CSV)',desc:'Column CSV fallback for Tally import tools or manual entry — invoices + a receipts file.',icon:'📗',color:'#0ea5e9',fn:exportTallyExcel},
 {id:'zoho',label:'Zoho Books CSV',desc:'CSV format compatible with Zoho Books import',icon:'📑',color:'#3b82f6',fn:exportZohoXLSX}];
 
+var TF_FIELDS=[['company','Tally company name','blank = currently-open company'],['salesLedger','Sales / income ledger',''],['cgst','Output CGST ledger',''],['sgst','Output SGST ledger',''],['igst','Output IGST ledger',''],['roundOff','Round-off ledger',''],['bank','Bank ledger (receipts)',''],['cash','Cash ledger (receipts)',''],['debtorGroup','Party group',''],['salesVchType','Sales voucher type',''],['receiptVchType','Receipt voucher type','']];
+function setTf(k,val){setTallyCfg(Object.assign({},tallyCfg,(function(o){o[k]=val;return o;})({})));}
 return<div>
 <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',marginBottom:14}}>Export Data</div>
 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
@@ -14347,6 +14433,42 @@ return<div>
 <div style={{fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.4}}>{f.desc}</div>
 <div style={{marginTop:10,fontSize:11,fontWeight:700,color:f.color}}>{invoices.length} invoice{invoices.length!==1?'s':''} ready</div>
 </div>;})}
+</div>
+
+{/* ── Tally import settings ── */}
+<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:16,marginTop:18}}>
+<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+<div>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>Tally import settings</div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)',marginTop:2}}>Map TaskFlowCo to your firm's exact Tally ledger &amp; voucher names — set once, used by the Tally XML/CSV exports.</div>
+</div>
+<button onClick={function(){setShowTallyCfg(!showTallyCfg);}} style={Object.assign({},BTN,{background:'rgba(14,42,71,0.1)',color:'#0e2a47'})}>{showTallyCfg?'Close':'Configure'}</button>
+</div>
+{showTallyCfg&&<div style={{marginTop:14}}>
+<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+{TF_FIELDS.map(function(f){return<div key={f[0]}><label style={LBL}>{f[1]}</label><input value={tallyCfg[f[0]]||''} onChange={function(e){setTf(f[0],e.target.value);}} placeholder={f[2]||TALLY_DEFAULTS[f[0]]} style={INP}/>{f[2]?<div style={{fontSize:10.5,color:'var(--tf-text-sub)',marginTop:3}}>{f[2]}</div>:null}</div>;})}
+</div>
+<div style={{display:'flex',gap:18,flexWrap:'wrap',margin:'14px 0 4px'}}>
+{[['createMasters','Auto-create missing ledgers'],['includeReceipts','Include payments as Receipt vouchers'],['billwise','Bill-wise references (match receipts to invoices)']].map(function(o){return<label key={o[0]} style={{display:'flex',alignItems:'center',gap:7,fontSize:12.5,color:'var(--tf-text)',cursor:'pointer'}}><input type="checkbox" checked={!!tallyCfg[o[0]]} onChange={function(e){setTf(o[0],e.target.checked);}} style={{accentColor:'#2F6BFF'}}/>{o[1]}</label>;})}
+</div>
+<div style={{display:'flex',gap:10,marginTop:12}}>
+<button onClick={saveTallyCfg} disabled={tallySaving} style={Object.assign({},BTN,{background:'#0e2a47',color:'#fff',opacity:tallySaving?0.6:1})}>{tallySaving?'Saving…':'Save settings'}</button>
+<button onClick={function(){setTallyCfg(Object.assign({},TALLY_DEFAULTS,{company:tallyCfg.company}));}} style={Object.assign({},BTN,{background:'rgba(14,42,71,0.08)',color:'#0e2a47'})}>Reset to defaults</button>
+</div>
+</div>}
+</div>
+
+{/* ── How to import ── */}
+<div style={{background:'rgba(47,107,255,0.05)',border:'1px solid rgba(47,107,255,0.18)',borderRadius:12,padding:'14px 16px',marginTop:14}}>
+<div style={{fontSize:12.5,fontWeight:700,color:'var(--tf-text)',marginBottom:6}}>How to import into Tally</div>
+<ol style={{margin:0,paddingLeft:18,fontSize:12,color:'var(--tf-text-sub)',lineHeight:1.7}}>
+<li>Open the target company in <b>Tally Prime</b> (keep it open).</li>
+<li>Gateway of Tally → <b>Import</b> → <b>Masters</b> (or Vouchers) → select the downloaded <code>tally_import_*.xml</code>.</li>
+<li>Ledgers are auto-created under standard groups; if your ledger names differ, set them above <b>before</b> exporting so amounts post to the right accounts.</li>
+<li>Re-importing the same file <b>updates</b> the vouchers (matched by ID) — it won't create duplicates.</li>
+<li>Heavily-customised Tally? Use the <b>Tally Excel (CSV)</b> file with your import utility instead.</li>
+</ol>
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Tip: leave <b>Tally company name</b> blank to import into whichever company is currently open — avoids company-name mismatches. Test with one invoice first.</div>
 </div>
 </div>;
 }
