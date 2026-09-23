@@ -179,6 +179,28 @@ const CSS = `
 .lp2 footer a:hover{color:#fff}
 .lp2 footer .bottom{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12.5px;color:#7E93AD;padding:20px 0;border-top:1px solid rgba(255,255,255,.1)}
 
+/* product gallery */
+.lp2 .grow{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.lp2 .grow.rev .gcol-img{order:2}
+.lp2 .gframe{box-shadow:0 34px 80px -46px rgba(19,35,56,.5),0 2px 6px rgba(19,35,56,.05)}
+.lp2 .gshot{position:relative;background:var(--field);aspect-ratio:16/10;overflow:hidden}
+.lp2 .gshot img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.lp2 .gph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:radial-gradient(120% 120% at 50% 0%,var(--bg-alt),var(--panel));text-align:center;padding:20px}
+.lp2 .gph-ic{width:50px;height:50px;border-radius:13px;background:var(--panel);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);box-shadow:0 8px 20px -12px rgba(19,35,56,.4)}
+.lp2 .gph-t{font-family:var(--serif);font-size:19px;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.lp2 .gph-bars{display:flex;flex-direction:column;gap:7px;width:min(70%,260px);margin-top:2px}
+.lp2 .gph-bars span{height:9px;border-radius:6px;background:var(--border)}
+.lp2 .gph-bars span:nth-child(1){width:100%}
+.lp2 .gph-bars span:nth-child(2){width:82%}
+.lp2 .gph-bars span:nth-child(3){width:64%}
+.lp2 .gcol-txt h3{font-family:var(--serif)}
+.lp2 .gbul{list-style:none;margin:18px 0 0;padding:0;display:flex;flex-direction:column;gap:12px}
+.lp2 .gbul li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;color:var(--ink-2);line-height:1.5}
+
+@media (max-width:820px){
+  .lp2 .grow{grid-template-columns:1fr;gap:24px}
+  .lp2 .grow.rev .gcol-img{order:0}
+}
 @media (max-width:760px){
   .lp2 .nav .links .navlink{display:none}
   .lp2 .floatcard{display:none}
@@ -426,6 +448,54 @@ function ProductShowcase() {
         </div>
       </div>
     </>
+  )
+}
+
+// ── Product gallery (alternating rows, real screenshots) ──
+// Drop real screenshots into public/gallery/<key>.png (≈1600×1000, 16:10) and
+// they replace the placeholder automatically. Until then a labelled preview
+// frame shows so the section is presentable.
+const GALLERY = [
+  { key: 'gst-desk', addr: 'app.taskflowco.in/gst', eyebrow: 'GST Desk',
+    title: 'Reconcile every GST return, by stage',
+    sub: 'Track each GSTR by internal stage and reconcile it against the portal — so you always know what is actually filed.',
+    bullets: ['Per-client GSTR tracking (1, 3B, 9…) by stage', 'Internal status vs GST-portal reconciliation', 'Escalating reminders as the due date nears'],
+    icon: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6M9 16l1.6 1.6L14 14.5" /></> },
+  { key: 'workzone', addr: 'app.taskflowco.in/workzone', eyebrow: 'WorkZone',
+    title: 'Every task, from pending to filed',
+    sub: 'Your whole team moves work across stage-based boards tailored to each work type.',
+    bullets: ['Pending → in progress → review → filed', 'Auto-generated recurring worksheets', 'Assignees, priorities, checklists & due dates'],
+    icon: <><rect x="3" y="4" width="4" height="16" rx="1" /><rect x="10" y="4" width="4" height="11" rx="1" /><rect x="17" y="4" width="4" height="14" rx="1" /></> },
+  { key: 'client-portal', addr: 'app.taskflowco.in/portal', eyebrow: 'Client Portal',
+    title: 'Collect documents without the chase',
+    sub: 'Request files from clients and receive them straight against the right task — no more email ping-pong.',
+    bullets: ['Branded document requests & forms', 'Each upload linked to its task', 'Secure client login & message thread'],
+    icon: <><path d="M6 16a4 4 0 0 1 1-7.9A5 5 0 0 1 17 8a3.5 3.5 0 0 1 1 6.9" /><path d="M12 11v6m0-6-2 2m2-2 2 2" /></> },
+  { key: 'billing', addr: 'app.taskflowco.in/billing', eyebrow: 'Billing & Exports',
+    title: 'Invoice, collect, and export to Tally',
+    sub: 'Raise invoices and proposals, record payments, and push it all to Tally or Zoho Books in one click.',
+    bullets: ['Invoices, proposals, payments & statements', 'One-click Tally / Zoho Books export', 'Bill-wise receipts & per-client ledgers'],
+    icon: <><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></> },
+  { key: 'analytics', addr: 'app.taskflowco.in/analytics', eyebrow: 'Analytics',
+    title: 'Know where the firm stands',
+    sub: 'On-time %, pending work, revenue and who is overloaded — the health of your practice at a glance.',
+    bullets: ['On-time filing % and aging', 'Team workload & capacity', 'Revenue & collections trends'],
+    icon: <path d="M5 19V5M5 19h14M9 16v-4M13 16V8M17 16v-6" /> },
+]
+function GalleryShot({ src, addr, label, icon }) {
+  const [err, setErr] = useState(false)
+  return (
+    <div className="browser gframe">
+      <div className="chrome">
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#E2626B' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#F4C04E' }} /><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#5FCE8E' }} />
+        <span className="addr mono">{addr}</span>
+      </div>
+      <div className="gshot">
+        {err
+          ? <div className="gph"><span className="gph-ic">{fic(icon)}</span><div className="gph-t">{label}</div><div className="gph-bars"><span /><span /><span /></div></div>
+          : <img src={src} alt={label + ' — TaskFlowCo screenshot'} loading="lazy" onError={() => setErr(true)} />}
+      </div>
+    </div>
   )
 }
 
@@ -811,6 +881,30 @@ export default function LandingPage({ onSignIn, loading }) {
           <ProductShowcase />
         </div>
       </div>
+
+      {/* PRODUCT GALLERY — alternating rows of real screenshots + features */}
+      <section id="gallery" className="wrap" style={{ padding: '80px 32px' }}>
+        <div className="sec-head" style={{ textAlign: 'center', maxWidth: 660, margin: '0 auto 52px' }}>
+          <span className="eyebrow">Product gallery</span>
+          <h2 style={{ margin: '14px 0 10px' }}>A real look inside TaskFlowCo</h2>
+          <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}>The desks, boards and reports your firm actually works in every day — not stock art.</p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 64 }}>
+          {GALLERY.map((g, i) => (
+            <div key={g.key} className={'grow' + (i % 2 ? ' rev' : '')}>
+              <div className="gcol-img"><GalleryShot src={'/gallery/' + g.key + '.png'} addr={g.addr} label={g.eyebrow} icon={g.icon} /></div>
+              <div className="gcol-txt">
+                <span className="eyebrow" style={{ color: 'var(--teal)' }}>{g.eyebrow}</span>
+                <h3 className="serif" style={{ fontSize: 'clamp(23px,2.6vw,31px)', fontWeight: 600, letterSpacing: '-.01em', color: 'var(--ink)', margin: '10px 0 8px', lineHeight: 1.15 }}>{g.title}</h3>
+                <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}>{g.sub}</p>
+                <ul className="gbul">
+                  {g.bullets.map((b, j) => <li key={j}>{check}{b}</li>)}
+                </ul>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* HOW IT WORKS */}
       <section id="workflow" className="wrap" style={{ padding: '80px 32px' }}>
