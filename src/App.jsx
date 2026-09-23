@@ -9549,23 +9549,123 @@ function AnalyticsDashboard({org,supabase,cu,workTypeConfigs,orgDepts}){
 
     {/* ── OVERVIEW TAB ── */}
     {activeTab==='overview'&&<>
-      {/* KPI Row */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:10,marginBottom:20}}>
-        {[
-          {label:'Total Tasks',value:totals.total,color:'var(--tf-text)',sub:totals.completed+' done · '+totals.total+' this FY'},
-          {label:'On-track',value:onTrackPct+'%',color:onTrackPct>=80?'#22c55e':onTrackPct>=50?'#f59e0b':'#ef4444',sub:totals.dueCompleted+' of '+totals.dueTotal+' due done'},
-          {label:'Pending (due)',value:duePending,color:'#f59e0b',sub:'should be done by now'},
-          {label:'Overdue',value:totals.overdue,color:'#ef4444',sub:'past due date'},
-          {label:'Upcoming',value:totals.upcoming,color:'#94a3b8',sub:'not due yet'},
-          {label:'On-time filing',value:onTimePct+'%',color:onTimePct>=80?'#22c55e':onTimePct>=50?'#f59e0b':'#ef4444',sub:timedDone>0?tLate+' filed late of '+timedDone:'no filings yet'}
-        ].map(function(k){
-          return<div key={k.label} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 16px',textAlign:'center'}}>
-            <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
-            <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:2}}>{k.label}</div>
-            {k.sub&&<div style={{fontSize:9,color:'var(--tf-text-sub)',marginTop:3,opacity:0.75}}>{k.sub}</div>}
-          </div>;
-        })}
-      </div>
+      {/* ── INSIGHT HERO + grouped KPIs + team strip ── */}
+      {(function(){
+        var hue=onTrackPct>=80?'#34d399':onTrackPct>=50?'#F4C04E':'#F0616D';
+        var circ=2*Math.PI*44, dash=Math.max(0,Math.min(circ,circ*onTrackPct/100));
+        var greeting=(function(){var h=new Date().getHours();return h<12?'Good morning':h<17?'Good afternoon':'Good evening';})();
+        var summary=onTrackPct>=80?'You’re on track — most of the work that’s due is done.':onTrackPct>=50?'Mostly on track — some due work is starting to slip.':'Running behind — several items need attention right now.';
+        // Needs attention: worst desks by overdue, then worst clients by overdue
+        var topDesks=workTypeStats.filter(function(s){return s.overdue>0;}).sort(function(a,b){return b.overdue-a.overdue;}).slice(0,3);
+        var ovdByClient={};overdueRows.forEach(function(r){if(!r.client_id)return;ovdByClient[r.client_id]=(ovdByClient[r.client_id]||0)+1;});
+        var topClients=Object.keys(ovdByClient).map(function(id){var c=clientMap[id];return{id:id,name:(c&&(c.display_name||c.name))||'Client',n:ovdByClient[id]};}).sort(function(a,b){return b.n-a.n;}).slice(0,3);
+        var attn=[];topDesks.forEach(function(s){attn.push({k:'desk',label:s.wt,n:s.overdue,wt:s.wt});});topClients.forEach(function(c){attn.push({k:'client',label:c.name,n:c.n});});attn=attn.slice(0,4);
+        // Filing trend sparkline
+        var trendVals=monthlyData.map(function(d){return d.done;});
+        var maxT=Math.max.apply(null,trendVals.concat([1]));
+        var TW=220,TH=54;
+        var pts=trendVals.map(function(v,i){var x=trendVals.length>1?(i/(trendVals.length-1))*TW:0;var y=TH-4-(v/maxT)*(TH-14);return x.toFixed(1)+','+y.toFixed(1);});
+        var lineP=pts.map(function(p,i){return (i===0?'M':'L')+p;}).join(' ');
+        var areaP=lineP+' L'+TW+','+TH+' L0,'+TH+' Z';
+        var busiest=memberStats.slice(0,5);
+        var MINI=function(v,label,color,onClick){return <div onClick={onClick} style={{flex:1,textAlign:'center',cursor:onClick?'pointer':'default'}}><div style={{fontSize:23,fontWeight:800,color:color}}>{v}</div><div style={{fontSize:10.5,color:'var(--tf-text-sub)',marginTop:3}}>{label}</div></div>;};
+        var seg=function(v,c){return v>0?<span key={c} style={{flex:v,background:c}}/>:null;};
+        return <>
+          {/* Hero band */}
+          <div style={{borderRadius:16,overflow:'hidden',marginBottom:14,background:'linear-gradient(135deg,#0E2A47 0%,#123a63 58%,#14504f 150%)',color:'#fff',padding:'22px 26px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(258px,1fr))',gap:22,alignItems:'center'}}>
+            {/* Health ring + summary */}
+            <div style={{display:'flex',alignItems:'center',gap:18}}>
+              <div style={{position:'relative',width:104,height:104,flexShrink:0}}>
+                <svg width="104" height="104" viewBox="0 0 104 104">
+                  <circle cx="52" cy="52" r="44" fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="9"/>
+                  <circle cx="52" cy="52" r="44" fill="none" stroke={hue} strokeWidth="9" strokeLinecap="round" strokeDasharray={dash+' '+circ} transform="rotate(-90 52 52)"/>
+                </svg>
+                <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+                  <div style={{fontSize:27,fontWeight:900,lineHeight:1}}>{onTrackPct}%</div>
+                  <div style={{fontSize:9.5,opacity:0.7,fontWeight:600,marginTop:2}}>on track</div>
+                </div>
+              </div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:11,letterSpacing:'0.09em',textTransform:'uppercase',opacity:0.6,fontWeight:700}}>{greeting} · practice health</div>
+                <div style={{fontSize:15.5,fontWeight:700,margin:'6px 0 9px',lineHeight:1.35}}>{summary}</div>
+                <div style={{display:'flex',gap:14,fontSize:12,flexWrap:'wrap'}}>
+                  <span style={{opacity:0.9}}><b style={{fontWeight:800}}>{totals.dueCompleted}</b>/{totals.dueTotal} due done</span>
+                  <span style={{color:'#FCA5A5'}}><b style={{fontWeight:800}}>{totals.overdue}</b> overdue</span>
+                  <span style={{opacity:0.75}}><b style={{fontWeight:800}}>{totals.upcoming}</b> upcoming</span>
+                </div>
+              </div>
+            </div>
+            {/* Needs attention now */}
+            <div style={{borderLeft:'1px solid rgba(255,255,255,0.14)',paddingLeft:22,alignSelf:'stretch'}}>
+              <div style={{fontSize:11,letterSpacing:'0.09em',textTransform:'uppercase',opacity:0.6,fontWeight:700,marginBottom:10}}>Needs attention now</div>
+              {attn.length===0
+                ? <div style={{fontSize:13.5,opacity:0.85,padding:'6px 0'}}>🎉 Nothing overdue — you’re all caught up.</div>
+                : <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {attn.map(function(a,i){return <div key={i} onClick={function(){if(a.k==='desk'){setDrillType(a.wt);setDrillFilter('overdue');}else{setActiveTab('overdue');}}} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer'}}>
+                      <span style={{width:6,height:6,borderRadius:'50%',background:a.k==='desk'?'#F0616D':'#F4C04E',flexShrink:0}}/>
+                      <span style={{fontSize:13,fontWeight:600,flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{a.label}<span style={{opacity:0.55,fontWeight:500,marginLeft:6,fontSize:11}}>{a.k==='desk'?'desk':'client'}</span></span>
+                      <span style={{fontSize:12,fontWeight:800,color:'#FCA5A5'}}>{a.n} overdue</span>
+                    </div>;})}
+                  </div>}
+              <button onClick={function(){setActiveTab('overdue');}} style={{marginTop:12,background:'rgba(255,255,255,0.12)',border:'1px solid rgba(255,255,255,0.22)',color:'#fff',borderRadius:8,padding:'6px 13px',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Review all overdue →</button>
+            </div>
+            {/* Filing trend */}
+            <div style={{borderLeft:'1px solid rgba(255,255,255,0.14)',paddingLeft:22,alignSelf:'stretch'}}>
+              <div style={{fontSize:11,letterSpacing:'0.09em',textTransform:'uppercase',opacity:0.6,fontWeight:700,marginBottom:8}}>Filings completed</div>
+              <svg width="100%" viewBox={'0 0 '+TW+' '+TH} preserveAspectRatio="none" style={{display:'block',height:54}}>
+                <defs><linearGradient id="tfTrendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#14C7C0" stopOpacity="0.38"/><stop offset="1" stopColor="#14C7C0" stopOpacity="0"/></linearGradient></defs>
+                <path d={areaP} fill="url(#tfTrendGrad)"/>
+                <path d={lineP} fill="none" stroke="#5FE6DF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <div style={{display:'flex',justifyContent:'space-between',marginTop:8,fontSize:12}}>
+                <span style={{opacity:0.7}}>{monthlyData[0].label}–{monthlyData[monthlyData.length-1].label}</span>
+                <span><b style={{fontWeight:800,color:onTimePct>=80?'#5FE6DF':'#fff'}}>{onTimePct}%</b> <span style={{opacity:0.7}}>on-time</span></span>
+              </div>
+            </div>
+          </div>
+          {/* Grouped KPI cards */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:12,marginBottom:14}}>
+            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px 18px'}}>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--tf-text-sub)',marginBottom:11}}>Progress</div>
+              <div style={{display:'flex',gap:8}}>
+                {MINI(totals.total,'Total tasks','var(--tf-text)')}
+                {MINI(totals.completed,'Completed','#22c55e')}
+                {MINI(onTimePct+'%','On-time filing',onTimePct>=80?'#22c55e':onTimePct>=50?'#0e2a47':'#ef4444')}
+              </div>
+            </div>
+            <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px 18px'}}>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--tf-text-sub)',marginBottom:11}}>Needs attention</div>
+              <div style={{display:'flex',gap:8}}>
+                {MINI(duePending,'Pending (due)','#f59e0b')}
+                {MINI(totals.overdue,'Overdue','#ef4444',totals.overdue>0?function(){setActiveTab('overdue');}:null)}
+                {MINI(totals.upcoming,'Upcoming','#94a3b8')}
+              </div>
+            </div>
+          </div>
+          {/* Team workload strip */}
+          {busiest.length>0&&<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,padding:'14px 18px',marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',marginBottom:12}}>
+              <span style={{fontSize:11,fontWeight:700,letterSpacing:'0.06em',textTransform:'uppercase',color:'var(--tf-text-sub)'}}>Team workload</span>
+              <button onClick={function(){setActiveTab('team');}} style={{marginLeft:'auto',background:'none',border:'none',color:'#2F6BFF',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>View team →</button>
+            </div>
+            <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+              {busiest.map(function(m){return <div key={m.id} onClick={function(){setActiveTab('team');}} style={{flex:'1 1 175px',minWidth:165,border:'1px solid var(--tf-border)',borderRadius:10,padding:'11px 13px',cursor:'pointer',background:'var(--tf-bg)'}}>
+                <div style={{display:'flex',alignItems:'center',gap:9,marginBottom:9}}>
+                  <span style={{width:28,height:28,borderRadius:'50%',background:mAvatarColor(m.id),color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:800,flexShrink:0}}>{(m.name||'?').slice(0,2).toUpperCase()}</span>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{m.name}</div>
+                    <div style={{fontSize:10.5,color:'var(--tf-text-sub)'}}>{m.total} tasks · {m.onTime}% on-time</div>
+                  </div>
+                  {m.overdue>0&&<span style={{fontSize:11,fontWeight:800,color:'#ef4444',flexShrink:0}}>{m.overdue}!</span>}
+                </div>
+                <div style={{display:'flex',height:6,borderRadius:99,overflow:'hidden',background:'var(--tf-border)'}}>
+                  {seg(m.done,'#22c55e')}{seg(m.pending,'#94a3b8')}{seg(m.upcoming,'#cbd5e1')}{seg(m.overdue,'#ef4444')}
+                </div>
+              </div>;})}
+            </div>
+          </div>}
+        </>;
+      })()}
       {/* Grouping mode toggle */}
       <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:16}}>
         <span style={{fontSize:11,color:'var(--tf-text-sub)',fontWeight:600,marginRight:4}}>Group by</span>
