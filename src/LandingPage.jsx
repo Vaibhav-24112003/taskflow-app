@@ -16,10 +16,10 @@ const CSS = `
 .lp2{
   /* v2 palette — light (primary) */
   --blue:#0E2A47; --blue-strong:#0A1F35;
-  --bg:#FBF9F5; --bg-alt:#F4F1EA; --panel:#FFFFFF; --field:#F6F3EC;
+  --bg:#FFFFFF; --bg-alt:#F5F7FB; --panel:#FFFFFF; --field:#F4F6FA;
   --ink:#132338; --ink-2:#55637A; --muted:#8C93A3;
-  --border:#E7E2D8; --border-2:#EFEBE2;
-  --nav-bg:rgba(251,249,245,.85); --foot:#14243A; --teal:#0E8F89;
+  --border:#E7EBF1; --border-2:#EFF2F7;
+  --nav-bg:rgba(255,255,255,.85); --foot:#14243A; --teal:#0E8F89;
   --laptop:#1A2A40; --laptopbase:#C9CFD9;
   --hero:radial-gradient(760px 360px at 80% 8%,rgba(47,107,255,.05),transparent),#FFFFFF;
   --serif:'Source Serif 4',Georgia,serif;
@@ -98,7 +98,7 @@ const CSS = `
 .lp2 .hero .checks{display:flex;align-items:center;gap:20px;margin-top:28px;flex-wrap:wrap;font-size:13.5px;color:var(--ink-2);font-weight:600}
 .lp2 .hero .checks span{display:inline-flex;align-items:center;gap:8px}
 .lp2 .stage{flex:1 1 520px;min-width:0;position:relative;padding:30px 10px;perspective:1700px}
-.lp2 .stage .frame{position:relative;margin:0 auto;max-width:620px;transform:rotateY(-9deg) rotateX(3.5deg);transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
+.lp2 .stage .frame{position:relative;margin:0 auto;max-width:620px;transform:rotateY(-14deg) rotateX(6deg);transform-style:preserve-3d;transition:transform .5s cubic-bezier(.2,.8,.2,1)}
 .lp2 .stage .frame:hover{transform:rotateY(0deg) rotateX(0deg)}
 .lp2 .floatcard{display:flex;align-items:center;gap:9px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:9px 12px;box-shadow:0 16px 36px -20px rgba(19,35,56,.5)}
 
@@ -113,7 +113,7 @@ const CSS = `
 .lp2 .grp-label{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .lp2 .grp-label span{font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--teal)}
 .lp2 .grp-label .rule{flex:1;height:1px;background:var(--border)}
-.lp2 .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.lp2 .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;box-shadow:0 1px 2px rgba(19,35,56,.04),0 18px 40px -30px rgba(19,35,56,.25)}
 .lp2 .fcell{background:var(--panel);padding:24px;transition:background .15s ease}
 .lp2 .fcell:hover{background:var(--field)}
 .lp2 .fcell .fic{width:42px;height:42px;border-radius:11px;background:var(--field);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--blue);margin-bottom:15px}
@@ -151,7 +151,7 @@ const CSS = `
 .lp2 .seg button{font-size:13px;font-weight:700;padding:8px 16px;border-radius:999px;cursor:pointer;font-family:inherit;border:0;background:transparent;color:var(--ink-2)}
 .lp2 .seg button.on{background:var(--blue);color:#fff}
 .lp2 .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;align-items:start}
-.lp2 .plan{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:26px}
+.lp2 .plan{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:26px;box-shadow:0 1px 2px rgba(19,35,56,.04),0 16px 36px -28px rgba(19,35,56,.22)}
 .lp2 .plan.featured{border:2px solid var(--blue);box-shadow:0 18px 40px -24px rgba(14,42,71,.5)}
 .lp2 .plan .tag{position:absolute;top:-11px;left:24px;background:var(--blue);color:#fff;font-size:11px;font-weight:800;padding:4px 11px;border-radius:99px}
 .lp2 .plan h3{font-size:16px;font-weight:800;color:var(--ink);margin:0}
