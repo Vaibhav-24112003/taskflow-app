@@ -1,9 +1,11 @@
 # Landing page — Product Gallery screenshots
 
-Drop real screenshots here and they replace the placeholder frames automatically
-on the landing page (Product Gallery section). No code change needed.
+These PNGs render inside the browser frames of the landing page's Product Gallery
+section. They ship as brand-styled *representative mockups* (real layout & design
+system, dummy firm/client data) so competitors can't lift the actual UI. Replace
+any file in place to swap the image — no code change needed; names must match.
 
-Expected files (PNG, ~1600×1000, 16:10 ratio, light theme, no personal client data):
+Current files (PNG, 1600×1000 @2x, 16:10 ratio, light theme, dummy data only):
 
 - gst-desk.png        → GST Desk
 - workzone.png        → WorkZone board
