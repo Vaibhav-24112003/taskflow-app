@@ -456,15 +456,15 @@ function ProductShowcase() {
 // they replace the placeholder automatically. Until then a labelled preview
 // frame shows so the section is presentable.
 const GALLERY = [
-  { key: 'gst-desk', addr: 'app.taskflowco.in/gst', eyebrow: 'GST Desk',
-    title: 'Reconcile every GST return, by stage',
-    sub: 'Track each GSTR by internal stage and reconcile it against the portal — so you always know what is actually filed.',
-    bullets: ['Per-client GSTR tracking (1, 3B, 9…) by stage', 'Internal status vs GST-portal reconciliation', 'Escalating reminders as the due date nears'],
+  { key: 'gst-desk', addr: 'app.taskflowco.in/desk', eyebrow: 'Compliance Desks',
+    title: 'One desk for every compliance line',
+    sub: 'GST, ITR, TDS, ROC and audit — each on its own desk, every return tracked by stage and reconciled against the portal, so you always know what is actually filed.',
+    bullets: ['Dedicated desks: GST, ITR, TDS, ROC & audit', 'Per-client tracking by internal stage', 'Escalating reminders as each due date nears'],
     icon: <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h6M9 16l1.6 1.6L14 14.5" /></> },
   { key: 'workzone', addr: 'app.taskflowco.in/workzone', eyebrow: 'WorkZone',
-    title: 'Every task, from pending to filed',
-    sub: 'Your whole team moves work across stage-based boards tailored to each work type.',
-    bullets: ['Pending → in progress → review → filed', 'Auto-generated recurring worksheets', 'Assignees, priorities, checklists & due dates'],
+    title: 'Your work, your way — many views',
+    sub: 'Board, table, calendar, workload and per-client views over the same worksheets. Group, filter and customise columns and stages to fit exactly how your firm works.',
+    bullets: ['Board · Table · Calendar · Workload · Client views', 'Fully custom stages, columns & work types', 'Team workload, big-client rollups & filters'],
     icon: <><rect x="3" y="4" width="4" height="16" rx="1" /><rect x="10" y="4" width="4" height="11" rx="1" /><rect x="17" y="4" width="4" height="14" rx="1" /></> },
   { key: 'client-portal', addr: 'app.taskflowco.in/portal', eyebrow: 'Client Portal',
     title: 'Collect documents without the chase',
@@ -933,11 +933,11 @@ export default function LandingPage({ onSignIn, loading }) {
       </div>
 
       {/* TESTIMONIAL */}
-      <div className="wrap" style={{ maxWidth: 900, padding: '80px 32px', textAlign: 'center' }}>
-        <p className="quote">“Every GST and ITR deadline for the whole firm sits on one board now. Nothing slips.”</p>
+      <div className="wrap" style={{ maxWidth: 920, padding: '80px 32px', textAlign: 'center' }}>
+        <p className="quote" style={{ maxWidth: '32ch' }}>“Every return, audit and deadline for the whole firm sits in one place now — GST, ITR, TDS, ROC, all of it. My team stopped chasing each other for status and clients stopped getting missed emails. Nothing slips through, and I can see exactly what’s filed, what’s pending and who’s on it — without asking a single person.”</p>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-          <span style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--field)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--ink-2)', fontSize: 14 }}>RB</span>
-          <div style={{ textAlign: 'left' }}><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>Managing Partner</div><div style={{ fontSize: 13, color: 'var(--muted)' }}>Mid-size CA firm · Pune</div></div>
+          <span style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--grad)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#fff', fontSize: 15 }}>“</span>
+          <div style={{ textAlign: 'left' }}><div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)' }}>Founder</div></div>
         </div>
       </div>
 
