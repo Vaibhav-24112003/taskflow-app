@@ -13678,7 +13678,55 @@ function MiniCalendar({rows,clientMap,wsMap}){
 }
 
 // ── Invoice View (preview with action bar) ──
-function InvoiceView({inv,org,clientMap,getInvTotal,getPaid,generatePDF,onClose,onEdit,onStatusChange,onSend,BTN}){
+// Build a clean invoice PDF as a File (lazy-loads jsPDF). Uses "Rs" to avoid ₹ glyph gaps.
+async function buildInvoicePdfFile(inv,org,c,t,paid){
+  var mod=await import('jspdf');var JsPDF=mod.jsPDF||mod.default;
+  var doc=new JsPDF({unit:'pt',format:'a4'});
+  var W=595,M=40,rx=W-M,y=54;
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.setTextColor(14,42,71);doc.text(String(org.name||''),M,y);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90,110,133);
+  var oy=y+16;
+  if(org.address)String(org.address).split(/\n/).forEach(function(ln){doc.text(String(ln),M,oy);oy+=12;});
+  if(org.gstin){doc.text('GSTIN: '+org.gstin,M,oy);oy+=12;}
+  doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(14,42,71);doc.text('TAX INVOICE',rx,y,{align:'right'});
+  doc.setFont('helvetica','normal');doc.setFontSize(10);doc.setTextColor(60,60,60);
+  doc.text('# '+(inv.invoice_no||''),rx,y+16,{align:'right'});
+  if(inv.invoice_date)doc.text('Date: '+inv.invoice_date,rx,y+30,{align:'right'});
+  if(inv.due_date)doc.text('Due: '+inv.due_date,rx,y+44,{align:'right'});
+  var by=Math.max(oy,y+60)+16;
+  doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(90,110,133);doc.text('BILL TO',M,by);
+  doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(20,20,40);doc.text(String(c.display_name||c.name||''),M,by+16);
+  var cy=by+30;doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90,110,133);
+  if(c.gstin){doc.text('GSTIN: '+c.gstin,M,cy);cy+=12;}
+  var ty=cy+18;
+  doc.setFillColor(245,247,250);doc.rect(M,ty-13,rx-M,22,'F');
+  var colDesc=M+8,colQty=rx-210,colRate=rx-120,colAmt=rx-8;
+  doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(90,110,133);
+  doc.text('DESCRIPTION',colDesc,ty+2);doc.text('QTY',colQty,ty+2,{align:'right'});doc.text('RATE',colRate,ty+2,{align:'right'});doc.text('AMOUNT',colAmt,ty+2,{align:'right'});
+  ty+=26;doc.setFont('helvetica','normal');doc.setTextColor(30,30,50);doc.setFontSize(10);
+  (inv.items||[]).forEach(function(it){
+    var amt=(Number(it.qty)||1)*(Number(it.rate)||0);
+    doc.text(String(it.description||''),colDesc,ty,{maxWidth:colQty-colDesc-16});
+    doc.text(String(it.qty||1),colQty,ty,{align:'right'});
+    doc.text('Rs '+Number(it.rate||0).toLocaleString('en-IN'),colRate,ty,{align:'right'});
+    doc.text('Rs '+amt.toLocaleString('en-IN'),colAmt,ty,{align:'right'});
+    var h=18;
+    if(it.sub_description){doc.setFontSize(8);doc.setTextColor(130,130,150);doc.text(String(it.sub_description),colDesc,ty+11,{maxWidth:colQty-colDesc-16});doc.setFontSize(10);doc.setTextColor(30,30,50);h=27;}
+    ty+=h;doc.setDrawColor(235,238,242);doc.line(M,ty-6,rx,ty-6);
+  });
+  ty+=10;
+  function tot(label,val,bold,color){doc.setFont('helvetica',bold?'bold':'normal');doc.setTextColor(color?color[0]:40,color?color[1]:40,color?color[2]:60);doc.text(label,colRate,ty,{align:'right'});doc.text(val,colAmt,ty,{align:'right'});ty+=16;}
+  tot('Subtotal','Rs '+t.sub.toLocaleString('en-IN'),false);
+  if(inv.tax_percent)tot('GST ('+inv.tax_percent+'%)','Rs '+t.tax.toLocaleString('en-IN'),false);
+  if(inv.tds_percent)tot('TDS ('+inv.tds_percent+'%)','- Rs '+t.tds.toLocaleString('en-IN'),false,[220,60,80]);
+  doc.setFontSize(12);tot('Net Payable','Rs '+t.total.toLocaleString('en-IN'),true,[14,42,71]);doc.setFontSize(10);
+  if(paid>0){tot('Paid','Rs '+paid.toLocaleString('en-IN'),false,[34,160,110]);tot('Balance','Rs '+(t.total-paid).toLocaleString('en-IN'),true,[220,60,80]);}
+  if(inv.notes){ty+=8;doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(90,110,133);doc.text('Notes: '+inv.notes,M,ty,{maxWidth:rx-M});ty+=14;}
+  if(inv.bank_details)doc.text('Bank: '+inv.bank_details,M,ty,{maxWidth:rx-M});
+  return new File([doc.output('blob')],'Invoice_'+String(inv.invoice_no||'inv').replace(/[^\w-]/g,'_')+'.pdf',{type:'application/pdf'});
+}
+
+function InvoiceView({inv,org,clientMap,getInvTotal,getPaid,generatePDF,onClose,onEdit,onStatusChange,onSend,supabase,onChanged,BTN}){
 var c=clientMap[inv.client_id]||{};
 var t=getInvTotal(inv);
 var paid=getPaid(inv.id);
@@ -13688,18 +13736,25 @@ var logoLeft=org.logo_position!=='right';
 var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0b',overdue:'#ef4444',cancelled:'#6b7280'};
 var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
 
-function sendEmail(){
+var [sending,setSending]=useState(false);
+async function sendEmail(){
 var clientEmail=c.email||'';
 var money='₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2});
 var subject='Invoice '+inv.invoice_no+' from '+org.name;
 var greet='Dear '+(c.display_name||c.name||'Client')+',';
-var lines=['Please find your Invoice <b>'+inv.invoice_no+'</b>'+(inv.invoice_date?' dated '+inv.invoice_date:'')+' for <b>'+money+'</b>.'];
+var lines=['Please find attached your Invoice <b>'+inv.invoice_no+'</b>'+(inv.invoice_date?' dated '+inv.invoice_date:'')+' for <b>'+money+'</b>.'];
 if(bal>0&&paid>0)lines.push('Balance due: <b>₹'+bal.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b>.');
 if(inv.due_date)lines.push('Due date: '+inv.due_date+'.');
 lines.push('Kindly arrange the payment at your earliest convenience. Thank you.');
 var bodyHtml='<p>'+greet+'</p><p>'+lines.join('</p><p>')+'</p><p>Regards,<br>'+org.name+'</p>';
 var bodyText=greet+'\n\n'+lines.join('\n\n').replace(/<\/?b>/g,'')+'\n\nRegards,\n'+org.name;
-if(onSend){onSend({to:clientEmail,subject:subject,body:bodyHtml,bodyText:bodyText,clientId:inv.client_id});return;}
+if(onSend){
+  setSending(true);
+  var file=null;try{file=await buildInvoicePdfFile(inv,org,c,t,paid);}catch(e){}
+  setSending(false);
+  onSend({to:clientEmail,subject:subject,body:bodyHtml,bodyText:bodyText,clientId:inv.client_id,attachment:file});
+  return;
+}
 window.open('mailto:'+clientEmail+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(bodyText),'_blank');}
 
 function shareLink(){
@@ -13707,17 +13762,41 @@ var text='Invoice '+inv.invoice_no+' | '+(c.display_name||c.name)+' | ₹'+t.tot
 if(navigator.share){navigator.share({title:'Invoice '+inv.invoice_no,text:text});}
 else{navigator.clipboard.writeText(text);alert('Invoice details copied to clipboard');}}
 
+async function unlinkTask(rowId){
+if(!supabase)return;
+if(!window.confirm('Remove this task from the invoice? It returns to unbilled work (Bill Work) and its line is removed from this invoice.'))return;
+var newItems=(inv.items||[]).filter(function(it){return it.row_id!==rowId;});
+var sub=newItems.reduce(function(s,it){return s+(Number(it.qty)||1)*(Number(it.rate)||0);},0);
+var tax=inv.tax_percent?sub*(Number(inv.tax_percent)/100):0;
+var tds=inv.tds_percent?sub*(Number(inv.tds_percent)/100):0;
+var res=await supabase.from('invoices').update({items:newItems,total:sub+tax-tds}).eq('id',inv.id);
+if(res.error){alert(res.error.message);return;}
+await supabase.from('worksheet_rows').update({invoice_id:null,billed_amount:null}).eq('id',rowId);
+if(onChanged)onChanged();
+if(onClose)onClose();
+}
+
 return<div style={{marginBottom:16}}>
 <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
 <button onClick={onClose} style={Object.assign({},BTN,{background:'var(--tf-panel)',color:'var(--tf-text-sub)',fontSize:12})}>← Back</button>
 <div style={{flex:1}}></div>
 <button onClick={onEdit} style={Object.assign({},BTN,{background:'rgba(14,42,71,0.12)',color:'#0e2a47'})}>✎ Edit</button>
-<button onClick={function(){sendEmail();}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>✉ Send</button>
+<button onClick={function(){sendEmail();}} disabled={sending} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6',opacity:sending?0.6:1})}>{sending?'Preparing…':'✉ Send'}</button>
 <button onClick={function(){shareLink();}} style={Object.assign({},BTN,{background:'rgba(139,92,246,0.12)',color:'#8b5cf6'})}>↗ Share</button>
 <button onClick={function(){generatePDF(inv);}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>🖨 PDF / Print</button>
 {inv.status==='draft'&&<button onClick={function(){onStatusChange('sent');}} style={Object.assign({},BTN,{background:'rgba(59,130,246,0.12)',color:'#3b82f6'})}>📤 Mark Sent</button>}
 {(inv.status==='sent'||inv.status==='partial')&&<button onClick={function(){onStatusChange('paid');}} style={Object.assign({},BTN,{background:'rgba(34,197,94,0.12)',color:'#22c55e'})}>✓ Mark Paid</button>}
 </div>
+
+{(function(){var linked=(inv.items||[]).filter(function(it){return it.row_id;});if(linked.length===0||!supabase)return null;return<div style={{maxWidth:800,margin:'0 auto 14px',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'12px 16px'}}>
+<div style={{fontSize:11,fontWeight:800,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8}}>Linked tasks · {linked.length}</div>
+{linked.map(function(it,i){return<div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderTop:i?'1px solid var(--tf-border)':'none'}}>
+<div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)'}}>{it.description}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{it.sub_description}</div></div>
+<div style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>₹{(Number(it.rate)||0).toLocaleString('en-IN')}</div>
+<button onClick={function(){unlinkTask(it.row_id);}} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444',fontSize:11,padding:'5px 10px'})}>Unlink</button>
+</div>;})}
+<div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:8}}>Unlinking returns the task to unbilled work and removes its line here — then re-bill it from ⚡ Bill Work.</div>
+</div>;})()}
 
 <div style={{background:'#fff',border:'1px solid #ddd',borderRadius:8,padding:'36px 40px',color:'#1a1a2e',fontFamily:'Arial,sans-serif',maxWidth:800,margin:'0 auto'}}>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28,flexDirection:logoLeft?'row':'row-reverse'}}>
@@ -13854,14 +13933,14 @@ function BillWorkPanel({org,supabase,clients,onClose,onDone,INP,LBL,BTN}){
     if(targets.length===0){setErr('Nothing selected to bill.');return;}
     if(!window.confirm('Create '+targets.length+' draft invoice'+(targets.length!==1?'s':'')+' combining '+targets.reduce(function(s,id){return s+cIncluded(id).length;},0)+' task'+'? Tasks will be marked billed.'))return;
     setGening(true);setErr('');
-    var created=0;
+    var created=0;var billedCids=[];
     try{
       for(var i=0;i<targets.length;i++){
         var cid=targets[i];var rowList=cIncluded(cid);
         var invNo='';
         try{var rn=await supabase.rpc('next_invoice_number');if(!rn.error&&rn.data)invNo=(typeof rn.data==='string')?rn.data:String(rn.data);}catch(_){}
         if(!invNo)invNo='INV-'+Date.now().toString(36).toUpperCase()+'-'+(i+1);
-        var items=rowList.map(function(t){return{description:t.title,sub_description:t.work_type+(t.period?' · '+t.period:'')+(t.mode==='hourly'&&t.hrs?' · '+t.hrs+'h':''),sac_code:'',qty:1,rate:Number(sel[t.id].amount)||0};});
+        var items=rowList.map(function(t){return{description:t.title,sub_description:t.work_type+(t.period?' · '+t.period:'')+(t.mode==='hourly'&&t.hrs?' · '+t.hrs+'h':''),sac_code:'',qty:1,rate:Number(sel[t.id].amount)||0,row_id:t.id};});
         var subA=items.reduce(function(s,it){return s+(Number(it.rate)||0);},0);
         var taxP=gstPct!==''?Number(gstPct):null;
         var total=subA+(taxP?subA*taxP/100:0);
@@ -13872,10 +13951,10 @@ function BillWorkPanel({org,supabase,clients,onClose,onDone,INP,LBL,BTN}){
         var upErr=null;
         await Promise.all(rowList.map(function(t){return supabase.from('worksheet_rows').update({invoice_id:invId,billed_amount:Number(sel[t.id].amount)||0}).eq('id',t.id).then(function(r){if(r.error)upErr=r.error;});}));
         if(upErr){setErr('Invoice made but task link failed: '+upErr.message);}
-        created++;
+        created++;billedCids.push(cid);
       }
       setGening(false);
-      onDone(created);
+      onDone(created,billedCids);
     }catch(e){setErr(String(e&&e.message||e));setGening(false);}
   }
 
@@ -14124,6 +14203,7 @@ var [proposals,setProposals]=useState(_bc?_bc.proposals:[]);
 var [showPayForm,setShowPayForm]=useState(false);
 var [billWork,setBillWork]=useState(false);
 var [invQuery,setInvQuery]=useState('');
+var [invClientId,setInvClientId]=useState('');
 var [stmtClientId,setStmtClientId]=useState('');
 var [stmtData,setStmtData]=useState(null);
 var [exportFmt,setExportFmt]=useState('pdf');
@@ -14165,7 +14245,9 @@ return<div style={{padding:'0 0 60px'}}>
 // ── PLACEHOLDER RENDERERS (will be filled in phases) ──
 function renderInvoices(){
 var _q=invQuery.trim().toLowerCase();
-var filtered=_q?invoices.filter(function(inv){var c=clientMap[inv.client_id]||{};return (inv.invoice_no||'').toLowerCase().indexOf(_q)>=0||((c.display_name||c.name||'').toLowerCase().indexOf(_q)>=0)||(inv.status||'').toLowerCase().indexOf(_q)>=0;}):invoices;
+var filtered=invoices;
+if(invClientId)filtered=filtered.filter(function(inv){return inv.client_id===invClientId;});
+if(_q)filtered=filtered.filter(function(inv){var c=clientMap[inv.client_id]||{};return (inv.invoice_no||'').toLowerCase().indexOf(_q)>=0||((c.display_name||c.name||'').toLowerCase().indexOf(_q)>=0)||(inv.status||'').toLowerCase().indexOf(_q)>=0;});
 function openNew(){setEditInv(null);setShowForm(true);}
 function openEdit(inv){setEditInv(inv);setShowForm(true);}
 async function delInv(id){if(!window.confirm('Delete this invoice?'))return;await supabase.from('invoice_items').delete().eq('invoice_id',id);await supabase.from('invoices').delete().eq('id',id);showToast('Invoice deleted');loadAll();}
@@ -14216,9 +14298,13 @@ setTimeout(function(){w.print();},400);
 var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0b',overdue:'#ef4444',cancelled:'#6b7280'};
 
 return<div>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,gap:10,flexWrap:'wrap'}}>
-<div style={{display:'flex',alignItems:'center',gap:10,flex:'1 1 220px'}}>
-<input value={invQuery} onChange={function(e){setInvQuery(e.target.value);}} placeholder="Search invoice no, client, status…" style={Object.assign({},INP,{maxWidth:280})}/>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,gap:10,flexWrap:'wrap'}}>
+<div style={{display:'flex',alignItems:'center',gap:8,flex:'1 1 220px',flexWrap:'wrap'}}>
+<select value={invClientId} onChange={function(e){setInvClientId(e.target.value);}} style={Object.assign({},INP,{maxWidth:220,cursor:'pointer'})}>
+<option value="">All clients</option>
+{clients.slice().sort(function(a,b){return (a.display_name||a.name||'').localeCompare(b.display_name||b.name||'');}).map(function(c){return<option key={c.id} value={c.id}>{c.display_name||c.name}</option>;})}
+</select>
+<input value={invQuery} onChange={function(e){setInvQuery(e.target.value);}} placeholder="Search invoice no, status…" style={Object.assign({},INP,{maxWidth:240})}/>
 <span style={{fontSize:13,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{filtered.length} invoice{filtered.length!==1?'s':''}</span>
 </div>
 <div style={{display:'flex',gap:8}}>
@@ -14226,9 +14312,16 @@ return<div>
 <button onClick={openNew} style={Object.assign({},BTN,{background:'#0e2a47',color:'#fff'})}>+ New Invoice</button>
 </div>
 </div>
-{billWork&&<BillWorkPanel org={org} supabase={supabase} clients={clients} onClose={function(){setBillWork(false);}} onDone={function(n){setBillWork(false);loadAll();showToast(n+' invoice'+(n!==1?'s':'')+' created as draft');}} INP={INP} LBL={LBL} BTN={BTN}/>}
+{invClientId&&(function(){var billed=filtered.reduce(function(s,inv){return s+getInvTotal(inv).total;},0);var recd=filtered.reduce(function(s,inv){return s+getPaid(inv.id);},0);var cnm=(clientMap[invClientId]||{});return<div style={{display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'11px 16px',marginBottom:14}}>
+<div style={{fontSize:13,fontWeight:800,color:'var(--tf-text)'}}>{cnm.display_name||cnm.name||'Client'}</div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Billed <b style={{color:'var(--tf-text)'}}>₹{Math.round(billed).toLocaleString('en-IN')}</b></div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Received <b style={{color:'#22c55e'}}>₹{Math.round(recd).toLocaleString('en-IN')}</b></div>
+<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Outstanding <b style={{color:billed-recd>0?'#f59e0b':'var(--tf-text-sub)'}}>₹{Math.round(billed-recd).toLocaleString('en-IN')}</b></div>
+<button onClick={function(){setInvClientId('');}} style={{marginLeft:'auto',background:'none',border:'1px solid var(--tf-border)',borderRadius:7,padding:'4px 10px',fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit'}}>Clear</button>
+</div>;})()}
+{billWork&&<BillWorkPanel org={org} supabase={supabase} clients={clients} onClose={function(){setBillWork(false);}} onDone={function(n,cids){setBillWork(false);loadAll();if(cids&&cids.length===1)setInvClientId(cids[0]);showToast(n+' invoice'+(n!==1?'s':'')+' created as draft');}} INP={INP} LBL={LBL} BTN={BTN}/>}
 {showForm&&<InvoiceForm inv={editInv} clients={clients} org={org} supabase={supabase} onClose={function(){setShowForm(false);setViewInv(null);}} onSaved={function(){setShowForm(false);setViewInv(null);loadAll();showToast(editInv?'Invoice updated':'Invoice created');}} INP={INP} LBL={LBL} BTN={BTN}/>}
-{viewInv&&!showForm&&<InvoiceView inv={viewInv} org={org} clientMap={clientMap} getInvTotal={getInvTotal} getPaid={getPaid} generatePDF={generatePDF} onClose={function(){setViewInv(null);}} onEdit={function(){openEdit(viewInv);}} onStatusChange={function(st){markStatus(viewInv.id,st);setViewInv(null);}} onSend={onCompose?function(payload){onCompose(payload);markStatus(viewInv.id,'sent');}:null} BTN={BTN}/>}
+{viewInv&&!showForm&&<InvoiceView inv={viewInv} org={org} clientMap={clientMap} getInvTotal={getInvTotal} getPaid={getPaid} generatePDF={generatePDF} onClose={function(){setViewInv(null);}} onEdit={function(){openEdit(viewInv);}} onStatusChange={function(st){markStatus(viewInv.id,st);setViewInv(null);}} onSend={onCompose?function(payload){onCompose(payload);markStatus(viewInv.id,'sent');}:null} supabase={supabase} onChanged={loadAll} BTN={BTN}/>}
 {filtered.length===0&&!showForm&&<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>No invoices yet. Create your first invoice.</div>}
 <div style={{display:'flex',flexDirection:'column',gap:8}}>
 {filtered.map(function(inv){
@@ -16144,6 +16237,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
     setActiveTab('gmail');
     setGmailSelThread(null);
     setGmailCompose({to:initCompose.to||'',cc:'',bcc:'',subject:initCompose.subject||'',body:initCompose.body||''});
+    setGmailComposeFiles(initCompose.attachment?[initCompose.attachment]:[]);
     if(onConsumeInit)onConsumeInit();
   },[initCompose]);
 
