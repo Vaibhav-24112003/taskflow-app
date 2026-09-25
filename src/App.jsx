@@ -4241,6 +4241,8 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
   var [stages,setStages]=useState(config&&config.stages&&config.stages.length>0?config.stages.map(function(s){return{key:s.key||'s_'+Date.now(),label:s.label||'',color:s.color||'#0e2a47'};}): []);
   var [isItrWorktype,setIsItrWorktype]=useState(config?!!config.is_itr_worktype:false);
   var [autoCarry,setAutoCarry]=useState(config?config.auto_carry_assignments!==false:true);
+  var [billingMode,setBillingMode]=useState(config&&config.billing_mode?config.billing_mode:'fixed');
+  var [billingRate,setBillingRate]=useState(config&&config.billing_rate!=null?String(config.billing_rate):'');
   var [saving,setSaving]=useState(false);
   var [err,setErr]=useState('');
 
@@ -4306,7 +4308,9 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
       is_active:config?config.is_active:true,
       sort_order:config?config.sort_order:99,
       is_itr_worktype:isItrWorktype,
-      auto_carry_assignments:autoCarry
+      auto_carry_assignments:autoCarry,
+      billing_mode:billingMode||'fixed',
+      billing_rate:billingRate!==''&&billingRate!==null?Number(billingRate):null
     };
     var result;
     if(isEdit){result=await updateWorkTypeConfig(config.id,payload);}
@@ -4366,6 +4370,22 @@ function WorkTypeFormModal({config,orgId,onClose,onSaved}){
               <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>hours budgeted per task</span>
             </div>
             <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Budgeted effort for one task of this work type. Logged time (from “→ Log”) is compared against it to show actual-vs-estimate and realization.</div>
+          </div>
+          <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(34,197,94,0.05)'}}>
+            <label style={LBL}>Billing <span style={{fontWeight:400,textTransform:'none'}}>(used by “Bill Work”)</span></label>
+            <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+              <select value={billingMode} onChange={function(e){setBillingMode(e.target.value);}} style={Object.assign({},INP,{width:150})}>
+                <option value="fixed">Fixed fee / task</option>
+                <option value="hourly">Hourly (rate × hrs)</option>
+                <option value="none">Not billed</option>
+              </select>
+              {billingMode!=='none'&&<div style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:13,color:'var(--tf-text-sub)'}}>₹</span>
+                <input type="number" min="0" step="1" value={billingRate} onChange={function(e){setBillingRate(e.target.value);}} style={Object.assign({},INP,{width:110})} placeholder="—"/>
+                <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{billingMode==='hourly'?'per hour':'per task'}</span>
+              </div>}
+            </div>
+            <div style={{fontSize:10,color:'var(--tf-text-sub)',marginTop:4}}>Default price when raising invoices from completed tasks. <b>Fixed</b> = flat amount per task; <b>Hourly</b> = rate × hours logged on that task; <b>Not billed</b> = excluded by default. You can still edit any amount at billing time.</div>
           </div>
           <div style={{marginBottom:14,padding:'11px 13px',borderRadius:9,border:'1px solid var(--tf-border)',background:'rgba(47,107,255,0.05)'}}>
             <label style={{display:'flex',alignItems:'flex-start',gap:10,cursor:'pointer'}}>
@@ -8866,7 +8886,7 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
       supabase.from('invoices').select('*').eq('org_id',org.id).eq('client_id',clientId).order('created_at',{ascending:false}).limit(200),
       supabase.from('payments').select('*').eq('org_id',org.id).order('payment_date',{ascending:false}).limit(500),
       supabase.from('attendance_time_logs').select('*').eq('org_id',org.id).eq('client_id',clientId).order('date',{ascending:false}).limit(500),
-      supabase.from('worksheet_rows').select('id,worksheet_id,status,due_date,completed_at,data,current_stage').eq('org_id',org.id).eq('client_id',clientId).limit(500),
+      supabase.from('worksheet_rows').select('id,worksheet_id,status,due_date,completed_at,data,current_stage,invoice_id,billable,billed_amount').eq('org_id',org.id).eq('client_id',clientId).limit(500),
       supabase.from('worksheets').select('id,work_type,period_label,period_year,frequency').eq('org_id',org.id).limit(1000),
       supabase.from('clients').select('id,name,display_name,phone,email').eq('id',clientId).maybeSingle(),
     ]);
@@ -8925,12 +8945,12 @@ function ClientLedgerTab({org,supabase,clients,initClientId}){
   var outstanding=totalInvoiced-totalReceived;
   var lastInvDate=invoices.length>0?invoices[0].created_at:null;
 
-  // Unbilled tasks: completed rows with no invoice after last invoice date (or all if no invoice)
+  // Unbilled tasks: completed rows not yet linked to an invoice and still billable.
+  // (Accurate — driven by worksheet_rows.invoice_id stamped when "Bill Work" raises an invoice.)
   var unbilledTasks=clientRows.filter(function(r){
-    if(r.status!=='completed')return false;
-    if(!lastInvDate)return true;
-    var compAt=r.completed_at||r.due_date;
-    return compAt&&compAt>lastInvDate;
+    if(r.billable===false)return false;
+    if(r.invoice_id)return false;
+    return r.status==='completed';
   });
 
   // Unbilled time: logs after last invoice date
@@ -13753,6 +13773,174 @@ return<div style={{marginBottom:16}}>
 </div>
 </div>;}
 
+// ── Bill Work: raise invoices from completed, unbilled tasks (bulk) ──
+function BillWorkPanel({org,supabase,clients,onClose,onDone,INP,LBL,BTN}){
+  var [loading,setLoading]=useState(true);
+  var [tasks,setTasks]=useState([]);       // enriched completed+unbilled tasks
+  var [sel,setSel]=useState({});           // rowId -> {include:bool, amount:number}
+  var [expanded,setExpanded]=useState({}); // clientId -> bool
+  var [gstPct,setGstPct]=useState('');
+  var [gening,setGening]=useState(false);
+  var [err,setErr]=useState('');
+  var [noRateCard,setNoRateCard]=useState(false);
+
+  var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
+  function cname(id){var c=clientMap[id];return c?(c.display_name||c.name||'Client'):'Client';}
+  function inr(n){return '₹'+(Math.round(Number(n)||0)).toLocaleString('en-IN');}
+
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id]);
+  async function load(){
+    setLoading(true);setErr('');
+    try{
+      var rres=await Promise.all([
+        supabase.from('work_type_configs').select('name,billing_mode,billing_rate,stages').eq('org_id',org.id).limit(500),
+        supabase.from('worksheets').select('id,work_type,period_label').eq('org_id',org.id).limit(4000),
+        supabase.from('worksheet_rows').select('id,worksheet_id,client_id,status,completed,completed_at,current_stage,due_date,data').eq('org_id',org.id).is('invoice_id',null).eq('billable',true).limit(5000)
+      ]);
+      var cfgByName={};(rres[0].data||[]).forEach(function(c){cfgByName[c.name]=c;});
+      var anyRate=(rres[0].data||[]).some(function(c){return c.billing_rate!=null&&Number(c.billing_rate)>0;});
+      var wm={};(rres[1].data||[]).forEach(function(w){wm[w.id]=w;});
+      var rows=rres[2].data||[];
+      var timeMap={};
+      try{var rt=await supabase.from('attendance_time_logs').select('worksheet_row_id,hours,minutes').eq('org_id',org.id).not('worksheet_row_id','is',null).limit(50000);(rt.data||[]).forEach(function(t){if(!t.worksheet_row_id)return;timeMap[t.worksheet_row_id]=(timeMap[t.worksheet_row_id]||0)+(Number(t.hours)||0)+(Number(t.minutes)||0)/60;});}catch(_){}
+      var out=[];var initSel={};
+      rows.forEach(function(r){
+        var ws=wm[r.worksheet_id];if(!ws)return;
+        var cfg=cfgByName[ws.work_type]||{};
+        var stages=cfg.stages||[];var lastKey=stages.length?stages[stages.length-1].key:null;
+        var done=r.status==='completed'||r.completed===true||(lastKey&&r.current_stage===lastKey);
+        if(!done)return;
+        var d=r.data||{};
+        var mode=cfg.billing_mode||'fixed';
+        var rate=cfg.billing_rate!=null?Number(cfg.billing_rate):0;
+        var hrs=Math.round((timeMap[r.id]||0)*100)/100;
+        var amount=mode==='hourly'?Math.round(rate*hrs):(mode==='fixed'?rate:0);
+        out.push({id:r.id,client_id:r.client_id,work_type:ws.work_type,period:ws.period_label||'',title:d.__title||ws.work_type,mode:mode,rate:rate,hrs:hrs,completed_at:r.completed_at||r.due_date||null});
+        initSel[r.id]={include:mode!=='none',amount:amount};
+      });
+      out.sort(function(a,b){return (b.completed_at||'').localeCompare(a.completed_at||'');});
+      setTasks(out);setSel(initSel);setNoRateCard(!anyRate);setLoading(false);
+    }catch(e){setErr(String(e&&e.message||e));setLoading(false);}
+  }
+
+  var byClient={};tasks.forEach(function(t){(byClient[t.client_id]=byClient[t.client_id]||[]).push(t);});
+  var clientIds=Object.keys(byClient).sort(function(a,b){return cname(a).localeCompare(cname(b));});
+  function cIncluded(id){return (byClient[id]||[]).filter(function(t){return sel[t.id]&&sel[t.id].include;});}
+  function cTotal(id){return cIncluded(id).reduce(function(s,t){return s+(Number(sel[t.id].amount)||0);},0);}
+  var grandCount=0,grandTotal=0,clientsWith=0;
+  clientIds.forEach(function(id){var inc=cIncluded(id);if(inc.length){clientsWith++;grandCount+=inc.length;grandTotal+=cTotal(id);}});
+
+  function toggleInc(rowId){setSel(function(p){var n=Object.assign({},p);n[rowId]=Object.assign({},n[rowId],{include:!(n[rowId]&&n[rowId].include)});return n;});}
+  function setAmt(rowId,v){setSel(function(p){var n=Object.assign({},p);n[rowId]=Object.assign({},n[rowId],{amount:v});return n;});}
+  function setClientAll(id,val){setSel(function(p){var n=Object.assign({},p);(byClient[id]||[]).forEach(function(t){n[t.id]=Object.assign({},n[t.id],{include:val});});return n;});}
+  async function markNB(rowId){
+    if(!window.confirm('Mark this task as non-billable? It will be permanently excluded from all future billing (e.g. free / goodwill work).'))return;
+    var r=await supabase.from('worksheet_rows').update({billable:false}).eq('id',rowId);
+    if(r.error){setErr(r.error.message);return;}
+    setTasks(function(p){return p.filter(function(t){return t.id!==rowId;});});
+  }
+
+  async function generate(ids){
+    var targets=ids.filter(function(id){return cIncluded(id).length>0;});
+    if(targets.length===0){setErr('Nothing selected to bill.');return;}
+    if(!window.confirm('Create '+targets.length+' draft invoice'+(targets.length!==1?'s':'')+' combining '+targets.reduce(function(s,id){return s+cIncluded(id).length;},0)+' task'+'? Tasks will be marked billed.'))return;
+    setGening(true);setErr('');
+    var created=0;
+    try{
+      for(var i=0;i<targets.length;i++){
+        var cid=targets[i];var rowList=cIncluded(cid);
+        var invNo='';
+        try{var rn=await supabase.rpc('next_invoice_number');if(!rn.error&&rn.data)invNo=(typeof rn.data==='string')?rn.data:String(rn.data);}catch(_){}
+        if(!invNo)invNo='INV-'+Date.now().toString(36).toUpperCase()+'-'+(i+1);
+        var items=rowList.map(function(t){return{description:t.title,sub_description:t.work_type+(t.period?' · '+t.period:'')+(t.mode==='hourly'&&t.hrs?' · '+t.hrs+'h':''),sac_code:'',qty:1,rate:Number(sel[t.id].amount)||0};});
+        var subA=items.reduce(function(s,it){return s+(Number(it.rate)||0);},0);
+        var taxP=gstPct!==''?Number(gstPct):null;
+        var total=subA+(taxP?subA*taxP/100:0);
+        var payload={org_id:org.id,client_id:cid,invoice_no:invNo,invoice_date:new Date().toISOString().slice(0,10),due_date:null,status:'draft',tax_percent:taxP,tds_percent:null,notes:'Auto-generated from '+rowList.length+' completed task'+(rowList.length!==1?'s':''),bank_details:null,items:items,total:total};
+        var ins=await supabase.from('invoices').insert(payload).select('id').single();
+        if(ins.error){setErr(ins.error.message);continue;}
+        var invId=ins.data.id;
+        var upErr=null;
+        await Promise.all(rowList.map(function(t){return supabase.from('worksheet_rows').update({invoice_id:invId,billed_amount:Number(sel[t.id].amount)||0}).eq('id',t.id).then(function(r){if(r.error)upErr=r.error;});}));
+        if(upErr){setErr('Invoice made but task link failed: '+upErr.message);}
+        created++;
+      }
+      setGening(false);
+      onDone(created);
+    }catch(e){setErr(String(e&&e.message||e));setGening(false);}
+  }
+
+  var OVR={position:'fixed',inset:0,background:'rgba(6,15,30,0.55)',zIndex:9998,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'28px 16px',overflowY:'auto'};
+  var PANEL={background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:16,width:'100%',maxWidth:920,boxShadow:'0 24px 60px rgba(0,0,0,0.3)',overflow:'hidden'};
+
+  return<div style={OVR} onClick={function(e){if(e.target===e.currentTarget&&!gening)onClose();}}>
+    <div style={PANEL}>
+      {/* Header */}
+      <div style={{background:'linear-gradient(135deg,#0E2A47,#123a63)',color:'#fff',padding:'18px 22px',display:'flex',alignItems:'center',gap:12}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:17,fontWeight:800}}>⚡ Bill Work</div>
+          <div style={{fontSize:12,opacity:0.75,marginTop:2}}>Combine completed, unbilled tasks into invoices — skip or exclude any you don’t want to charge.</div>
+        </div>
+        <button onClick={onClose} disabled={gening} style={{background:'rgba(255,255,255,0.14)',border:'1px solid rgba(255,255,255,0.25)',color:'#fff',borderRadius:8,padding:'7px 13px',fontSize:13,fontWeight:700,cursor:gening?'default':'pointer',fontFamily:'inherit'}}>Close</button>
+      </div>
+
+      {/* Summary / actions bar */}
+      <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',padding:'14px 22px',borderBottom:'1px solid var(--tf-border)',background:'var(--tf-surface)'}}>
+        <div style={{fontSize:13,color:'var(--tf-text)'}}><b>{grandCount}</b> task{grandCount!==1?'s':''} · <b>{clientsWith}</b> client{clientsWith!==1?'s':''} · <b style={{color:'#2F6BFF'}}>{inr(grandTotal)}</b></div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+          <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>GST %</span>
+          <input type="number" min="0" max="28" value={gstPct} onChange={function(e){setGstPct(e.target.value);}} placeholder="—" style={Object.assign({},INP,{width:70})}/>
+        </div>
+        <button onClick={function(){generate(clientIds);}} disabled={gening||grandCount===0} style={Object.assign({},BTN,{background:grandCount===0?'var(--tf-border)':'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff',opacity:gening?0.6:1,cursor:(gening||grandCount===0)?'default':'pointer'})}>{gening?'Generating…':'Generate '+clientsWith+' invoice'+(clientsWith!==1?'s':'')}</button>
+      </div>
+
+      {err&&<div style={{padding:'10px 22px',background:'rgba(239,68,68,0.1)',color:'#ef4444',fontSize:12.5,fontWeight:600}}>{err}</div>}
+      {noRateCard&&!loading&&tasks.length>0&&<div style={{padding:'9px 22px',background:'rgba(245,158,11,0.1)',color:'#b45309',fontSize:12}}>Tip: set a price per work type in <b>Set-up → Work Types → Billing</b> so amounts auto-fill. You can still type amounts per line below.</div>}
+
+      {/* Body */}
+      <div style={{maxHeight:'56vh',overflowY:'auto',padding:'8px 14px 18px'}}>
+        {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading unbilled work…</div>
+        :tasks.length===0?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}><div style={{fontSize:34,marginBottom:10}}>🎉</div><div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No unbilled work</div><div style={{fontSize:13}}>Every completed task has been billed or marked non-billable.</div></div>
+        :clientIds.map(function(cid){
+          var list=byClient[cid];var inc=cIncluded(cid);var isOpen=expanded[cid]!==false; // default open
+          return<div key={cid} style={{border:'1px solid var(--tf-border)',borderRadius:12,marginBottom:10,overflow:'hidden',background:'var(--tf-surface)'}}>
+            <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer'}} onClick={function(){setExpanded(function(p){var n=Object.assign({},p);n[cid]=!(p[cid]!==false);return n;});}}>
+              <span style={{fontSize:12,color:'var(--tf-text-sub)',width:12}}>{isOpen?'▾':'▸'}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:'var(--tf-text)'}}>{cname(cid)}</div>
+                <div style={{fontSize:11.5,color:'var(--tf-text-sub)',marginTop:1}}>{list.length} unbilled task{list.length!==1?'s':''} · {inc.length} selected</div>
+              </div>
+              <div style={{fontSize:14,fontWeight:800,color:inc.length?'#2F6BFF':'var(--tf-text-sub)'}}>{inr(cTotal(cid))}</div>
+              <button onClick={function(e){e.stopPropagation();generate([cid]);}} disabled={gening||inc.length===0} style={Object.assign({},BTN,{background:inc.length===0?'var(--tf-border)':'#0e2a47',color:'#fff',fontSize:11,padding:'6px 11px',cursor:(gening||inc.length===0)?'default':'pointer'})}>Invoice →</button>
+            </div>
+            {isOpen&&<div style={{borderTop:'1px solid var(--tf-border)'}}>
+              <div style={{display:'flex',gap:12,padding:'7px 14px',borderBottom:'1px solid var(--tf-border-2,var(--tf-border))'}}>
+                <button onClick={function(){setClientAll(cid,true);}} style={{background:'none',border:'none',color:'#2F6BFF',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Select all</button>
+                <button onClick={function(){setClientAll(cid,false);}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>Clear</button>
+              </div>
+              {list.map(function(t){
+                var s=sel[t.id]||{include:false,amount:0};
+                return<div key={t.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderTop:'1px solid var(--tf-border)',opacity:s.include?1:0.55}}>
+                  <input type="checkbox" checked={!!s.include} onChange={function(){toggleInc(t.id);}} style={{width:16,height:16,cursor:'pointer',flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:'var(--tf-text)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.title}</div>
+                    <div style={{fontSize:11,color:'var(--tf-text-sub)',marginTop:1}}>{t.work_type}{t.period?' · '+t.period:''}{t.mode==='hourly'?' · '+t.hrs+'h @ '+inr(t.rate)+'/h':''}{t.mode==='none'?' · not billed by default':''}</div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:4,flexShrink:0}}>
+                    <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>₹</span>
+                    <input type="number" min="0" value={s.amount} onChange={function(e){setAmt(t.id,e.target.value);}} style={Object.assign({},INP,{width:92,textAlign:'right',padding:'6px 8px'})}/>
+                  </div>
+                  <button title="Mark non-billable (permanent)" onClick={function(){markNB(t.id);}} style={{background:'none',border:'1px solid var(--tf-border)',color:'#ef4444',borderRadius:7,padding:'5px 8px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>⊘</button>
+                </div>;
+              })}
+            </div>}
+          </div>;
+        })}
+      </div>
+    </div>
+  </div>;
+}
+
 // ── Invoice Form (separate component to keep BillingModule smaller) ──
 function InvoiceForm({inv,clients,org,supabase,onClose,onSaved,INP,LBL,BTN}){
 var [clientId,setClientId]=useState(inv?inv.client_id:'');
@@ -13924,6 +14112,7 @@ var [editProposal,setEditProposal]=useState(null);
 var [viewProposal,setViewProposal]=useState(null);
 var [proposals,setProposals]=useState(_bc?_bc.proposals:[]);
 var [showPayForm,setShowPayForm]=useState(false);
+var [billWork,setBillWork]=useState(false);
 var [stmtClientId,setStmtClientId]=useState('');
 var [stmtData,setStmtData]=useState(null);
 var [exportFmt,setExportFmt]=useState('pdf');
@@ -14015,10 +14204,14 @@ setTimeout(function(){w.print();},400);
 var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0b',overdue:'#ef4444',cancelled:'#6b7280'};
 
 return<div>
-<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,gap:10,flexWrap:'wrap'}}>
 <div style={{fontSize:13,color:'var(--tf-text-sub)'}}>{filtered.length} invoice{filtered.length!==1?'s':''}</div>
+<div style={{display:'flex',gap:8}}>
+<button onClick={function(){setBillWork(true);}} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff'})}>⚡ Bill Work</button>
 <button onClick={openNew} style={Object.assign({},BTN,{background:'#0e2a47',color:'#fff'})}>+ New Invoice</button>
 </div>
+</div>
+{billWork&&<BillWorkPanel org={org} supabase={supabase} clients={clients} onClose={function(){setBillWork(false);}} onDone={function(n){setBillWork(false);loadAll();showToast(n+' invoice'+(n!==1?'s':'')+' created as draft');}} INP={INP} LBL={LBL} BTN={BTN}/>}
 {showForm&&<InvoiceForm inv={editInv} clients={clients} org={org} supabase={supabase} onClose={function(){setShowForm(false);setViewInv(null);}} onSaved={function(){setShowForm(false);setViewInv(null);loadAll();showToast(editInv?'Invoice updated':'Invoice created');}} INP={INP} LBL={LBL} BTN={BTN}/>}
 {viewInv&&!showForm&&<InvoiceView inv={viewInv} org={org} clientMap={clientMap} getInvTotal={getInvTotal} getPaid={getPaid} generatePDF={generatePDF} onClose={function(){setViewInv(null);}} onEdit={function(){openEdit(viewInv);}} onStatusChange={function(st){markStatus(viewInv.id,st);setViewInv(null);}} BTN={BTN}/>}
 {filtered.length===0&&!showForm&&<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>No invoices yet. Create your first invoice.</div>}
