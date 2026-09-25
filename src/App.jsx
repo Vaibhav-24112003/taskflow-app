@@ -13678,7 +13678,7 @@ function MiniCalendar({rows,clientMap,wsMap}){
 }
 
 // ── Invoice View (preview with action bar) ──
-function InvoiceView({inv,org,clientMap,getInvTotal,getPaid,generatePDF,onClose,onEdit,onStatusChange,BTN}){
+function InvoiceView({inv,org,clientMap,getInvTotal,getPaid,generatePDF,onClose,onEdit,onStatusChange,onSend,BTN}){
 var c=clientMap[inv.client_id]||{};
 var t=getInvTotal(inv);
 var paid=getPaid(inv.id);
@@ -13690,9 +13690,17 @@ var stColor=STATUS_COLORS[inv.status]||'#94a3b8';
 
 function sendEmail(){
 var clientEmail=c.email||'';
-var subject=encodeURIComponent('Invoice '+inv.invoice_no+' from '+org.name);
-var body=encodeURIComponent('Dear '+(c.display_name||c.name||'Client')+',\n\nPlease find attached Invoice '+inv.invoice_no+' dated '+(inv.invoice_date||'')+' for ₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2})+'.\n\n'+(inv.due_date?'Due Date: '+inv.due_date+'\n\n':'')+'Regards,\n'+org.name);
-window.open('mailto:'+clientEmail+'?subject='+subject+'&body='+body,'_blank');}
+var money='₹'+t.total.toLocaleString('en-IN',{minimumFractionDigits:2});
+var subject='Invoice '+inv.invoice_no+' from '+org.name;
+var greet='Dear '+(c.display_name||c.name||'Client')+',';
+var lines=['Please find your Invoice <b>'+inv.invoice_no+'</b>'+(inv.invoice_date?' dated '+inv.invoice_date:'')+' for <b>'+money+'</b>.'];
+if(bal>0&&paid>0)lines.push('Balance due: <b>₹'+bal.toLocaleString('en-IN',{minimumFractionDigits:2})+'</b>.');
+if(inv.due_date)lines.push('Due date: '+inv.due_date+'.');
+lines.push('Kindly arrange the payment at your earliest convenience. Thank you.');
+var bodyHtml='<p>'+greet+'</p><p>'+lines.join('</p><p>')+'</p><p>Regards,<br>'+org.name+'</p>';
+var bodyText=greet+'\n\n'+lines.join('\n\n').replace(/<\/?b>/g,'')+'\n\nRegards,\n'+org.name;
+if(onSend){onSend({to:clientEmail,subject:subject,body:bodyHtml,bodyText:bodyText,clientId:inv.client_id});return;}
+window.open('mailto:'+clientEmail+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(bodyText),'_blank');}
 
 function shareLink(){
 var text='Invoice '+inv.invoice_no+' | '+(c.display_name||c.name)+' | ₹'+t.total.toLocaleString('en-IN')+' | Status: '+inv.status;
@@ -13783,6 +13791,7 @@ function BillWorkPanel({org,supabase,clients,onClose,onDone,INP,LBL,BTN}){
   var [gening,setGening]=useState(false);
   var [err,setErr]=useState('');
   var [noRateCard,setNoRateCard]=useState(false);
+  var [q,setQ]=useState('');
 
   var clientMap={};clients.forEach(function(c){clientMap[c.id]=c;});
   function cname(id){var c=clientMap[id];return c?(c.display_name||c.name||'Client'):'Client';}
@@ -13887,7 +13896,8 @@ function BillWorkPanel({org,supabase,clients,onClose,onDone,INP,LBL,BTN}){
       {/* Summary / actions bar */}
       <div style={{display:'flex',alignItems:'center',gap:14,flexWrap:'wrap',padding:'14px 22px',borderBottom:'1px solid var(--tf-border)',background:'var(--tf-surface)'}}>
         <div style={{fontSize:13,color:'var(--tf-text)'}}><b>{grandCount}</b> task{grandCount!==1?'s':''} · <b>{clientsWith}</b> client{clientsWith!==1?'s':''} · <b style={{color:'#2F6BFF'}}>{inr(grandTotal)}</b></div>
-        <div style={{display:'flex',alignItems:'center',gap:6,marginLeft:'auto'}}>
+        <input value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search client…" style={Object.assign({},INP,{width:180,marginLeft:'auto'})}/>
+        <div style={{display:'flex',alignItems:'center',gap:6}}>
           <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>GST %</span>
           <input type="number" min="0" max="28" value={gstPct} onChange={function(e){setGstPct(e.target.value);}} placeholder="—" style={Object.assign({},INP,{width:70})}/>
         </div>
@@ -13901,7 +13911,7 @@ function BillWorkPanel({org,supabase,clients,onClose,onDone,INP,LBL,BTN}){
       <div style={{maxHeight:'56vh',overflowY:'auto',padding:'8px 14px 18px'}}>
         {loading?<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)'}}>Loading unbilled work…</div>
         :tasks.length===0?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}><div style={{fontSize:34,marginBottom:10}}>🎉</div><div style={{fontWeight:700,color:'var(--tf-text)',marginBottom:4}}>No unbilled work</div><div style={{fontSize:13}}>Every completed task has been billed or marked non-billable.</div></div>
-        :clientIds.map(function(cid){
+        :(q.trim()?clientIds.filter(function(id){return cname(id).toLowerCase().indexOf(q.trim().toLowerCase())>=0;}):clientIds).map(function(cid){
           var list=byClient[cid];var inc=cIncluded(cid);var isOpen=expanded[cid]!==false; // default open
           return<div key={cid} style={{border:'1px solid var(--tf-border)',borderRadius:12,marginBottom:10,overflow:'hidden',background:'var(--tf-surface)'}}>
             <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',cursor:'pointer'}} onClick={function(){setExpanded(function(p){var n=Object.assign({},p);n[cid]=!(p[cid]!==false);return n;});}}>
@@ -14092,7 +14102,7 @@ return<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-bor
 </div>;}
 
 // ── Billing Module ────────────────────────────────────────────────
-function BillingModule({org,supabase,cu,activeTab}){
+function BillingModule({org,supabase,cu,activeTab,onCompose}){
 var tab=activeTab||'invoices';
 var _bc=_billingCache[org.id]||null;
 var [loading,setLoading]=useState(!_bc);
@@ -14113,6 +14123,7 @@ var [viewProposal,setViewProposal]=useState(null);
 var [proposals,setProposals]=useState(_bc?_bc.proposals:[]);
 var [showPayForm,setShowPayForm]=useState(false);
 var [billWork,setBillWork]=useState(false);
+var [invQuery,setInvQuery]=useState('');
 var [stmtClientId,setStmtClientId]=useState('');
 var [stmtData,setStmtData]=useState(null);
 var [exportFmt,setExportFmt]=useState('pdf');
@@ -14153,7 +14164,8 @@ return<div style={{padding:'0 0 60px'}}>
 
 // ── PLACEHOLDER RENDERERS (will be filled in phases) ──
 function renderInvoices(){
-var filtered=invoices;
+var _q=invQuery.trim().toLowerCase();
+var filtered=_q?invoices.filter(function(inv){var c=clientMap[inv.client_id]||{};return (inv.invoice_no||'').toLowerCase().indexOf(_q)>=0||((c.display_name||c.name||'').toLowerCase().indexOf(_q)>=0)||(inv.status||'').toLowerCase().indexOf(_q)>=0;}):invoices;
 function openNew(){setEditInv(null);setShowForm(true);}
 function openEdit(inv){setEditInv(inv);setShowForm(true);}
 async function delInv(id){if(!window.confirm('Delete this invoice?'))return;await supabase.from('invoice_items').delete().eq('invoice_id',id);await supabase.from('invoices').delete().eq('id',id);showToast('Invoice deleted');loadAll();}
@@ -14205,7 +14217,10 @@ var STATUS_COLORS={draft:'#94a3b8',sent:'#3b82f6',paid:'#22c55e',partial:'#f59e0
 
 return<div>
 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,gap:10,flexWrap:'wrap'}}>
-<div style={{fontSize:13,color:'var(--tf-text-sub)'}}>{filtered.length} invoice{filtered.length!==1?'s':''}</div>
+<div style={{display:'flex',alignItems:'center',gap:10,flex:'1 1 220px'}}>
+<input value={invQuery} onChange={function(e){setInvQuery(e.target.value);}} placeholder="Search invoice no, client, status…" style={Object.assign({},INP,{maxWidth:280})}/>
+<span style={{fontSize:13,color:'var(--tf-text-sub)',whiteSpace:'nowrap'}}>{filtered.length} invoice{filtered.length!==1?'s':''}</span>
+</div>
 <div style={{display:'flex',gap:8}}>
 <button onClick={function(){setBillWork(true);}} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff'})}>⚡ Bill Work</button>
 <button onClick={openNew} style={Object.assign({},BTN,{background:'#0e2a47',color:'#fff'})}>+ New Invoice</button>
@@ -14213,7 +14228,7 @@ return<div>
 </div>
 {billWork&&<BillWorkPanel org={org} supabase={supabase} clients={clients} onClose={function(){setBillWork(false);}} onDone={function(n){setBillWork(false);loadAll();showToast(n+' invoice'+(n!==1?'s':'')+' created as draft');}} INP={INP} LBL={LBL} BTN={BTN}/>}
 {showForm&&<InvoiceForm inv={editInv} clients={clients} org={org} supabase={supabase} onClose={function(){setShowForm(false);setViewInv(null);}} onSaved={function(){setShowForm(false);setViewInv(null);loadAll();showToast(editInv?'Invoice updated':'Invoice created');}} INP={INP} LBL={LBL} BTN={BTN}/>}
-{viewInv&&!showForm&&<InvoiceView inv={viewInv} org={org} clientMap={clientMap} getInvTotal={getInvTotal} getPaid={getPaid} generatePDF={generatePDF} onClose={function(){setViewInv(null);}} onEdit={function(){openEdit(viewInv);}} onStatusChange={function(st){markStatus(viewInv.id,st);setViewInv(null);}} BTN={BTN}/>}
+{viewInv&&!showForm&&<InvoiceView inv={viewInv} org={org} clientMap={clientMap} getInvTotal={getInvTotal} getPaid={getPaid} generatePDF={generatePDF} onClose={function(){setViewInv(null);}} onEdit={function(){openEdit(viewInv);}} onStatusChange={function(st){markStatus(viewInv.id,st);setViewInv(null);}} onSend={onCompose?function(payload){onCompose(payload);markStatus(viewInv.id,'sent');}:null} BTN={BTN}/>}
 {filtered.length===0&&!showForm&&<div style={{textAlign:'center',padding:40,color:'var(--tf-text-sub)',fontSize:13}}>No invoices yet. Create your first invoice.</div>}
 <div style={{display:'flex',flexDirection:'column',gap:8}}>
 {filtered.map(function(inv){
@@ -15547,6 +15562,10 @@ function tfWaOpen(phone, text){
 function RichEditor({id,value,onChange,placeholder,minHeight}){
   var editorRef=useRef(null);
   var savedRangeRef=useRef(null);
+  // Initialize content once from `value` (e.g. a prefilled invoice email body).
+  useEffect(function(){
+    if(editorRef.current&&value!=null&&value!==''&&!editorRef.current.innerHTML){editorRef.current.innerHTML=value;}
+  /* eslint-disable-next-line */},[]);
   var [showLinkModal,setShowLinkModal]=useState(false);
   var [linkUrl,setLinkUrl]=useState('');
   var [linkText,setLinkText]=useState('');
@@ -15653,7 +15672,7 @@ function RichEditor({id,value,onChange,placeholder,minHeight}){
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
-function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onConsumeInit}){
+function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,initCompose,onConsumeInit}){
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
   var [portalUsers,setPortalUsers]=useState([]);
@@ -16119,6 +16138,15 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
     if(onConsumeInit)onConsumeInit();
   },[initClientId,clients.length]);
 
+  // Cross-link from Billing "Send invoice/proposal": open the Gmail composer prefilled.
+  useEffect(function(){
+    if(!initCompose)return;
+    setActiveTab('gmail');
+    setGmailSelThread(null);
+    setGmailCompose({to:initCompose.to||'',cc:'',bcc:'',subject:initCompose.subject||'',body:initCompose.body||''});
+    if(onConsumeInit)onConsumeInit();
+  },[initCompose]);
+
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
@@ -16551,7 +16579,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,onCo
             </div>
             <div style={{marginBottom:10}}>
               <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:3}}>Body</label>
-              <RichEditor id="gmail_compose_editor" onChange={function(html){setGmailCompose(Object.assign({},gmailCompose,{body:html}));}} placeholder="Write your email..." minHeight={250}/>
+              <RichEditor id="gmail_compose_editor" value={gmailCompose.body||''} onChange={function(html){setGmailCompose(Object.assign({},gmailCompose,{body:html}));}} placeholder="Write your email..." minHeight={250}/>
             </div>
             <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
               <button onClick={function(){sendGmailNew(gmailCompose.to,gmailCompose.subject,gmailCompose.body,gmailCompose.cc,gmailCompose.bcc);}} style={{background:'linear-gradient(135deg,#4285f4,#1a73e8)',border:'none',borderRadius:8,padding:'10px 28px',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,boxShadow:'0 2px 8px rgba(66,133,244,0.3)'}}>Send</button>
@@ -19640,6 +19668,12 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const [orgModule,setOrgModule]=useState(function(){return localStorage.getItem('tf_lastOrgModule')||null;}); // null=launcher | 'diary'|'workzone'|'library'|'team'|'analytics'|'comms'|'masterdata'|'setup'
   const [tab,setTab]=useState(function(){return localStorage.getItem('tf_lastOrgTab')||'';});
   const [commsClientId,setCommsClientId]=useState(null); // cross-link: Client Connect → Mailing preselect
+  const [commsCompose,setCommsCompose]=useState(null); // cross-link: Billing invoice/proposal → Mailing composer prefill
+  function goCompose(payload){
+    if(hasModule('comms')){setCommsCompose(payload);setOrgModule('comms');setTab('mailing');try{localStorage.setItem('tf_lastOrgModule','comms');localStorage.setItem('tf_lastOrgTab','mailing');}catch(e){}}
+    else if(payload&&payload.to){window.open('mailto:'+payload.to+'?subject='+encodeURIComponent(payload.subject||'')+'&body='+encodeURIComponent(payload.bodyText||''),'_blank');}
+    else{window.open('mailto:?subject='+encodeURIComponent((payload&&payload.subject)||'')+'&body='+encodeURIComponent((payload&&payload.bodyText)||''),'_blank');}
+  }
   const [showAppTour,setShowAppTour]=useState(false); // in-app spotlight tour
   const [workTypeConfigs,setWorkTypeConfigs]=useState([]);
   const [myRole,setMyRole]=useState('member');
@@ -19931,7 +19965,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
-            {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
+            {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} initCompose={commsCompose} onConsumeInit={function(){setCommsClientId(null);setCommsCompose(null);}}/>}
             {tab==='portal'&&(hasModule('portal')
               ? <ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>
               : <ModuleLock module="portal" gate={trialGate} onBack={()=>setTab('mailing')} onUpgrade={goUpgrade}/>)}
@@ -19940,7 +19974,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
         : <ModuleLock module="comms" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('')}}/>)}
       {/* Billing — paid module */}
       {orgModule==='billing'&&(hasModule('billing')
-        ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab}/>
+        ? <BillingModule org={org} supabase={supabase} cu={cu} activeTab={tab} onCompose={goCompose}/>
         : <ModuleLock module="billing" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('')}}/>)}
       {/* Upgrade & Plans */}
       {orgModule==='upgrade'&&<Suspense fallback={null}><UpgradePlansModule org={org} supabase={supabase} cu={cu}
