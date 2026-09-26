@@ -15773,12 +15773,13 @@ function CommsSubTabs({tabs,value,onChange}){
 }
 function CampaignsPillar({org,supabase,cu,workTypeConfigs,initClientId,onConsumeInit,startAudiences}){
   var [sub,setSub]=useState(startAudiences?'audiences':'send');
+  var [emailIds,setEmailIds]=useState(null);
   useEffect(function(){if(initClientId)setSub('send');},[initClientId]);
   return<div>
     <CommsSubTabs tabs={[['send','📣 Send / Bulk'],['audiences','📇 Audiences']]} value={sub} onChange={setSub}/>
     {sub==='send'
-      ? <CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} initialTab="bulk" tabsAllowed={['bulk','reminders','whatsapp','templates']} initClientId={initClientId} onConsumeInit={onConsumeInit}/>
-      : <ContactsModule org={org} supabase={supabase} cu={cu}/>}
+      ? <CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} initialTab="bulk" tabsAllowed={['bulk','reminders','whatsapp','templates']} initClientId={initClientId} initBulkContacts={emailIds} onConsumeInit={onConsumeInit}/>
+      : <ContactsModule org={org} supabase={supabase} cu={cu} onEmailThese={function(ids){setEmailIds(ids);setSub('send');}}/>}
   </div>;
 }
 function ClientsPillar({org,supabase,cu,workTypeConfigs,hasModule,trialGate,goUpgrade,startTab,onEmailClient}){
@@ -15792,7 +15793,7 @@ function ClientsPillar({org,supabase,cu,workTypeConfigs,hasModule,trialGate,goUp
 }
 
 // ── Contacts / Audiences: non-client recipients for campaigns ──
-function ContactsModule({org,supabase,cu}){
+function ContactsModule({org,supabase,cu,onEmailThese}){
   var [loading,setLoading]=useState(true);
   var [contacts,setContacts]=useState([]);
   var [lists,setLists]=useState([]);
@@ -15936,8 +15937,9 @@ function ContactsModule({org,supabase,cu}){
     </div>
 
     {/* Bulk bar */}
-    {selIds.length>0&&<div style={{display:'flex',alignItems:'center',gap:10,background:'rgba(47,107,255,0.08)',border:'1px solid #BBD2FF',borderRadius:10,padding:'9px 14px',marginBottom:12}}>
+    {selIds.length>0&&<div style={{display:'flex',alignItems:'center',gap:10,background:'rgba(47,107,255,0.08)',border:'1px solid #BBD2FF',borderRadius:10,padding:'9px 14px',marginBottom:12,flexWrap:'wrap'}}>
       <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{selIds.length} selected</span>
+      {onEmailThese&&(function(){var eligible=selIds.filter(function(id){var c=contacts.find(function(x){return x.id===id;});return c&&c.email&&!c.unsubscribed;});return<button onClick={function(){if(eligible.length===0){flash('No emailable contacts selected (need an email, not unsubscribed)');return;}onEmailThese(eligible);}} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff'})}>✉ Email these{eligible.length!==selIds.length?' ('+eligible.length+')':''}</button>;})()}
       <select onChange={function(e){if(e.target.value){addSelToList(e.target.value);e.target.value='';}}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">Add to list…</option>{lists.map(function(l){return<option key={l.id} value={l.id}>{l.name}</option>;})}</select>
       <button onClick={bulkDelete} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444'})}>Delete</button>
       <button onClick={function(){setSel({});}} style={Object.assign({},BTN,{background:'none',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)'})}>Clear</button>
@@ -16028,7 +16030,7 @@ function ContactsModule({org,supabase,cu}){
   </div>;
 }
 
-function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,initCompose,onConsumeInit,initialTab,tabsAllowed}){
+function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,initCompose,onConsumeInit,initialTab,tabsAllowed,initBulkContacts}){
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
   var [portalUsers,setPortalUsers]=useState([]);
@@ -16505,6 +16507,15 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
     setGmailComposeFiles(initCompose.attachment?[initCompose.attachment]:[]);
     if(onConsumeInit)onConsumeInit();
   },[initCompose]);
+
+  // Cross-link from Audiences "Email these": open Bulk with contacts preselected.
+  useEffect(function(){
+    if(!initBulkContacts||!initBulkContacts.length)return;
+    setBulkAudience('contacts');
+    var m={};initBulkContacts.forEach(function(id){m[id]=true;});
+    setBulkSelIds(m);
+    setActiveTab('bulk');
+  },[initBulkContacts]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
   async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);try{var rcc=await supabase.from('campaign_contacts').select('id,name,email,phone,tags,unsubscribed,unsub_token').eq('org_id',org.id).limit(5000);setCampaignContacts(rcc.data||[]);}catch(e){}var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
