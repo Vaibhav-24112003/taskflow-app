@@ -1182,7 +1182,7 @@ var CMD_MODULES=[
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'dsc',label:'DSC Register'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
-  {id:'comms',label:'Communication',tabs:[{id:'mailing',label:'Mail'},{id:'contacts',label:'Contacts'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'inbox',label:'Inbox'},{id:'campaigns',label:'Campaigns'},{id:'clients',label:'Client Portal & Requests'}]},
   {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
   {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
@@ -15765,6 +15765,32 @@ function RichEditor({id,value,onChange,placeholder,minHeight}){
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
+// ── Communication pillar sub-nav (Option A: Inbox · Campaigns · Clients) ──
+function CommsSubTabs({tabs,value,onChange}){
+  return<div style={{display:'flex',gap:8,padding:'2px 0 16px',flexWrap:'wrap'}}>
+    {tabs.map(function(t){var on=value===t[0];return<button key={t[0]} onClick={function(){onChange(t[0]);}} style={{padding:'8px 15px',borderRadius:10,border:'1px solid',borderColor:on?'#2F6BFF':'var(--tf-border)',background:on?'rgba(47,107,255,0.08)':'var(--tf-surface)',color:on?'#2F6BFF':'var(--tf-text-sub)',fontSize:13,fontWeight:on?800:600,cursor:'pointer',fontFamily:'inherit'}}>{t[1]}</button>;})}
+  </div>;
+}
+function CampaignsPillar({org,supabase,cu,workTypeConfigs,initClientId,onConsumeInit,startAudiences}){
+  var [sub,setSub]=useState(startAudiences?'audiences':'send');
+  useEffect(function(){if(initClientId)setSub('send');},[initClientId]);
+  return<div>
+    <CommsSubTabs tabs={[['send','📣 Send / Bulk'],['audiences','📇 Audiences']]} value={sub} onChange={setSub}/>
+    {sub==='send'
+      ? <CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs} initialTab="bulk" tabsAllowed={['bulk','reminders','whatsapp','templates']} initClientId={initClientId} onConsumeInit={onConsumeInit}/>
+      : <ContactsModule org={org} supabase={supabase} cu={cu}/>}
+  </div>;
+}
+function ClientsPillar({org,supabase,cu,workTypeConfigs,hasModule,trialGate,goUpgrade,startTab,onEmailClient}){
+  var [sub,setSub]=useState(startTab||'portal');
+  return<div>
+    <CommsSubTabs tabs={[['portal','🌐 Client Portal'],['requests','📨 Requests & Campaigns']]} value={sub} onChange={setSub}/>
+    {sub==='portal'
+      ? (hasModule('portal')?<ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={workTypeConfigs}/>:<ModuleLock module="portal" gate={trialGate} onBack={function(){setSub('requests');}} onUpgrade={goUpgrade}/>)
+      : <ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){if(t==='portal')setSub('portal');}} onEmailClient={onEmailClient}/>}
+  </div>;
+}
+
 // ── Contacts / Audiences: non-client recipients for campaigns ──
 function ContactsModule({org,supabase,cu}){
   var [loading,setLoading]=useState(true);
@@ -16002,13 +16028,13 @@ function ContactsModule({org,supabase,cu}){
   </div>;
 }
 
-function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,initCompose,onConsumeInit}){
+function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,initCompose,onConsumeInit,initialTab,tabsAllowed}){
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
   var [portalUsers,setPortalUsers]=useState([]);
   var [templates,setTemplates]=useState([]);
   var [toast,setToast]=useState(null);
-  var [activeTab,setActiveTab]=useState('gmail'); // 'gmail'(Inbox) | 'bulk' | 'reminders' | 'templates'
+  var [activeTab,setActiveTab]=useState(initialTab||'gmail'); // 'gmail'(Inbox) | 'bulk' | 'reminders' | 'whatsapp' | 'templates'
   // Bulk email state
   var [bulkSelIds,setBulkSelIds]=useState({});
   var [bulkFilterWT,setBulkFilterWT]=useState('');
@@ -16706,20 +16732,24 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
   return<div style={{display:'flex',height:'calc(100vh - 120px)',margin:'0 -24px -60px'}}>
     {/* LEFT PANEL — Tabs + Folder nav */}
     <div style={{width:gmailThreePaneActive?185:260,borderRight:'1px solid var(--tf-border)',background:'var(--tf-panel)',display:'flex',flexDirection:'column',flexShrink:0,transition:'width 0.2s'}}>
-      <div style={{padding:'14px 12px 12px',borderBottom:'1px solid var(--tf-border)'}}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
-          {[
+      {(function(){
+        var TABS=[
             {id:'gmail',label:'Inbox',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>},
             {id:'bulk',label:'Bulk',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>},
             {id:'reminders',label:'Reminders',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>},
             {id:'templates',label:'Templates',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>},
             {id:'whatsapp',label:'WhatsApp',svg:<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.2-.6.1-.2.3-.7 1-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.9-2.1-.2-.5-.4-.4-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2 0 1.3.9 2.5 1.1 2.7.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.2-.3-.2-.5-.3zM12 2a10 10 0 00-8.6 15l-1.3 4.7L7 20.4A10 10 0 1012 2z"/></svg>}
-          ].map(function(t){
+        ];
+        if(tabsAllowed&&tabsAllowed.length)TABS=TABS.filter(function(t){return tabsAllowed.indexOf(t.id)>=0;});
+        if(TABS.length<=1)return null;
+        return<div style={{padding:'14px 12px 12px',borderBottom:'1px solid var(--tf-border)'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+          {TABS.map(function(t){
             var active=activeTab===t.id;
             return<button key={t.id} onClick={function(){setActiveTab(t.id);}} title={t.label} style={{display:'flex',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:6,padding:'9px 6px',border:'1px solid',borderColor:active?'#2F6BFF':'var(--tf-border)',borderRadius:10,background:active?'rgba(47,107,255,0.08)':'var(--tf-surface)',color:active?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontSize:11.5,fontWeight:active?800:600,fontFamily:'inherit',transition:'all 0.12s'}}><span style={{flexShrink:0,display:'inline-flex'}}>{t.svg}</span><span style={{whiteSpace:'nowrap'}}>{t.label}</span></button>;
           })}
         </div>
-      </div>
+      </div>;})()}
       {/* Left body */}
       <div style={{flex:1,overflowY:'auto',padding:'10px 0'}}>
         {activeTab==='gmail'?<>
@@ -20020,7 +20050,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   const [commsClientId,setCommsClientId]=useState(null); // cross-link: Client Connect → Mailing preselect
   const [commsCompose,setCommsCompose]=useState(null); // cross-link: Billing invoice/proposal → Mailing composer prefill
   function goCompose(payload){
-    if(hasModule('comms')){setCommsCompose(payload);setOrgModule('comms');setTab('mailing');try{localStorage.setItem('tf_lastOrgModule','comms');localStorage.setItem('tf_lastOrgTab','mailing');}catch(e){}}
+    if(hasModule('comms')){setCommsCompose(payload);setOrgModule('comms');setTab('inbox');try{localStorage.setItem('tf_lastOrgModule','comms');localStorage.setItem('tf_lastOrgTab','inbox');}catch(e){}}
     else if(payload&&payload.to){window.open('mailto:'+payload.to+'?subject='+encodeURIComponent(payload.subject||'')+'&body='+encodeURIComponent(payload.bodyText||''),'_blank');}
     else{window.open('mailto:?subject='+encodeURIComponent((payload&&payload.subject)||'')+'&body='+encodeURIComponent((payload&&payload.bodyText)||''),'_blank');}
   }
@@ -20175,7 +20205,7 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
   if(canSeeAnalytics&&ffOn('analytics')){
     MODULES.push({id:'analytics',label:'Analytics',icon:BarChart2,desc:'Organisation-wide performance review — for owners and admins.',gradient:'linear-gradient(135deg,#10b981,#059669)',tabs:[{id:'overview',label:'Overview'}],ownerOnly:true});
   }
-  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Everything client-facing in one place — email your clients, the login-based Client Portal, and request/campaign link forms.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'mailing',label:'Mail'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]});
+  if(ffOn('comms'))MODULES.push({id:'comms',label:'Communication',icon:Mail,desc:'Everything client-facing in one place — inbox, campaigns & outreach, contacts and the client portal.',gradient:'linear-gradient(135deg,#06b6d4,#0891b2)',tabs:[{id:'inbox',label:'Inbox'},{id:'campaigns',label:'Campaigns'},{id:'clients',label:'Client Portal & Requests'}]});
   if(ffOn('billing'))MODULES.push({id:'billing',label:'Billing',icon:Receipt,desc:'Invoices, proposals, payments, statements and exports for Tally & Zoho.',gradient:'linear-gradient(135deg,#ec4899,#db2777)',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'},{id:'export',label:'Export'}]});
   MODULES.push({id:'upgrade',label:'Plans & Billing',icon:CreditCard,desc:'Manage your subscription, upgrade plan and view invoices.',gradient:'linear-gradient(135deg,#2F6BFF,#14C7C0)',tabs:[]});
   MODULES.push({id:'masterdata',label:'Master Data',icon:Database,desc:'Client master with work type enrollment, work types and groups.',gradient:'linear-gradient(135deg,#8b5cf6,#7c3aed)',tabs:masterdataTabs});
@@ -20315,12 +20345,13 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
-            {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'&&tab!=='contacts'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} initCompose={commsCompose} onConsumeInit={function(){setCommsClientId(null);setCommsCompose(null);}}/>}
-            {tab==='contacts'&&<ContactsModule org={org} supabase={supabase} cu={cu}/>}
-            {tab==='portal'&&(hasModule('portal')
-              ? <ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>
-              : <ModuleLock module="portal" gate={trialGate} onBack={()=>setTab('mailing')} onUpgrade={goUpgrade}/>)}
-            {tab==='connect'&&<ClientConnectModule org={org} supabase={supabase} cu={cu} onGoTab={function(t){setTab(t);}} onEmailClient={function(cid){setCommsClientId(cid);setTab('mailing');}}/>}
+            {/* Pillar 1 — Inbox (1:1). Also the target for invoice/proposal compose. */}
+            {(tab==='inbox'||tab==='mailing'||(tab!=='campaigns'&&tab!=='clients'&&tab!=='portal'&&tab!=='connect'&&tab!=='contacts'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initialTab="gmail" tabsAllowed={['gmail']} initClientId={commsClientId} initCompose={commsCompose} onConsumeInit={function(){setCommsClientId(null);setCommsCompose(null);}}/>}
+            {/* Pillar 2 — Campaigns & Outreach (1:many) + Audiences */}
+            {tab==='campaigns'&&<CampaignsPillar org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} onConsumeInit={function(){setCommsClientId(null);}}/>}
+            {tab==='contacts'&&<CampaignsPillar org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} startAudiences={true}/>}
+            {/* Pillar 3 — Clients & Requests */}
+            {(tab==='clients'||tab==='portal'||tab==='connect')&&<ClientsPillar org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} hasModule={hasModule} trialGate={trialGate} goUpgrade={goUpgrade} startTab={tab==='portal'?'portal':(tab==='connect'?'requests':'portal')} onEmailClient={function(cid){setCommsClientId(cid);setTab('campaigns');}}/>}
           </>
         : <ModuleLock module="comms" gate={trialGate} onBack={()=>setOrgModule(null)} onUpgrade={(planId)=>{try{localStorage.setItem('tf_upgrade_plan',planId);localStorage.setItem('tf_lastOrgModule','upgrade');localStorage.setItem('tf_lastOrgTab','')}catch(e){}setOrgModule('upgrade');setTab('')}}/>)}
       {/* Billing — paid module */}
