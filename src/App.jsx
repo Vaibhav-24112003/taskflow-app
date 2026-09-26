@@ -1182,7 +1182,7 @@ var CMD_MODULES=[
   {id:'library',label:'Library',tabs:[{id:'credentials',label:'Credentials'},{id:'dsc',label:'DSC Register'},{id:'sops',label:'SOPs'},{id:'tools',label:'Tools & Connections'},{id:'study',label:'Study Resources'}]},
   {id:'team',label:'Team',tabs:[{id:'logs',label:'Logs'},{id:'attendance',label:'Attendance'},{id:'leaves',label:'Leaves'}]},
   {id:'analytics',label:'Analytics',tabs:[{id:'overview',label:'Overview'}]},
-  {id:'comms',label:'Communication',tabs:[{id:'mailing',label:'Mail'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]},
+  {id:'comms',label:'Communication',tabs:[{id:'mailing',label:'Mail'},{id:'contacts',label:'Contacts'},{id:'portal',label:'Client Portal'},{id:'connect',label:'Requests & Campaigns'}]},
   {id:'billing',label:'Billing',tabs:[{id:'invoices',label:'Invoices'},{id:'proposals',label:'Proposals'},{id:'payments',label:'Payments'},{id:'statements',label:'Statements'}]},
   {id:'masterdata',label:'Master Data',tabs:[{id:'clients',label:'Clients'},{id:'worktypes',label:'Work Types'},{id:'groups',label:'Groups & Teams'}]},
   {id:'setup',label:'Set-up',tabs:[{id:'members',label:'Members'},{id:'settings',label:'Settings'}]},
@@ -15765,6 +15765,243 @@ function RichEditor({id,value,onChange,placeholder,minHeight}){
 
 // ── Client Portal Module (Firm Side) — manage portal users & requests ──
 
+// ── Contacts / Audiences: non-client recipients for campaigns ──
+function ContactsModule({org,supabase,cu}){
+  var [loading,setLoading]=useState(true);
+  var [contacts,setContacts]=useState([]);
+  var [lists,setLists]=useState([]);
+  var [members,setMembers]=useState({}); // contactId -> [listId]
+  var [q,setQ]=useState('');
+  var [statusF,setStatusF]=useState('all'); // all|active|unsub
+  var [tagF,setTagF]=useState('');
+  var [listF,setListF]=useState('');
+  var [sel,setSel]=useState({});
+  var [edit,setEdit]=useState(null); // contact object or {} for new
+  var [showImport,setShowImport]=useState(false);
+  var [showLists,setShowLists]=useState(false);
+  var [toast,setToast]=useState('');
+  function flash(m){setToast(m);setTimeout(function(){setToast('');},2200);}
+
+  var INP={background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:8,padding:'8px 11px',color:'var(--tf-text)',fontSize:13,outline:'none',fontFamily:'inherit'};
+  var BTN={padding:'8px 14px',borderRadius:8,border:'none',fontWeight:700,fontSize:12.5,cursor:'pointer',fontFamily:'inherit'};
+
+  useEffect(function(){load();/* eslint-disable-next-line */},[org.id]);
+  async function load(){
+    setLoading(true);
+    var r=await Promise.all([
+      supabase.from('campaign_contacts').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(5000),
+      supabase.from('campaign_lists').select('*').eq('org_id',org.id).order('name').limit(500)
+    ]);
+    var cs=r[0].data||[],ls=r[1].data||[];
+    var mm={};
+    if(ls.length){
+      var rm=await supabase.from('campaign_list_members').select('list_id,contact_id').in('list_id',ls.map(function(l){return l.id;})).limit(50000);
+      (rm.data||[]).forEach(function(x){(mm[x.contact_id]=mm[x.contact_id]||[]).push(x.list_id);});
+    }
+    setContacts(cs);setLists(ls);setMembers(mm);setLoading(false);
+  }
+
+  var allTags=(function(){var s={};contacts.forEach(function(c){(c.tags||[]).forEach(function(t){s[t]=1;});});return Object.keys(s).sort();})();
+  var listCount={};contacts.forEach(function(c){(members[c.id]||[]).forEach(function(lid){listCount[lid]=(listCount[lid]||0)+1;});});
+
+  var shown=contacts.filter(function(c){
+    if(statusF==='active'&&c.unsubscribed)return false;
+    if(statusF==='unsub'&&!c.unsubscribed)return false;
+    if(tagF&&!(c.tags||[]).some(function(t){return t===tagF;}))return false;
+    if(listF&&!(members[c.id]||[]).some(function(l){return l===listF;}))return false;
+    if(q.trim()){var s=q.trim().toLowerCase();if(!((c.name||'').toLowerCase().indexOf(s)>=0||(c.email||'').toLowerCase().indexOf(s)>=0||(c.phone||'').toLowerCase().indexOf(s)>=0))return false;}
+    return true;
+  });
+  var selIds=Object.keys(sel).filter(function(k){return sel[k];});
+
+  async function saveContact(){
+    var c=edit;if(!c.name&&!c.email){flash('Name or email required');return;}
+    var tags=(typeof c.tags==='string')?c.tags.split(',').map(function(t){return t.trim();}).filter(Boolean):(c.tags||[]);
+    var payload={org_id:org.id,name:(c.name||'').trim()||null,email:(c.email||'').trim()||null,phone:(c.phone||'').trim()||null,tags:tags,notes:(c.notes||'').trim()||null};
+    var res;
+    if(c.id){res=await supabase.from('campaign_contacts').update(payload).eq('id',c.id);}
+    else{payload.source='manual';payload.created_by=cu.id;res=await supabase.from('campaign_contacts').insert(payload);}
+    if(res.error){flash(res.error.message);return;}
+    // list assignment
+    if(c.id&&c._lists){
+      await supabase.from('campaign_list_members').delete().eq('contact_id',c.id);
+      var rows=(c._lists||[]).map(function(lid){return{list_id:lid,contact_id:c.id};});
+      if(rows.length)await supabase.from('campaign_list_members').insert(rows);
+    }
+    setEdit(null);flash('Saved');load();
+  }
+  async function toggleUnsub(c){
+    var res=await supabase.from('campaign_contacts').update({unsubscribed:!c.unsubscribed,status:!c.unsubscribed?'unsubscribed':'active'}).eq('id',c.id);
+    if(!res.error){setContacts(function(p){return p.map(function(x){return x.id===c.id?Object.assign({},x,{unsubscribed:!c.unsubscribed,status:!c.unsubscribed?'unsubscribed':'active'}):x;});});}
+  }
+  async function delContact(c){if(!window.confirm('Delete this contact?'))return;await supabase.from('campaign_contacts').delete().eq('id',c.id);setContacts(function(p){return p.filter(function(x){return x.id!==c.id;});});}
+  async function convertToClient(c){
+    if(!window.confirm('Create a client from this contact?'))return;
+    var ins=await supabase.from('clients').insert({org_id:org.id,name:c.name||c.email||'Client',display_name:c.name||null,email:c.email||null,phone:c.phone||null}).select('id').single();
+    if(ins.error){flash(ins.error.message);return;}
+    await supabase.from('campaign_contacts').update({client_id:ins.data.id}).eq('id',c.id);
+    flash('Client created');load();
+  }
+  async function addSelToList(listId){
+    if(!listId||selIds.length===0)return;
+    var rows=selIds.map(function(cid){return{list_id:listId,contact_id:cid};});
+    await supabase.from('campaign_list_members').upsert(rows,{onConflict:'list_id,contact_id',ignoreDuplicates:true});
+    setSel({});flash('Added to list');load();
+  }
+  async function bulkDelete(){if(selIds.length===0||!window.confirm('Delete '+selIds.length+' contact(s)?'))return;await supabase.from('campaign_contacts').delete().in('id',selIds);setSel({});load();}
+
+  // CSV import
+  var [csvText,setCsvText]=useState('');var [csvTag,setCsvTag]=useState('');var [importing,setImporting]=useState(false);
+  function parseCsv(text){
+    var lines=String(text||'').split(/\r?\n/).map(function(l){return l.trim();}).filter(Boolean);
+    if(!lines.length)return[];
+    var idx={name:0,email:1,phone:2,tags:3};
+    var first=lines[0].toLowerCase();
+    var hasHeader=first.indexOf('email')>=0||first.indexOf('name')>=0;
+    if(hasHeader){var cols=lines[0].split(',').map(function(s){return s.trim().toLowerCase();});idx={name:cols.indexOf('name'),email:cols.indexOf('email'),phone:cols.indexOf('phone'),tags:cols.indexOf('tags')};lines=lines.slice(1);}
+    return lines.map(function(l){var p=l.split(',');function g(i){return i>=0&&p[i]!=null?String(p[i]).trim():'';}return{name:g(idx.name),email:g(idx.email),phone:g(idx.phone),tags:g(idx.tags)};}).filter(function(r){return r.email&&r.email.indexOf('@')>=0;});
+  }
+  async function doImport(){
+    var rows=parseCsv(csvText);
+    if(rows.length===0){flash('No valid rows (need an email column)');return;}
+    setImporting(true);
+    var existing={};contacts.forEach(function(c){if(c.email)existing[c.email.toLowerCase()]=1;});
+    var extraTag=csvTag.trim();
+    var payload=[];var seen={};
+    rows.forEach(function(r){var e=r.email.toLowerCase();if(existing[e]||seen[e])return;seen[e]=1;var tags=(r.tags?r.tags.split(/[;|]/):[]).map(function(t){return t.trim();}).filter(Boolean);if(extraTag)tags.push(extraTag);payload.push({org_id:org.id,name:r.name||null,email:r.email,phone:r.phone||null,tags:tags,source:'csv',created_by:cu.id});});
+    if(payload.length===0){setImporting(false);flash('All emails already exist');return;}
+    var res=await supabase.from('campaign_contacts').insert(payload);
+    setImporting(false);
+    if(res.error){flash(res.error.message);return;}
+    setShowImport(false);setCsvText('');setCsvTag('');flash('Imported '+payload.length+' contact'+(payload.length!==1?'s':'')+(rows.length-payload.length>0?' · '+(rows.length-payload.length)+' skipped':''));load();
+  }
+
+  // Lists CRUD
+  var [newListName,setNewListName]=useState('');
+  async function createList(){if(!newListName.trim())return;var res=await supabase.from('campaign_lists').insert({org_id:org.id,name:newListName.trim()}).select().single();if(!res.error){setLists(function(p){return p.concat([res.data]).sort(function(a,b){return a.name.localeCompare(b.name);});});setNewListName('');}}
+  async function renameList(l){var n=window.prompt('Rename list',l.name);if(n==null||!n.trim())return;await supabase.from('campaign_lists').update({name:n.trim()}).eq('id',l.id);setLists(function(p){return p.map(function(x){return x.id===l.id?Object.assign({},x,{name:n.trim()}):x;});});}
+  async function delList(l){if(!window.confirm('Delete list "'+l.name+'"? Contacts are kept.'))return;await supabase.from('campaign_lists').delete().eq('id',l.id);setLists(function(p){return p.filter(function(x){return x.id!==l.id;});});load();}
+
+  var statusPill=function(c){return c.unsubscribed
+    ?<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:99,background:'rgba(239,68,68,0.12)',color:'#ef4444'}}>Unsubscribed</span>
+    :<span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:99,background:'rgba(34,197,94,0.12)',color:'#22c55e'}}>Active</span>;};
+
+  var OVR={position:'fixed',inset:0,background:'rgba(6,15,30,0.5)',zIndex:9998,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 16px',overflowY:'auto'};
+
+  return<div style={{padding:'0 0 60px'}}>
+    {toast&&<div style={{position:'fixed',top:18,right:18,background:'#d1fae5',color:'#065f46',padding:'10px 18px',borderRadius:10,fontSize:13,fontWeight:600,zIndex:9999,boxShadow:'0 4px 20px rgba(0,0,0,0.15)'}}>{toast}</div>}
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:14,flexWrap:'wrap',gap:10}}>
+      <div><h2 style={{fontSize:20,fontWeight:800,color:'var(--tf-text)',margin:0}}>Contacts &amp; Audiences</h2>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)',marginTop:3}}>Leads and prospects who aren’t clients yet — target them in campaigns.</div></div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button onClick={function(){setShowLists(true);}} style={Object.assign({},BTN,{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text)'})}>Lists · {lists.length}</button>
+        <button onClick={function(){setShowImport(true);}} style={Object.assign({},BTN,{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text)'})}>⇪ Import CSV</button>
+        <button onClick={function(){setEdit({tags:''});}} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff'})}>+ Add contact</button>
+      </div>
+    </div>
+
+    {/* Filters */}
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
+      <input value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search name, email, phone…" style={Object.assign({},INP,{minWidth:220})}/>
+      <select value={statusF} onChange={function(e){setStatusF(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="all">All statuses</option><option value="active">Active</option><option value="unsub">Unsubscribed</option></select>
+      <select value={tagF} onChange={function(e){setTagF(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">All tags</option>{allTags.map(function(t){return<option key={t} value={t}>{t}</option>;})}</select>
+      <select value={listF} onChange={function(e){setListF(e.target.value);}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">All lists</option>{lists.map(function(l){return<option key={l.id} value={l.id}>{l.name} ({listCount[l.id]||0})</option>;})}</select>
+      <span style={{fontSize:12.5,color:'var(--tf-text-sub)',marginLeft:'auto'}}>{shown.length} of {contacts.length}</span>
+    </div>
+
+    {/* Bulk bar */}
+    {selIds.length>0&&<div style={{display:'flex',alignItems:'center',gap:10,background:'rgba(47,107,255,0.08)',border:'1px solid #BBD2FF',borderRadius:10,padding:'9px 14px',marginBottom:12}}>
+      <span style={{fontSize:13,fontWeight:700,color:'var(--tf-text)'}}>{selIds.length} selected</span>
+      <select onChange={function(e){if(e.target.value){addSelToList(e.target.value);e.target.value='';}}} style={Object.assign({},INP,{cursor:'pointer'})}><option value="">Add to list…</option>{lists.map(function(l){return<option key={l.id} value={l.id}>{l.name}</option>;})}</select>
+      <button onClick={bulkDelete} style={Object.assign({},BTN,{background:'rgba(239,68,68,0.1)',color:'#ef4444'})}>Delete</button>
+      <button onClick={function(){setSel({});}} style={Object.assign({},BTN,{background:'none',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)'})}>Clear</button>
+    </div>}
+
+    {loading?<div style={{textAlign:'center',padding:48,color:'var(--tf-text-sub)'}}>Loading contacts…</div>
+    :contacts.length===0?<div style={{background:'var(--tf-surface)',border:'1px dashed var(--tf-border)',borderRadius:12,padding:'44px 24px',textAlign:'center'}}>
+      <div style={{fontSize:34,marginBottom:10}}>📇</div>
+      <div style={{fontWeight:700,fontSize:15,color:'var(--tf-text)',marginBottom:6}}>No contacts yet</div>
+      <div style={{fontSize:13,color:'var(--tf-text-sub)',marginBottom:16}}>Add leads/prospects manually or import a CSV, then reach them from campaigns.</div>
+      <div style={{display:'flex',gap:8,justifyContent:'center'}}><button onClick={function(){setShowImport(true);}} style={Object.assign({},BTN,{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',color:'var(--tf-text)'})}>⇪ Import CSV</button><button onClick={function(){setEdit({tags:''});}} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff'})}>+ Add contact</button></div>
+    </div>
+    :<div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:12,overflow:'hidden'}}>
+      <table style={{width:'100%',borderCollapse:'collapse'}}>
+        <thead><tr style={{borderBottom:'1px solid var(--tf-border)'}}>
+          <th style={{width:34,padding:'10px 12px'}}><input type="checkbox" checked={shown.length>0&&shown.every(function(c){return sel[c.id];})} onChange={function(e){var v=e.target.checked;setSel(function(p){var n=Object.assign({},p);shown.forEach(function(c){n[c.id]=v;});return n;});}}/></th>
+          {['Name','Email','Phone','Tags','Status',''].map(function(h){return<th key={h} style={{textAlign:'left',padding:'10px 12px',fontSize:11,letterSpacing:'.06em',textTransform:'uppercase',color:'var(--tf-text-sub)',fontWeight:700}}>{h}</th>;})}
+        </tr></thead>
+        <tbody>
+          {shown.map(function(c){return<tr key={c.id} style={{borderBottom:'1px solid var(--tf-border)',opacity:c.unsubscribed?0.6:1}}>
+            <td style={{padding:'10px 12px'}}><input type="checkbox" checked={!!sel[c.id]} onChange={function(){setSel(function(p){var n=Object.assign({},p);n[c.id]=!n[c.id];return n;});}}/></td>
+            <td style={{padding:'10px 12px',fontSize:13.5,fontWeight:600,color:'var(--tf-text)'}}>{c.name||'—'}{c.client_id&&<span style={{fontSize:10,marginLeft:6,color:'#22c55e',fontWeight:700}}>● client</span>}</td>
+            <td style={{padding:'10px 12px',fontSize:13,color:'var(--tf-text-sub)'}} className="mono">{c.email||'—'}</td>
+            <td style={{padding:'10px 12px',fontSize:13,color:'var(--tf-text-sub)'}}>{c.phone||'—'}</td>
+            <td style={{padding:'10px 12px'}}>{(c.tags||[]).slice(0,4).map(function(t){return<span key={t} style={{display:'inline-block',fontSize:10.5,fontWeight:600,padding:'2px 7px',borderRadius:99,background:'var(--tf-bg)',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)',marginRight:4,marginBottom:2}}>{t}</span>;})}</td>
+            <td style={{padding:'10px 12px'}}>{statusPill(c)}</td>
+            <td style={{padding:'10px 12px',whiteSpace:'nowrap',textAlign:'right'}}>
+              <button onClick={function(){setEdit(Object.assign({},c,{tags:(c.tags||[]).join(', '),_lists:(members[c.id]||[]).slice()}));}} title="Edit" style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'var(--tf-text-sub)',marginRight:4}}>Edit</button>
+              <button onClick={function(){toggleUnsub(c);}} title={c.unsubscribed?'Resubscribe':'Unsubscribe'} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',fontSize:11,cursor:'pointer',color:c.unsubscribed?'#22c55e':'#ef4444',marginRight:4}}>{c.unsubscribed?'Resub':'Unsub'}</button>
+              {!c.client_id&&<button onClick={function(){convertToClient(c);}} title="Convert to client" style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'#2F6BFF',marginRight:4}}>→ Client</button>}
+              <button onClick={function(){delContact(c);}} title="Delete" style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13}}>✕</button>
+            </td>
+          </tr>;})}
+          {shown.length===0&&<tr><td colSpan={7} style={{padding:'28px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:13}}>No contacts match your filters.</td></tr>}
+        </tbody>
+      </table>
+    </div>}
+
+    {/* Add/Edit modal */}
+    {edit&&<div style={OVR} onClick={function(e){if(e.target===e.currentTarget)setEdit(null);}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:460,padding:20,boxShadow:'0 24px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>{edit.id?'Edit contact':'New contact'}</div>
+        {[['name','Name'],['email','Email'],['phone','Phone']].map(function(f){return<div key={f[0]} style={{marginBottom:11}}><label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:4}}>{f[1]}</label><input value={edit[f[0]]||''} onChange={function(e){var v=e.target.value;setEdit(function(p){var n=Object.assign({},p);n[f[0]]=v;return n;});}} style={Object.assign({},INP,{width:'100%'})}/></div>;})}
+        <div style={{marginBottom:11}}><label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:4}}>Tags (comma-separated)</label><input value={edit.tags||''} onChange={function(e){var v=e.target.value;setEdit(function(p){return Object.assign({},p,{tags:v});});}} placeholder="prospect, seminar-2026" style={Object.assign({},INP,{width:'100%'})}/></div>
+        {edit.id&&lists.length>0&&<div style={{marginBottom:11}}><label style={{fontSize:11,fontWeight:600,color:'var(--tf-text-sub)',textTransform:'uppercase',letterSpacing:'.05em',display:'block',marginBottom:6}}>Lists</label><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{lists.map(function(l){var on=(edit._lists||[]).indexOf(l.id)>=0;return<button key={l.id} onClick={function(){setEdit(function(p){var cur=(p._lists||[]).slice();var i=cur.indexOf(l.id);if(i>=0)cur.splice(i,1);else cur.push(l.id);return Object.assign({},p,{_lists:cur});});}} style={{fontSize:12,fontWeight:600,padding:'5px 11px',borderRadius:99,border:'1px solid',borderColor:on?'#2F6BFF':'var(--tf-border)',background:on?'rgba(47,107,255,0.1)':'transparent',color:on?'#2F6BFF':'var(--tf-text-sub)',cursor:'pointer',fontFamily:'inherit'}}>{l.name}</button>;})}</div></div>}
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+          <button onClick={function(){setEdit(null);}} style={Object.assign({},BTN,{background:'none',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)'})}>Cancel</button>
+          <button onClick={saveContact} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff'})}>Save</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* Import modal */}
+    {showImport&&<div style={OVR} onClick={function(e){if(e.target===e.currentTarget)setShowImport(false);}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:560,padding:20,boxShadow:'0 24px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:6}}>Import contacts (CSV)</div>
+        <div style={{fontSize:12,color:'var(--tf-text-sub)',marginBottom:12}}>Columns: <b>name, email, phone, tags</b> (tags separated by ; ). A header row is optional. Paste below or choose a file. Existing emails are skipped.</div>
+        <input type="file" accept=".csv,text/csv,text/plain" onChange={function(e){var f=e.target.files&&e.target.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){setCsvText(String(rd.result||''));};rd.readAsText(f);}} style={{marginBottom:10,fontSize:12}}/>
+        <textarea value={csvText} onChange={function(e){setCsvText(e.target.value);}} rows={8} placeholder={'name,email,phone,tags\nRavi Traders,ravi@example.com,9876543210,prospect;gst'} style={Object.assign({},INP,{width:'100%',resize:'vertical',fontFamily:'monospace',fontSize:12})}/>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginTop:10}}>
+          <input value={csvTag} onChange={function(e){setCsvTag(e.target.value);}} placeholder="Add a tag to all (optional)" style={Object.assign({},INP,{flex:1})}/>
+          <span style={{fontSize:12,color:'var(--tf-text-sub)'}}>{parseCsv(csvText).length} valid row(s)</span>
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
+          <button onClick={function(){setShowImport(false);}} style={Object.assign({},BTN,{background:'none',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)'})}>Cancel</button>
+          <button onClick={doImport} disabled={importing} style={Object.assign({},BTN,{background:'linear-gradient(135deg,#2F6BFF,#14C7C0)',color:'#fff',opacity:importing?0.6:1})}>{importing?'Importing…':'Import'}</button>
+        </div>
+      </div>
+    </div>}
+
+    {/* Lists modal */}
+    {showLists&&<div style={OVR} onClick={function(e){if(e.target===e.currentTarget)setShowLists(false);}}>
+      <div style={{background:'var(--tf-bg)',border:'1px solid var(--tf-border)',borderRadius:14,width:'100%',maxWidth:460,padding:20,boxShadow:'0 24px 60px rgba(0,0,0,0.3)'}}>
+        <div style={{fontSize:16,fontWeight:800,color:'var(--tf-text)',marginBottom:14}}>Audience lists</div>
+        <div style={{display:'flex',gap:8,marginBottom:14}}>
+          <input value={newListName} onChange={function(e){setNewListName(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')createList();}} placeholder="New list name (e.g. Q3 Seminar)" style={Object.assign({},INP,{flex:1})}/>
+          <button onClick={createList} style={Object.assign({},BTN,{background:'#0e2a47',color:'#fff'})}>Add</button>
+        </div>
+        {lists.length===0?<div style={{fontSize:13,color:'var(--tf-text-sub)',textAlign:'center',padding:'12px 0'}}>No lists yet.</div>
+        :lists.map(function(l){return<div key={l.id} style={{display:'flex',alignItems:'center',gap:8,padding:'9px 0',borderTop:'1px solid var(--tf-border)'}}>
+          <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:'var(--tf-text)'}}>{l.name}</div><div style={{fontSize:11,color:'var(--tf-text-sub)'}}>{listCount[l.id]||0} contact(s)</div></div>
+          <button onClick={function(){renameList(l);}} style={{background:'none',border:'1px solid var(--tf-border)',borderRadius:6,padding:'4px 8px',fontSize:11,cursor:'pointer',color:'var(--tf-text-sub)'}}>Rename</button>
+          <button onClick={function(){delList(l);}} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:13}}>✕</button>
+        </div>;})}
+        <div style={{display:'flex',justifyContent:'flex-end',marginTop:16}}><button onClick={function(){setShowLists(false);}} style={Object.assign({},BTN,{background:'none',border:'1px solid var(--tf-border)',color:'var(--tf-text-sub)'})}>Done</button></div>
+      </div>
+    </div>}
+  </div>;
+}
+
 function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,initCompose,onConsumeInit}){
   var [loading,setLoading]=useState(true);
   var [clients,setClients]=useState([]);
@@ -15777,6 +16014,8 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
   var [bulkFilterWT,setBulkFilterWT]=useState('');
   var [bulkSubject,setBulkSubject]=useState('');
   var [bulkBody,setBulkBody]=useState('');
+  var [bulkAudience,setBulkAudience]=useState('clients'); // 'clients' | 'contacts'
+  var [campaignContacts,setCampaignContacts]=useState([]); // non-client contacts for campaigns
   var [bulkCC,setBulkCC]=useState('');
   var [bulkSending,setBulkSending]=useState(false);
   var [bulkResult,setBulkResult]=useState(null); // {ok,fail}
@@ -16242,7 +16481,7 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
   },[initCompose]);
 
   useEffect(function(){function onVisible(){if(document.visibilityState==='hidden'){clearTimeout(loadTimerRef.current);}else if(loadingRef.current){loadingRef.current=false;loadData();}}document.addEventListener('visibilitychange',onVisible);return function(){document.removeEventListener('visibilitychange',onVisible);};/* eslint-disable-next-line */},[org.id]);
-  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
+  async function loadData(){if(loadingRef.current)return;loadingRef.current=true;var gen=++loadGenRef.current;setLoading(true);if(loadTimerRef.current)clearTimeout(loadTimerRef.current);loadTimerRef.current=setTimeout(function(){if(gen===loadGenRef.current){setLoading(false);loadingRef.current=false;}},12000);try{var rc=await supabase.from('clients').select('id,name,display_name,pan,email,phone,custom_fields').eq('org_id',org.id).order('name').limit(2000);var ru=await supabase.from('client_portal_access').select('id,client_id,email,is_active').eq('org_id',org.id).limit(1000);var rt=await supabase.from('email_templates').select('*').eq('org_id',org.id).order('created_at',{ascending:false}).limit(100);setClients(rc.data||[]);setPortalUsers(ru.data||[]);setTemplates(rt.data||[]);try{var rcc=await supabase.from('campaign_contacts').select('id,name,email,phone,tags,unsubscribed,unsub_token').eq('org_id',org.id).limit(5000);setCampaignContacts(rcc.data||[]);}catch(e){}var rOrgGmail=await supabase.from('org_cloud_storage').select('access_token,updated_at').eq('org_id',org.id).eq('provider','gmail_org_accounts').maybeSingle();if(rOrgGmail.data&&rOrgGmail.data.access_token){try{var orgAccounts=JSON.parse(rOrgGmail.data.access_token);localStorage.setItem('tf_gmailOrgAccounts_'+org.id,JSON.stringify(orgAccounts));}catch(e){}}}catch(e){console.error(e);}finally{if(gen===loadGenRef.current){clearTimeout(loadTimerRef.current);setLoading(false);loadingRef.current=false;}}}
 
   // Build email-able client list: use portal email if exists, else client.email
   var portalEmailMap={};
@@ -16257,6 +16496,15 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
   var filteredClients=emailClients;
   if(bulkFilterWT){filteredClients=emailClients.filter(function(c){return c.workTypes.some(function(w){return w===bulkFilterWT;});});}
   if(clientSearch.trim()){var s=clientSearch.toLowerCase();filteredClients=filteredClients.filter(function(c){return c.name.toLowerCase().includes(s)||(c.pan||'').toLowerCase().includes(s)||c.email.toLowerCase().includes(s);});}
+
+  // Non-client contacts (audience) — same shape so the picker/sender is uniform.
+  var emailContacts=(campaignContacts||[]).filter(function(c){return c.email;}).map(function(c){return{id:c.id,name:c.name||c.email,email:c.email,phone:c.phone||'',tags:c.tags||[],unsubscribed:!!c.unsubscribed,unsub_token:c.unsub_token,isContact:true};});
+  var filteredContacts=emailContacts;
+  if(clientSearch.trim()){var sc=clientSearch.toLowerCase();filteredContacts=filteredContacts.filter(function(c){return (c.name||'').toLowerCase().includes(sc)||c.email.toLowerCase().includes(sc);});}
+  // The active recipient pool (clients or contacts) — drives the picker, chips and send.
+  var audienceList=bulkAudience==='contacts'?filteredContacts:filteredClients;
+  var audienceAll=bulkAudience==='contacts'?emailContacts:emailClients;
+  function recipById(id){return audienceAll.find(function(x){return x.id===id;});}
 
   // Template CRUD
   async function saveTemplate(){
@@ -16326,38 +16574,43 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
       .replace(/\{gstin\}/g,cf.gstin||'')
       .replace(/\{work_type\}/g,(wt!==undefined?wt:bulkFilterWT)||'');
   }
+  function unsubUrl(tok){return 'https://www.taskflowco.in/?unsub='+tok;}
   async function sendBulk(){
+    var toContacts=bulkAudience==='contacts';
     var cids=Object.keys(bulkSelIds);
-    if(cids.length===0){showToast('Select at least one client','err');return;}
+    if(cids.length===0){showToast('Select at least one '+(toContacts?'contact':'client'),'err');return;}
     if(!bulkSubject.trim()){showToast('Subject required','err');return;}
-    var recips=cids.map(function(cid){return emailClients.find(function(x){return x.id===cid;});}).filter(function(c){return c&&c.email;});
-    if(recips.length===0){showToast('No emails found for selected clients','err');return;}
+    var recips=cids.map(function(cid){return recipById(cid);}).filter(function(c){return c&&c.email;});
+    // Suppress unsubscribed contacts.
+    var suppressed=0;
+    if(toContacts){var before=recips.length;recips=recips.filter(function(c){return !c.unsubscribed;});suppressed=before-recips.length;}
+    if(recips.length===0){showToast(toContacts?'All selected contacts are unsubscribed':'No emails found for selected clients','err');return;}
     setBulkResult(null);
     if(gmailToken){
-      // Personalised INDIVIDUAL emails via Gmail (no BCC) — each client gets their own.
       setBulkSending(true);var ok=0,fail=0;
       for(var i=0;i<recips.length;i++){
         var c=recips[i];
         var subj=mergeClientVars(bulkSubject,c);
         var plain=mergeClientVars(bulkBody,c);
-        var html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;">'+tfLinkify(plain).replace(/\n/g,'<br>')+'</div>';
+        var html='<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1a2332;">'+tfLinkify(plain).replace(/\n/g,'<br>');
+        // Contacts (leads) must carry an unsubscribe link.
+        if(toContacts&&c.unsub_token)html+='<div style="margin-top:22px;padding-top:12px;border-top:1px solid #e5e9f0;font-size:11px;color:#94a3b8">You received this because you opted in or shared your email with '+(org.name||'us')+'. <a href="'+unsubUrl(c.unsub_token)+'" style="color:#94a3b8">Unsubscribe</a>.</div>';
+        html+='</div>';
         try{
           var encoded=buildMimeEmail(c.email,subj,html,bulkCC,'','','','',[]);
           var res=await gmailApi('messages/send',null,{method:'POST',headers:{'Authorization':'Bearer '+gmailToken,'Content-Type':'application/json'},body:JSON.stringify({raw:encoded})});
-          if(res&&res.id){ok++;logComm(c.id,'email_sent',subj,plain,c.email,bulkCC);}else fail++;
+          if(res&&res.id){ok++;if(toContacts){try{supabase.from('comm_logs').insert({org_id:org.id,contact_id:c.id,type:'email_sent',subject:subj,body:plain,to_email:c.email,cc:bulkCC,created_by:cu.id});}catch(e){}}else{logComm(c.id,'email_sent',subj,plain,c.email,bulkCC);}}else fail++;
         }catch(e){fail++;}
       }
       setBulkSending(false);setBulkResult({ok:ok,fail:fail});
-      showToast('Sent '+ok+' individual email'+(ok!==1?'s':'')+(fail?' · '+fail+' failed':''),fail&&!ok?'err':'ok');
+      showToast('Sent '+ok+' email'+(ok!==1?'s':'')+(fail?' · '+fail+' failed':'')+(suppressed?' · '+suppressed+' unsubscribed skipped':''),fail&&!ok?'err':'ok');
     } else {
-      // Fallback (no Gmail connected): open the OS mail app with everyone BCC'd.
       var emails=recips.map(function(c){return c.email;}).filter(function(e,i,a){return a.indexOf(e)===i;});
       var mailto='mailto:?bcc='+encodeURIComponent(emails.join(','));
       if(bulkCC.trim())mailto+='&cc='+encodeURIComponent(bulkCC.trim());
       mailto+='&subject='+encodeURIComponent(bulkSubject)+'&body='+encodeURIComponent(bulkBody);
       window.open(mailto,'_blank');
-      recips.forEach(function(c){logComm(c.id,'email_sent',bulkSubject,bulkBody,c.email,bulkCC);});
-      showToast('Opened your mail app ('+emails.length+' BCC). Connect Gmail to send personalised individual emails.');
+      showToast('Opened your mail app ('+emails.length+' BCC)'+(suppressed?' · '+suppressed+' unsubscribed skipped':'')+'. Connect Gmail to send personalised individual emails.');
     }
   }
 
@@ -16547,29 +16800,32 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
             </div>
           </>}
         </>:activeTab==='bulk'?<>
+          <div style={{padding:'0 12px 8px',display:'flex',gap:4}}>
+            {[['clients','Clients'],['contacts','Contacts']].map(function(o){var on=bulkAudience===o[0];return<button key={o[0]} onClick={function(){setBulkAudience(o[0]);setBulkSelIds({});setBulkFilterWT('');}} style={{flex:1,padding:'6px 8px',borderRadius:7,border:'1px solid',borderColor:on?'#2F6BFF':'var(--tf-border)',background:on?'rgba(47,107,255,0.1)':'var(--tf-surface)',color:on?'#2F6BFF':'var(--tf-text-sub)',fontSize:11,fontWeight:on?800:600,cursor:'pointer',fontFamily:'inherit'}}>{o[1]}</button>;})}
+          </div>
           <div style={{padding:'0 12px 8px'}}>
-            <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder="Search clients..." style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
+            <input value={clientSearch} onChange={function(e){setClientSearch(e.target.value);}} placeholder={bulkAudience==='contacts'?'Search contacts...':'Search clients...'} style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:7,padding:'6px 10px',color:'var(--tf-text)',fontSize:11,outline:'none',width:'100%',boxSizing:'border-box',fontFamily:'inherit'}}/>
           </div>
           {activeTab==='bulk'&&<div style={{padding:'0 12px 6px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)'}}>{Object.keys(bulkSelIds).length} selected</span>
             <div style={{display:'flex',gap:4}}>
-              <button onClick={function(){var all={};filteredClients.forEach(function(c){if(c.email)all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'none',color:'#0e2a47',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>All</button>
+              <button onClick={function(){var all={};audienceList.forEach(function(c){if(c.email&&!c.unsubscribed)all[c.id]=true;});setBulkSelIds(all);}} style={{background:'none',border:'none',color:'#0e2a47',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>All</button>
               <span style={{color:'var(--tf-border)'}}>|</span>
               <button onClick={function(){setBulkSelIds({});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:10,fontWeight:700,padding:0}}>Clear</button>
             </div>
           </div>}
-          {filteredClients.map(function(c){
-            var hasEmail=!!c.email;
-            var checked=!!bulkSelIds[c.id];
-            return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:hasEmail?'pointer':'default',background:checked?'rgba(14,42,71,0.06)':'transparent',opacity:hasEmail?1:0.5}}>
-              <input type="checkbox" checked={checked} disabled={!hasEmail} onChange={function(){if(!hasEmail)return;setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#0e2a47',flexShrink:0}}/>
+          {audienceList.map(function(c){
+            var hasEmail=!!c.email;var unsub=!!c.unsubscribed;
+            var checked=!!bulkSelIds[c.id];var disabled=!hasEmail||unsub;
+            return<label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:disabled?'default':'pointer',background:checked?'rgba(14,42,71,0.06)':'transparent',opacity:disabled?0.5:1}}>
+              <input type="checkbox" checked={checked} disabled={disabled} onChange={function(){if(disabled)return;setBulkSelIds(function(p){var n=Object.assign({},p);if(n[c.id])delete n[c.id];else n[c.id]=true;return n;});}} style={{accentColor:'#0e2a47',flexShrink:0}}/>
               <div style={{minWidth:0,flex:1}}>
                 <div style={{fontSize:12,fontWeight:600,color:'var(--tf-text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-                <div style={{fontSize:10,color:hasEmail?'var(--tf-text-sub)':'#ef4444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{hasEmail?c.email:'No email'}</div>
+                <div style={{fontSize:10,color:unsub?'#ef4444':(hasEmail?'var(--tf-text-sub)':'#ef4444'),overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{unsub?'Unsubscribed':(hasEmail?c.email:'No email')}</div>
               </div>
             </label>;
           })}
-          {filteredClients.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>No clients found.</div>}
+          {audienceList.length===0&&<div style={{padding:'16px 14px',textAlign:'center',color:'var(--tf-text-sub)',fontSize:11}}>{bulkAudience==='contacts'?'No contacts yet — add them in the Contacts tab.':'No clients found.'}</div>}
         </>:activeTab==='reminders'?
         <>
           <div style={{padding:'12px 14px'}}>
@@ -16779,13 +17035,13 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
         </div>
         {/* Filter + Template row */}
         <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap',alignItems:'flex-end'}}>
-          <div style={{flex:1,minWidth:180}}>
+          {bulkAudience!=='contacts'&&<div style={{flex:1,minWidth:180}}>
             <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Filter by Work Type</label>
             <select value={bulkFilterWT} onChange={function(e){setBulkFilterWT(e.target.value);var wt=e.target.value;if(!wt){setBulkSelIds({});return;}var sel={};emailClients.forEach(function(c){if(c.email&&c.workTypes.some(function(w){return w===wt;}))sel[c.id]=true;});setBulkSelIds(sel);}} style={INP}>
               <option value="">— All Clients —</option>
               {(workTypeConfigs||[]).filter(function(c){return c.is_active;}).map(function(c){return<option key={c.id} value={c.name}>{c.name}</option>;})}
             </select>
-          </div>
+          </div>}
           <div style={{flex:1,minWidth:180}}>
             <label style={{fontSize:10,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',display:'block',marginBottom:4}}>Use Template</label>
             <select onChange={function(e){var tid=e.target.value;if(!tid)return;var t=templates.find(function(x){return x.id===tid;});if(t){setBulkSubject(t.subject);setBulkBody(t.body||'');}e.target.value='';}} style={INP}>
@@ -16813,9 +17069,9 @@ function CommunicationsModule({org,supabase,cu,workTypeConfigs,initClientId,init
         {/* Recipient summary + Send */}
         <div style={{background:'var(--tf-surface)',border:'1px solid var(--tf-border)',borderRadius:10,padding:'14px 18px',marginBottom:16}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--tf-text-sub)',textTransform:'uppercase',marginBottom:8}}>Recipients ({Object.keys(bulkSelIds).length})</div>
-          {Object.keys(bulkSelIds).length===0?<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Select clients from the left panel or use a work type filter.</div>:
+          {Object.keys(bulkSelIds).length===0?<div style={{fontSize:12,color:'var(--tf-text-sub)'}}>Select {bulkAudience==='contacts'?'contacts':'clients'} from the left panel{bulkAudience==='contacts'?'.':' or use a work type filter.'}</div>:
           <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-            {Object.keys(bulkSelIds).map(function(cid){var c=emailClients.find(function(x){return x.id===cid;});if(!c)return null;return<span key={cid} style={{display:'inline-flex',alignItems:'center',gap:4,background:'rgba(14,42,71,0.08)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:20,padding:'3px 10px 3px 10px',fontSize:11,color:'var(--tf-text)'}}>
+            {Object.keys(bulkSelIds).map(function(cid){var c=recipById(cid);if(!c)return null;return<span key={cid} style={{display:'inline-flex',alignItems:'center',gap:4,background:'rgba(14,42,71,0.08)',border:'1px solid rgba(14,42,71,0.2)',borderRadius:20,padding:'3px 10px 3px 10px',fontSize:11,color:'var(--tf-text)'}}>
               {c.name} <span style={{color:'var(--tf-text-sub)',fontSize:10}}>({c.email})</span>
               <button onClick={function(){setBulkSelIds(function(p){var n=Object.assign({},p);delete n[cid];return n;});}} style={{background:'none',border:'none',color:'var(--tf-text-sub)',cursor:'pointer',fontSize:13,padding:0,marginLeft:2}}>×</button>
             </span>;})}
@@ -20059,7 +20315,8 @@ function OrgDashboard({org,supabase,cu,allWorkspaces,onBack,navTarget,trialGate}
       {/* Communication — paid module */}
       {orgModule==='comms'&&(hasModule('comms')
         ? <>
-            {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} initCompose={commsCompose} onConsumeInit={function(){setCommsClientId(null);setCommsCompose(null);}}/>}
+            {(tab==='mailing'||(tab!=='portal'&&tab!=='connect'&&tab!=='contacts'))&&<CommunicationsModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs} initClientId={commsClientId} initCompose={commsCompose} onConsumeInit={function(){setCommsClientId(null);setCommsCompose(null);}}/>}
+            {tab==='contacts'&&<ContactsModule org={org} supabase={supabase} cu={cu}/>}
             {tab==='portal'&&(hasModule('portal')
               ? <ClientPortalModule org={org} supabase={supabase} cu={cu} workTypeConfigs={activeConfigs}/>
               : <ModuleLock module="portal" gate={trialGate} onBack={()=>setTab('mailing')} onUpgrade={goUpgrade}/>)}
@@ -21765,7 +22022,28 @@ function stripAuthHash(){
   }catch(_){}
 }
 
+function UnsubscribePublic({supabase,token}){
+  var [state,setState]=useState('working');
+  useEffect(function(){
+    supabase.rpc('campaign_unsubscribe',{p_token:token}).then(function(r){
+      if(r.error)setState('error');else setState(r.data==='ok'?'done':'notfound');
+    }).catch(function(){setState('error');});
+  /* eslint-disable-next-line */},[]);
+  var msg=state==='working'?'Processing your request…':state==='done'?'You have been unsubscribed. You will no longer receive marketing emails from this sender.':state==='notfound'?'This link is invalid or has already been used.':'Something went wrong. Please try again later.';
+  return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#0E2A47',padding:24,fontFamily:'system-ui,-apple-system,sans-serif'}}>
+    <div style={{background:'#fff',borderRadius:16,padding:'40px 34px',maxWidth:440,textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+      <div style={{fontSize:38,marginBottom:14}}>{state==='done'?'✅':state==='working'?'⏳':'⚠️'}</div>
+      <div style={{fontSize:19,fontWeight:800,color:'#0E2A47',marginBottom:10}}>Email preferences</div>
+      <div style={{fontSize:14,color:'#5C6E85',lineHeight:1.6}}>{msg}</div>
+    </div>
+  </div>;
+}
+
 export default function App(){
+  // Public unsubscribe: /?unsub={token}
+  const unsubToken=useState(function(){try{return new URL(window.location.href).searchParams.get('unsub')||null;}catch(e){return null;}})[0];
+  if(unsubToken)return<><GlobalStyle lightMode={false}/><UnsubscribePublic supabase={supabase} token={unsubToken}/></>;
+
   // Client Connect public form: #/c/{token}
   const clientFormToken=useState(function(){var h=window.location.hash;return h.startsWith('#/c/')?h.slice(4):null;})[0];
   if(clientFormToken)return<><GlobalStyle lightMode={false}/><ClientFormPublic supabase={supabase} token={clientFormToken}/></>;
